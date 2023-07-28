@@ -21,6 +21,7 @@ async function fetchDataForAllTokenIds() {
 
 // Fetch data and display it in the HTML page.
 fetchDataForAllTokenIds().then(data => {
+    console.log(data);
     const container = document.getElementById('container');
 
     // Create a new div for each row
@@ -34,21 +35,33 @@ fetchDataForAllTokenIds().then(data => {
 
         const iconImg = document.createElement('img');
         iconImg.src = item.uris.icon;
-        iconImg.width = 64;  // Set width to 64 pixels
-        iconImg.height = 64;  // Set height to 64 pixels
+        iconImg.width = 64;
+        iconImg.height = 64;
+        iconImg.title = item.description;  // Added title to show description on hover
         iconSymbolNameCell.appendChild(iconImg);
 
         const nameSpan = document.createElement('span');
         nameSpan.innerText = item.name;
         nameSpan.className = 'name';
+        nameSpan.title = item.description;  // Added title to show description on hover
         iconSymbolNameCell.appendChild(nameSpan);
 
         const symbolSpan = document.createElement('span');
         symbolSpan.innerText = item.token.symbol;
         symbolSpan.className = 'symbol';
+        symbolSpan.title = item.description;  // Added title to show description on hover
         iconSymbolNameCell.appendChild(symbolSpan);
 
         row.appendChild(iconSymbolNameCell);
+
+        // Create and append the category in one cell
+        const categoryCell = document.createElement('div');
+        categoryCell.className = 'cell category';
+        const categoryInput = document.createElement('input');
+        categoryInput.value = item.token.category;
+        categoryInput.readOnly = true;
+        categoryCell.appendChild(categoryInput);
+        row.appendChild(categoryCell);
 
         // Create and append the web link if it exists
         if (item.uris && item.uris.web) {
@@ -56,9 +69,22 @@ fetchDataForAllTokenIds().then(data => {
             webCell.className = 'cell web';
             const webLink = document.createElement('a');
             webLink.href = item.uris.web;
+			webLink.target = '_blank';
             webLink.innerText = item.uris.web.replace('https://', '').replace(/\/$/, '');
             webCell.appendChild(webLink);
             row.appendChild(webCell);
+        }
+
+        // Create and append the twitter link if it exists
+        if (item.uris && item.uris.twitter) {
+            const twitterCell = document.createElement('div');
+            twitterCell.className = 'cell twitter';
+            const twitterLink = document.createElement('a');
+            twitterLink.href = item.uris.twitter;
+			twitterLink.target = '_blank';
+            twitterLink.innerHTML = '<i class="fab fa-twitter"></i>';  // Font Awesome Twitter icon
+            twitterCell.appendChild(twitterLink);
+            row.appendChild(twitterCell);
         }
 
         // Add the row to the container
