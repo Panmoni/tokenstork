@@ -21,9 +21,6 @@ async function fetchDataForAllTokenIds() {
 
 // Fetch data and display it in the HTML page.
 fetchDataForAllTokenIds().then(data => {
-	
-	console.log(data);
-	
     const container = document.getElementById('container');
 
     // Create a new div for each row
@@ -31,37 +28,38 @@ fetchDataForAllTokenIds().then(data => {
         const row = document.createElement('div');
         row.className = 'row';
 
-        // Create and append the icon
-        const iconCell = document.createElement('div');
-        iconCell.className = 'cell';
+        // Create and append the icon, name and symbol in one cell
+        const iconSymbolNameCell = document.createElement('div');
+        iconSymbolNameCell.className = 'cell icon-symbol-name';
+
         const iconImg = document.createElement('img');
         iconImg.src = item.uris.icon;
-		iconImg.width = 64;
-		iconImg.height = 64;
-        iconCell.appendChild(iconImg);
-        row.appendChild(iconCell);
+        iconImg.width = 64;  // Set width to 64 pixels
+        iconImg.height = 64;  // Set height to 64 pixels
+        iconSymbolNameCell.appendChild(iconImg);
 
-        // Create and append the symbol
-        const symbolCell = document.createElement('div');
-        symbolCell.className = 'cell';
-        symbolCell.innerText = item.token.symbol;
-        row.appendChild(symbolCell);
+        const nameSpan = document.createElement('span');
+        nameSpan.innerText = item.name;
+        nameSpan.className = 'name';
+        iconSymbolNameCell.appendChild(nameSpan);
 
-        // Create and append the name
-        const nameCell = document.createElement('div');
-        nameCell.className = 'cell';
-        nameCell.innerText = item.name;
-        row.appendChild(nameCell);
+        const symbolSpan = document.createElement('span');
+        symbolSpan.innerText = item.token.symbol;
+        symbolSpan.className = 'symbol';
+        iconSymbolNameCell.appendChild(symbolSpan);
 
-		if (item.uris && item.uris.web) {
-		            const webCell = document.createElement('div');
-		            webCell.className = 'cell';
-		            const webLink = document.createElement('a');
-		            webLink.href = item.uris.web;
-		            webLink.innerText = item.uris.web.replace('https://', '').replace(/\/$/, '');
-		            webCell.appendChild(webLink);
-		            row.appendChild(webCell);
-		        }
+        row.appendChild(iconSymbolNameCell);
+
+        // Create and append the web link if it exists
+        if (item.uris && item.uris.web) {
+            const webCell = document.createElement('div');
+            webCell.className = 'cell web';
+            const webLink = document.createElement('a');
+            webLink.href = item.uris.web;
+            webLink.innerText = item.uris.web.replace('https://', '').replace(/\/$/, '');
+            webCell.appendChild(webLink);
+            row.appendChild(webCell);
+        }
 
         // Add the row to the container
         container.appendChild(row);
