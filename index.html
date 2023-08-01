@@ -1,132 +1,150 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
+  <head>
     <meta charset="UTF-8" />
+
+    <title>Token Stork: BCH Cash Tokens Market Cap</title>
+    <meta
+      name="description"
+      content="Page description. No longer than 155 characters."
+    />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://tokenstork.com/" />
+    <meta property="og:title" content="Your Page Title Here" />
+    <meta
+      property="og:description"
+      content="Page description. No longer than 155 characters."
+    />
+    <meta
+      property="og:image"
+      content="https://yourwebsite.com/images/og_image.jpg"
+    />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://tokenstork.com/" />
+    <meta property="twitter:title" content="Your Page Title Here" />
+    <meta
+      property="twitter:description"
+      content="Page description. No longer than 155 characters."
+    />
+    <meta
+      property="twitter:image"
+      content="https://yourwebsite.com/images/twitter_card.jpg"
+    />
+
+    <!-- Google / Search Engine Tags -->
+    <meta itemprop="name" content="Your Page Title Here" />
+    <meta
+      itemprop="description"
+      content="Page description. No longer than 155 characters."
+    />
+    <meta
+      itemprop="image"
+      content="https://yourwebsite.com/images/google_image.jpg"
+    />
+
+    <!-- Other tags -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="X-UA-Compatible" content="ie=edge" />
-    <title>Token Stork</title>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
-	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-	<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.4/css/all.css">
-    <style>
-		body {
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            justify-content: flex-start;
-            padding: 30px;
-            box-sizing: border-box;
-		    font-family: 'Inter', sans-serif;
-			background-color: #FDFCF1;
-        }
-		h1 {
-            font-family: 'Roboto', sans-serif;
-            font-weight: 500;
-            font-size: 32px;
-            color: #157A6E;
-			margin-bottom: 5px;
-        }
-        h2 {
-            font-family: 'Roboto', sans-serif;
-            font-weight: 300;
-            font-size: 20px;
-            color: #157A6E;
-        }
-        .container {
-            display: flex;
-            flex-direction: column;
-            width: 90%;
-        }
-        .row {
-            display: flex;
-            justify-content: space-between;
-            padding: 10px 0; /* add vertical padding */
-            border-bottom: 1px solid #ddd; /* add bottom border */
-        }
-        .cell {
-            flex: 1;
-            display: flex;
-            align-items: center;
-        }
-		.cell.icon-symbol-name {
-		    flex: 5; /* adjust as needed for your preferred column widths */
-		}
 
-		.cell.icon-symbol-name .name {
-		    margin-left: 10px;
-		    font-size: 20px; /* adjust as needed */
-		    font-weight: bold;
-		}
+    <!-- Google fonts -->
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Raleway:wght@700&family=Open+Sans:wght@400;700&display=swap"
+    />
 
-		.cell.icon-symbol-name .symbol {
-		    margin-left: 10px;
-		    color: #888; /* gray color */
-		}
-        .cell.web {
-            flex: 4; /* adjust as needed for your preferred column widths */
-            text-align: left;
-        }
-        img {
-            width: 64px;
-            height: 64px;
-        }
-		footer {
-		    font-family: 'Inter', sans-serif;
-		    font-size: 14px;
-		    background-color: #F2E9E1;
-		    color: #000;
-		    padding: 20px;
-		    display: flex;
-		    flex-direction: column;
-		    align-items: center;
-		    justify-content: center;
-		}
-		.footer-content {
-		    max-width: 1200px;
-		    width: 100%;
-		}
-		.disclaimer {
-		    margin-bottom: 10px;
-		}
-		.attribution {
-		    margin-bottom: 10px;
-		}
-		.footer-links {
-		    display: flex;
-		    gap: 10px;
-		}
-		.footer-links a {
-		    color: #157A6E;
-		    text-decoration: none;
-		}
-		input[readonly] {
-		    border: none;
-		    background-color: #eee;
-		}
-		.fab.fa-twitter {
-		    font-size: 1.2em;
-		    color: #1DA1F2;
-		}
-	</style>
-</head>
-<body>
-    <h1>TokenStork</h1>
-    <h2>Delivering your beloved new CashTokens on BCH since 2023</h2>
-	
-    <div id="container" class="container"></div>
+    <!-- Font Awesome -->
+    <script
+      src="https://kit.fontawesome.com/c00639d1c2.js"
+      crossorigin="anonymous"
+    ></script>
 
+    <link rel="stylesheet" type="text/css" href="styles.css" />
+  </head>
+  <body>
+    <div id="hello-bar">
+      <p>
+        FTs tracked: <span id="ftCount">0</span> | NFTs tracked: N/A | BCH
+        Price: <span id="bch-price">$0.00</span> | Fear & Greed: X/Y
+      </p>
+    </div>
 
+    <header>
+      <div class="logo">
+        <h1><a href="/">TokenStork</a></h1>
+        <h2>Delivering your beloved new CashTokens on BCH since 2023</h2>
+      </div>
+      <nav>
+        <ul class="nav-links">
+          <li><a href="#">Create Tokens</a></li>
+          <li><a href="#">Wallet</a></li>
+          <li><a href="/about">About</a></li>
+        </ul>
+      </nav>
+    </header>
 
-	<footer>
-	    <div class="footer-content">
-	        <p class="disclaimer">Disclaimer: Cryptocurrency investments carry a high degree of risk, and may not be suitable for all investors. Before deciding to trade cryptocurrencies, you should carefully consider your investment objectives, level of experience, and risk appetite. The possibility exists that you could sustain a loss of some or all of your initial investment. Therefore, you should not invest money that you cannot afford to lose. This website is for informational purposes only and is not intended to provide specific financial, investment, tax, legal, accounting or other advice.</p>
-	        <p class="attribution">A <a href="https://www.panmoni.com/">Panmoni</a> project made possible by a <a href="https://www.paytaca.com/">Paytaca</a> API and <a href="https://www.bitcoincashsite.com/">BCH</a>.</p>
-	        <div class="footer-links">
-	            <a href="#">Privacy Policy</a> | <a href="#">Terms of Service</a> | <a href="mailto:hello@panmoni.com">Contact</a> | <a href="https://t.me/Panmoni">Telegram</a>
-	        </div>
-	    </div>
-	</footer>
-	
-</body>
-<script src="script.js"></script>
+    <div id="headers" class="header-row"></div>
+    <div id="toast" class="toast">Copied to clipboard</div>
+    <div id="container"></div>
+
+    <footer>
+      <div class="footer-content">
+        <p class="disclaimer">
+          Disclaimer: Cryptocurrency investments carry a high degree of risk,
+          and may not be suitable for all investors. Before deciding to trade
+          cryptocurrencies, you should carefully consider your investment
+          objectives, level of experience, and risk appetite. The possibility
+          exists that you could sustain a loss of some or all of your initial
+          investment. Therefore, you should not invest money that you cannot
+          afford to lose. This website is for informational purposes only and is
+          not intended to provide specific financial, investment, tax, legal,
+          accounting or other advice.
+        </p>
+        <p class="attribution">
+          A
+          <a
+            href="https://www.panmoni.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            >Panmoni</a
+          >
+          project made possible by a
+          <a
+            href="https://www.paytaca.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            >Paytaca</a
+          >
+          API and
+          <a
+            href="https://www.bitcoincashsite.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            >BCH</a
+          >.
+        </p>
+        <div class="footer-links">
+          <a href="privacy.txt" target="_blank" rel="noopener noreferrer"
+            >Privacy Policy</a
+          >
+          |
+          <a href="tos.txt" target="_blank" rel="noopener noreferrer"
+            >Terms of Service</a
+          >
+          | <a href="mailto:hello@panmoni.com">Contact</a> |
+          <a
+            href="https://t.me/Panmoni"
+            target="_blank"
+            rel="noopener noreferrer"
+            >Telegram</a
+          >
+        </div>
+      </div>
+    </footer>
+    <!-- Javascript functions etc. -->
+    <script src="script.js"></script>
+  </body>
 </html>
