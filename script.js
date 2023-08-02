@@ -247,7 +247,7 @@ fetchDataForAllTokenIds()
 
       // Create and link to salemkode explorer
       const icon = document.createElement("img");
-      icon.src = "salemkode.png";
+      icon.src = "img/salemkode.png";
       icon.className = "sk-icon";
       icon.style.width = "24px";
       icon.style.height = "24px";
