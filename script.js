@@ -172,7 +172,7 @@ fetchDataForAllTokenIds()
       // Create and append the circulating supply in one cell
       const circSupplyCell = document.createElement("div");
       circSupplyCell.className = "cell circSupply";
-      circSupplyCell.textContent = "0.00";
+      circSupplyCell.textContent = "N/A";
       row.appendChild(circSupplyCell);
 
       // Create and append the max supply in one cell
