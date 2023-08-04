@@ -205,16 +205,17 @@ fetchDataForAllTokenIds()
       }
 
       // Get the max supply from chaingraph
-      async function getFTMaxSupply(tokenId) {
+      async function getFTMaxSupply(tokenId, decimals) {
         const responseJson = await queryTotalSupplyFT(tokenId, chaingraphUrl);
-        const totalAmount = responseJson.data.transaction[0].outputs.reduce((total, output) => total +  parseInt(output.fungible_token_amount),0);
+        let totalAmount = responseJson.data.transaction[0].outputs.reduce((total, output) => total +  parseInt(output.fungible_token_amount),0);
+        totalAmount = totalAmount.toFixed(decimals);
         return totalAmount;
       }
 
       // Create and append the max supply in one cell
       const maxSupplyCell = document.createElement("div");
 
-      getFTMaxSupply(item.token.category).then(maxSupply => {
+      getFTMaxSupply(item.token.category, item.token.decimals).then(maxSupply => {
         let maxSupplyAmount = humanizeMaxSupply(maxSupply);
         maxSupplyCell.className = "cell maxSupply";
         maxSupplyCell.textContent = maxSupplyAmount;
