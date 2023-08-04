@@ -4,9 +4,9 @@ TokenStork aims to be a "market cap"-style website for BCH CashTokens.
 
 https://tokenstork.com
 
-TokenStork uses Paytaca's BCMR indexer API and @mainnet_pat's Chaingraph install. 🙏
+TokenStork uses [Paytaca's BCMR indexer API](https://github.com/paytaca/bcmr-indexer) and [@mainnet_pat](https://github.com/mainnet-pat)'s [Chaingraph](https://github.com/bitauth/chaingraph) install. 🙏
 
-Thanks @mr-zwets for your very valuable help and encouragement!
+Thanks [@mr-zwets](https://github.com/mr-zwets) for your very valuable help and encouragement!
 
 Release Announcement: https://twitter.com/BitcoinCashSite/status/1687565837169819648
 
