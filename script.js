@@ -244,6 +244,7 @@ fetchDataForAllTokenIds()
 
 
       // convert it back to a number
+      totalAmount = totalAmount === "" ? "0" : totalAmount;
       totalAmount = Number(totalAmount);
 
       return totalAmount;
