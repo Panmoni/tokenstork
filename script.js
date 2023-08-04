@@ -1,5 +1,8 @@
 "use strict";
 
+import { queryTotalSupplyFT } from './queryChainGraph.js';
+const chaingraphUrl = "https://gql.chaingraph.pat.mn/v1/graphql";
+
 // Get the price of BCH in USD from CoinGecko
 fetch(
   "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin-cash&vs_currencies=usd"
@@ -202,11 +205,16 @@ fetchDataForAllTokenIds()
       }
 
       const maxSupplyCell = document.createElement("div");
-      let onlySixteenDigitsForNow = humanizeMaxSupply(1000000000000000);
+
+      const responseJson = await queryTotalSupplyFT(item.token.category, chaingraphUrl);
+      const totalAmount = responseJson.data.transaction[0].outputs.reduce((total, output) => total +  parseInt(output.fungible_token_amount),0);
+      maxSupplyAmount = humanizeMaxSupply(totalAmount);
+
+      // let onlySixteenDigitsForNow = humanizeMaxSupply(1000000000000000);
       // let nf = new Intl.NumberFormat("en-US");
       maxSupplyCell.className = "cell maxSupply";
       // maxSupplyCell.innerText = nf.format(onlySixteenDigitsForNow);
-      maxSupplyCell.textContent = onlySixteenDigitsForNow;
+      maxSupplyCell.textContent = maxSupplyAmount;
       row.appendChild(maxSupplyCell);
 
       // Create and append the market cap in one cell
