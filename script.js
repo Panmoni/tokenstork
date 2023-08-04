@@ -204,16 +204,17 @@ fetchDataForAllTokenIds()
         return normalizedNum.toFixed(1) + " " + units[unitIndex];
       }
 
+      // Get the max supply from chaingraph
+      async function getFTMaxSupply(tokenId){
+        const responseJson = await queryTotalSupplyFT(tokenId, chaingraphUrl);
+        const totalAmount = responseJson.data.transaction[0].outputs.reduce((total, output) => total +  parseInt(output.fungible_token_amount),0);
+      }
+
       const maxSupplyCell = document.createElement("div");
 
-      const responseJson = queryTotalSupplyFT(item.token.category, chaingraphUrl);
-      const totalAmount = responseJson.data.transaction[0].outputs.reduce((total, output) => total +  parseInt(output.fungible_token_amount),0);
-      maxSupplyAmount = humanizeMaxSupply(totalAmount);
+      maxSupplyAmount = humanizeMaxSupply(getFTMaxSupply(item.token.category));
 
-      // let onlySixteenDigitsForNow = humanizeMaxSupply(1000000000000000);
-      // let nf = new Intl.NumberFormat("en-US");
       maxSupplyCell.className = "cell maxSupply";
-      // maxSupplyCell.innerText = nf.format(onlySixteenDigitsForNow);
       maxSupplyCell.textContent = maxSupplyAmount;
       row.appendChild(maxSupplyCell);
 
