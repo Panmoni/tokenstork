@@ -208,10 +208,8 @@ fetchDataForAllTokenIds()
       async function getFTMaxSupply(tokenId) {
         const responseJson = await queryTotalSupplyFT(tokenId, chaingraphUrl);
         const totalAmount = responseJson.data.transaction[0].outputs.reduce((total, output) => total +  parseInt(output.fungible_token_amount),0);
+        return totalAmount;
       }
-
-
-      
 
       // Create and append the max supply in one cell
       const maxSupplyCell = document.createElement("div");
