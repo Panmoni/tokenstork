@@ -205,6 +205,11 @@ fetchDataForAllTokenIds()
         // Get the number in terms of that unit
         var normalizedNum = num / Math.pow(10, unitIndex * 3);
 
+        // If decimal part is zero, return integer part only
+    if (normalizedNum % 1 === 0) {
+      return normalizedNum.toFixed(0) + " " + units[unitIndex];
+  }
+
         // Round to one decimal place and add the unit
         return normalizedNum.toFixed(1) + " " + units[unitIndex];
       }
