@@ -231,9 +231,6 @@ fetchDataForAllTokenIds()
             throw new Error("Invalid token amount");
           }
           let amount = BigInt(output.fungible_token_amount);
-          if (isNaN(amount)) {
-            throw new Error("Invalid token amount");
-          }
           return total + amount;
         }, BigInt(0));
       
