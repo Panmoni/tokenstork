@@ -212,7 +212,7 @@ fetchDataForAllTokenIds()
 
       const maxSupplyCell = document.createElement("div");
 
-      maxSupplyAmount = humanizeMaxSupply(getFTMaxSupply(item.token.category));
+      let maxSupplyAmount = humanizeMaxSupply(getFTMaxSupply(item.token.category));
 
       maxSupplyCell.className = "cell maxSupply";
       maxSupplyCell.textContent = maxSupplyAmount;
