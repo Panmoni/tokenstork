@@ -1,6 +1,6 @@
 "use strict";
 
-import { queryTotalSupplyFT } from './queryChainGraph.js';
+import queryTotalSupplyFT  from 'queryChainGraph.js';
 const chaingraphUrl = "https://gql.chaingraph.pat.mn/v1/graphql";
 
 // Get the price of BCH in USD from CoinGecko
