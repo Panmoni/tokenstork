@@ -206,7 +206,7 @@ fetchDataForAllTokenIds()
 
       const maxSupplyCell = document.createElement("div");
 
-      const responseJson = await queryTotalSupplyFT(item.token.category, chaingraphUrl);
+      const responseJson = queryTotalSupplyFT(item.token.category, chaingraphUrl);
       const totalAmount = responseJson.data.transaction[0].outputs.reduce((total, output) => total +  parseInt(output.fungible_token_amount),0);
       maxSupplyAmount = humanizeMaxSupply(totalAmount);
 
