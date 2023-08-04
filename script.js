@@ -217,30 +217,33 @@ fetchDataForAllTokenIds()
       // Get the max supply from chaingraph
       async function getFTMaxSupply(tokenId, decimals) {
         const responseJson = await queryTotalSupplyFT(tokenId, chaingraphUrl);
+
         if(!responseJson.data || !responseJson.data.transaction || !responseJson.data.transaction[0] || !responseJson.data.transaction[0].outputs){
           throw new Error("Invalid response structure");
         }
-
-        let totalAmount = responseJson.data.transaction[0].outputs.reduce((total, output) => total + BigInt(output.fungible_token_amount), BigInt(0));
-          if (isNaN(amount)) {
-            throw new Error("Invalid token amount");
-          }
-          return total + amount;
-        }, BigInt(0));
 
         if (isNaN(decimals) || decimals < 0 || decimals > 100) {
           throw new Error("Invalid decimals value");
         }
 
-          // Convert to a string, then slice off the last 'decimals' digits
-          totalAmount = totalAmount.toString();
-          if (totalAmount.length > decimals) {
-            totalAmount = totalAmount.slice(0, -decimals);
+        let totalAmount = responseJson.data.transaction[0].outputs.reduce((total, output) => {
+          let amount = BigInt(output.fungible_token_amount);
+          if (isNaN(amount)) {
+            throw new Error("Invalid token amount");
           }
-          // convert it back to a number
-          totalAmount = Number(totalAmount);
-          
-          return totalAmount;
+          return total + amount;
+        }, BigInt(0));
+      
+      // Convert to a string, then slice off the last 'decimals' digits
+      totalAmount = totalAmount.toString();
+      if (totalAmount.length > decimals) {
+        totalAmount = totalAmount.slice(0, -decimals);
+      }
+
+      // convert it back to a number
+      totalAmount = Number(totalAmount);
+
+      return totalAmount;
       }
 
       // Create and append the max supply in one cell
