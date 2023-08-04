@@ -240,6 +240,9 @@ fetchDataForAllTokenIds()
         totalAmount = totalAmount.slice(0, -decimals);
       }
 
+      console.log("totalAmount after removal of decimal places: ", totalAmount);
+
+
       // convert it back to a number
       totalAmount = Number(totalAmount);
 
