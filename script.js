@@ -191,6 +191,11 @@ fetchDataForAllTokenIds()
           "quintillion",
         ];
 
+        // If number is less than 10000, return it as it is
+        if (num < 10000) {
+          return parseInt(num).toString();
+        }
+
         // Make sure the number is positive and get its logarithm
         var magnitude = Math.log10(Math.abs(num));
 
