@@ -236,11 +236,14 @@ fetchDataForAllTokenIds()
 
         console.log("totalAmount before removal of decimal places: ", totalAmount);
       
-      // Convert to a string, then slice off the last 'decimals' digits
-      totalAmount = totalAmount.toString();
-      if (totalAmount.length > decimals) {
-        totalAmount = totalAmount.slice(0, -decimals);
-      }
+       // Convert to a string, then slice off the last 'decimals' digits
+       totalAmount = totalAmount.toString();
+       if (totalAmount.length > decimals) {
+         totalAmount = totalAmount.slice(0, -decimals);
+       } else {
+         // if 'totalAmount' is smaller than or equal to 'decimals', then 'totalAmount' becomes '0'
+         totalAmount = '0';
+       }
 
       console.log("totalAmount after removal of decimal places: ", totalAmount);
 
