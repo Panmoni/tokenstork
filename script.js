@@ -221,8 +221,7 @@ fetchDataForAllTokenIds()
           throw new Error("Invalid response structure");
         }
 
-        let totalAmount = responseJson.data.transaction[0].outputs.reduce((total, output) => {
-          const amount = BigInt(output.fungible_token_amount);
+        let totalAmount = responseJson.data.transaction[0].outputs.reduce((total, output) => total + BigInt(output.fungible_token_amount), BigInt(0));
           if (isNaN(amount)) {
             throw new Error("Invalid token amount");
           }
@@ -233,9 +232,15 @@ fetchDataForAllTokenIds()
           throw new Error("Invalid decimals value");
         }
 
-        totalAmount = totalAmount / BigInt(Math.pow(10, decimals));
-
-        return totalAmount.toString();
+          // Convert to a string, then slice off the last 'decimals' digits
+          totalAmount = totalAmount.toString();
+          if (totalAmount.length > decimals) {
+            totalAmount = totalAmount.slice(0, -decimals);
+          }
+          // convert it back to a number
+          totalAmount = Number(totalAmount);
+          
+          return totalAmount;
       }
 
       // Create and append the max supply in one cell
