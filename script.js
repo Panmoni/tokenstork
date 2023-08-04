@@ -207,9 +207,19 @@ fetchDataForAllTokenIds()
       // Get the max supply from chaingraph
       async function getFTMaxSupply(tokenId, decimals) {
         const responseJson = await queryTotalSupplyFT(tokenId, chaingraphUrl);
-        let totalAmount = responseJson.data.transaction[0].outputs.reduce((total, output) => total +  parseInt(output.fungible_token_amount),0);
-        totalAmount = totalAmount.toFixed(decimals);
-        return totalAmount;
+        if(!responseJson.data || !responseJson.data.transaction || !responseJson.data.transaction[0] || !responseJson.data.transaction[0].outputs){
+          throw new Error("Invalid response structure");
+        }
+
+
+        let totalAmount = responseJson.data.transaction[0].outputs.reduce((total, output) => {
+          const amount = BigInt(output.fungible_token_amount);
+          return total + amount;
+        }, BigInt(0));
+
+        totalAmount = totalAmount / BigInt(Math.pow(10, decimals));
+
+        return totalAmount.toString();
       }
 
       // Create and append the max supply in one cell
