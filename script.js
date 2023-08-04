@@ -206,9 +206,9 @@ fetchDataForAllTokenIds()
         var normalizedNum = num / Math.pow(10, unitIndex * 3);
 
         // If decimal part is zero, return integer part only
-    if (normalizedNum % 1 === 0) {
-      return normalizedNum.toFixed(0) + " " + units[unitIndex];
-  }
+      if (normalizedNum % 1 === 0) {
+        return normalizedNum.toFixed(0) + " " + units[unitIndex];
+      }
 
         // Round to one decimal place and add the unit
         return normalizedNum.toFixed(1) + " " + units[unitIndex];
@@ -221,11 +221,17 @@ fetchDataForAllTokenIds()
           throw new Error("Invalid response structure");
         }
 
-
         let totalAmount = responseJson.data.transaction[0].outputs.reduce((total, output) => {
           const amount = BigInt(output.fungible_token_amount);
+          if (isNaN(amount)) {
+            throw new Error("Invalid token amount");
+          }
           return total + amount;
         }, BigInt(0));
+
+        if (isNaN(decimals) || decimals < 0 || decimals > 100) {
+          throw new Error("Invalid decimals value");
+        }
 
         totalAmount = totalAmount / BigInt(Math.pow(10, decimals));
 
@@ -235,11 +241,16 @@ fetchDataForAllTokenIds()
       // Create and append the max supply in one cell
       const maxSupplyCell = document.createElement("div");
 
-      getFTMaxSupply(item.token.category, item.token.decimals).then(maxSupply => {
+      getFTMaxSupply(item.token.category, item.token.decimals)
+      .then(maxSupply => {
         let maxSupplyAmount = humanizeMaxSupply(maxSupply);
         maxSupplyCell.className = "cell maxSupply";
         maxSupplyCell.textContent = maxSupplyAmount;
-    });
+      })
+      .catch(error => {
+        console.error(error);
+        maxSupplyCell.textContent = "Error fetching max supply";
+      });
     
       row.appendChild(maxSupplyCell);
 
