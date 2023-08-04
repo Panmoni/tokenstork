@@ -227,6 +227,9 @@ fetchDataForAllTokenIds()
         }
 
         let totalAmount = responseJson.data.transaction[0].outputs.reduce((total, output) => {
+          if (typeof output.fungible_token_amount !== 'string') {
+            throw new Error("Invalid token amount");
+          }
           let amount = BigInt(output.fungible_token_amount);
           if (isNaN(amount)) {
             throw new Error("Invalid token amount");
