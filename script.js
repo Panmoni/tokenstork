@@ -210,13 +210,18 @@ fetchDataForAllTokenIds()
         const totalAmount = responseJson.data.transaction[0].outputs.reduce((total, output) => total +  parseInt(output.fungible_token_amount),0);
       }
 
+
+      
+
       // Create and append the max supply in one cell
       const maxSupplyCell = document.createElement("div");
 
-      let maxSupplyAmount = humanizeMaxSupply(getFTMaxSupply(item.token.category));
-
-      maxSupplyCell.className = "cell maxSupply";
-      maxSupplyCell.textContent = maxSupplyAmount;
+      getFTMaxSupply(item.token.category).then(maxSupply => {
+        let maxSupplyAmount = humanizeMaxSupply(maxSupply);
+        maxSupplyCell.className = "cell maxSupply";
+        maxSupplyCell.textContent = maxSupplyAmount;
+    });
+    
       row.appendChild(maxSupplyCell);
 
       // Create and append the market cap in one cell

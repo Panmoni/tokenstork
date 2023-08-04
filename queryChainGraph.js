@@ -26,12 +26,12 @@ export async function queryTotalSupplyFT(tokenId, chaingraphUrl){
         transaction(
           where: {
             inputs: {
-              outpoint_transaction_hash: { _eq: "\\x${tokenId}" }
+              outpoint_transaction_hash: { _eq: "\\\\x${tokenId}" }
               outpoint_index: { _eq: 0 }
             }
           }
         ) {
-          outputs(where: { token_category: { _eq: "\\x${tokenId}" } }) {
+          outputs(where: { token_category: { _eq: "\\\\x${tokenId}" } }) {
             fungible_token_amount
           }
         }
