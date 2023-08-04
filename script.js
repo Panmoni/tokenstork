@@ -233,6 +233,8 @@ fetchDataForAllTokenIds()
           let amount = BigInt(output.fungible_token_amount);
           return total + amount;
         }, BigInt(0));
+
+        console.log("totalAmount before removal of decimal places: ", totalAmount);
       
       // Convert to a string, then slice off the last 'decimals' digits
       totalAmount = totalAmount.toString();
