@@ -1,6 +1,6 @@
 "use strict";
 
-import { queryTotalSupplyFT }  from './queryChainGraph.js';
+import { queryTotalSupplyFT } from "./queryChainGraph.js";
 const chaingraphUrl = "https://gql.chaingraph.pat.mn/v1/graphql";
 
 // Get the price of BCH in USD from CoinGecko
@@ -48,6 +48,7 @@ const tokenIds = [
   "8bc2ebc1547257265ece8381f3ed6aa573c5aa8a23e0f552dc7128bb8a8e6f0f",
   "b69f76548653033603cdcb81299e3c1d1f3d61ad66e7ba0e6569b493605b4cbe",
   "36546e4062a1cfd070a4a8d8ff9db18aae4ddf8d9ac9a4fa789314d108b49797",
+  "7955dd3bdbdd0a4f1ff3316865a0995416dd9d9b05e0d075b075069428e64cc4",
 ];
 
 // Get number of tokens being tracked.
@@ -206,9 +207,9 @@ fetchDataForAllTokenIds()
         var normalizedNum = num / Math.pow(10, unitIndex * 3);
 
         // If decimal part is zero, return integer part only
-      if (normalizedNum % 1 === 0) {
-        return normalizedNum.toFixed(0) + " " + units[unitIndex];
-      }
+        if (normalizedNum % 1 === 0) {
+          return normalizedNum.toFixed(0) + " " + units[unitIndex];
+        }
 
         // Round to one decimal place and add the unit
         return normalizedNum.toFixed(1) + " " + units[unitIndex];
@@ -218,7 +219,12 @@ fetchDataForAllTokenIds()
       async function getFTMaxSupply(tokenId, decimals) {
         const responseJson = await queryTotalSupplyFT(tokenId, chaingraphUrl);
 
-        if(!responseJson.data || !responseJson.data.transaction || !responseJson.data.transaction[0] || !responseJson.data.transaction[0].outputs){
+        if (
+          !responseJson.data ||
+          !responseJson.data.transaction ||
+          !responseJson.data.transaction[0] ||
+          !responseJson.data.transaction[0].outputs
+        ) {
           throw new Error("Invalid response structure");
         }
 
@@ -226,43 +232,51 @@ fetchDataForAllTokenIds()
           throw new Error("Invalid decimals value");
         }
 
-        let totalAmount = responseJson.data.transaction[0].outputs.reduce((total, output) => {
-          if (typeof output.fungible_token_amount !== 'string') {
-            throw new Error("Invalid token amount");
-          }
-          let amount = BigInt(output.fungible_token_amount);
-          return total + amount;
-        }, BigInt(0));
+        let totalAmount = responseJson.data.transaction[0].outputs.reduce(
+          (total, output) => {
+            if (typeof output.fungible_token_amount !== "string") {
+              throw new Error("Invalid token amount");
+            }
+            let amount = BigInt(output.fungible_token_amount);
+            return total + amount;
+          },
+          BigInt(0)
+        );
 
-        console.log("totalAmount before removal of decimal places: ", totalAmount);
-      
-       // Convert to a decimal form
+        console.log(
+          "totalAmount before removal of decimal places: ",
+          totalAmount
+        );
+
+        // Convert to a decimal form
         totalAmount = totalAmount / BigInt(Math.pow(10, decimals));
 
-        console.log("totalAmount after removal of decimal places: ", totalAmount);
+        console.log(
+          "totalAmount after removal of decimal places: ",
+          totalAmount
+        );
 
+        // convert it back to a number
+        totalAmount = totalAmount === "" ? "0" : totalAmount;
+        totalAmount = Number(totalAmount);
 
-      // convert it back to a number
-      totalAmount = totalAmount === "" ? "0" : totalAmount;
-      totalAmount = Number(totalAmount);
-
-      return totalAmount;
+        return totalAmount;
       }
 
       // Create and append the max supply in one cell
       const maxSupplyCell = document.createElement("div");
 
       getFTMaxSupply(item.token.category, item.token.decimals)
-      .then(maxSupply => {
-        let maxSupplyAmount = humanizeMaxSupply(maxSupply);
-        maxSupplyCell.className = "cell maxSupply";
-        maxSupplyCell.textContent = maxSupplyAmount;
-      })
-      .catch(error => {
-        console.error(error);
-        maxSupplyCell.textContent = "Error fetching max supply";
-      });
-    
+        .then((maxSupply) => {
+          let maxSupplyAmount = humanizeMaxSupply(maxSupply);
+          maxSupplyCell.className = "cell maxSupply";
+          maxSupplyCell.textContent = maxSupplyAmount;
+        })
+        .catch((error) => {
+          console.error(error);
+          maxSupplyCell.textContent = "Error fetching max supply";
+        });
+
       row.appendChild(maxSupplyCell);
 
       // Create and append the market cap in one cell
