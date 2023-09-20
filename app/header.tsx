@@ -1,16 +1,18 @@
 // header.tsx
 
+import Image from "next/image";
+
 const Header = () => {
   return (
     <header>
       <div className="logo">
         <h1>
           <a href="/">
-            <img
-              src="logo-simple-bch.png"
+            <Image
+              src="/logo-simple-bch.png"
               alt="TokenStork - Delivering beautiful new CashTokens on BCH since 2023"
-              width="553"
-              height="100"
+              width={553}
+              height={100}
               title="TokenStork - Delivering beautiful new CashTokens on BCH since 2023"
             />
           </a>
