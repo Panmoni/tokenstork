@@ -1,7 +1,6 @@
 import { ElectrumCluster, ElectrumTransport } from "electrum-cash";
 
 const handler = async (req, res) => {
-  // <-- Added `async` here
   const category = req.query.category;
   const decimals = parseInt(req.query.decimals, 10);
 
@@ -64,7 +63,6 @@ const handler = async (req, res) => {
     console.error("Error while fetching data:", error);
     res.status(500).json({ error: "Internal Server Error" });
   } finally {
-    // <-- Ensure electrum is shutdown properly, no matter the outcome
     await electrum.shutdown();
   }
 };
