@@ -8,6 +8,13 @@ export default async function handler(
 ) {
   try {
     const url = "https://fear-and-greed-index.p.rapidapi.com/v1/fgi";
+
+    // Check if the API key exists
+    const apiKey = process.env.FEAR_AND_GREED_API_KEY;
+    if (!apiKey) {
+      throw new Error("FEAR_AND_GREED_API_KEY is not set");
+    }
+
     const options = {
       method: "GET",
       headers: {
