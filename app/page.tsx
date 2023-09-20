@@ -65,7 +65,7 @@ export default function Page() {
     }
 
     // Get the max supply from chaingraph
-    async function getFTMaxSupply(tokenId, decimals) {
+    async function getFTMaxSupply(tokenId: string, decimals: number) {
       const responseJson = await queryTotalSupplyFT(tokenId, chaingraphUrl);
 
       if (
