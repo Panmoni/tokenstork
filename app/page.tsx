@@ -9,10 +9,20 @@ import tokenIds from "./tokenIds.js";
 // import { TokenData } from "./interfaces";
 // import TokenDataContext from "./contexts/tokendatacontext";
 
+type TokenData = {
+  uris: { [key: string]: any };
+  token: {
+    decimals: number;
+    category: string;
+    symbol: string;
+  };
+  maxSupply: string;
+};
+
 const chaingraphUrl = "https://gql.chaingraph.pat.mn/v1/graphql";
 
 export default function Page() {
-  const [data, setData] = useState([]);
+  const [data, setData] = useState<TokenData[]>([]);
   const [toastMessage, setToastMessage] = useState("");
 
   const fetchDataForAllTokenIds = useCallback(async () => {
@@ -107,7 +117,7 @@ export default function Page() {
     }
     // Create and append the max supply in one cell
     // Humanize the max supply
-    function humanizeMaxSupply(num) {
+    function humanizeMaxSupply(num: number): string {
       var units = [
         "",
         "thousand",
@@ -120,7 +130,7 @@ export default function Page() {
 
       // If number is less than 10000, return it as it is
       if (num < 10000) {
-        return parseInt(num).toString();
+        return num.toString();
       }
 
       // Make sure the number is positive and get its logarithm
