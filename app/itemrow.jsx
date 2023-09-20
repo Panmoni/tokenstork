@@ -13,6 +13,7 @@ import {
   faTelegram,
 } from "@fortawesome/free-brands-svg-icons";
 import { useBCHPrice } from "./bchpriceclientprovider";
+import Image from "next/image";
 
 const ItemRow = ({ item, copyText }) => {
   const { bchPrice } = useBCHPrice();
@@ -93,15 +94,15 @@ const ItemRow = ({ item, copyText }) => {
     <div className="row">
       {/* Icon, Name, and Symbol */}
       <div className="cell icon-symbol-name">
-        <img
+        <Image
           src={
             item?.uris?.icon?.startsWith("ipfs://")
               ? "https://ipfs.io/ipfs/" + item.uris.icon.substring(7)
               : item?.uris?.icon
           }
           alt={item?.name}
-          width="64"
-          height="64"
+          width={64}
+          height={64}
         />
         <span className="name" title={item.description}>
           {item.name.length > 20 ? item.name.substr(0, 20) + "..." : item.name}
