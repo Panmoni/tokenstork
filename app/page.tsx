@@ -6,6 +6,7 @@ import Headers from "./headers";
 import Toast from "./toast";
 import Container from "./container";
 import tokenIds from "./tokenIds.js";
+// import { TokenData } from "./interfaces";
 // import TokenDataContext from "./contexts/tokendatacontext";
 
 const chaingraphUrl = "https://gql.chaingraph.pat.mn/v1/graphql";
@@ -78,6 +79,7 @@ export default function Page() {
         .map((result) => result.value);
     } catch (error) {
       console.error(`Error fetching data for all token ids: `, error);
+      return [];
     }
   }
 
