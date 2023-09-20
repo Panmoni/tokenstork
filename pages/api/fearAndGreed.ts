@@ -20,7 +20,7 @@ export default async function handler(
       headers: {
         "X-RapidAPI-Key": process.env.FEAR_AND_GREED_API_KEY,
         "X-RapidAPI-Host": "fear-and-greed-index.p.rapidapi.com",
-      },
+      } as Record<string, string>,
     };
     const response = await fetch(url, options);
     const data = await response.json();
