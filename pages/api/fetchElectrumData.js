@@ -1,6 +1,7 @@
 import { ElectrumCluster, ElectrumTransport } from "electrum-cash";
 
-export default async (req, res) => {
+const handler = async (req, res) => {
+  // <-- Added `async` here
   const category = req.query.category;
   const decimals = parseInt(req.query.decimals, 10);
 
@@ -12,19 +13,6 @@ export default async (req, res) => {
     return res
       .status(400)
       .json({ error: "Decimals is required and should be a number" });
-  }
-
-  async function fetchTokenDetails(tokenId) {
-    try {
-      const response = await fetch(
-        `https://bcmr.paytaca.com/api/tokens/${tokenId}`
-      );
-      const data = await response.json();
-      return data.token.decimals;
-    } catch (error) {
-      console.error("Error fetching token details:", error);
-      return null;
-    }
   }
 
   function calculateAmount(decimals) {
@@ -40,14 +28,9 @@ export default async (req, res) => {
 
   try {
     await electrum.ready();
-  } catch (e) {
-    console.error("Failed to connect ", e);
-    return res.status(500).json({ error: "Failed to connect to Electrum" });
-  }
 
-  const amount = calculateAmount(decimals);
+    const amount = calculateAmount(decimals);
 
-  try {
     const response = await electrum.request(
       "cauldron.contract.token_price",
       2,
@@ -55,7 +38,6 @@ export default async (req, res) => {
       amount
     );
 
-    // Check if the response contains valid price data
     if (!response || (response.buy === 0 && response.sell === 0)) {
       return res.json({ price: "N/A", liquidity: "N/A" });
     }
@@ -75,15 +57,16 @@ export default async (req, res) => {
       category
     );
 
-    // Shutdown the Electrum cluster
-    await electrum.shutdown();
-
     const price = (response.buy + response.sell) / 2;
 
-    // Send the data as a response
     res.json({ price, liquidity });
   } catch (error) {
     console.error("Error while fetching data:", error);
     res.status(500).json({ error: "Internal Server Error" });
+  } finally {
+    // <-- Ensure electrum is shutdown properly, no matter the outcome
+    await electrum.shutdown();
   }
 };
+
+export default handler;

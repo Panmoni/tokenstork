@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { queryTotalSupplyFT } from "./queryChainGraph.js";
 import Headers from "./headers";
 import Toast from "./toast";
@@ -15,6 +15,19 @@ export default function Page() {
   const [data, setData] = useState([]);
   const [toastMessage, setToastMessage] = useState("");
 
+  const fetchDataForAllTokenIds = useCallback(async () => {
+    try {
+      const promises = tokenIds.map(fetchDataForTokenId);
+      const results = await Promise.allSettled(promises);
+      return results
+        .filter((result) => result.status === "fulfilled")
+        .map((result) => result.value);
+    } catch (error) {
+      console.error(`Error fetching data for all token ids: `, error);
+      return [];
+    }
+  }, [fetchDataForTokenId]);
+
   useEffect(() => {
     async function fetchData() {
       const fetchedData = await fetchDataForAllTokenIds();
@@ -22,7 +35,7 @@ export default function Page() {
     }
 
     fetchData();
-  }, []);
+  }, [fetchDataForAllTokenIds]);
 
   function showToast(message: string) {
     setToastMessage(message);
@@ -67,19 +80,6 @@ export default function Page() {
         },
         maxSupply: "N/A",
       };
-    }
-  }
-
-  async function fetchDataForAllTokenIds() {
-    try {
-      const promises = tokenIds.map(fetchDataForTokenId);
-      const results = await Promise.allSettled(promises);
-      return results
-        .filter((result) => result.status === "fulfilled")
-        .map((result) => result.value);
-    } catch (error) {
-      console.error(`Error fetching data for all token ids: `, error);
-      return [];
     }
   }
 
