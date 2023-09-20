@@ -82,7 +82,7 @@ export default function Page() {
       }
 
       let totalAmount = responseJson.data.transaction[0].outputs.reduce(
-        (total, output) => {
+        (total: bigint, output: { fungible_token_amount: string }) => {
           if (typeof output.fungible_token_amount !== "string") {
             throw new Error("Invalid token amount");
           }
