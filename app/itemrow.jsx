@@ -139,10 +139,12 @@ const ItemRow = ({ item, copyText }) => {
           rel="noopener noreferrer"
           title="View on SalemKode Explorer"
         >
-          <img
-            src="salemkode.png"
+          <Image
+            src="/salemkode.png"
             className="sk-icon"
             alt="Link to token on SalemKode Explorer"
+            width={24}
+            height={24}
           />
         </a>
       </div>
