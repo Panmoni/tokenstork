@@ -15,8 +15,8 @@ const Footer = () => {
     <footer>
       <div className="footer-content">
         <p className="attribution">
-          TokenStork "Delivering beautiful new CashTokens on BCH since 2023" is
-          a{" "}
+          TokenStork &quot;Delivering beautiful new CashTokens on BCH since
+          2023&quot; is a{" "}
           <a
             href="https://www.panmoni.com/"
             target="_blank"
@@ -41,7 +41,7 @@ const Footer = () => {
             rel="noopener noreferrer"
             title="mainnet_pat"
           >
-            mainnet_pat's{" "}
+            mainnet_pat&apos;s{" "}
           </a>
           Chaingraph and{" "}
           <a
