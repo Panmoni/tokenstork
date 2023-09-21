@@ -50,7 +50,7 @@ const ItemRow = ({ item, copyText }) => {
       // Extract decimals from the tokenData
       const decimals = tokenData.token.decimals;
       const res = await fetch(
-        `https://cauldronapi.panmoni.com?category=${category}&decimals=${decimals}`,
+        `https://cauldronapi.panmoni.com/token_price?category=${category}&decimals=${decimals}`,
         {
           mode: "no-cors",
         }
