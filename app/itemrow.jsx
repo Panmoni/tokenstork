@@ -30,7 +30,9 @@ const ItemRow = ({ item, copyText }) => {
     telegram: faTelegram,
   };
 
-  const [electrumData, setElectrumData] = useState(null);
+  const [electrumData, setElectrumData] = useState({
+    price: "Loading...",
+  });
 
   function satoshisToBCH(satoshis) {
     return satoshis / 100000000;
@@ -55,22 +57,20 @@ const ItemRow = ({ item, copyText }) => {
         throw new Error(`API returned status: ${res.status}`);
       }
       const data = await res.json();
+      const { buy, sell } = data.result;
 
-      // This will handle price calculation
-      if (!data || (data.buy === 0 && data.sell === 0)) {
-        setElectrumData({ price: "N/A", liquidity: "N/A" });
-      } else if (
-        !data ||
-        typeof data.buy !== "number" ||
-        typeof data.sell !== "number"
-      ) {
+      if (!buy && !sell) {
+        return { price: "N/A" };
+      } else if (typeof buy !== "number" || typeof sell !== "number") {
         console.error("Invalid response from the API.");
+        console.error(data);
+        return null;
       } else {
-        const price = (data.buy + data.sell) / 2;
-        setElectrumData({ price, liquidity: data.liquidity });
+        const avgPrice = (buy + sell) / 2;
+        return { price: avgPrice };
       }
 
-      return data;
+      return data.result;
     } catch (error) {
       console.error("Error fetching data:", error);
       return null;
@@ -84,7 +84,9 @@ const ItemRow = ({ item, copyText }) => {
     } else {
       const bchValue = satoshisToBCH(parseFloat(electrumData.price));
       const usdValue = bchValue * bchPrice;
-      if (usdValue >= 1) {
+      if (isNaN(usdValue)) {
+        displayPrice = "Error";
+      } else if (usdValue >= 1) {
         // If USD value >= 1, display with 2 decimal places
         displayPrice = `$${Math.round(usdValue * 100) / 100}`;
       } else {
