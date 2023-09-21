@@ -1,84 +1,84 @@
-// // import { ElectrumCluster, ElectrumTransport } from "electrum-cash";
+// import { ElectrumCluster, ElectrumTransport } from "electrum-cash";
 
-// // const { ElectrumClient, ElectrumTransport } = require("electrum-cash");
+// const { ElectrumClient, ElectrumTransport } = require("electrum-cash");
 
-// const ElectrumCash = require("electrum-cash");
-// const ElectrumCluster = ElectrumCash.ElectrumCluster;
-// const ElectrumTransport = ElectrumCash.ElectrumTransport;
+const ElectrumCash = require("electrum-cash");
+const ElectrumCluster = ElectrumCash.ElectrumCluster;
+const ElectrumTransport = ElectrumCash.ElectrumTransport;
 
-// const handler = async (req, res) => {
-//   const category = req.query.category;
-//   const decimals = parseInt(req.query.decimals, 10);
+const handler = async (req, res) => {
+  const category = req.query.category;
+  const decimals = parseInt(req.query.decimals, 10);
 
-//   if (!category) {
-//     return res.status(400).json({ error: "Category is required" });
-//   }
+  if (!category) {
+    return res.status(400).json({ error: "Category is required" });
+  }
 
-//   if (isNaN(decimals)) {
-//     return res
-//       .status(400)
-//       .json({ error: "Decimals is required and should be a number" });
-//   }
+  if (isNaN(decimals)) {
+    return res
+      .status(400)
+      .json({ error: "Decimals is required and should be a number" });
+  }
 
-//   function calculateAmount(decimals) {
-//     return decimals === 0 ? 1 : Math.pow(10, decimals);
-//   }
+  function calculateAmount(decimals) {
+    return decimals === 0 ? 1 : Math.pow(10, decimals);
+  }
 
-//   // const electrum = new ElectrumClient(
-//   //   "TokenStork.com",
-//   //   "1.4.3",
-//   //   "rostrum.cauldron.quest",
-//   //   50004,
-//   //   ElectrumTransport.WSS.Scheme
-//   // );
+  // const electrum = new ElectrumClient(
+  //   "TokenStork.com",
+  //   "1.4.3",
+  //   "rostrum.cauldron.quest",
+  //   50004,
+  //   ElectrumTransport.WSS.Scheme
+  // );
 
-//   const electrum = new ElectrumCluster("TokenStork.com", "1.4.3", 1, 1);
-//   electrum.addServer(
-//     "rostrum.cauldron.quest",
-//     50004,
-//     ElectrumTransport.WSS.Scheme
-//   );
+  const electrum = new ElectrumCluster("TokenStork.com", "1.4.3", 1, 1);
+  electrum.addServer(
+    "rostrum.cauldron.quest",
+    50004,
+    ElectrumTransport.WSS.Scheme
+  );
 
-//   try {
-//     await electrum.ready();
+  try {
+    await electrum.ready();
 
-//     const amount = calculateAmount(decimals);
+    const amount = calculateAmount(decimals);
 
-//     const response = await electrum.request(
-//       "cauldron.contract.token_price",
-//       2,
-//       category,
-//       amount
-//     );
+    const response = await electrum.request(
+      "cauldron.contract.token_price",
+      2,
+      category,
+      amount
+    );
 
-//     if (!response || (response.buy === 0 && response.sell === 0)) {
-//       return res.json({ price: "N/A", liquidity: "N/A" });
-//     }
+    if (!response || (response.buy === 0 && response.sell === 0)) {
+      return res.json({ price: "N/A", liquidity: "N/A" });
+    }
 
-//     if (
-//       !response ||
-//       typeof response.buy !== "number" ||
-//       typeof response.sell !== "number"
-//     ) {
-//       console.error("Invalid response from Electrum.");
-//       return res.status(500).json({ error: "Failed to fetch price data." });
-//     }
+    if (
+      !response ||
+      typeof response.buy !== "number" ||
+      typeof response.sell !== "number"
+    ) {
+      console.error("Invalid response from Electrum.");
+      return res.status(500).json({ error: "Failed to fetch price data." });
+    }
 
-//     const liquidity = await electrum.request(
-//       "cauldron.contract.token_value_locked",
-//       2,
-//       category
-//     );
+    const liquidity = await electrum.request(
+      "cauldron.contract.token_value_locked",
+      2,
+      category
+    );
 
-//     const price = (response.buy + response.sell) / 2;
+    const price = (response.buy + response.sell) / 2;
 
-//     res.json({ price, liquidity });
-//   } catch (error) {
-//     console.error("Error while fetching data:", error);
-//     res.status(500).json({ error: "Internal Server Error" });
-//   } finally {
-//     await electrum.shutdown();
-//   }
-// };
+    res.json({ price, liquidity });
+  } catch (error) {
+    console.error("Error while fetching data:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  } finally {
+    await electrum.shutdown();
+  }
+};
 
-// export default handler;
+export default handler;

@@ -46,20 +46,30 @@ const ItemRow = ({ item, copyText }) => {
         throw new Error(`Paytaca API returned status: ${tokenResponse.status}`);
       }
       const tokenData = await tokenResponse.json();
-
-      // Extract decimals from the tokenData
       const decimals = tokenData.token.decimals;
+
       const res = await fetch(
-        `https://cauldronapi.panmoni.com/token_price?category=${category}&decimals=${decimals}`,
-        {
-          mode: "no-cors",
-        }
+        `https://cauldronapi.panmoni.com/token_price?category=${category}&decimals=${decimals}`
       );
       if (!res.ok) {
         throw new Error(`API returned status: ${res.status}`);
       }
       const data = await res.json();
-      setElectrumData(data);
+
+      // This will handle price calculation
+      if (!data || (data.buy === 0 && data.sell === 0)) {
+        setElectrumData({ price: "N/A", liquidity: "N/A" });
+      } else if (
+        !data ||
+        typeof data.buy !== "number" ||
+        typeof data.sell !== "number"
+      ) {
+        console.error("Invalid response from the API.");
+      } else {
+        const price = (data.buy + data.sell) / 2;
+        setElectrumData({ price, liquidity: data.liquidity });
+      }
+
       return data;
     } catch (error) {
       console.error("Error fetching data:", error);
