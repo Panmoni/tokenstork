@@ -44,13 +44,15 @@ const nextConfig = {
       },
       {
         protocol: "https",
-        hostname: "**.ipfs.dweb.link",
+        hostname:
+          "bafybeiekc4wo27tmfi26zzujs3qfn2z5osncs74zzdr53l52apu2toswzm.ipfs.dweb.link",
         port: "",
         pathname: "**",
       },
       {
         protocol: "https",
-        hostname: "**.ipfs.nftstorage.link",
+        hostname:
+          "bafkreigyby3j4ue7oxw6ucpojflzbt24x7vik7rp2sjqnfme6d2cfyjdea.ipfs.nftstorage.link",
         port: "",
         pathname: "**",
       },
