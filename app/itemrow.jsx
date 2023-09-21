@@ -50,7 +50,7 @@ const ItemRow = ({ item, copyText }) => {
       // Extract decimals from the tokenData
       const decimals = tokenData.token.decimals;
       const res = await fetch(
-        `/api/fetchElectrumData?category=${category}&decimals=${decimals}`
+        `https://cauldronapi.panmoni.com?category=${category}&decimals=${decimals}`
       );
       if (!res.ok) {
         throw new Error(`API returned status: ${res.status}`);

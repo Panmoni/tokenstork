@@ -1,4 +1,10 @@
-import { ElectrumCluster, ElectrumTransport } from "electrum-cash";
+// import { ElectrumCluster, ElectrumTransport } from "electrum-cash";
+
+// const { ElectrumClient, ElectrumTransport } = require("electrum-cash");
+
+const ElectrumCash = require("electrum-cash");
+const ElectrumCluster = ElectrumCash.ElectrumCluster;
+const ElectrumTransport = ElectrumCash.ElectrumTransport;
 
 const handler = async (req, res) => {
   const category = req.query.category;
@@ -17,6 +23,14 @@ const handler = async (req, res) => {
   function calculateAmount(decimals) {
     return decimals === 0 ? 1 : Math.pow(10, decimals);
   }
+
+  // const electrum = new ElectrumClient(
+  //   "TokenStork.com",
+  //   "1.4.3",
+  //   "rostrum.cauldron.quest",
+  //   50004,
+  //   ElectrumTransport.WSS.Scheme
+  // );
 
   const electrum = new ElectrumCluster("TokenStork.com", "1.4.3", 1, 1);
   electrum.addServer(
