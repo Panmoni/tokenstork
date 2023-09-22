@@ -19,6 +19,7 @@ const bodyFont = Inter({
 // const headingFont = bodyFont;
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://tokenstork.com"),
   title:
     "Token Stork: Discover, Track and Analyze BCH Cash Tokens (0.0.1 beta)",
   description: "Track BCH CashTokens market cap and more with TokenStork.",
