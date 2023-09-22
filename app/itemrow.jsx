@@ -33,6 +33,7 @@ const ItemRow = ({ item, copyText }) => {
   const [electrumData, setElectrumData] = useState({
     price: "Loading...",
   });
+  const [liquidityValue, setLiquidityValue] = useState("N/A");
 
   function satoshisToBCH(satoshis) {
     return satoshis / 100000000;
@@ -98,10 +99,35 @@ const ItemRow = ({ item, copyText }) => {
     }
   }
 
+  // Function to fetch liquidity data
+  const fetchLiquidityDataForCategory = async (category) => {
+    try {
+      const response = await fetch(
+        `https://cauldronapi.panmoni.com/token_liquidity?category=${category}`
+      );
+      if (!response.ok) {
+        throw new Error(`Liquidity API returned status: ${response.status}`);
+      }
+      const data = await response.json();
+      const bchValue = satoshisToBCH(data.result.bch);
+      const usdValue = bchValue * bchPrice;
+      return usdValue;
+    } catch (error) {
+      console.error("Error fetching liquidity data:", error);
+      return null;
+    }
+  };
+
   useEffect(() => {
     (async () => {
       const data = await fetchElectrumDataForCategory(category);
       setElectrumData(data);
+
+      // Fetch liquidity data and update the state
+      const liquidityData = await fetchLiquidityDataForCategory(category);
+      if (liquidityData !== null) {
+        setLiquidityValue(`$${liquidityData.toFixed(2)}`);
+      }
     })();
   }, [category]);
 
@@ -134,12 +160,13 @@ const ItemRow = ({ item, copyText }) => {
       <div className="cell maxSupply">{item.maxSupply || "N/A"}</div>
       {/* Market Cap */}
       <div className="cell marketCap">N/A</div>
+      <div className="cell tvl">{liquidityValue}</div>
       {/* Category with copy and link icons */}
       <div className="cell category">
         <span className="category-display" title={item.token.category}>
-          {item.token.category.slice(0, 10) +
+          {item.token.category.slice(0, 5) +
             "..." +
-            item.token.category.slice(-10)}
+            item.token.category.slice(-5)}
         </span>{" "}
         <FontAwesomeIcon
           className="icon-space"

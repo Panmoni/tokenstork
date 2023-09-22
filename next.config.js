@@ -60,6 +60,4 @@ const nextConfig = {
   },
 };
 
-// bafkreigyby3j4ue7oxw6ucpojflzbt24x7vik7rp2sjqnfme6d2cfyjdea.ipfs.nftstorage.link
-// https://bafybeiekc4wo27tmfi26zzujs3qfn2z5osncs74zzdr53l52apu2toswzm.ipfs.dweb.link
 module.exports = nextConfig;

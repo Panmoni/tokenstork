@@ -5,6 +5,7 @@ const Headers = () => {
     "Circulating Supply",
     "Max Supply",
     "Market Cap",
+    "TVL",
     "Category",
     "Links",
   ];
@@ -21,4 +22,3 @@ const Headers = () => {
 };
 
 export default Headers;
-

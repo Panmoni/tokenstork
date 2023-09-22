@@ -11,7 +11,7 @@
 
 /* CSS Variables */
 :root {
-  --grid-template: 25% 12% 12% 12% 12% 15% 12%;
+  --grid-template: 20% 12% 12% 12% 12% 8% 12% 12%;
   --heading-color: #4f359b;
   --secondary-color: #ff6b6b;
   --background-color: #f0eff4;

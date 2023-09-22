@@ -43,7 +43,22 @@ const Footer = () => {
           >
             mainnet_pat&apos;s{" "}
           </a>
-          Chaingraph and{" "}
+          Chaingraph,{" "}
+          <a
+            href="https://cauldron.quest/"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="BCH informational website"
+          >
+            Cauldron Swap,{" "}
+          </a>
+          <a
+            href="https://www.coingecko.com/en"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="CoinGecko"
+          ></a>
+          and{" "}
           <a
             href="https://www.bitcoincashsite.com/"
             target="_blank"
@@ -60,8 +75,17 @@ const Footer = () => {
             title="Twitter"
           >
             Mathieu Geukens
+          </a>{" "}
+          and{" "}
+          <a
+            href="https://twitter.com/dagur"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Twitter"
+          >
+            Dagur
           </a>
-          .
+          . Prices in USD.
         </p>
         <p className="support">
           <strong>Support</strong>:
