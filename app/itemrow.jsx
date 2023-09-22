@@ -111,7 +111,13 @@ const ItemRow = ({ item, copyText }) => {
       const data = await response.json();
       const bchValue = satoshisToBCH(data.result.bch);
       const usdValue = bchValue * bchPrice;
-      return usdValue;
+
+      // Format the usdValue with commas
+      const formattedValue = `$${usdValue.toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`;
+      return formattedValue;
     } catch (error) {
       console.error("Error fetching liquidity data:", error);
       return null;
@@ -126,10 +132,10 @@ const ItemRow = ({ item, copyText }) => {
       // Fetch liquidity data and update the state
       const liquidityData = await fetchLiquidityDataForCategory(category);
       if (liquidityData !== null) {
-        setLiquidityValue(`$${liquidityData.toFixed(2)}`);
+        setLiquidityValue(liquidityData);
       }
     })();
-  }, [category]);
+  }, [category, bchPrice]);
 
   return (
     <div className="row">
