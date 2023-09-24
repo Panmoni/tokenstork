@@ -5,6 +5,7 @@ import {
   faTwitter,
   faInstagram,
   faYoutube,
+  faReddit,
   faDiscord,
   faTelegram,
   faGithub,
@@ -121,6 +122,13 @@ const Footer = () => {
             rel="noopener noreferrer"
           >
             <FontAwesomeIcon icon={faTelegram} className="footer-fa-icons" />
+          </a>
+          <a
+            href="https://www.reddit.com/r/BCHCashTokens/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <FontAwesomeIcon icon={faReddit} className="footer-fa-icons" />
           </a>
           <a
             href="https://www.youtube.com/@RealBitcoinCashSite"
