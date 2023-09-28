@@ -1,6 +1,6 @@
-// HT https://github.com/cashonize/wallet/blob/main/queryChainGraph.js
+// HT https://github.com/mr-zwets/token-explorer/blob/main/src/utils/queryChainGraph.ts
 
-async function queryChainGraph(queryReq, chaingraphUrl) {
+async function queryChainGraph(queryReq: string, chaingraphUrl: string) {
   const jsonObj = {
     operationName: null,
     variables: {},
@@ -21,7 +21,10 @@ async function queryChainGraph(queryReq, chaingraphUrl) {
   return await response.json();
 }
 
-export async function queryTotalSupplyFT(tokenId, chaingraphUrl) {
+export async function queryTotalSupplyFT(
+  tokenId: string,
+  chaingraphUrl: string
+) {
   const queryReqTotalSupply = `query {
         transaction(
           where: {
@@ -39,22 +42,29 @@ export async function queryTotalSupplyFT(tokenId, chaingraphUrl) {
   return await queryChainGraph(queryReqTotalSupply, chaingraphUrl);
 }
 
-export async function queryActiveMinting(tokenId, chaingraphUrl) {
+export async function queryActiveMinting(
+  tokenId: string,
+  chaingraphUrl: string
+) {
   const queryReqActiveMinting = `query {
-        output(
-          where: {
-            token_category: { _eq: "\\\\x${tokenId}" }
-            _and: { nonfungible_token_capability: { _eq: "minting" } }
-            _not: { spent_by: {} }
-          }
-        ) {
-          locking_bytecode
+      output(
+        where: {
+          token_category: { _eq: "\\\\x${tokenId}" }
+          _and: { nonfungible_token_capability: { _eq: "minting" } }
+          _not: { spent_by: {} }
         }
-      }`;
+      ) {
+        locking_bytecode
+      }
+    }`;
   return await queryChainGraph(queryReqActiveMinting, chaingraphUrl);
 }
 
-export async function querySupplyNFTs(tokenId, chaingraphUrl, offset = 0) {
+export async function querySupplyNFTs(
+  tokenId: string,
+  chaingraphUrl: string,
+  offset: number = 0
+) {
   const queryReqTotalSupply = `query {
         output(
           offset: ${offset}
@@ -74,7 +84,10 @@ export async function querySupplyNFTs(tokenId, chaingraphUrl, offset = 0) {
   return await queryChainGraph(queryReqTotalSupply, chaingraphUrl);
 }
 
-export async function queryAuthHead(tokenId, chaingraphUrl) {
+export async function queryAuthchainLength(
+  tokenId: string,
+  chaingraphUrl: string
+) {
   const queryReqAuthHead = `query {
     transaction(
       where: {
@@ -86,8 +99,12 @@ export async function queryAuthHead(tokenId, chaingraphUrl) {
       hash
       authchains {
         authhead {
-          hash
-        }
+          hash,
+          identity_output {
+            fungible_token_amount
+          }
+        },
+        authchain_length
       }
     }
   }`;

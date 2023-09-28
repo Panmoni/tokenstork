@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { queryTotalSupplyFT } from "./queryChainGraph.js";
+import { queryTotalSupplyFT, queryAuthchainLength } from "./queryChainGraph";
 import Headers from "./headers";
 import Toast from "./toast";
 import Container from "./container";
@@ -17,6 +17,10 @@ type TokenData = {
     symbol: string;
   };
   maxSupply: string;
+  maxSupplyNum: number;
+  reservedSupplyFT: string;
+  reservedSupplyFTNum: number;
+  circSupplyHumanized: string;
 };
 
 const chaingraphUrl = "https://gql.chaingraph.pat.mn/v1/graphql";
@@ -56,8 +60,29 @@ export default function Page() {
             tokenId,
             tokenData.token.decimals
           );
+          tokenData.maxSupplyNum = maxSupply;
           tokenData.maxSupply = humanizeMaxSupply(maxSupply);
         }
+
+        // Fetch reserved supply
+        if (tokenData && tokenData.token) {
+          const totalReservedAmount = await getReservedSupplyFT(
+            tokenId,
+            tokenData.token.decimals
+          );
+          tokenData.reservedSupplyFT = humanizeMaxSupply(totalReservedAmount);
+          tokenData.reservedSupplyFTNum = totalReservedAmount;
+          // if (totalReservedAmount === 0) {
+          //   tokenData.reservedSupplyFT = 0;
+          // } else {
+          //   tokenData.getReservedSupplyFT =
+          //     humanizeMaxSupply(totalReservedAmount);
+          // }
+        }
+
+        tokenData.circSupplyHumanized = humanizeMaxSupply(
+          tokenData.maxSupplyNum - tokenData.reservedSupplyFTNum
+        );
 
         return tokenData;
       } catch (error) {
@@ -115,6 +140,54 @@ export default function Page() {
 
       return totalAmount;
     }
+
+    async function getReservedSupplyFT(tokenId: string, decimals: number) {
+      const responseJson = await queryAuthchainLength(tokenId, chaingraphUrl);
+
+      // console.log(responseJson);
+
+      //deal with null values
+      // console.log(
+      //   "responseJson: ",
+      //   tokenId +
+      //     ": " +
+      //     responseJson.data.transaction[0].authchains[0].authhead
+      //       .identity_output[0].fungible_token_amount
+      // );
+
+      if (
+        !responseJson.data.transaction[0].authchains[0].authhead
+          .identity_output[0].fungible_token_amount
+      ) {
+        let totalReservedAmount = 0;
+        // console.log(tokenId + ": " + totalReservedAmount);
+        return totalReservedAmount;
+      } else {
+        if (isNaN(decimals) || decimals < 0 || decimals > 100) {
+          throw new Error("Invalid decimals value");
+        }
+
+        let totalReservedAmount =
+          responseJson.data.transaction?.[0]?.authchains?.[0]?.authhead
+            ?.identity_output?.[0]?.fungible_token_amount;
+
+        totalReservedAmount = BigInt(totalReservedAmount);
+
+        // Convert to a decimal form
+        totalReservedAmount =
+          totalReservedAmount / BigInt(Math.pow(10, decimals));
+
+        // convert it back to a number
+        totalReservedAmount =
+          totalReservedAmount === "" ? "0" : totalReservedAmount;
+        totalReservedAmount = Number(totalReservedAmount);
+
+        // reservedSupplyFT?
+        // console.log("totalReservedAmount: ", totalReservedAmount);
+        return totalReservedAmount;
+      }
+    }
+
     // Create and append the max supply in one cell
     // Humanize the max supply
     function humanizeMaxSupply(num: number): string {

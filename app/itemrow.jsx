@@ -35,6 +35,8 @@ const ItemRow = ({ item, copyText }) => {
   });
   const [liquidityValue, setLiquidityValue] = useState("N/A");
 
+  // console.log(item.reservedSupplyFT);
+
   function satoshisToBCH(satoshis) {
     return satoshis / 100000000;
   }
@@ -124,6 +126,43 @@ const ItemRow = ({ item, copyText }) => {
     }
   };
 
+  let marketCapValue;
+
+  // Check if displayPrice is "N/A" or if there's no reservedSupply
+  if (displayPrice === "N/A" || !item.reservedSupplyFT) {
+    marketCapValue = "N/A";
+  } else if (
+    typeof item.reservedSupplyFTNum === "number" &&
+    typeof item.maxSupplyNum === "number"
+  ) {
+    marketCapValue =
+      (item.maxSupplyNum - item.reservedSupplyFTNum) *
+      parseFloat(displayPrice.slice(1));
+  } else {
+    marketCapValue = "N/A";
+  }
+
+  let formattedMarketCapValue;
+
+  if (marketCapValue !== "N/A") {
+    if (marketCapValue >= 1) {
+      // If calculatedValue >= 1, display with 2 decimal places and add commas
+      formattedMarketCapValue = `$${(
+        Math.round(marketCapValue * 100) / 100
+      ).toLocaleString("en-US", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      })}`;
+    } else {
+      // If calculatedValue < 1, display with 6 decimal places
+      formattedMarketCapValue = `$${(
+        Math.round(marketCapValue * 1000000) / 1000000
+      ).toFixed(6)}`;
+    }
+  } else {
+    formattedMarketCapValue = "N/A";
+  }
+
   useEffect(() => {
     (async () => {
       const data = await fetchElectrumDataForCategory(category);
@@ -161,11 +200,16 @@ const ItemRow = ({ item, copyText }) => {
       {/* Price */}
       <div className="cell price">{displayPrice}</div>
       {/* Circulating Supply */}
-      <div className="cell circSupply">N/A</div>
+      <div className="cell circSupply">
+        {/* {item.reservedSupplyFT
+          ? item.maxSupplyNum - item.reservedSupplyFTNum
+          : item.maxSupply} */}
+        {item.circSupplyHumanized}
+      </div>
       {/* Max Supply */}
       <div className="cell maxSupply">{item.maxSupply || "N/A"}</div>
       {/* Market Cap */}
-      <div className="cell marketCap">N/A</div>
+      <div className="cell marketCap">{formattedMarketCapValue}</div>
       <div className="cell tvl">{liquidityValue}</div>
       {/* Category with copy and link icons */}
       <div className="cell category">
