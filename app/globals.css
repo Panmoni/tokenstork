@@ -1,3 +1,7 @@
+/* @tailwind base;
+@tailwind components;
+@tailwind utilities; */
+
 /* 
   Filename: styles.css
   Author: George Donnelly
@@ -7,7 +11,7 @@
 
 /* CSS Variables */
 :root {
-  --grid-template: 25% 12% 12% 12% 12% 15% 12%;
+  --grid-template: 20% 12% 12% 12% 12% 8% 12% 12%;
   --heading-color: #4f359b;
   --secondary-color: #ff6b6b;
   --background-color: #f0eff4;
@@ -22,8 +26,8 @@
   --link-hover-color: #693cc4;
   --link-active-color: #2b185b;
   --link-visited-color: #9166cc;
-  --heading-font: "Raleway", sans-serif;
-  --body-font: "Open Sans", sans-serif;
+  /* --heading-font: "Raleway", sans-serif;
+  --body-font: "Open Sans", sans-serif; */
 }
 
 /* Reset Styles */
@@ -175,7 +179,7 @@ a:visited {
 /* Header */
 #hello-bar {
   background-color: var(--heading-color);
-  color: #fff;
+  color: var(--white-color);
   padding: 0.8rem 1rem;
   width: 100%;
   position: fixed;
@@ -208,6 +212,7 @@ nav ul.nav-links {
   align-items: center;
   font-family: var(--heading-font);
   font-size: 1.125rem;
+  font-weight: 700;
   margin-top: 1rem;
 }
 
@@ -306,12 +311,21 @@ nav ul.nav-links li a {
 .sk-icon,
 .bcmr-links {
   margin-left: 0.625rem;
+  color: var(--accent-color);
 }
 
-.fa-solid,
-.fa-brands,
-.fab {
+.sk-icon {
+  max-width: 24px;
+}
+
+.icon-space {
+  margin-left: 10px;
   color: var(--accent-color);
+}
+
+.footer-fa-icons {
+  color: var(--accent-color);
+  font-size: 1.5rem;
 }
 
 /* Copy Category */
@@ -324,15 +338,20 @@ nav ul.nav-links li a {
   border-radius: 0.125rem;
   padding: 1rem;
   position: fixed;
-  z-index: 1;
   left: 50%;
   bottom: 1.875rem;
   font-size: 1.063rem;
   transform: translateX(-50%);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  opacity: 0;
+  transition: opacity 0.3s, visibility 0.3s;
+  z-index: 1000;
 }
 
 .toast.show {
   visibility: visible;
+  opacity: 1;
+  display: block;
   -webkit-animation: fadein 0.5s, fadeout 0.5s 2.5s;
   animation: fadein 0.5s, fadeout 0.5s 2.5s;
 }
