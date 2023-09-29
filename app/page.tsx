@@ -144,17 +144,6 @@ export default function Page() {
     async function getReservedSupplyFT(tokenId: string, decimals: number) {
       const responseJson = await queryAuthchainLength(tokenId, chaingraphUrl);
 
-      // console.log(responseJson);
-
-      //deal with null values
-      // console.log(
-      //   "responseJson: ",
-      //   tokenId +
-      //     ": " +
-      //     responseJson.data.transaction[0].authchains[0].authhead
-      //       .identity_output[0].fungible_token_amount
-      // );
-
       if (
         !responseJson.data.transaction[0].authchains[0].authhead
           .identity_output[0].fungible_token_amount
