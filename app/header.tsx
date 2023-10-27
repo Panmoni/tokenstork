@@ -22,16 +22,6 @@ const Header = () => {
       <nav>
         <ul className="nav-links">
           <li>
-            <a title="Create your own CashTokens" href="#">
-              Create Tokens
-            </a>
-          </li>
-          <li>
-            <a title="Create a BCH wallet" href="#">
-              Wallet
-            </a>
-          </li>
-          <li>
             <a title="Learn more about TokenStork" href="about/">
               About
             </a>
