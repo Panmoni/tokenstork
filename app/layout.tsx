@@ -1,4 +1,5 @@
 import "./globals.css";
+import { GeistSans, GeistMono } from "geist/font";
 import { Inter } from "next/font/google";
 import type { Metadata } from "next";
 import HelloBar from "./hellobar";
@@ -10,6 +11,8 @@ import { config } from "@fortawesome/fontawesome-svg-core";
 config.autoAddCss = false;
 import { BCHPriceProvider } from "./bchpriceclientprovider";
 // import TokenDataProvider from "./providers/tokendataprovider";
+
+// TODO: replace Inter with Geist
 
 const bodyFont = Inter({
   subsets: ["latin"],
