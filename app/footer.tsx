@@ -13,85 +13,20 @@ import {
 
 const Footer = () => {
   return (
-    <footer>
+    <footer className="py-4 px-6 mb-20">
       <div className="footer-content">
         <p className="attribution">
-          TokenStork &quot;Delivering beautiful new CashTokens on BCH since
-          2023&quot; is a{" "}
+          A&nbsp;
           <a
             href="https://www.panmoni.com/"
             target="_blank"
             rel="noopener noreferrer"
             title="Panmoni is a Web3 product studio"
+            className="unset gradient-link tracking-wider font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#00abda] to-[#1476ff] hover:after:bg-gradient-to-r hover:after:from-[#00abda] hover:after:to-[#1476ff] astro-C44LKZXB"
           >
-            Panmoni{" "}
-          </a>
-          project made possible by a{" "}
-          <a
-            href="https://www.paytaca.com/"
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Thank you"
-          >
-            Paytaca{" "}
-          </a>
-          API,{" "}
-          <a
-            href="https://twitter.com/mainnet_pat"
-            target="_blank"
-            rel="noopener noreferrer"
-            title="mainnet_pat"
-          >
-            mainnet_pat&apos;s{" "}
-          </a>
-          Chaingraph,{" "}
-          <a
-            href="https://cauldron.quest/"
-            target="_blank"
-            rel="noopener noreferrer"
-            title="BCH informational website"
-          >
-            Cauldron Swap,{" "}
-          </a>
-          <a
-            href="https://www.coingecko.com/en"
-            target="_blank"
-            rel="noopener noreferrer"
-            title="CoinGecko"
-          ></a>
-          and{" "}
-          <a
-            href="https://www.bitcoincashsite.com/"
-            target="_blank"
-            rel="noopener noreferrer"
-            title="BCH informational website"
-          >
-            BCH{" "}
-          </a>
-          with help from{" "}
-          <a
-            href="https://twitter.com/GeukensMathieu"
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Twitter"
-          >
-            Mathieu Geukens
+            Panmoni
           </a>{" "}
-          and{" "}
-          <a
-            href="https://twitter.com/dagur"
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Twitter"
-          >
-            Dagur
-          </a>
-          . Prices in USD.
-        </p>
-        <p className="support">
-          <strong>Support</strong>:
-          bitcoincash:qz3pxmwda8gd42wa8k9yfxcwhcaapeuhygjc8mc4m8 |
-          bitcoincash:zz3pxmwda8gd42wa8k9yfxcwhcaapeuhyg4j59kny5
+          project. Prices in USD.
         </p>
         <div className="footer-links">
           <a href="privacy.txt" target="_blank" rel="noopener noreferrer">

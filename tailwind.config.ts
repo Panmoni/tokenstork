@@ -1,5 +1,7 @@
 import type { Config } from "tailwindcss";
 
+// TODO: consider moving colors into here.
+
 const config: Config = {
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
@@ -9,8 +11,8 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        // sans: ["var(--heading-font)"],
-        // mono: ["var(--body-font)"],
+        sans: ["var(--font-geist-sans)"],
+        mono: ["var(--font-geist-mono)"],
       },
     },
   },

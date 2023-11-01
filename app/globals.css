@@ -1,6 +1,6 @@
-/* @tailwind base;
+@tailwind base;
 @tailwind components;
-@tailwind utilities; */
+@tailwind utilities;
 
 /* 
   Filename: styles.css
@@ -8,6 +8,8 @@
   Date Created: 28 Jul 2023
   Description: Main stylesheet for TokenStork.com 
 */
+
+/* TODO: move as much of this into tailwind as possible. */
 
 /* CSS Variables */
 :root {
@@ -26,8 +28,6 @@
   --link-hover-color: #693cc4;
   --link-active-color: #2b185b;
   --link-visited-color: #9166cc;
-  /* --heading-font: "Raleway", sans-serif;
-  --body-font: "Open Sans", sans-serif; */
 }
 
 /* Reset Styles */
@@ -128,7 +128,6 @@ body {
   flex-direction: column;
   justify-content: flex-start;
   padding: 1.25rem 3.125rem;
-  font-family: var(--body-font);
   background-color: var(--background-color);
   color: var(--font-color);
 }
@@ -143,7 +142,6 @@ h3,
 h4,
 h5,
 h6 {
-  font-family: var(--heading-font);
   color: var(--heading-color);
   font-weight: 700;
   margin-bottom: 0.313rem;
@@ -210,7 +208,6 @@ nav ul.nav-links {
   list-style-type: none;
   display: flex;
   align-items: center;
-  font-family: var(--heading-font);
   font-size: 1.125rem;
   font-weight: 700;
   margin-top: 1rem;
@@ -402,7 +399,6 @@ nav ul.nav-links li a {
 
 /* Footer */
 footer {
-  font-family: var(--body-font);
   background-color: var(--background-color);
   padding: 1.25rem 3.125rem;
   margin-top: 1.25rem;

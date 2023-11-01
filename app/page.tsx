@@ -6,8 +6,6 @@ import Headers from "./headers";
 import Toast from "./toast";
 import Container from "./container";
 import tokenIds from "./tokenIds.js";
-// import { TokenData } from "./interfaces";
-// import TokenDataContext from "./contexts/tokendatacontext";
 
 type TokenData = {
   uris: { [key: string]: any };

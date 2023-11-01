@@ -1,7 +1,6 @@
-import "./globals.css";
 import { GeistSans, GeistMono } from "geist/font";
-import { Inter } from "next/font/google";
-import type { Metadata } from "next";
+import "./globals.css";
+import type { Metadata, Viewport } from "next";
 import HelloBar from "./hellobar";
 import Footer from "./footer";
 import Header from "./header";
@@ -10,16 +9,13 @@ import "@fortawesome/fontawesome-svg-core/styles.css";
 import { config } from "@fortawesome/fontawesome-svg-core";
 config.autoAddCss = false;
 import { BCHPriceProvider } from "./bchpriceclientprovider";
-// import TokenDataProvider from "./providers/tokendataprovider";
 
-// TODO: replace Inter with Geist
-
-const bodyFont = Inter({
-  subsets: ["latin"],
-  variable: "--body-font",
-});
-
-// const headingFont = bodyFont;
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  themeColor: "#4f359b",
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://tokenstork.com"),
@@ -72,8 +68,7 @@ export default function RootLayout({
 }) {
   return (
     <BCHPriceProvider>
-      {/* <TokenDataProvider tokenId={tokenId}> */}
-      <html lang="en" className={`${bodyFont.variable} font-sans`}>
+      <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
         <body>
           <HelloBar />
           <Header />
@@ -82,7 +77,6 @@ export default function RootLayout({
           <GoogleAnalytics />
         </body>
       </html>
-      {/* </TokenDataProvider> */}
     </BCHPriceProvider>
   );
 }
