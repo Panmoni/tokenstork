@@ -2,7 +2,7 @@ import { GeistSans, GeistMono } from "geist/font";
 import type { Metadata, Viewport } from "next";
 import HelloBar from "./components/HelloBar";
 import Footer from "./components/Footer";
-import Navbar from "./components/Header2";
+import Navbar from "./components/Header";
 import GoogleAnalytics from "./components/GoogleAnalytics";
 import { BCHPriceProvider } from "./providers/bchpriceclientprovider";
 import "./globals.css";

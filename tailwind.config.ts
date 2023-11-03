@@ -2,6 +2,7 @@ import type { Config } from "tailwindcss";
 
 // TODO: create themes for dogecash andxrbf https://tailwindcss.com/docs/theme, https://tailwindcss.com/docs/configuration
 // TODO: maybe just implement sun and moon for now https://github.com/HamedBahram/next-starter-with-theme/blob/main/app/components/ThemeButton.jsx
+// TODO: fix warning about safelist patterns. https://tailwindcss.com/docs/content-configuration#safelisting-classes
 
 const config: Config = {
   content: [

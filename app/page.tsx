@@ -8,7 +8,7 @@ import {
 import Headers from "./headers";
 import Toast from "./components/Toast";
 import Container from "./container";
-import tokenIds from "./tokenIds.js";
+import tokenIds from "./utils/tokenIds.js";
 
 type TokenData = {
   uris: { [key: string]: any };

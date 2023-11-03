@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import tokenIds from "../tokenIds";
+import tokenIds from "../utils/tokenIds";
 import TinyLoader from "./TinyLoader";
 import { useBCHPrice } from "../providers/bchpriceclientprovider";
 
