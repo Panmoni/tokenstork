@@ -1,4 +1,4 @@
-import { GeistSans, GeistMono } from "geist/font";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import HelloBar from "./hellobar";
@@ -9,6 +9,11 @@ import "@fortawesome/fontawesome-svg-core/styles.css";
 import { config } from "@fortawesome/fontawesome-svg-core";
 config.autoAddCss = false;
 import { BCHPriceProvider } from "./bchpriceclientprovider";
+
+const bodyFont = Inter({
+  subsets: ["latin"],
+  variable: "--body-font",
+});
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -68,7 +73,7 @@ export default function RootLayout({
 }) {
   return (
     <BCHPriceProvider>
-      <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
+      <html lang="en" className={`${bodyFont.variable} font-sans`}>
         <body>
           <HelloBar />
           <Header />
