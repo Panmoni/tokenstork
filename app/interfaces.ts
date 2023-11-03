@@ -1,5 +1,3 @@
-// types.ts
-
 export interface TokenData {
   uris: Record<string, string>;
   token: {
@@ -8,6 +6,4 @@ export interface TokenData {
     symbol: string;
   };
   maxSupply: string;
-  // Add other properties as needed
 }
-

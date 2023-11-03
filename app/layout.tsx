@@ -1,14 +1,16 @@
 import { GeistSans, GeistMono } from "geist/font";
-import "./globals.css";
 import type { Metadata, Viewport } from "next";
-import HelloBar from "./hellobar";
-import Footer from "./footer";
-import Header from "./header";
-import GoogleAnalytics from "./GoogleAnalytics";
+import HelloBar from "./components/HelloBar";
+import Footer from "./components/Footer";
+import Navbar from "./components/Header2";
+import GoogleAnalytics from "./components/GoogleAnalytics";
+import { BCHPriceProvider } from "./providers/bchpriceclientprovider";
+import "./globals.css";
 import "@fortawesome/fontawesome-svg-core/styles.css";
 import { config } from "@fortawesome/fontawesome-svg-core";
 config.autoAddCss = false;
-import { BCHPriceProvider } from "./bchpriceclientprovider";
+
+// TODO: add inner pages https://www.tremor.so/docs/components/tracker, https://storybook.tremor.so/?path=/docs/components-list-table--docs
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -69,9 +71,9 @@ export default function RootLayout({
   return (
     <BCHPriceProvider>
       <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
-        <body>
+        <body className="container mx-auto">
           <HelloBar />
-          <Header />
+          <Navbar />
           {children}
           <Footer />
           <GoogleAnalytics />

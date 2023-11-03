@@ -1,9 +1,12 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { queryTotalSupplyFT, queryAuthchainLength } from "./queryChainGraph";
+import {
+  queryTotalSupplyFT,
+  queryAuthchainLength,
+} from "./utils/queryChainGraph";
 import Headers from "./headers";
-import Toast from "./toast";
+import Toast from "./components/Toast";
 import Container from "./container";
 import tokenIds from "./tokenIds.js";
 

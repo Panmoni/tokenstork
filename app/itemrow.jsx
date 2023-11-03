@@ -12,7 +12,7 @@ import {
   faDiscord,
   faTelegram,
 } from "@fortawesome/free-brands-svg-icons";
-import { useBCHPrice } from "./bchpriceclientprovider";
+import { useBCHPrice } from "./providers/bchpriceclientprovider";
 import Image from "next/image";
 
 const ItemRow = ({ item, copyText }) => {
@@ -179,7 +179,7 @@ const ItemRow = ({ item, copyText }) => {
   return (
     <div className="row">
       {/* Icon, Name, and Symbol */}
-      <div className="cell icon-symbol-name">
+      <div>
         <Image
           src={
             item?.uris?.icon?.startsWith("ipfs://")
@@ -190,30 +190,28 @@ const ItemRow = ({ item, copyText }) => {
           width={64}
           height={64}
         />
-        <span className="name" title={item.description}>
+        <span title={item.description}>
           {item.name.length > 20 ? item.name.substr(0, 20) + "..." : item.name}
         </span>
-        <span className="symbol" title={item.description}>
-          {item.token.symbol}
-        </span>
+        <span title={item.description}>{item.token.symbol}</span>
       </div>
       {/* Price */}
-      <div className="cell price">{displayPrice}</div>
+      <div>{displayPrice}</div>
       {/* Circulating Supply */}
-      <div className="cell circSupply">
+      <div>
         {/* {item.reservedSupplyFT
           ? item.maxSupplyNum - item.reservedSupplyFTNum
           : item.maxSupply} */}
         {item.circSupplyHumanized}
       </div>
       {/* Max Supply */}
-      <div className="cell maxSupply">{item.maxSupply || "N/A"}</div>
+      <div>{item.maxSupply || "N/A"}</div>
       {/* Market Cap */}
-      <div className="cell marketCap">{formattedMarketCapValue}</div>
-      <div className="cell tvl">{liquidityValue}</div>
+      <div>{formattedMarketCapValue}</div>
+      <div>{liquidityValue}</div>
       {/* Category with copy and link icons */}
-      <div className="cell category">
-        <span className="category-display" title={item.token.category}>
+      <div>
+        <span title={item.token.category}>
           {item.token.category.slice(0, 5) +
             "..." +
             item.token.category.slice(-5)}
@@ -233,7 +231,6 @@ const ItemRow = ({ item, copyText }) => {
         >
           <Image
             src="/salemkode.png"
-            className="sk-icon"
             alt="Link to token on SalemKode Explorer"
             width={24}
             height={24}
@@ -241,7 +238,7 @@ const ItemRow = ({ item, copyText }) => {
         </a>
       </div>
       {/* Links */}
-      <div className="cell links">
+      <div>
         {/* Iterate over each key in `item.uris` and create links */}
         {Object.keys(item.uris).map((key) => {
           // Check if the key exists in linkItems
@@ -254,7 +251,7 @@ const ItemRow = ({ item, copyText }) => {
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                <FontAwesomeIcon icon={linkItems[key]} className="bcmr-links" />
+                <FontAwesomeIcon icon={linkItems[key]} />
               </a>
             );
           }

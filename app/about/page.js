@@ -1,16 +1,18 @@
-// TODO: the grid is set too high up so it affects this page and breaks the whole thing.
-
 export default function Page() {
   return (
-    <main className="container mx-auto py-6 block">
-      <h2 className="text-3xl mb-4">About Token Stork</h2>
+    <main className="px-1 sm:px-2 lg:px-4 text-base">
+      <h2 className="text-4xl font-extrabold mb-4">
+        <span className="text-transparent bg-clip-text bg-gradient-to-r to-accent from-primary">
+          About Token Stork
+        </span>
+      </h2>
       <p>
-        TokenStork.com is a market-cap site for BCH CashTokens built and
-        maintained by{" "}
-        <a href="https://georgedonnelly.com/" target="_blank">
-          George Donnelly
-        </a>
-        .{" "}
+        TokenStork.com is a market-cap site for BCH{" "}
+        <a href="https://cashtokens.org/" target="_blank">
+          CashTokens
+        </a>{" "}
+        built and maintained by{" "}
+        <a href="https://georgedonnelly.com/">George Donnelly</a>.{" "}
         <a href="https://github.com/Panmoni/tokenstork" target="_blank">
           The code is open-source
         </a>
@@ -25,32 +27,42 @@ export default function Page() {
         >
           roadmap
         </a>
-        .
+        . I welcome your suggestions, criticisms, bug reports and general
+        feedback any time.
+      </p>
+
+      <h3 className="text-2xl my-4">Need Help Building?</h3>
+      <p>
+        Want to build a dapp on BCH but need some technical help?{" "}
+        <strong>Hire me!</strong> Email{" "}
+        <a href="mailto:george@panmoni.com">george@panmoni.com</a> and I will
+        build what you need!
       </p>
 
       <h3 className="text-2xl my-4">Get the Latest BCH News</h3>
-
       <p>
         Join{" "}
         <a href="https://www.reddit.com/r/BCHCashTokens/" target="_blank">
           r/BCHCashTokens
         </a>
-        .
+        , the only remaining censorship-free BCH subreddit where everything
+        related to BCH is on-topic. .
       </p>
-
       <h3 className="text-2xl my-4">Support</h3>
-
-      <p>bitcoincash:qz3pxmwda8gd42wa8k9yfxcwhcaapeuhygjc8mc4m8</p>
-
+      <p className="mb-4">
+        At this time, this site is self-funded and running on borrowed APIs, so
+        please consider supporting this work by donating to the following
+        address:
+      </p>
+      <p className="text-lg">
+        bitcoincash:qz3pxmwda8gd42wa8k9yfxcwhcaapeuhygjc8mc4m8
+      </p>
       <h3 className="text-2xl my-4">Contact</h3>
-
       <p>
         Please email <a href="mailto:hello@panmoni.com">hello@panmoni.com</a>{" "}
         and we&apos;ll be thrilled to assist you.
       </p>
-
       <h3 className="text-2xl my-4">Acknowledgments</h3>
-
       <p className="my-4">
         TokenStork is made possible through the provision of technical
         assistance, APIs, etc by the following. Thank you for your
@@ -77,7 +89,7 @@ export default function Page() {
         >
           mainnet_pat&apos;s
         </a>
-        &nbsp;Chaingraph server
+        &nbsp;Chaingraph server (donation sent)
       </li>
       <li>
         <a

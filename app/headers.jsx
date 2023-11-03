@@ -11,11 +11,9 @@ const Headers = () => {
   ];
 
   return (
-    <div id="headers" className="header-row">
+    <div>
       {headers.map((header) => (
-        <div key={header} className="header">
-          {header}
-        </div>
+        <div key={header}>{header}</div>
       ))}
     </div>
   );

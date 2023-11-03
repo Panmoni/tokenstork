@@ -2,7 +2,7 @@ import React from "react";
 
 const Toast = ({ message }) => {
   return (
-    <div id="toast" className={`toast ${message ? "show" : ""}`}>
+    <div className={`${message ? "show" : ""}`}>
       {message || "Copied to clipboard"}
     </div>
   );

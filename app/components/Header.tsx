@@ -1,11 +1,9 @@
-// header.tsx
-
 import Image from "next/image";
 
 const Header = () => {
   return (
     <header>
-      <div className="logo">
+      <div>
         <h1>
           <a href="/">
             <Image
@@ -14,15 +12,21 @@ const Header = () => {
               width={553}
               height={100}
               title="TokenStork - Delivering beautiful new CashTokens on BCH since 2023"
+              priority={true}
             />
           </a>
         </h1>
       </div>
 
       <nav>
-        <ul className="nav-links">
+        <ul>
           <li>
-            <a title="Learn more about TokenStork" href="about/">
+            <a title="New homepage" href="/table">
+              Table
+            </a>
+          </li>
+          <li>
+            <a title="Learn more about TokenStork" href="/about">
               About
             </a>
           </li>
