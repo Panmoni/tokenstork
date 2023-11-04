@@ -57,90 +57,93 @@ export default function Page() {
       <p className="text-lg">
         bitcoincash:qz3pxmwda8gd42wa8k9yfxcwhcaapeuhygjc8mc4m8
       </p>
-      <h3 className="text-2xl my-4">Contact</h3>
-      <p>
-        Please email <a href="mailto:hello@panmoni.com">hello@panmoni.com</a>{" "}
-        and we&apos;ll be thrilled to assist you.
-      </p>
+
       <h3 className="text-2xl my-4">Acknowledgments</h3>
       <p className="my-4">
         TokenStork is made possible through the provision of technical
         assistance, APIs, etc by the following. Thank you for your
         collaboration!
       </p>
-      <li>
-        a&nbsp;
-        <a
-          href="https://www.paytaca.com/"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Thank you"
-        >
-          Paytaca
-        </a>
-        &nbsp;API
-      </li>
-      <li>
-        <a
-          href="https://twitter.com/mainnet_pat"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="mainnet_pat"
-        >
-          mainnet_pat&apos;s
-        </a>
-        &nbsp;Chaingraph server (donation sent)
-      </li>
-      <li>
-        <a
-          href="https://cauldron.quest/"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="BCH informational website"
-        >
-          Cauldron Swap
-        </a>
-      </li>
-      <li>
-        <a
-          href="https://www.coingecko.com/en"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="CoinGecko"
-        >
-          CoinGecko
-        </a>
-      </li>
-      <li>
-        <a
-          href="https://www.bitcoincashsite.com/"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="BCH informational website"
-        >
-          BCH
-        </a>
-      </li>
-      <li>
-        <a
-          href="https://twitter.com/GeukensMathieu"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Twitter"
-        >
-          Mathieu Geukens
-        </a>
-      </li>
-      <li>
-        <a
-          href="https://twitter.com/dagur"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Twitter"
-        >
-          Dagur
-        </a>
-      </li>
+      <ul>
+        <li>
+          a&nbsp;
+          <a
+            href="https://www.paytaca.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Thank you"
+          >
+            Paytaca
+          </a>
+          &nbsp;API
+        </li>
+        <li>
+          <a
+            href="https://twitter.com/mainnet_pat"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="mainnet_pat"
+          >
+            mainnet_pat&apos;s
+          </a>
+          &nbsp;Chaingraph server (donation sent)
+        </li>
+        <li>
+          <a
+            href="https://cauldron.quest/"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="BCH informational website"
+          >
+            Cauldron Swap
+          </a>
+        </li>
+        <li>
+          <a
+            href="https://www.coingecko.com/en"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="CoinGecko"
+          >
+            CoinGecko
+          </a>
+        </li>
+        <li>
+          <a
+            href="https://www.bitcoincashsite.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="BCH informational website"
+          >
+            BCH
+          </a>
+        </li>
+        <li>
+          <a
+            href="https://twitter.com/GeukensMathieu"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Twitter"
+          >
+            Mathieu Geukens
+          </a>
+        </li>
+        <li>
+          <a
+            href="https://twitter.com/dagur"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Twitter"
+          >
+            Dagur
+          </a>
+        </li>
+      </ul>
+      <h3 className="text-2xl my-4">Contact</h3>
+      <p>
+        Please email <a href="mailto:hello@panmoni.com">hello@panmoni.com</a>{" "}
+        and we&apos;ll be thrilled to assist you.
+      </p>
     </main>
   );
 }

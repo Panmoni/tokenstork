@@ -7,3 +7,5 @@ export interface TokenData {
   };
   maxSupply: string;
 }
+
+//TODO: remove this or merge it with similar data in page.tsx

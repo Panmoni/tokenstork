@@ -7,7 +7,7 @@ const Footer = () => {
       <div className="max-w-screen-xl px-4 py-12 mx-auto space-y-8 overflow-hidden sm:px-6 lg:px-8">
         <nav className="flex flex-wrap justify-center -mx-5 -my-2">
           <div className="px-5 py-2">
-            <a href="/about" className="text-base leading-6 ">
+            <a href="/about" className="text-base leading-6 no-underline">
               About
             </a>
           </div>
@@ -15,7 +15,7 @@ const Footer = () => {
           <div className="px-5 py-2">
             <a
               href="mailto:hello@panmoni.com"
-              className="text-base leading-6 text-gray-500 hover:text-gray-900"
+              className="text-base leading-6 text-gray-500 hover:text-gray-900 no-underline"
             >
               Contact
             </a>
@@ -23,7 +23,7 @@ const Footer = () => {
           <div className="px-5 py-2">
             <a
               href="/tos"
-              className="text-base leading-6 text-gray-500 hover:text-gray-900"
+              className="text-base leading-6 text-gray-500 hover:text-gray-900 no-underline"
             >
               Terms
             </a>
@@ -31,7 +31,7 @@ const Footer = () => {
           <div className="px-5 py-2">
             <a
               href="/tos#privacy"
-              className="text-base leading-6 text-gray-500 hover:text-gray-900"
+              className="text-base leading-6 text-gray-500 hover:text-gray-900 no-underline"
             >
               Privacy
             </a>
@@ -42,7 +42,7 @@ const Footer = () => {
             target="_blank"
             rel="noopener noreferrer"
             href="https://www.reddit.com/r/BCHCashTokens/"
-            className="text-gray-400 hover:text-gray-500"
+            className="text-gray-400"
           >
             <span className="sr-only">Reddit</span>
             <svg
@@ -78,6 +78,8 @@ const Footer = () => {
             </svg>
           </a>
           <a
+            target="_blank"
+            rel="noopener noreferrer"
             href="https://twitter.com/bitcoincashsite"
             className="text-gray-400 hover:text-gray-500"
           >

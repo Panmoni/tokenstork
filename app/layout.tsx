@@ -1,16 +1,20 @@
-import { GeistSans, GeistMono } from "geist/font";
 import type { Metadata, Viewport } from "next";
 import HelloBar from "./components/HelloBar";
 import Footer from "./components/Footer";
 import Navbar from "./components/Header";
 import GoogleAnalytics from "./components/GoogleAnalytics";
 import { BCHPriceProvider } from "./providers/bchpriceclientprovider";
+import { Inter } from "next/font/google";
 import "./globals.css";
-import "@fortawesome/fontawesome-svg-core/styles.css";
-import { config } from "@fortawesome/fontawesome-svg-core";
-config.autoAddCss = false;
+
+const bodyFont = Inter({
+  subsets: ["latin"],
+  variable: "--body-font",
+});
 
 // TODO: add inner pages https://www.tremor.so/docs/components/tracker, https://storybook.tremor.so/?path=/docs/components-list-table--docs
+// TODO: add CTA eg https://mambaui.com/components/call-to-action
+// TODO: add gradient bg https://kopi.dev/tailwind/gradient-background-animation/ (also has some spacing stuff), https://tailwindcomponents.com/component/button-background-hover-animation
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -70,7 +74,7 @@ export default function RootLayout({
 }) {
   return (
     <BCHPriceProvider>
-      <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
+      <html lang="en" className={`${bodyFont.variable} font-sans`}>
         <body className="container mx-auto">
           <HelloBar />
           <Navbar />

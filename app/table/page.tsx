@@ -1,5 +1,19 @@
 "use client";
 
+import Toast from "@/app/components/Toast";
+
+import tokenIds from "@/app/utils/tokenIds.js";
+import {
+  satoshisToBCH,
+  humanizeBigNumber,
+} from "@/app/utils/presentationUtils";
+import {
+  queryTotalSupplyFT,
+  queryAuthchainLength,
+} from "@/app/utils/queryChainGraph";
+
+import React, { useState, useEffect, useCallback } from "react";
+
 import { InformationCircleIcon } from "@heroicons/react/solid";
 import {
   BadgeDelta,
@@ -18,7 +32,6 @@ import {
   TableRow,
   Title,
 } from "@tremor/react";
-import { useState } from "react";
 export type SalesPerson = {
   name: string;
   leads: number;
@@ -85,13 +98,38 @@ const deltaTypes: { [key: string]: DeltaType } = {
 
 // TODO: explore search example from https://github.com/vercel/nextjs-postgres-nextauth-tailwindcss-template/tree/main
 
-export default function SalesPeopleTable() {
+// TODO: add headers manually
+// const headers = [
+//   "Name",
+//   "Price",
+//   "Circulating Supply",
+//   "Max Supply",
+//   "Market Cap",
+//   "TVL",
+//   "Category",
+//   "Links",
+// ];
+
+export default function tokenTable() {
+  const [toastMessage, setToastMessage] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [selectedNames, setSelectedNames] = useState<string[]>([]);
 
   const isSalesPersonSelected = (salesPerson: SalesPerson) =>
     (salesPerson.status === selectedStatus || selectedStatus === "all") &&
     (selectedNames.includes(salesPerson.name) || selectedNames.length === 0);
+
+  function showToast(message: string) {
+    setToastMessage(message);
+    setTimeout(() => {
+      setToastMessage("");
+    }, 3000);
+  }
+
+  function copyText(text: string) {
+    navigator.clipboard.writeText(text);
+    showToast("Category copied to clipboard");
+  }
 
   return (
     <main className="px-1 sm:px-2 lg:px-4 text-base">

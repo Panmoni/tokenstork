@@ -1,6 +1,6 @@
 {
   "name": "tokenstorkapp",
-  "version": "0.0.1",
+  "version": "0.0.2 (beta)",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,20 +9,14 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@fortawesome/fontawesome-svg-core": "^6.4.2",
-    "@fortawesome/free-brands-svg-icons": "^6.4.2",
-    "@fortawesome/free-solid-svg-icons": "^6.4.2",
-    "@fortawesome/react-fontawesome": "^0.2.0",
     "@heroicons/react": "^1.0.6",
     "@tremor/react": "^3.10.1",
-    "@types/mdx": "^2.0.9",
     "@types/node": "20.6.0",
     "@types/react": "18.2.21",
     "@types/react-dom": "18.2.7",
     "autoprefixer": "10.4.16",
     "eslint": "8.49.0",
     "eslint-config-next": "^14.0.1",
-    "geist": "^1.0.0",
     "next": "^14.0.1",
     "next-themes": "^0.2.1",
     "postcss": "^8.4.31",
