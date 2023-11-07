@@ -15,6 +15,8 @@ import { TokenData } from "@/app/interfaces";
 // tokenTotalSupply
 // tokenTotalReservedAmount
 
+// TODO: figure out what type output should be.
+
 async function validateDecimals(decimals: any): Promise<number> {
   if (isNaN(decimals) || decimals < 0 || decimals > 100) {
     throw new Error("Invalid decimals value");
@@ -74,7 +76,7 @@ export async function getTokenData(
     }
 
     let totalSupplyBigInt = BigInt(0);
-    maxSupplyData.data.transaction[0].outputs.forEach((output) => {
+    maxSupplyData.data.transaction[0].outputs.forEach((output: any) => {
       totalSupplyBigInt += BigInt(output.fungible_token_amount);
     });
     const tokenTotalSupplyString = convertToDecimalString(
