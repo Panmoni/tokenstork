@@ -7,3 +7,5 @@ export default function TinyLoader() {
     </div>
   );
 }
+
+// TODO: consider making this a small spinning BCH logo or something else interesting, or maybe changing it seasonally

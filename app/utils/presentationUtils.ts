@@ -1,5 +1,10 @@
 // app/utils/presentationUtils.ts
 
+// TOC
+// satoshisToBCH
+// humanizeBigNumber
+// formatMarketCap
+
 export function satoshisToBCH(sats: number) {
   return sats / 100000000;
 }
@@ -23,7 +28,7 @@ export function humanizeBigNumber(value: number): string {
 
 export function formatMarketCap(marketCap: string): string {
   if (marketCap === "N/A" || marketCap === "0") {
-    return "N/A";
+    return "-";
   }
 
   const numericValue = parseFloat(marketCap);

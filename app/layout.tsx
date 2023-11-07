@@ -15,6 +15,7 @@ const bodyFont = Inter({
 // TODO: add inner pages https://www.tremor.so/docs/components/tracker, https://storybook.tremor.so/?path=/docs/components-list-table--docs
 // TODO: add CTA eg https://mambaui.com/components/call-to-action
 // TODO: add gradient bg https://kopi.dev/tailwind/gradient-background-animation/ (also has some spacing stuff), https://tailwindcomponents.com/component/button-background-hover-animation
+// TODO: work more on different screen sizes
 
 export const viewport: Viewport = {
   width: "device-width",

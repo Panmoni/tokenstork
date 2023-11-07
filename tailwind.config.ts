@@ -1,8 +1,17 @@
 import type { Config } from "tailwindcss";
 
+const colors = require("tailwindcss/colors");
+
 // TODO: create themes for dogecash andxrbf https://tailwindcss.com/docs/theme, https://tailwindcss.com/docs/configuration
 // TODO: maybe just implement sun and moon for now https://github.com/HamedBahram/next-starter-with-theme/blob/main/app/components/ThemeButton.jsx
 // TODO: fix warning about safelist patterns. https://tailwindcss.com/docs/content-configuration#safelisting-classes
+// TODO: under container, consider re-adding and/or adjusting this.
+// padding: {
+//   DEFAULT: "1rem",
+//   md: "1.5rem",
+//   lg: "2rem",
+//   xl: "4rem",
+// },
 
 const config: Config = {
   content: [
@@ -15,7 +24,6 @@ const config: Config = {
     colors: {
       transparent: "transparent",
       current: "currentColor",
-      white: "#ffffff",
       primary: "#4f359b",
       secondary: "#ff6b6b",
       accent: "#0ac18e",
@@ -27,6 +35,15 @@ const config: Config = {
       linkhover: "#693cc4",
       linkactive: "#2b185b",
       linkvisited: "#9166cc",
+      black: colors.black,
+      white: colors.white,
+      gray: colors.gray,
+      emerald: colors.emerald,
+      indigo: colors.indigo,
+      violet: colors.violet,
+      yellow: colors.yellow,
+      fuchsia: colors.fuchsia,
+      pink: colors.pink,
     },
     fontSize: {
       sm: "0.8rem",
@@ -39,12 +56,6 @@ const config: Config = {
     },
     container: {
       center: true,
-      padding: {
-        DEFAULT: "1rem",
-        md: "1.5rem",
-        lg: "2rem",
-        xl: "4rem",
-      },
     },
     extend: {
       colors: {
