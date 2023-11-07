@@ -15,6 +15,8 @@ import {
 import { useBCHPrice } from "./providers/bchpriceclientprovider";
 import Image from "next/image";
 
+// TODO: delete itemRow
+
 const ItemRow = ({ item, copyText }) => {
   const { bchPrice } = useBCHPrice();
   const { uris, token } = item;

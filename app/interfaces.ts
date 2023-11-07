@@ -1,11 +1,12 @@
 export interface TokenData {
-  uris: Record<string, string>;
-  token: {
-    decimals: number;
-    category: string;
-    symbol: string;
-  };
+  icon: string;
+  name: string;
+  description: string;
+  symbol: string;
+  price: number;
+  circulatingSupply: string;
   maxSupply: string;
+  marketCap: string;
+  tvl: number;
+  category: string;
 }
-
-//TODO: remove this or merge it with similar data in page.tsx
