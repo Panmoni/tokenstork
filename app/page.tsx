@@ -211,10 +211,10 @@ export default function TokenDataPage() {
                       : "$" + token.price.toFixed(6)}
                   </TableCell>
                   <TableCell className="text-right hover:text-xl">
-                    {humanizeBigNumber(token.circulatingSupply)}
+                    {humanizeBigNumber(Number(token.circulatingSupply))}
                   </TableCell>
                   <TableCell className="text-right hover:text-xl">
-                    {humanizeBigNumber(token.maxSupply)}
+                    {humanizeBigNumber(Number(token.maxSupply))}
                   </TableCell>
                   <TableCell className="text-right hover:text-xl">
                     {formatMarketCap(token.marketCap)}
