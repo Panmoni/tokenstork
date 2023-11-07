@@ -102,7 +102,7 @@ export default function TokenDataPage() {
     <main className="px-1 sm:px-2 lg:px-4 text-lg">
       <h2 className="text-3xl font-extrabold mb-4">
         <span className="text-transparent bg-clip-text bg-gradient-to-r to-accent from-primary">
-          Today&apos;s BCH CashTokens Prices by Total Value Locked
+          Today&apos;s BCH CashTokens Prices
         </span>
       </h2>
       {loading ? (

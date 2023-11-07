@@ -6,6 +6,7 @@
 - compare load times of old and new
 - do lighthouse test without paytaca and in private tab
 - launch for review, twitter, telegram
+- add inner pages
 
 ## REF
 

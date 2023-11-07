@@ -46,13 +46,13 @@ export default function Page() {
           r/BCHCashTokens
         </a>
         , the only remaining censorship-free BCH subreddit where everything
-        related to BCH is on-topic. .
+        related to BCH is on-topic.
       </p>
       <h3 className="text-2xl my-4">Support</h3>
       <p className="mb-4">
-        At this time, this site is self-funded and running on borrowed APIs, so
-        please consider supporting this work by donating to the following
-        address:
+        At this time, this site is self-funded and running on borrowed APIs, as
+        well lending an API to others, so please consider supporting this work
+        by donating to the following address:
       </p>
       <p className="text-lg">
         bitcoincash:qz3pxmwda8gd42wa8k9yfxcwhcaapeuhygjc8mc4m8
