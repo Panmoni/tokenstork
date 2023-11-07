@@ -33,8 +33,7 @@ import {
 } from "@tremor/react";
 
 // TODO: explore search example from https://github.com/vercel/nextjs-postgres-nextauth-tailwindcss-template/tree/main
-// TODO: make it also reactive to changes in token prices/data
-// TODO: legend for orders of magnitude abbreviations
+// TODO: should this be all server and zero client?
 
 export default function TokenDataPage() {
   const [tokenData, setTokenData] = useState<TokenData[]>([]);
