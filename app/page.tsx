@@ -1,247 +1,201 @@
+// app/test/page.tsx
+
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
+import Image from "next/image";
+
+import tokenIds from "@/app/utils/tokenIds.js";
+import { getTokenData } from "@/app/utils/getTokenData";
 import {
-  queryTotalSupplyFT,
-  queryAuthchainLength,
-} from "./utils/queryChainGraph";
-import Headers from "./headers";
-import Toast from "./components/Toast";
-import Container from "./container";
+  humanizeBigNumber,
+  formatMarketCap,
+} from "@/app/utils/presentationUtils";
 
-type TokenData = {
-  uris: { [key: string]: any };
-  token: {
-    decimals: number;
-    category: string;
-    symbol: string;
-  };
-  maxSupply: string;
-  maxSupplyNum: number;
-  reservedSupplyFT: string;
-  reservedSupplyFTNum: number;
-  circSupplyHumanized: string;
-};
+import { TokenData } from "@/app/interfaces";
+import { useBCHPrice } from "@/app/providers/bchpriceclientprovider";
 
-const chaingraphUrl = "https://gql.chaingraph.pat.mn/v1/graphql";
+import TinyLoader from "@/app/components/TinyLoader";
+import FormatCategory from "@/app/components/FormatCategory";
 
-export default function Page() {
-  const [data, setData] = useState<TokenData[]>([]);
-  const [toastMessage, setToastMessage] = useState("");
+import { InformationCircleIcon } from "@heroicons/react/solid";
+import {
+  Flex,
+  Icon,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+  Title,
+} from "@tremor/react";
 
-  const fetchDataForAllTokenIds = useCallback(async () => {
-    try {
-      const promises = tokenIds.map(fetchDataForTokenId);
-      const results = await Promise.allSettled(promises);
-      return results
-        .filter(
-          (result): result is PromiseFulfilledResult<any> =>
-            result.status === "fulfilled"
-        )
-        .map((result) => result.value);
-    } catch (error) {
-      console.error(`Error fetching data for all token ids: `, error);
-      return [];
-    }
+// TODO: explore search example from https://github.com/vercel/nextjs-postgres-nextauth-tailwindcss-template/tree/main
 
-    async function fetchDataForTokenId(tokenId: string) {
-      try {
-        const response = await fetch(
-          `https://bcmr.paytaca.com/api/tokens/${tokenId}`
-        );
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const tokenData = await response.json();
-
-        // Fetch max supply
-        if (tokenData && tokenData.token) {
-          const maxSupply = await getFTMaxSupply(
-            tokenId,
-            tokenData.token.decimals
-          );
-          tokenData.maxSupplyNum = maxSupply;
-          tokenData.maxSupply = humanizeMaxSupply(maxSupply);
-        }
-
-        // Fetch reserved supply
-        if (tokenData && tokenData.token) {
-          const totalReservedAmount = await getReservedSupplyFT(
-            tokenId,
-            tokenData.token.decimals
-          );
-          tokenData.reservedSupplyFT = humanizeMaxSupply(totalReservedAmount);
-          tokenData.reservedSupplyFTNum = totalReservedAmount;
-          // if (totalReservedAmount === 0) {
-          //   tokenData.reservedSupplyFT = 0;
-          // } else {
-          //   tokenData.getReservedSupplyFT =
-          //     humanizeMaxSupply(totalReservedAmount);
-          // }
-        }
-
-        tokenData.circSupplyHumanized = humanizeMaxSupply(
-          tokenData.maxSupplyNum - tokenData.reservedSupplyFTNum
-        );
-
-        return tokenData;
-      } catch (error) {
-        console.error(`Error fetching data for token id ${tokenId}: `, error);
-        return {
-          uris: {},
-          token: {
-            decimals: 0,
-            category: "",
-            symbol: "",
-          },
-          maxSupply: "N/A",
-        };
-      }
-    }
-
-    // Get the max supply from chaingraph
-    async function getFTMaxSupply(tokenId: string, decimals: number) {
-      const responseJson = await queryTotalSupplyFT(tokenId, chaingraphUrl);
-
-      if (
-        !responseJson.data ||
-        !responseJson.data.transaction ||
-        !responseJson.data.transaction[0] ||
-        !responseJson.data.transaction[0].outputs
-      ) {
-        throw new Error("Invalid response structure");
-      }
-
-      if (isNaN(decimals) || decimals < 0 || decimals > 100) {
-        throw new Error("Invalid decimals value");
-      }
-
-      let totalAmount = responseJson.data.transaction[0].outputs.reduce(
-        (total: bigint, output: { fungible_token_amount: string }) => {
-          if (typeof output.fungible_token_amount !== "string") {
-            throw new Error("Invalid token amount");
-          }
-          let amount = BigInt(output.fungible_token_amount);
-          return total + amount;
-        },
-        BigInt(0)
-      );
-
-      // console.log("totalAmount before removal of decimal places: ", totalAmount);
-
-      // Convert to a decimal form
-      totalAmount = totalAmount / BigInt(Math.pow(10, decimals));
-
-      // console.log("totalAmount after removal of decimal places: ", totalAmount);
-
-      // convert it back to a number
-      totalAmount = totalAmount === "" ? "0" : totalAmount;
-      totalAmount = Number(totalAmount);
-
-      return totalAmount;
-    }
-
-    async function getReservedSupplyFT(tokenId: string, decimals: number) {
-      const responseJson = await queryAuthchainLength(tokenId, chaingraphUrl);
-
-      if (
-        !responseJson.data.transaction[0].authchains[0].authhead
-          .identity_output[0].fungible_token_amount
-      ) {
-        let totalReservedAmount = 0;
-        // console.log(tokenId + ": " + totalReservedAmount);
-        return totalReservedAmount;
-      } else {
-        if (isNaN(decimals) || decimals < 0 || decimals > 100) {
-          throw new Error("Invalid decimals value");
-        }
-
-        let totalReservedAmount =
-          responseJson.data.transaction?.[0]?.authchains?.[0]?.authhead
-            ?.identity_output?.[0]?.fungible_token_amount;
-
-        totalReservedAmount = BigInt(totalReservedAmount);
-
-        // Convert to a decimal form
-        totalReservedAmount =
-          totalReservedAmount / BigInt(Math.pow(10, decimals));
-
-        // convert it back to a number
-        totalReservedAmount =
-          totalReservedAmount === "" ? "0" : totalReservedAmount;
-        totalReservedAmount = Number(totalReservedAmount);
-
-        // reservedSupplyFT?
-        // console.log("totalReservedAmount: ", totalReservedAmount);
-        return totalReservedAmount;
-      }
-    }
-
-    // Create and append the max supply in one cell
-    // Humanize the max supply
-    function humanizeMaxSupply(num: number): string {
-      var units = [
-        "",
-        "thousand",
-        "million",
-        "billion",
-        "trillion",
-        "quadrillion",
-        "quintillion",
-      ];
-
-      // If number is less than 10000, return it as it is
-      if (num < 10000) {
-        return num.toString();
-      }
-
-      // Make sure the number is positive and get its logarithm
-      var magnitude = Math.log10(Math.abs(num));
-
-      // Determine the unit to use
-      var unitIndex = Math.min(Math.floor(magnitude / 3), units.length - 1);
-
-      // Get the number in terms of that unit
-      var normalizedNum = num / Math.pow(10, unitIndex * 3);
-
-      // If decimal part is zero, return integer part only
-      if (normalizedNum % 1 === 0) {
-        return normalizedNum.toFixed(0) + " " + units[unitIndex];
-      }
-
-      // Round to one decimal place and add the unit
-      return normalizedNum.toFixed(1) + " " + units[unitIndex];
-    }
-  }, []);
+export default function TokenDataPage() {
+  const [tokenData, setTokenData] = useState<TokenData[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const { bchPrice } = useBCHPrice();
 
   useEffect(() => {
     async function fetchData() {
-      const fetchedData = await fetchDataForAllTokenIds();
-      setData(fetchedData);
+      setLoading(true);
+      try {
+        if (bchPrice === null) {
+          throw new Error("BCH price is not available");
+        }
+        const fixedPrice = parseFloat(bchPrice.toFixed(2));
+
+        const dataPromises = tokenIds.map((category) =>
+          getTokenData(category, fixedPrice)
+        );
+        const results = await Promise.all(dataPromises);
+        const allTokenData = results.flat();
+        setTokenData(allTokenData);
+      } catch (error) {
+        if (error instanceof Error) {
+          setError(error.message);
+        } else {
+          setError("An unexpected error occurred");
+        }
+      } finally {
+        setLoading(false);
+      }
     }
 
-    fetchData();
-  }, [fetchDataForAllTokenIds]);
+    if (bchPrice !== null) {
+      fetchData();
+    }
+  }, [bchPrice]);
 
-  function showToast(message: string) {
-    setToastMessage(message);
-    setTimeout(() => {
-      setToastMessage("");
-    }, 3000);
+  if (error) {
+    return <p>Error: {error}</p>;
   }
 
-  function copyText(text: string) {
-    navigator.clipboard.writeText(text);
-    showToast("Category copied to clipboard");
+  if (loading) {
+    return <TinyLoader />;
+  }
+
+  if (tokenData.length === 0) {
+    return <p>No token data available.</p>;
   }
 
   return (
-    <main>
-      <section>
-        <Headers />
-        {toastMessage && <Toast message={toastMessage} />}
-        <Container data={data} copyText={copyText} />
-      </section>
+    <main className="px-1 sm:px-2 lg:px-4 text-lg">
+      <h2 className="text-3xl font-extrabold mb-4">
+        <span className="text-transparent bg-clip-text bg-gradient-to-r to-accent from-primary">
+          Today&apos;s BCH CashTokens Prices by Total Value Locked
+        </span>
+      </h2>
+      {loading ? (
+        <p>Loading...</p>
+      ) : (
+        <div>
+          <Flex
+            className="space-x-0.5"
+            justifyContent="start"
+            alignItems="center"
+          >
+            <Title> BCH CashTokens Market Cap Data </Title>
+          </Flex>
+          <Table className="mt-6">
+            <TableHead>
+              <TableRow>
+                <TableHeaderCell>Name</TableHeaderCell>
+                <TableHeaderCell>Ticker</TableHeaderCell>
+                <TableHeaderCell className="text-right">
+                  Price ($)
+                </TableHeaderCell>
+                <TableHeaderCell className="text-right">
+                  Circulating Supply
+                  <Icon
+                    icon={InformationCircleIcon}
+                    variant="simple"
+                    tooltip="The supply present at the authhead."
+                    className="align-middle"
+                  />
+                </TableHeaderCell>
+                <TableHeaderCell className="text-right">
+                  Max Supply
+                </TableHeaderCell>
+                <TableHeaderCell className="text-right">
+                  Market Cap ($)
+                </TableHeaderCell>
+                <TableHeaderCell className="text-right">
+                  TVL ($){" "}
+                  <Icon
+                    icon={InformationCircleIcon}
+                    variant="simple"
+                    tooltip="Total Value Locked."
+                    className="align-middle"
+                  />
+                </TableHeaderCell>
+                <TableHeaderCell className="text-right">
+                  Token Category{" "}
+                  <Icon
+                    icon={InformationCircleIcon}
+                    variant="simple"
+                    tooltip="Sometimes referred to as TokenID."
+                    className="align-middle"
+                  />
+                </TableHeaderCell>
+              </TableRow>
+            </TableHead>
+
+            <TableBody className="!opacity-100">
+              {tokenData.map((token) => (
+                <TableRow key={token.name}>
+                  <TableCell>
+                    <Image
+                      src={
+                        token.icon?.startsWith("ipfs://")
+                          ? "https://ipfs.io/ipfs/" + token.icon.substring(7)
+                          : token.icon
+                      }
+                      alt={token.name}
+                      width={32}
+                      height={32}
+                      className="rounded-full inline align-middle"
+                      title={token.description}
+                    />{" "}
+                    <span
+                      className="align-middle font-semibold"
+                      title={token.description}
+                    >
+                      {token.name.length > 16
+                        ? token.name.substr(0, 16) + "..."
+                        : token.name}
+                    </span>
+                  </TableCell>
+                  <TableCell>{token.symbol}</TableCell>
+                  <TableCell className="text-right">
+                    {token.price === 0 ? "N/A" : "$" + token.price.toFixed(6)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {humanizeBigNumber(token.circulatingSupply)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {humanizeBigNumber(token.maxSupply)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatMarketCap(token.marketCap)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {token.tvl === 0
+                      ? "N/A"
+                      : "$" + Number(token.tvl).toFixed(0)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <FormatCategory category={token.category} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
     </main>
   );
 }

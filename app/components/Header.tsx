@@ -7,10 +7,7 @@ import Image from "next/image";
 
 // TODO: should this have the header tag?
 
-const navigation = [
-  { name: "About", href: "/about" },
-  { name: "V2", href: "/test" },
-];
+const navigation = [{ name: "About", href: "/about" }];
 
 function classNames(...classes: string[]) {
   return classes.filter(Boolean).join(" ");
