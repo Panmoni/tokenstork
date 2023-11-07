@@ -15,8 +15,6 @@ import { TokenData } from "@/app/interfaces";
 // tokenTotalSupply
 // tokenTotalReservedAmount
 
-// TODO: investigate number precision issues
-
 async function validateDecimals(decimals: any): Promise<number> {
   if (isNaN(decimals) || decimals < 0 || decimals > 100) {
     throw new Error("Invalid decimals value");
