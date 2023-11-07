@@ -133,7 +133,7 @@ const TokenSkeleton = () => {
                     decoding="async"
                     data-nimg="1"
                     className="rounded-full inline align-middle mr-2 animate-spin"
-                    srcset="
+                    srcSet="
                   /_next/image?url=https%3A%2F%2Fipfs.io%2Fipfs%2FQmabDdWy8wzcio6AR11Bo7xcqB5Dd47oftn1kbG69iWvaW&amp;w=32&amp;q=75 1x,
                   /_next/image?url=https%3A%2F%2Fipfs.io%2Fipfs%2FQmabDdWy8wzcio6AR11Bo7xcqB5Dd47oftn1kbG69iWvaW&amp;w=64&amp;q=75 2x
                 "
@@ -204,7 +204,7 @@ const TokenSkeleton = () => {
                     decoding="async"
                     data-nimg="1"
                     className="rounded-full inline align-middle mr-2 animate-spin"
-                    srcset="
+                    srcSet="
                   /_next/image?url=https%3A%2F%2Fipfs.io%2Fipfs%2Fbafkreicqqq3tkq5tkbtg3vhbhw6urybothpoedsszuejs5baq2k25mhgvu&amp;w=32&amp;q=75 1x,
                   /_next/image?url=https%3A%2F%2Fipfs.io%2Fipfs%2Fbafkreicqqq3tkq5tkbtg3vhbhw6urybothpoedsszuejs5baq2k25mhgvu&amp;w=64&amp;q=75 2x
                 "
@@ -275,7 +275,7 @@ const TokenSkeleton = () => {
                     decoding="async"
                     data-nimg="1"
                     className="rounded-full inline align-middle mr-2 animate-spin"
-                    srcset="
+                    srcSet="
                   /_next/image?url=https%3A%2F%2Fgist.githubusercontent.com%2Fmr-zwets%2F84b0057808af20df392815fb27d4a661%2Fraw%2FDogecoin_Logo.png&amp;w=32&amp;q=75 1x,
                   /_next/image?url=https%3A%2F%2Fgist.githubusercontent.com%2Fmr-zwets%2F84b0057808af20df392815fb27d4a661%2Fraw%2FDogecoin_Logo.png&amp;w=64&amp;q=75 2x
                 "
@@ -346,7 +346,7 @@ const TokenSkeleton = () => {
                     decoding="async"
                     data-nimg="1"
                     className="rounded-full inline align-middle mr-2 animate-spin"
-                    srcset="
+                    srcSet="
                   /_next/image?url=https%3A%2F%2Fipfs.io%2Fipfs%2FQmTXuMscUEHyy3VyBWFVWgBb1yLGofGB9VmSq2uFF9z9fM&amp;w=32&amp;q=75 1x,
                   /_next/image?url=https%3A%2F%2Fipfs.io%2Fipfs%2FQmTXuMscUEHyy3VyBWFVWgBb1yLGofGB9VmSq2uFF9z9fM&amp;w=64&amp;q=75 2x
                 "
@@ -417,7 +417,7 @@ const TokenSkeleton = () => {
                     decoding="async"
                     data-nimg="1"
                     className="rounded-full inline align-middle mr-2 animate-spin"
-                    srcset="
+                    srcSet="
                   /_next/image?url=https%3A%2F%2Fipfs.pat.mn%2Fipfs%2FQmev5pGFZNAQLukwTBHCpvqmSXDD841VA6bHq5fxLYXRWs&amp;w=32&amp;q=75 1x,
                   /_next/image?url=https%3A%2F%2Fipfs.pat.mn%2Fipfs%2FQmev5pGFZNAQLukwTBHCpvqmSXDD841VA6bHq5fxLYXRWs&amp;w=64&amp;q=75 2x
                 "
@@ -488,7 +488,7 @@ const TokenSkeleton = () => {
                     decoding="async"
                     data-nimg="1"
                     className="rounded-full inline align-middle mr-2 animate-spin"
-                    srcset="
+                    srcSet="
                   /_next/image?url=https%3A%2F%2Fi.ibb.co%2F6sJknMy%2Fspice-logo.png&amp;w=32&amp;q=75 1x,
                   /_next/image?url=https%3A%2F%2Fi.ibb.co%2F6sJknMy%2Fspice-logo.png&amp;w=64&amp;q=75 2x
                 "
@@ -559,7 +559,7 @@ const TokenSkeleton = () => {
                     decoding="async"
                     data-nimg="1"
                     className="rounded-full inline align-middle mr-2 animate-spin"
-                    srcset="
+                    srcSet="
                   /_next/image?url=https%3A%2F%2Fipfs.io%2Fipfs%2Fbafybeiekc4wo27tmfi26zzujs3qfn2z5osncs74zzdr53l52apu2toswzm&amp;w=32&amp;q=75 1x,
                   /_next/image?url=https%3A%2F%2Fipfs.io%2Fipfs%2Fbafybeiekc4wo27tmfi26zzujs3qfn2z5osncs74zzdr53l52apu2toswzm&amp;w=64&amp;q=75 2x
                 "
@@ -636,7 +636,7 @@ Bismuth Shed was founded in 2017 and is based in Taipei City, Taiwan. Bismuth Sh
                     decoding="async"
                     data-nimg="1"
                     className="rounded-full inline align-middle mr-2 animate-spin"
-                    srcset="
+                    srcSet="
                   /_next/image?url=https%3A%2F%2Fgist.githubusercontent.com%2FBiWinBi%2F16a92d06305a727674a1131379dfd4e9%2Fraw%2FLogo.png&amp;w=32&amp;q=75 1x,
                   /_next/image?url=https%3A%2F%2Fgist.githubusercontent.com%2FBiWinBi%2F16a92d06305a727674a1131379dfd4e9%2Fraw%2FLogo.png&amp;w=64&amp;q=75 2x
                 "
@@ -713,7 +713,7 @@ Bismuth Shed was founded in 2017 and is based in Taipei City, Taiwan. Bismuth Sh
                     decoding="async"
                     data-nimg="1"
                     className="rounded-full inline align-middle mr-2 animate-spin"
-                    srcset="
+                    srcSet="
                   /_next/image?url=https%3A%2F%2Fipfs.io%2Fipfs%2Fbafkreiax4h2evyf4g7iuu6kuqkxwez4kvduxayngj5vxmvgrekipevptl4&amp;w=32&amp;q=75 1x,
                   /_next/image?url=https%3A%2F%2Fipfs.io%2Fipfs%2Fbafkreiax4h2evyf4g7iuu6kuqkxwez4kvduxayngj5vxmvgrekipevptl4&amp;w=64&amp;q=75 2x
                 "
@@ -784,7 +784,7 @@ Bismuth Shed was founded in 2017 and is based in Taipei City, Taiwan. Bismuth Sh
                     decoding="async"
                     data-nimg="1"
                     className="rounded-full inline align-middle mr-2 animate-spin"
-                    srcset="
+                    srcSet="
                   /_next/image?url=https%3A%2F%2Fipfs.io%2Fipfs%2Fbafkreidhofzqmsb5gf7wdvnqwbe74ryxje3vto7miyo2ywsid2pwbk475m&amp;w=32&amp;q=75 1x,
                   /_next/image?url=https%3A%2F%2Fipfs.io%2Fipfs%2Fbafkreidhofzqmsb5gf7wdvnqwbe74ryxje3vto7miyo2ywsid2pwbk475m&amp;w=64&amp;q=75 2x
                 "
@@ -855,7 +855,7 @@ Bismuth Shed was founded in 2017 and is based in Taipei City, Taiwan. Bismuth Sh
                     decoding="async"
                     data-nimg="1"
                     className="rounded-full inline align-middle mr-2 animate-spin"
-                    srcset="
+                    srcSet="
                   /_next/image?url=https%3A%2F%2Fsock.cauldron.quest%2Fblueorb.png&amp;w=32&amp;q=75 1x,
                   /_next/image?url=https%3A%2F%2Fsock.cauldron.quest%2Fblueorb.png&amp;w=64&amp;q=75 2x
                 "
@@ -926,7 +926,7 @@ Bismuth Shed was founded in 2017 and is based in Taipei City, Taiwan. Bismuth Sh
                     decoding="async"
                     data-nimg="1"
                     className="rounded-full inline align-middle mr-2 animate-spin"
-                    srcset="
+                    srcSet="
                   /_next/image?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftangoswap-cash%2Fassets%2Fmaster%2Fblockchains%2Fsmartbch%2Fassets%2F0x4EA4A00E15B9E8FeE27eB6156a865525083e9F71%2Flogo.png&amp;w=32&amp;q=75 1x,
                   /_next/image?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftangoswap-cash%2Fassets%2Fmaster%2Fblockchains%2Fsmartbch%2Fassets%2F0x4EA4A00E15B9E8FeE27eB6156a865525083e9F71%2Flogo.png&amp;w=64&amp;q=75 2x
                 "
@@ -997,7 +997,7 @@ Bismuth Shed was founded in 2017 and is based in Taipei City, Taiwan. Bismuth Sh
                     decoding="async"
                     data-nimg="1"
                     className="rounded-full inline align-middle mr-2 animate-spin"
-                    srcset="
+                    srcSet="
                   /_next/image?url=https%3A%2F%2Fbafkreigyby3j4ue7oxw6ucpojflzbt24x7vik7rp2sjqnfme6d2cfyjdea.ipfs.nftstorage.link%2F&amp;w=32&amp;q=75 1x,
                   /_next/image?url=https%3A%2F%2Fbafkreigyby3j4ue7oxw6ucpojflzbt24x7vik7rp2sjqnfme6d2cfyjdea.ipfs.nftstorage.link%2F&amp;w=64&amp;q=75 2x
                 "
@@ -1065,7 +1065,7 @@ Bismuth Shed was founded in 2017 and is based in Taipei City, Taiwan. Bismuth Sh
                     decoding="async"
                     data-nimg="1"
                     className="rounded-full inline align-middle mr-2 animate-spin"
-                    srcset="
+                    srcSet="
                   /_next/image?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcryptobugnft%2Finvalidcash-token-registry%2Fmain%2FBelly.png&amp;w=32&amp;q=75 1x,
                   /_next/image?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcryptobugnft%2Finvalidcash-token-registry%2Fmain%2FBelly.png&amp;w=64&amp;q=75 2x
                 "
@@ -1136,7 +1136,7 @@ Bismuth Shed was founded in 2017 and is based in Taipei City, Taiwan. Bismuth Sh
                     decoding="async"
                     data-nimg="1"
                     className="rounded-full inline align-middle mr-2 animate-spin"
-                    srcset="
+                    srcSet="
                   /_next/image?url=https%3A%2F%2Fpbs.twimg.com%2Fprofile_images%2F1637136772227268608%2FnBUBqz7Y_400x400.jpg&amp;w=32&amp;q=75 1x,
                   /_next/image?url=https%3A%2F%2Fpbs.twimg.com%2Fprofile_images%2F1637136772227268608%2FnBUBqz7Y_400x400.jpg&amp;w=64&amp;q=75 2x
                 "
@@ -1207,7 +1207,7 @@ Bismuth Shed was founded in 2017 and is based in Taipei City, Taiwan. Bismuth Sh
                     decoding="async"
                     data-nimg="1"
                     className="rounded-full inline align-middle mr-2 animate-spin"
-                    srcset="
+                    srcSet="
                   /_next/image?url=https%3A%2F%2Fipfs.io%2Fipfs%2FQmQZiH5Qm793qsnhFjF3F8jB3ADYusofE5WBEu4tMuH7mv&amp;w=32&amp;q=75 1x,
                   /_next/image?url=https%3A%2F%2Fipfs.io%2Fipfs%2FQmQZiH5Qm793qsnhFjF3F8jB3ADYusofE5WBEu4tMuH7mv&amp;w=64&amp;q=75 2x
                 "
@@ -1278,7 +1278,7 @@ Bismuth Shed was founded in 2017 and is based in Taipei City, Taiwan. Bismuth Sh
                     decoding="async"
                     data-nimg="1"
                     className="rounded-full inline align-middle mr-2 animate-spin"
-                    srcset="
+                    srcSet="
                   /_next/image?url=https%3A%2F%2Fsock.cauldron.quest%2Fsock.png&amp;w=32&amp;q=75 1x,
                   /_next/image?url=https%3A%2F%2Fsock.cauldron.quest%2Fsock.png&amp;w=64&amp;q=75 2x
                 "
@@ -1349,7 +1349,7 @@ Bismuth Shed was founded in 2017 and is based in Taipei City, Taiwan. Bismuth Sh
                     decoding="async"
                     data-nimg="1"
                     className="rounded-full inline align-middle mr-2 animate-spin"
-                    srcset="
+                    srcSet="
                   /_next/image?url=https%3A%2F%2Fipfs.pat.mn%2Fipfs%2FQmeTHACo1GsxsXbwPk9NgYPsmH5an1js2pMvAcFqRjtxJk&amp;w=32&amp;q=75 1x,
                   /_next/image?url=https%3A%2F%2Fipfs.pat.mn%2Fipfs%2FQmeTHACo1GsxsXbwPk9NgYPsmH5an1js2pMvAcFqRjtxJk&amp;w=64&amp;q=75 2x
                 "
@@ -1420,7 +1420,7 @@ Bismuth Shed was founded in 2017 and is based in Taipei City, Taiwan. Bismuth Sh
                     decoding="async"
                     data-nimg="1"
                     className="rounded-full inline align-middle mr-2 animate-spin"
-                    srcset="
+                    srcSet="
                   /_next/image?url=https%3A%2F%2Fgist.github.com%2Falpsy05%2F948dc4d353379a6aeef7daaed2863dfe%2Fraw%2F0ed348912c2fb0a439bec08d3e8fa58d46013ab2%2Fcashcats.png&amp;w=32&amp;q=75 1x,
                   /_next/image?url=https%3A%2F%2Fgist.github.com%2Falpsy05%2F948dc4d353379a6aeef7daaed2863dfe%2Fraw%2F0ed348912c2fb0a439bec08d3e8fa58d46013ab2%2Fcashcats.png&amp;w=64&amp;q=75 2x
                 "
@@ -1488,7 +1488,7 @@ Bismuth Shed was founded in 2017 and is based in Taipei City, Taiwan. Bismuth Sh
                     decoding="async"
                     data-nimg="1"
                     className="rounded-full inline align-middle mr-2 animate-spin"
-                    srcset="
+                    srcSet="
                   /_next/image?url=https%3A%2F%2Fipfs.pat.mn%2Fipfs%2FQmQH7H8wxXmr5cH28mUAGEhCTvQ895Lot6vVjHRn38AZYs&amp;w=32&amp;q=75 1x,
                   /_next/image?url=https%3A%2F%2Fipfs.pat.mn%2Fipfs%2FQmQH7H8wxXmr5cH28mUAGEhCTvQ895Lot6vVjHRn38AZYs&amp;w=64&amp;q=75 2x
                 "
