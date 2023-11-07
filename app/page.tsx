@@ -17,8 +17,7 @@ import { useBCHPrice } from "@/app/providers/bchpriceclientprovider";
 
 import TokenSkeleton from "@/app/components/TokenSkeleton";
 import FormatCategory from "@/app/components/FormatCategory";
-import MagLegend from "@/app/components/MagLegend";
-import CTA from "@/app/components/CTA";
+import BottomCards from "@/app/components/BottomCards";
 
 import { InformationCircleIcon } from "@heroicons/react/solid";
 import {
@@ -91,6 +90,7 @@ export default function TokenDataPage() {
     return (
       <>
         <TokenSkeleton />
+        <BottomCards />
       </>
     );
   }
@@ -242,7 +242,7 @@ export default function TokenDataPage() {
               ))}
             </TableBody>
           </Table>
-          <MagLegend />
+          <BottomCards />
         </div>
       )}
     </main>

@@ -16,6 +16,7 @@ import { TokenData } from "@/app/interfaces";
 // tokenTotalReservedAmount
 
 // TODO: figure out what type output should be.
+// TODO: funnel price and bcmr data into a db, and then pull it from there for the website.
 
 async function validateDecimals(decimals: any): Promise<number> {
   if (isNaN(decimals) || decimals < 0 || decimals > 100) {

@@ -1,19 +1,10 @@
 ## PENDING presentation issues
 
 - Tremor is changing the font, fix that.
-- MagLegend use something from Tremor, headless, etc.
-- maybe put boxes at bottom, and one is for r/BCHCashTokens
-
-## Launch
-
-- keep old one around on a different branch to check numbers
-- compare load times of old and new
-- do lighthouse test without paytaca and in private tab
 
 ## PENDING code issues
 
 - move cauldron api to vercel
-- add inner pages
 - sorting, default sort is TVL, https://www.google.com/search?q=sortable%20table%20nextjs
 
 3. **Type Safety for JSON Responses**: Ensure the types for the API JSON responses are properly defined. Currently, the script assumes that the JSON response will match the expected structure. You should define interfaces for these responses to ensure type safety.
@@ -62,10 +53,14 @@ To improve the performance of the `getTokenData` script, there are several strat
 
 By implementing these strategies, you should see an improvement in the script's execution time and overall efficiency.
 
-## TODO
+## Launch
 
-// TODO: add custom 404 page is this the doge you were looking for?
+- keep old one around on a different branch to check numbers
+- compare load times of old and new
+- do lighthouse test without paytaca and in private tab
 
 ## REF
 
 - https://heroicons.com/
+
+---
