@@ -1,4 +1,4 @@
-# TODO
+# To Do
 
 - move cauldron api to vercel
 - sorting, default sort is TVL, https://www.google.com/search?q=sortable%20table%20nextjs

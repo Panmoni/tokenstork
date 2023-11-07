@@ -1,3 +1,5 @@
+// TODO: consider making this a small spinning BCH logo or something else interesting, or maybe changing it seasonally
+
 export default function TinyLoader() {
   return (
     <div className="inline-flex items-center justify-center space-x-1">
@@ -7,5 +9,3 @@ export default function TinyLoader() {
     </div>
   );
 }
-
-// TODO: consider making this a small spinning BCH logo or something else interesting, or maybe changing it seasonally

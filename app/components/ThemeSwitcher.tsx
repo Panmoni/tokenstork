@@ -1,6 +1,6 @@
 "use client";
 
-// TODO: update to use Tremor and make sure it works, then include in header, maybe as sun/
+// TODO: update to use Tremor and make sure it works, then include in header, maybe as sun/moon
 
 import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";

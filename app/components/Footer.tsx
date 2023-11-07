@@ -1,4 +1,3 @@
-// TODO: test responsiveness
 // TODO: implement colors on hover
 
 const Footer = () => {
