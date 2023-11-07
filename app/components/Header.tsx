@@ -7,6 +7,7 @@ import Image from "next/image";
 
 // TODO: should this have the header tag?
 // TODO: confetti on click of header logo?
+// TODO: not super thrilled about using the Disclosure component? https://headlessui.com/react/disclosure
 
 const navigation = [
   { name: "Tokens", href: "/" },

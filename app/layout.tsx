@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from "next";
-import HelloBar from "./components/HelloBar";
-import Footer from "./components/Footer";
-import Navbar from "./components/Header";
+import HelloBar from "@/app/components/HelloBar";
+import Footer from "@/app/components/Footer";
+import Navbar from "@/app/components/Header";
+import CTA from "@/app/components/CTA";
 import GoogleAnalytics from "./components/GoogleAnalytics";
 import { BCHPriceProvider } from "./providers/bchpriceclientprovider";
 import { Inter } from "next/font/google";
@@ -13,7 +14,6 @@ const bodyFont = Inter({
 });
 
 // TODO: add inner pages https://www.tremor.so/docs/components/tracker, https://storybook.tremor.so/?path=/docs/components-list-table--docs
-// TODO: add CTA eg https://mambaui.com/components/call-to-action
 // TODO: add gradient bg https://kopi.dev/tailwind/gradient-background-animation/ (also has some spacing stuff), https://tailwindcomponents.com/component/button-background-hover-animation
 // TODO: work more on different screen sizes
 
@@ -80,6 +80,7 @@ export default function RootLayout({
           <HelloBar />
           <Navbar />
           {children}
+          <CTA />
           <Footer />
           <GoogleAnalytics />
         </body>

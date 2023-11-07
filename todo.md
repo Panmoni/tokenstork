@@ -1,7 +1,6 @@
 ## PENDING presentation issues
 
 - Tremor is changing the font, fix that.
-- what else can Tremor do for us? headlessui?
 - MagLegend use something from Tremor, headless, etc.
 - maybe put boxes at bottom, and one is for r/BCHCashTokens
 

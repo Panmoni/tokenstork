@@ -64,7 +64,7 @@ export default function Page() {
         assistance, APIs, etc by the following. Thank you for your
         collaboration!
       </p>
-      <ul>
+      <ul className="list-disc list-inside ml-5">
         <li>
           a&nbsp;
           <a
