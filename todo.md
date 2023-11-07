@@ -1,15 +1,22 @@
 ## PENDING presentation issues
 
-- rounding of numbers? line 90, 150 itemrow
+- check numbers again
+-     rounding of numbers? line 90, 150 itemrow
 
 - work on table colors
+- alt row colors
 - implement skeleton load
 - Tremor is changing the font, fix that.
+- what else can Tremor do for us?
+- ticker in smaller font?
+- add legend for number abbreviations
 
 ## Launch
 
 - keep old one around on a different branch to check numbers
 - compare load times of old and new
+
+- sorting, default sort is TVL
 
 ## PENDING code issues
 

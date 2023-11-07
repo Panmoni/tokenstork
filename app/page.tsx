@@ -155,8 +155,8 @@ export default function TokenDataPage() {
                           : token.icon
                       }
                       alt={token.name}
-                      width={32}
-                      height={32}
+                      width={28}
+                      height={28}
                       className="rounded-full inline align-middle"
                       title={token.description}
                     />{" "}
