@@ -1,3 +1,5 @@
+// TODO: make it into a grid and on top of the CTA put 2 items that are ads perhaps.
+
 const CTA = () => {
   return (
     <section className="mt-4 bg-accent hover:bg-primary rounded-lg">

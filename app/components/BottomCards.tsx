@@ -25,7 +25,7 @@ const BottomCards = () => {
           Follow @BitcoinCashSite on 𝕏 to stay up-to-date with the BCH and
           CashTokens space!
         </p>
-        <p className="mt-4 mb-6 mx-auto text-center">
+        <p className="mt-8 mb-6 mx-auto text-center">
           <a
             target="_blank"
             rel="noopener noreferrer"
@@ -34,6 +34,9 @@ const BottomCards = () => {
           >
             Follow @BitcoinCashSite
           </a>
+        </p>
+        <p className="text-xs text-center mb-4">
+          Your ad here. <a href="mailto:hello@panmoni.com">hello@panmoni.com</a>
         </p>
       </div>
       <div className="transform transition duration-500 hover:scale-105 bg-gradient-to-br from-primary to-primary-light shadow-lg rounded-lg overflow-hidden my-10">
@@ -58,7 +61,7 @@ const BottomCards = () => {
           Subscribe to r/BCHCashTokens to stay up-to-date with the BCH and
           CashTokens space!
         </p>
-        <p className="mt-4 mb-6 mx-auto text-center">
+        <p className="mt-8 mb-6 mx-auto text-center">
           <a
             target="_blank"
             rel="noopener noreferrer"
@@ -67,6 +70,9 @@ const BottomCards = () => {
           >
             Subscribe to r/BCHCashTokens
           </a>
+        </p>
+        <p className="text-xs text-center mb-4">
+          Your ad here. <a href="mailto:hello@panmoni.com">hello@panmoni.com</a>
         </p>
       </div>
       <div className="transform transition duration-500 hover:scale-105 bg-gradient-to-br from-secondary to-secondary-light shadow-lg rounded-lg w-full mx-auto overflow-hidden my-10 p-6">

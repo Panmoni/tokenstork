@@ -16,7 +16,7 @@ import { TokenData } from "@/app/interfaces";
 // tokenTotalReservedAmount
 
 // TODO: figure out what type output should be.
-// TODO: funnel price and bcmr data into a db, and then pull it from there for the website.
+// TODO: funnel price and bcmr data into a db, and then pull it from there for the website. This might make the cauldronapi.panmoni.com redundant, tho guru are using it, so maybe create api.panmoni.com or something and host the data there from the db? Or even just put the API inside this same app.
 // TODO: implement comprehensive error handling in getTokenData
 // Consider what should happen if an API fails. Should the function continue with partial data, return null, or throw an error?
 // After each API call, validate the response structure to ensure the data exists. OR perhaps this is unnecessary if I'm going to implement the database.
