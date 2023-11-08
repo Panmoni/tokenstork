@@ -992,16 +992,13 @@ Bismuth Shed was founded in 2017 and is based in Taipei City, Taiwan. Bismuth Sh
                     alt="HASHMOB"
                     title="$HASH"
                     loading="lazy"
-                    width="28"
-                    height="28"
+                    width="32"
+                    height="32"
                     decoding="async"
                     data-nimg="1"
-                    className="rounded-full inline align-middle mr-2 animate-spin"
-                    srcSet="
-                  /_next/image?url=https%3A%2F%2Fbafkreigyby3j4ue7oxw6ucpojflzbt24x7vik7rp2sjqnfme6d2cfyjdea.ipfs.nftstorage.link%2F&amp;w=32&amp;q=75 1x,
-                  /_next/image?url=https%3A%2F%2Fbafkreigyby3j4ue7oxw6ucpojflzbt24x7vik7rp2sjqnfme6d2cfyjdea.ipfs.nftstorage.link%2F&amp;w=64&amp;q=75 2x
-                "
-                    src="/_next/image?url=https%3A%2F%2Fbafkreigyby3j4ue7oxw6ucpojflzbt24x7vik7rp2sjqnfme6d2cfyjdea.ipfs.nftstorage.link%2F&amp;w=64&amp;q=75"
+                    className="rounded-full inline align-middle animate-spin"
+                    srcSet="/_next/image?url=https%3A%2F%2Fipfs.io%2Fipfs%2Fbafkreigyby3j4ue7oxw6ucpojflzbt24x7vik7rp2sjqnfme6d2cfyjdea&amp;w=32&amp;q=75 1x, /_next/image?url=https%3A%2F%2Fipfs.io%2Fipfs%2Fbafkreigyby3j4ue7oxw6ucpojflzbt24x7vik7rp2sjqnfme6d2cfyjdea&amp;w=64&amp;q=75 2x"
+                    src="/_next/image?url=https%3A%2F%2Fipfs.io%2Fipfs%2Fbafkreigyby3j4ue7oxw6ucpojflzbt24x7vik7rp2sjqnfme6d2cfyjdea&amp;w=64&amp;q=75"
                   />
                   <span className="align-middle font-semibold" title="$HASH">
                     HASHMOB
