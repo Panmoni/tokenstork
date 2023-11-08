@@ -12,6 +12,7 @@
 - add inner pages
 - light and dark themes
 - skeleton programmatic generation
+- enable sorting on remaining columns on front page
 
 ## 0.0.4
 - NFT tab on front page
@@ -24,6 +25,7 @@
 
 ## 0.0.6
 - custom site themes
+- add badges for tokens that have been updated recently and that are listed in various BCMR registries, eg otr.cash.
 
 ## 0.0.7
 - list all NFT projects
