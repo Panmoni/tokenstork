@@ -1,6 +1,5 @@
 # To Do
 
-- sorting, default sort is TVL
 - move old one to its own branch
 - compare load times of old and new
 - do lighthouse test without paytaca and in private tab

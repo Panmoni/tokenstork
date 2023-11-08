@@ -11,11 +11,6 @@ const TokenSkeleton = () => {
         </span>
       </h2>
       <div>
-        <div className="tremor-Flex-root flex w-full flex-row justify-start items-center space-x-0.5">
-          <p className="font-medium text-tremor-title text-tremor-content-emphasis dark:text-dark-tremor-content-emphasis">
-            BCH CashTokens Market Cap Data
-          </p>
-        </div>
         <div className="tremor-Table-root overflow-auto mt-6 animate-pulse">
           <table className="tremor-Table-table w-full tabular-nums text-tremor-default text-tremor-content dark:text-dark-tremor-content">
             <thead className="tremor-TableHead-root text-left text-tremor-content dark:text-dark-tremor-content">

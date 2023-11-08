@@ -36,12 +36,43 @@ import {
 // TODO: explore search example from https://github.com/vercel/nextjs-postgres-nextauth-tailwindcss-template/tree/main
 // TODO: should this be all server and zero client?
 
+type SortState = {
+  column: string;
+  direction: "asc" | "desc";
+};
+
 export default function TokenDataPage() {
   const [tokenData, setTokenData] = useState<TokenData[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [sortState, setSortState] = useState<SortState>({
+    column: "tvl",
+    direction: "desc",
+  });
   const { bchPrice } = useBCHPrice();
   const updateInterval = 300000; // milliseconds
+
+  const sortData = (data: TokenData[], { column, direction }: SortState) => {
+    return [...data].sort((a, b) => {
+      if (a[column] < b[column]) {
+        return direction === "asc" ? -1 : 1;
+      }
+      if (a[column] > b[column]) {
+        return direction === "asc" ? 1 : -1;
+      }
+      return 0;
+    });
+  };
+
+  const onSort = (column: string) => {
+    const isAsc = sortState.column === column && sortState.direction === "asc";
+    setSortState({
+      column,
+      direction: isAsc ? "desc" : "asc",
+    });
+  };
+
+  const sortedData = sortData(tokenData, sortState);
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null;
@@ -123,8 +154,16 @@ export default function TokenDataPage() {
                     className="align-middle"
                   />
                 </TableHeaderCell>
-                <TableHeaderCell className="text-right">
+                <TableHeaderCell
+                  className="text-right cursor-pointer"
+                  onClick={() => onSort("price")}
+                >
                   Price ($){" "}
+                  {sortState.column === "price" ? (
+                    <span>{sortState.direction === "asc" ? "↑" : "↓"}</span>
+                  ) : (
+                    <span>↕</span>
+                  )}
                   <Icon
                     icon={InformationCircleIcon}
                     variant="simple"
@@ -159,7 +198,10 @@ export default function TokenDataPage() {
                     className="align-middle"
                   />
                 </TableHeaderCell>
-                <TableHeaderCell className="text-right">
+                <TableHeaderCell
+                  className="text-right cursor-pointer"
+                  onClick={() => onSort("tvl")}
+                >
                   TVL ($){" "}
                   <Icon
                     icon={InformationCircleIcon}
@@ -167,6 +209,13 @@ export default function TokenDataPage() {
                     tooltip="Total Value Locked"
                     className="align-middle"
                   />
+                  <span>
+                    {sortState.column === "tvl"
+                      ? sortState.direction === "asc"
+                        ? "↑"
+                        : "↓"
+                      : "↕"}
+                  </span>
                 </TableHeaderCell>
                 <TableHeaderCell className="text-right">
                   Token Category{" "}
@@ -181,7 +230,7 @@ export default function TokenDataPage() {
             </TableHead>
 
             <TableBody className="!opacity-100">
-              {tokenData.map((token) => (
+              {sortedData.map((token) => (
                 <TableRow
                   key={token.name}
                   className="transition duration-200 ease-in-out cursor-pointer hover:shadow-lg hover:bg-gradient-to-r from-violet-600/20 to-indigo-600/10"
