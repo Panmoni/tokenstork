@@ -1,1 +1,61 @@
-- analyze load times of old and new, compare vercel-hosted to vercel-hosted, look for opps
+# TODO
+
+## 0.0.2
+- analyze load times of old and new, compare vercel-hosted to vercel-hosted, look for opps to improve.
+- footer cleanup
+- header cleanup
+- add a couple more API calls to the HelloBar, eg crypto FGI
+- get breakpoints confirmed working
+- ensure responsiveness
+
+## 0.0.3
+- add inner pages
+- light and dark themes
+- skeleton programmatic generation
+
+## 0.0.4
+- NFT tab on front page
+- custom 404 page
+- add search bar to token table
+
+## 0.0.5
+- set up MariaDB or PG, put API into it and pull API data from there to achieve speedier loading.
+- show fees in header https://bitcoinfees.cash/. Perhaps use chaingraph to get last block `fee_satoshis` and divide by `transaction_count` to get avg sats per transaction and convert to decimal BCH and multiply by current price.
+
+## 0.0.6
+- custom site themes
+
+## 0.0.7
+- list all NFT projects
+- tapswap integration
+
+## 0.0.8
+- Integrate Wallet Connect 2.
+- add historical price graphs.
+
+## 0.0.9
+- comprehensive error-checking and tests.
+
+## 0.1.0
+- add ability to create FTs and NFTs.
+
+## 0.2.0
+- add ability to create ICOs and have oversight and continuity for them, with milestones, DAO formation, investors can vote on release of payments or return pro rate to investors, community engagement and update tools.
+- add trading volume tracking.
+
+## 0.5.0
+- add ability to create BCMR identities for people and organizations.
+- add portfolio/watchlist functionality.
+
+## 0.7.0
+- add token management tools (metadata updates, dividends, mass distribution, airdrops, ability to secure authbase, etc.)
+- show updates when tokens update their BCMR data.
+
+## 0.9.0
+- add other pertinent BCH chain data.
+
+## 1.0.0
+- run own chaingraph and BCMR servers.
+
+## 2.0.0.
+- add social features
