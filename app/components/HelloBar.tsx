@@ -30,7 +30,7 @@ const HelloBar: React.FC = () => {
       <div className="case text-xs tracking-wider text-center px-4 py-3">
         Tokens tracked: <span>{tokenIds.length}</span> | BCH Price:&nbsp;
         {bchPrice ? "$" + bchPrice.toFixed(2) : <TinyLoader />} &nbsp;| CNN Fear
-        & Greed:&nbsp; {fearGreedIndex || <TinyLoader />}
+        & Greed:&nbsp;{fearGreedIndex || <TinyLoader />}
       </div>
     </div>
   );

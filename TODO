@@ -57,5 +57,8 @@
 ## 1.0.0
 - run own chaingraph and BCMR servers.
 
+## 1.5.0
+- offer/track additional products that require on-chain contracts, eg annuities https://unspent.app/contract?opReturn=6a047574786f0141010102f00317a914ae83c90909bf710ef2d948ebf6f957a9219f549c8703884e0b02b00417a914fc133e739da7ad80cb97c254cc6499c761e4b88287&network=mainnet
+
 ## 2.0.0.
 - add social features
