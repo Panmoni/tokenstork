@@ -1,9 +1,29 @@
 // app/utils/presentationUtils.ts
 
 // TOC
+// getIPFSUrl
 // satoshisToBCH
 // humanizeBigNumber
 // formatMarketCap
+
+export function getIPFSUrl(iconUrl: string) {
+  const ipfsGateway = "https://ipfs.io/ipfs/";
+  const ipfsPatterns = [
+    // "https://<CID>.ipfs.nftstorage.link/"
+    /https:\/\/(.+)\.ipfs\.nftstorage\.link\//,
+    // Pattern for "ipfs://<CID>"
+    /ipfs:\/\/(.+)/,
+  ];
+
+  for (const pattern of ipfsPatterns) {
+    const match = iconUrl.match(pattern);
+    if (match && match[1]) {
+      return `${ipfsGateway}${match[1]}`;
+    }
+  }
+
+  return iconUrl;
+}
 
 export function satoshisToBCH(sats: number) {
   return sats / 100000000;

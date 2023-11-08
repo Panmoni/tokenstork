@@ -10,6 +10,7 @@ import { getTokenData } from "@/app/utils/getTokenData";
 import {
   humanizeBigNumber,
   formatMarketCap,
+  getIPFSUrl,
 } from "@/app/utils/presentationUtils";
 
 import { TokenData } from "@/app/interfaces";
@@ -109,18 +110,19 @@ export default function TokenDataPage() {
         <p>Loading...</p>
       ) : (
         <div>
-          <Flex
-            className="space-x-0.5"
-            justifyContent="start"
-            alignItems="center"
-          >
-            <Title> BCH CashTokens Market Cap Data </Title>
-          </Flex>
           <Table className="mt-6">
             <TableHead>
               <TableRow>
-                <TableHeaderCell>Name</TableHeaderCell>
-                <TableHeaderCell>Ticker</TableHeaderCell>
+                <TableHeaderCell>Token Name</TableHeaderCell>
+                <TableHeaderCell>
+                  Ticker
+                  <Icon
+                    icon={InformationCircleIcon}
+                    variant="simple"
+                    tooltip="Token metadata subject to change"
+                    className="align-middle"
+                  />
+                </TableHeaderCell>
                 <TableHeaderCell className="text-right">
                   Price ($){" "}
                   <Icon
@@ -186,11 +188,7 @@ export default function TokenDataPage() {
                 >
                   <TableCell>
                     <Image
-                      src={
-                        token.icon?.startsWith("ipfs://")
-                          ? "https://ipfs.io/ipfs/" + token.icon.substring(7)
-                          : token.icon
-                      }
+                      src={getIPFSUrl(token.icon)}
                       alt={token.name}
                       width={32}
                       height={32}
