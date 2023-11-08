@@ -35,6 +35,8 @@ import {
 
 // TODO: explore search example from https://github.com/vercel/nextjs-postgres-nextauth-tailwindcss-template/tree/main
 // TODO: should this be all server and zero client?
+// TODO: does the new UI work via proxy?
+// TODO: add tabs on this and add a tab for NFTs.
 
 type SortState = {
   column: string;
