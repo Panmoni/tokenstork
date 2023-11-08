@@ -7,12 +7,18 @@ export default function Page() {
         </span>
       </h2>
       <p>
-        TokenStork.com is a market-cap site for BCH{" "}
+        TokenStork.com is a market-cap site for{" "}
+        <a href="https://bitcoincashsite.com/" target="_blank">
+          BCH
+        </a>{" "}
         <a href="https://cashtokens.org/" target="_blank">
           CashTokens
         </a>{" "}
         built and maintained by{" "}
-        <a href="https://georgedonnelly.com/">George Donnelly</a>.{" "}
+        <a href="https://georgedonnelly.com/" target="_blank">
+          George Donnelly
+        </a>
+        .{" "}
         <a href="https://github.com/Panmoni/tokenstork" target="_blank">
           The code is open-source
         </a>
@@ -22,13 +28,17 @@ export default function Page() {
         </a>{" "}
         or the{" "}
         <a
-          href="https://github.com/Panmoni/tokenstork/projects?query=is%3Aopen"
+          href="https://github.com/orgs/Panmoni/projects/4/views/1"
           target="_blank"
         >
           roadmap
         </a>
-        . I welcome your suggestions, criticisms, bug reports and general
-        feedback any time.
+        .
+      </p>
+      <p className="mt-2">
+        I welcome your suggestions, criticisms, bug reports and general feedback
+        any time. Let me know what functionality would be of assistance to you,
+        and I will probably add it!
       </p>
 
       <h3 className="text-2xl my-4">Need Help Building?</h3>
@@ -52,9 +62,9 @@ export default function Page() {
       <p className="mb-4">
         At this time, this site is self-funded and running on borrowed APIs, as
         well lending an API to others, so please consider supporting this work
-        by donating to the following address:
+        by donating to the following address. Thank you!
       </p>
-      <p className="text-lg">
+      <p className="text-lg font-mono">
         bitcoincash:qz3pxmwda8gd42wa8k9yfxcwhcaapeuhygjc8mc4m8
       </p>
 

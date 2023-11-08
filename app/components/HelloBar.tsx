@@ -28,7 +28,7 @@ const HelloBar: React.FC = () => {
   return (
     <div className="bg-primary text-white flex items-center">
       <div className="case text-xs tracking-wider text-center px-4 py-3">
-        FTs tracked: <span>{tokenIds.length}</span> | BCH Price:&nbsp;
+        Tokens tracked: <span>{tokenIds.length}</span> | BCH Price:&nbsp;
         {bchPrice ? "$" + bchPrice.toFixed(2) : <TinyLoader />} &nbsp;| CNN Fear
         & Greed:&nbsp; {fearGreedIndex || <TinyLoader />}
       </div>

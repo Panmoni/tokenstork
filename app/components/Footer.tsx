@@ -183,7 +183,14 @@ const Footer = () => {
             </svg>
           </a>
         </div>
-        <p className="mt-4 text-base leading-6 text-center text-gray-400">
+        <p className="mt-4 text-base leading-6 text-center text-gray-700">
+          Visit{" "}
+          <a href="https://bitcoincashsite.com/" target="_blank">
+            BitcoinCashSite.com
+          </a>{" "}
+          to learn more about BCH today.
+        </p>
+        <p className="mt-2 text-base leading-6 text-center text-gray-400">
           A&nbsp;
           <a
             href="https://www.panmoni.com/"
