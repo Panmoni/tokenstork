@@ -1,5 +1,3 @@
-// TODO: implement colors on hover
-
 const Footer = () => {
   return (
     <footer className="bg-primary/20 mt-10 rounded-lg">
@@ -41,7 +39,7 @@ const Footer = () => {
             target="_blank"
             rel="noopener noreferrer"
             href="https://www.reddit.com/r/BCHCashTokens/"
-            className="text-gray-400"
+            className="text-gray-400 hover:text-accent"
           >
             <span className="sr-only">Reddit</span>
             <svg
@@ -80,7 +78,7 @@ const Footer = () => {
             target="_blank"
             rel="noopener noreferrer"
             href="https://twitter.com/bitcoincashsite"
-            className="text-gray-400 hover:text-gray-500"
+            className="text-gray-400 hover:text-accent"
           >
             <span className="sr-only">Twitter</span>
             <svg
@@ -97,7 +95,7 @@ const Footer = () => {
             target="_blank"
             rel="noopener noreferrer"
             href="https://github.com/Panmoni/tokenstork"
-            className="text-gray-400 hover:text-gray-500"
+            className="text-gray-400 hover:text-accent"
           >
             <span className="sr-only">GitHub</span>
             <svg
@@ -117,7 +115,7 @@ const Footer = () => {
             target="_blank"
             rel="noopener noreferrer"
             href="https://t.me/Panmoni/487"
-            className="text-gray-400 hover:text-gray-500"
+            className="text-gray-400 hover:text-accent"
           >
             <span className="sr-only">Telegram</span>
             <svg
@@ -141,7 +139,7 @@ const Footer = () => {
             target="_blank"
             rel="noopener noreferrer"
             href="https://www.youtube.com/@RealBitcoinCashSite"
-            className="text-gray-400 hover:text-gray-500"
+            className="text-gray-400 hover:text-accent"
           >
             <span className="sr-only">YouTube</span>
             <svg
@@ -167,7 +165,7 @@ const Footer = () => {
             target="_blank"
             rel="noopener noreferrer"
             href="https://www.instagram.com/bitcoincashsite"
-            className="text-gray-400 hover:text-gray-500"
+            className="text-gray-400 hover:text-accent"
           >
             <span className="sr-only">Instagram</span>
             <svg
