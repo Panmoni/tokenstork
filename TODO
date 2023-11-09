@@ -3,11 +3,8 @@
 ## 0.0.2
 - footer cleanup
 - header cleanup
-- add a couple more API calls to the HelloBar, eg crypto FGI
-- get breakpoints confirmed working
 - ensure responsiveness
 - increase text size, esp the nav menu and bold the nav menu
-- maybe remove spinning
 - - enable sorting on remaining columns on front page, marketcap sorting https://github.com/Panmoni/tokenstork/issues/3
 - maybe merge ticker in with name
 - https://developer.chrome.com/docs/lighthouse/performance/offscreen-images/
@@ -16,10 +13,13 @@
 
 ## 0.0.3
 - add inner pages
+- get breakpoints confirmed working/optimized
 - remove tokenid from front page
 - light and dark themes
 - skeleton programmatic generation
 - optimize loading time using Lighthouse, etc.
+- add a couple more API calls to the HelloBar, eg crypto FGI
+
 
 ## 0.0.4
 - NFT tab on front page
