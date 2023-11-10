@@ -1,25 +1,5 @@
 # TODO
 
-## 0.0.2
-- enable sorting on remaining columns on front page, marketcap sorting https://github.com/Panmoni/tokenstork/issues/3
-
-circulatingSupplyBigInt
-maxSupplyBigInt
-marketCapBigInt
-
-
-
-<TableHeaderCell
-                  className="text-right cursor-pointer"
-                  onClick={() => onSort("price")}
-                >
-                  Price ($){" "}
-                  {sortState.column === "price" ? (
-                    <span>{sortState.direction === "asc" ? "↑" : "↓"}</span>
-                  ) : (
-                    <span>↕</span>
-                  )}
-
 ## 0.0.3
 - add inner pages
 - get breakpoints confirmed working/optimized
