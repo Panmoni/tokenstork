@@ -2,16 +2,15 @@
 
 ## 0.0.2
 - header cleanup
-- ensure responsiveness
+- test responsiveness
 - increase text size, esp the nav menu and bold the nav menu
 - enable sorting on remaining columns on front page, marketcap sorting https://github.com/Panmoni/tokenstork/issues/3
-- maybe merge ticker in with name
-
 
 ## 0.0.3
 - add inner pages
 - get breakpoints confirmed working/optimized
 - remove tokenid from front page
+- maybe merge ticker in with name
 - light and dark themes
 - skeleton programmatic generation?
 - add a couple more API calls to the HelloBar, eg crypto FGI
@@ -32,6 +31,7 @@
 ## 0.0.6
 - list all NFT projects
 - tapswap integration
+- confetti on click of header logo?
 
 ## 0.0.7
 - custom site themes
