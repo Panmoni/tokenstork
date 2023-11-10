@@ -28,7 +28,7 @@ export default function Page() {
         </a>{" "}
         or the{" "}
         <a
-          href="https://github.com/Panmoni/tokenstork/blob/002/TODO"
+          href="https://github.com/Panmoni/tokenstork/blob/main/TODO"
           target="_blank"
         >
           roadmap
