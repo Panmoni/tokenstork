@@ -40,6 +40,7 @@ const config: Config = {
       black: colors.black,
       white: colors.white,
       gray: colors.gray,
+      slate: colors.slate,
       emerald: colors.emerald,
       indigo: colors.indigo,
       violet: colors.violet,
@@ -143,7 +144,7 @@ const config: Config = {
       },
       fontSize: {
         "tremor-label": "0.75rem",
-        "tremor-default": ["0.875rem", { lineHeight: "1.25rem" }],
+        "tremor-default": ["1rem", { lineHeight: "1.25rem" }],
         "tremor-title": ["1.125rem", { lineHeight: "1.75rem" }],
         "tremor-metric": ["1.875rem", { lineHeight: "2.25rem" }],
       },
