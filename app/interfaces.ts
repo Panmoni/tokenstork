@@ -10,8 +10,11 @@ export interface TokenData {
   symbol: string;
   price: number;
   circulatingSupply: string;
+  circulatingSupplyBigInt: bigint;
   maxSupply: string;
+  maxSupplyBigInt: bigint;
   marketCap: string;
+  marketCapBigInt: bigint;
   tvl: number;
   category: string;
 }

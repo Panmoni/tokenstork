@@ -173,8 +173,16 @@ export default function TokenDataPage() {
                     className="align-middle"
                   />
                 </TableHeaderCell>
-                <TableHeaderCell className="text-right">
+                <TableHeaderCell
+                  className="text-right cursor-pointer"
+                  onClick={() => onSort("circulatingSupplyBigInt")}
+                >
                   Circulating Supply
+                  {sortState.column === "circulatingSupplyBigInt" ? (
+                    <span>{sortState.direction === "asc" ? "↑" : "↓"}</span>
+                  ) : (
+                    <span>↕</span>
+                  )}
                   <Icon
                     icon={InformationCircleIcon}
                     variant="simple"
@@ -182,8 +190,16 @@ export default function TokenDataPage() {
                     className="align-middle"
                   />
                 </TableHeaderCell>
-                <TableHeaderCell className="text-right">
+                <TableHeaderCell
+                  className="text-right cursor-pointer"
+                  onClick={() => onSort("maxSupplyBigInt")}
+                >
                   Max Supply{" "}
+                  {sortState.column === "maxSupplyBigInt" ? (
+                    <span>{sortState.direction === "asc" ? "↑" : "↓"}</span>
+                  ) : (
+                    <span>↕</span>
+                  )}
                   <Icon
                     icon={InformationCircleIcon}
                     variant="simple"
@@ -191,8 +207,16 @@ export default function TokenDataPage() {
                     className="align-middle"
                   />
                 </TableHeaderCell>
-                <TableHeaderCell className="text-right">
+                <TableHeaderCell
+                  className="text-right cursor-pointer"
+                  onClick={() => onSort("marketCapBigInt")}
+                >
                   Market Cap ($){" "}
+                  {sortState.column === "marketCapBigInt" ? (
+                    <span>{sortState.direction === "asc" ? "↑" : "↓"}</span>
+                  ) : (
+                    <span>↕</span>
+                  )}
                   <Icon
                     icon={InformationCircleIcon}
                     variant="simple"

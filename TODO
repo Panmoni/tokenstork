@@ -1,14 +1,30 @@
 # TODO
 
 ## 0.0.2
-- header cleanup
 - enable sorting on remaining columns on front page, marketcap sorting https://github.com/Panmoni/tokenstork/issues/3
+
+circulatingSupplyBigInt
+maxSupplyBigInt
+marketCapBigInt
+
+
+
+<TableHeaderCell
+                  className="text-right cursor-pointer"
+                  onClick={() => onSort("price")}
+                >
+                  Price ($){" "}
+                  {sortState.column === "price" ? (
+                    <span>{sortState.direction === "asc" ? "↑" : "↓"}</span>
+                  ) : (
+                    <span>↕</span>
+                  )}
 
 ## 0.0.3
 - add inner pages
 - get breakpoints confirmed working/optimized
 - remove tokenid from front page
-- maybe merge ticker in with name
+- maybe merge ticker in with name (and update skeleton)
 - light and dark themes
 - skeleton programmatic generation?
 - add a couple more API calls to the HelloBar, eg crypto FGI

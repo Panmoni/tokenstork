@@ -6,7 +6,6 @@ import { Disclosure, Menu, Transition } from "@headlessui/react";
 import Image from "next/image";
 
 // TODO: should this have the header tag?
-// TODO: not super thrilled about using the Disclosure component? https://headlessui.com/react/disclosure
 
 const navigation = [
   { name: "Tokens", href: "/" },

@@ -83,12 +83,12 @@ export async function getTokenData(
       throw new Error("Invalid response structure");
     }
 
-    let totalSupplyBigInt = BigInt(0);
+    let maxSupplyBigInt = BigInt(0);
     maxSupplyData.data.transaction[0].outputs.forEach((output: any) => {
-      totalSupplyBigInt += BigInt(output.fungible_token_amount);
+      maxSupplyBigInt += BigInt(output.fungible_token_amount);
     });
     const tokenTotalSupplyString = convertToDecimalString(
-      totalSupplyBigInt,
+      maxSupplyBigInt,
       tokenDecimals
     );
 
@@ -116,7 +116,7 @@ export async function getTokenData(
       : 0;
 
     const tokenCirculatingSupplyBigInt =
-      totalSupplyBigInt - tokenTotalReservedAmountBigInt;
+      maxSupplyBigInt - tokenTotalReservedAmountBigInt;
     const tokenCirculatingSupplyString = convertToDecimalString(
       tokenCirculatingSupplyBigInt,
       tokenDecimals
@@ -141,6 +141,9 @@ export async function getTokenData(
       maxSupply: tokenTotalSupplyString,
       marketCap: tokenMarketCap.toString(),
       tvl: totalValueLocked,
+      circulatingSupplyBigInt: tokenCirculatingSupplyBigInt,
+      maxSupplyBigInt: maxSupplyBigInt,
+      marketCapBigInt: BigInt(Math.round(tokenMarketCap)),
       category: tokenCategory,
     };
 
