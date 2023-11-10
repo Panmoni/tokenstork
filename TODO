@@ -2,8 +2,6 @@
 
 ## 0.0.2
 - header cleanup
-- test responsiveness
-- increase text size, esp the nav menu and bold the nav menu
 - enable sorting on remaining columns on front page, marketcap sorting https://github.com/Panmoni/tokenstork/issues/3
 
 ## 0.0.3
