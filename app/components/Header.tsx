@@ -9,6 +9,7 @@ import Image from "next/image";
 
 const navigation = [
   { name: "Tokens", href: "/" },
+  { name: "Learn", href: "/learn" },
   { name: "About", href: "/about" },
 ];
 
