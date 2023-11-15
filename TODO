@@ -12,6 +12,7 @@
 - https://developer.chrome.com/docs/lighthouse/performance/offscreen-images/
 - https://web.dev/articles/optimize-cls
 - https://developer.chrome.com/docs/lighthouse/best-practices/csp-xss/
+- maybe add CRC20 tab https://gitlab.com/0353F40E/crc20-to-bcmr/-/blob/master/bcmr/bitcoin-cash-metadata-registry.json?ref_type=heads, https://t.me/cashtoken_devs/13114 liquidity
 
 ## 0.0.4
 - NFT tab on front page
