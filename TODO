@@ -2,6 +2,7 @@
 
 ## 0.0.3
 - add inner pages
+- ensure use of Link component esp for internal links
 - get breakpoints confirmed working/optimized
 - remove tokenid from front page
 - maybe merge ticker in with name (and update skeleton)
@@ -13,7 +14,7 @@
 - https://web.dev/articles/optimize-cls
 - https://developer.chrome.com/docs/lighthouse/best-practices/csp-xss/
 - maybe add CRC20 tab https://gitlab.com/0353F40E/crc20-to-bcmr/-/blob/master/bcmr/bitcoin-cash-metadata-registry.json?ref_type=heads, https://t.me/cashtoken_devs/13114 liquidity
-- expand Learn page with more resources, link to bitcoincashsite.com, etc.
+- expand Learn page with more resources, link to bitcoincashsite.com, better UI, etc.
 
 ## 0.0.4
 - NFT tab on front page
