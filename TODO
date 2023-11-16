@@ -20,6 +20,8 @@
 - NFT tab on front page
 - custom 404 page
 - add search bar to token table
+- consider setting up this site as a BCMR server as well.
+- ensure good uptake in search engines
 
 ## 0.0.5
 - set up MariaDB or PG, put API into it and pull API data from there to achieve speedier loading.
@@ -29,6 +31,7 @@
 - list all NFT projects
 - tapswap integration
 - confetti on click of header logo?
+- parallelize and optimize loading speed of pages, streaming, suspense, islands, etc.
 
 ## 0.0.7
 - custom site themes
@@ -40,6 +43,9 @@
 
 ## 0.0.9
 - comprehensive error-checking and tests.
+- error.tsx
+- https://nextjs.org/docs/app/building-your-application/routing/error-handling
+- improve accessibility, aria labels, etc.
 
 ## 0.1.0
 - add ability to create FTs and NFTs.
