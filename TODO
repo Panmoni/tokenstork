@@ -6,17 +6,13 @@
 - get breakpoints confirmed working/optimized
 - remove tokenid from front page
 - maybe merge ticker in with name (and update skeleton)
-- light and dark themes
 - skeleton programmatic generation?
-- add a couple more API calls to the HelloBar, eg crypto FGI, https://min-api.cryptocompare.com/documentation
-- optimize loading time using Lighthouse, etc.
-- https://developer.chrome.com/docs/lighthouse/performance/offscreen-images/
-- https://web.dev/articles/optimize-cls
-- https://developer.chrome.com/docs/lighthouse/best-practices/csp-xss/
-- maybe add CRC20 tab https://gitlab.com/0353F40E/crc20-to-bcmr/-/blob/master/bcmr/bitcoin-cash-metadata-registry.json?ref_type=heads, https://t.me/cashtoken_devs/13114 liquidity
 - expand Learn page with more resources, link to bitcoincashsite.com, better UI, etc.
+- set up MariaDB or Postgres, put API into it and pull API data from there to achieve speedier loading.
 
 ## 0.0.4
+- light and dark themes
+- add a couple more API calls to the HelloBar, eg crypto FGI, https://min-api.cryptocompare.com/documentation
 - NFT tab on front page
 - custom 404 page
 - add search bar to token table
@@ -24,7 +20,11 @@
 - ensure good uptake in search engines
 
 ## 0.0.5
-- set up MariaDB or PG, put API into it and pull API data from there to achieve speedier loading.
+- optimize loading time using Lighthouse, etc.
+- https://developer.chrome.com/docs/lighthouse/performance/offscreen-images/
+- https://web.dev/articles/optimize-cls
+- https://developer.chrome.com/docs/lighthouse/best-practices/csp-xss/
+- maybe add CRC20 tab https://gitlab.com/0353F40E/crc20-to-bcmr/-/blob/master/bcmr/bitcoin-cash-metadata-registry.json?ref_type=heads, https://t.me/cashtoken_devs/13114 liquidity
 - show fees in header https://bitcoinfees.cash/. Perhaps use chaingraph to get last block `fee_satoshis` and divide by `transaction_count` to get avg sats per transaction and convert to decimal BCH and multiply by current price.
 
 ## 0.0.6
