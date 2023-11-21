@@ -8,7 +8,7 @@
 - maybe merge ticker in with name (and update skeleton)
 - light and dark themes
 - skeleton programmatic generation?
-- add a couple more API calls to the HelloBar, eg crypto FGI
+- add a couple more API calls to the HelloBar, eg crypto FGI, https://min-api.cryptocompare.com/documentation
 - optimize loading time using Lighthouse, etc.
 - https://developer.chrome.com/docs/lighthouse/performance/offscreen-images/
 - https://web.dev/articles/optimize-cls

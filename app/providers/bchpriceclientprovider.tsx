@@ -32,38 +32,15 @@ export const BCHPriceProvider: React.FC<{ children: ReactNode }> = ({
   const [bchPrice, setBchPrice] = useState<number | null>(null);
 
   useEffect(() => {
-    // Fetch BCH price from CoinGecko
     const fetchBCHPrice = async () => {
       try {
-        const response = await fetch(
-          "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin-cash&vs_currencies=usd"
-        );
+        const response = await fetch("/api/bchPrice");
         const data = await response.json();
-        setBchPrice(data["bitcoin-cash"].usd);
+        setBchPrice(data.USD);
       } catch (error) {
-        console.error("Error fetching BCH price from CoinGecko:", error);
-
-        // Fetch BCH price from CryptoCompare API
-        try {
-          const cryptoCompareAPIKey = process.env.CRYPTO_COMPARE_KEY;
-          if (!cryptoCompareAPIKey) {
-            throw new Error("CRYPTO_COMPARE_KEY is not set");
-          }
-          const backupApiResponse = await fetch(
-            "https://min-api.cryptocompare.com/data/price?fsym=BCH&tsyms=USD&api_key=" +
-              cryptoCompareAPIKey
-          );
-          const backupData = await backupApiResponse.json();
-          setBchPrice(backupData.USD);
-        } catch (backupError) {
-          console.error(
-            "Error fetching BCH price from CryptoCompare API:",
-            backupError
-          );
-        }
+        console.error("Error fetching BCH price from internal API:", error);
       }
     };
-
     fetchBCHPrice();
   }, []);
 
