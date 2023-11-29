@@ -18,6 +18,7 @@
 - add search bar to token table
 - consider setting up this site as a BCMR server as well.
 - ensure good uptake in search engines
+- integrate the TokenStorkRegistry into the site (BCMR)
 
 ## 0.0.5
 - optimize loading time using Lighthouse, etc.
