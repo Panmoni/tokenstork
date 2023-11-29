@@ -58,6 +58,30 @@ export default function Page() {
         , the only remaining censorship-free BCH subreddit where everything
         related to BCH is on-topic.
       </p>
+      <h3 className="text-2xl my-4">TokenStork BCH Metadata Registry</h3>
+      <p className="mb-4">
+        TokenStork now also hosts{" "}
+        <a
+          target="_blank"
+          rel="noopener noreferrer"
+          href="https://tokenstork.com/.well-known/bitcoin-cash-metadata-registry.json"
+        >
+          TokenStorkRegistry
+        </a>
+        , a BCH Metadata Registry. PRs are welcome at our{" "}
+        <a
+          target="_blank"
+          rel="noopener noreferrer"
+          href="https://github.com/Panmoni/tokenstork/blob/main/public/.well-known/bitcoin-cash-metadata-registry.json"
+        >
+          GitHub repo
+        </a>
+        . For now, the registry mirrors{" "}
+        <a target="_blank" rel="noopener noreferrer" href="https://otr.cash">
+          otr.cash
+        </a>
+        .
+      </p>
       <h3 className="text-2xl my-4">Support</h3>
       <p className="mb-4">
         At this time, this site is self-funded and running on borrowed APIs, as
