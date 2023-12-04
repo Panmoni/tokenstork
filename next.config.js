@@ -56,6 +56,13 @@ const nextConfig = {
         port: "",
         pathname: "**",
       },
+      {
+        protocol: "https",
+        hostname:
+          "bafybeidcjcoeafswct54nf2rhoejfbpbna3zn7tyybcimrcmcbdi5twi74.ipfs.nftstorage.link",
+        port: "",
+        pathname: "d44bf7822552d522802e7076dc9405f5e43151f0ac12b9f6553bda1ce8560002.png",
+      },
     ],
   },
 };
