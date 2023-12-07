@@ -1,8 +1,10 @@
 # Token Stork
 
-TokenStork is a market cap website for BCH CashTokens.
+TokenStork is a market cap website and metadata registry for BCH CashTokens.
 
 https://tokenstork.com
+
+The BCMR is at `public/.well-known/bitcoin-cash-metadata-registry.json`.
 
 TokenStork uses [Paytaca's BCMR indexer API](https://github.com/paytaca/bcmr-indexer) and [@mainnet_pat](https://github.com/mainnet-pat)'s [Chaingraph](https://github.com/bitauth/chaingraph) install. 🙏
 
