@@ -9,6 +9,7 @@
 - skeleton programmatic generation?
 - expand Learn page with more resources, link to bitcoincashsite.com, better UI, etc.
 - set up MariaDB or Postgres, put API into it and pull API data from there to achieve speedier loading.
+- prices in bch and weekly price change (ht JoyFarmer)
 
 ## 0.0.4
 - light and dark themes
