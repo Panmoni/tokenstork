@@ -8,17 +8,28 @@
 
 export function getIPFSUrl(iconUrl: string) {
   const ipfsGateway = "https://ipfs.io/ipfs/";
+  const extendedIpfsPattern =
+    /https:\/\/[a-zA-Z0-9]+\.(ipfs\.nftstorage\.link)\/.+/;
+  if (extendedIpfsPattern.test(iconUrl)) {
+    return iconUrl;
+  }
   const ipfsPatterns = [
-    // "https://<CID>.ipfs.nftstorage.link/"
-    /https:\/\/(.+)\.ipfs\.nftstorage\.link\//,
-    // Pattern for "ipfs://<CID>"
-    /ipfs:\/\/(.+)/,
+    {
+      // "https://<CID>.ipfs.nftstorage.link/"
+      pattern: /https:\/\/(.+)\.ipfs\.nftstorage\.link\//,
+      replace: (cid: string) => `${ipfsGateway}${cid}`,
+    },
+    {
+      // "ipfs://<CID>"
+      pattern: /ipfs:\/\/(.+)/,
+      replace: (cid: string) => `${ipfsGateway}${cid}`,
+    },
   ];
 
-  for (const pattern of ipfsPatterns) {
+  for (const { pattern, replace } of ipfsPatterns) {
     const match = iconUrl.match(pattern);
     if (match && match[1]) {
-      return `${ipfsGateway}${match[1]}`;
+      return replace(match[1]);
     }
   }
 
