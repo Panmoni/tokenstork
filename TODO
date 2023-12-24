@@ -1,6 +1,7 @@
 # TODO
 
 ## 0.0.3
+- https://github.com/Panmoni/tokenstork/issues/8
 - add inner pages
 - ensure use of Link component esp for internal links
 - get breakpoints confirmed working/optimized
