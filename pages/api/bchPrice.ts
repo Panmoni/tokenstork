@@ -1,12 +1,33 @@
 // @/pages/api/bchPrice.ts
 
 import type { NextApiRequest, NextApiResponse } from "next";
+import NextCors from "nextjs-cors";
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
   try {
+    await NextCors(req, res, {
+      methods: ["GET"],
+      origin: (
+        origin: string | undefined,
+        callback: (err: Error | null, allow?: boolean) => void
+      ) => {
+        const allowedOrigins = [
+          "https://tokenstork.com",
+          "http://localhost:3000",
+        ];
+
+        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+          callback(null, true);
+        } else {
+          callback(new Error("Not allowed by CORS"));
+        }
+      },
+      optionsSuccessStatus: 200,
+    });
+
     const cryptoCompareUrl =
       "https://min-api.cryptocompare.com/data/price?fsym=BCH&tsyms=USD";
 
