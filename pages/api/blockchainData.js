@@ -2,18 +2,6 @@
 import { ElectrumCluster, ElectrumTransport } from "electrum-cash";
 // import NextCors from "nextjs-cors";
 
-const electrum = new ElectrumCluster("TokenStork.com", "1.5.1", 1, 1);
-
-electrum.addServer("fulcrum.greyh.at");
-electrum.addServer("electroncash.de");
-electrum.addServer("electroncash.dk");
-electrum.addServer("bch.loping.net");
-electrum.addServer("fulcrum.jettscythe.xyz");
-
-console.log("Connecting to Electrum servers...");
-await electrum.ready();
-console.log("Connected to Electrum servers.");
-
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
@@ -24,6 +12,19 @@ export default async function handler(req, res) {
     res.status(200).end();
     return;
   }
+
+  const electrum = new ElectrumCluster("TokenStork.com", "1.5.1", 1, 1);
+
+  electrum.addServer("fulcrum.greyh.at");
+  electrum.addServer("electroncash.de");
+  electrum.addServer("electroncash.dk");
+  electrum.addServer("bch.loping.net");
+  electrum.addServer("fulcrum.jettscythe.xyz");
+
+  console.log("Connecting to Electrum servers...");
+  await electrum.ready();
+  console.log("Connected to Electrum servers.");
+
   try {
     // await NextCors(req, res, {
     //   methods: ["GET"],
