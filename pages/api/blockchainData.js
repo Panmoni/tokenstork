@@ -15,11 +15,11 @@ export default async function handler(req, res) {
 
   const electrum = new ElectrumCluster("TokenStork.com", "1.5.1", 1, 1);
 
+  electrum.addServer("fulcrum.jettscythe.xyz");
   electrum.addServer("fulcrum.greyh.at");
   electrum.addServer("electroncash.de");
   electrum.addServer("electroncash.dk");
   electrum.addServer("bch.loping.net");
-  electrum.addServer("fulcrum.jettscythe.xyz");
 
   console.log("Connecting to Electrum servers...");
   await electrum.ready();
