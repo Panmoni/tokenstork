@@ -1,6 +1,6 @@
 // @/pages/api/blockchainData.js
 import { ElectrumCluster, ElectrumTransport } from "electrum-cash";
-import NextCors from "nextjs-cors";
+// import NextCors from "nextjs-cors";
 
 const electrum = new ElectrumCluster("TokenStork.com", "1.5.1", 1, 1);
 
@@ -15,24 +15,24 @@ console.log("Connected to Electrum servers.");
 
 export default async function handler(req, res) {
   try {
-    await NextCors(req, res, {
-      methods: ["GET"],
-      origin: (origin, callback) => {
-        const allowedOrigins = [
-          "https://tokenstork.com",
-          "https://drop.tokenstork.com",
-          "http://localhost:3000",
-          "http://localhost:5173",
-        ];
+    // await NextCors(req, res, {
+    //   methods: ["GET"],
+    //   origin: (origin, callback) => {
+    //     const allowedOrigins = [
+    //       "https://tokenstork.com",
+    //       "https://drop.tokenstork.com",
+    //       "http://localhost:3000",
+    //       "http://localhost:5173",
+    //     ];
 
-        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-          callback(null, true);
-        } else {
-          callback(new Error("Not allowed by CORS"));
-        }
-      },
-      optionsSuccessStatus: 200,
-    });
+    //     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+    //       callback(null, true);
+    //     } else {
+    //       callback(new Error("Not allowed by CORS"));
+    //     }
+    //   },
+    //   optionsSuccessStatus: 200,
+    // });
 
     // Extract BCH address from request
     const userAddress = req.query.address;
