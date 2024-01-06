@@ -41,7 +41,8 @@ export default async function handler(req, res) {
     // Fetch balance
     const userBalance = await electrum.request(
       "blockchain.scripthash.get_balance",
-      scripthash
+      scripthash,
+      "exclude_tokens"
     );
 
     // Fetch UTXOs
