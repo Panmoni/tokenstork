@@ -1,6 +1,5 @@
 // @/pages/api/blockchainData.js
 import { ElectrumCluster, ElectrumTransport } from "electrum-cash";
-// import NextCors from "nextjs-cors";
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -26,25 +25,6 @@ export default async function handler(req, res) {
   console.log("Connected to Electrum servers.");
 
   try {
-    // await NextCors(req, res, {
-    //   methods: ["GET"],
-    //   origin: (origin, callback) => {
-    //     const allowedOrigins = [
-    //       "https://tokenstork.com",
-    //       "https://drop.tokenstork.com",
-    //       "http://localhost:3000",
-    //       "http://localhost:5173",
-    //     ];
-
-    //     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-    //       callback(null, true);
-    //     } else {
-    //       callback(new Error("Not allowed by CORS"));
-    //     }
-    //   },
-    //   optionsSuccessStatus: 200,
-    // });
-
     // Extract BCH address from request
     const userAddress = req.query.address;
     if (!userAddress) {
@@ -69,6 +49,7 @@ export default async function handler(req, res) {
       "blockchain.scripthash.listunspent",
       scripthash
     );
+    console.log("userUtxos:", userUtxos);
 
     // Return the fetched data
     res.status(200).json({ balance: userBalance, utxos: userUtxos });
@@ -82,7 +63,7 @@ export default async function handler(req, res) {
     // You might want to send a generic message in production for security reasons
     res.status(500).json({
       error: "An error occurred while processing your request.",
-      details: error.message, // Consider removing this line in production
+      // details: error.message, // Consider removing this line in production
     });
   } finally {
     electrum.shutdown();
