@@ -73,8 +73,17 @@ export default async function handler(req, res) {
     // Return the fetched data
     res.status(200).json({ balance: userBalance, utxos: userUtxos });
   } catch (error) {
-    console.error("Error fetching data:", error);
-    res.status(500).json({ error: error.message });
+    // Enhanced error logging
+    console.error("Error occurred in /api/blockchainData endpoint:");
+    console.error("Error message:", error.message);
+    console.error("Error stack:", error.stack);
+
+    // Send a detailed error message to the client, only if it's safe to expose it
+    // You might want to send a generic message in production for security reasons
+    res.status(500).json({
+      error: "An error occurred while processing your request.",
+      details: error.message, // Consider removing this line in production
+    });
   } finally {
     electrum.shutdown();
   }
