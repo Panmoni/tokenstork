@@ -44,6 +44,7 @@ export default async function handler(req, res) {
       scripthash,
       "exclude_tokens"
     );
+    console.log("userBalance:", userBalance);
 
     // Fetch UTXOs
     const userUtxos = await electrum.request(
