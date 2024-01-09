@@ -1,16 +1,19 @@
 // @/pages/api/blockchainData.js
 import { ElectrumCluster, ElectrumTransport } from "electrum-cash";
+import NextCors from "nextjs-cors";
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-  // Handle OPTIONS request
-  if (req.method === "OPTIONS") {
-    res.status(200).end();
-    return;
-  }
+  await NextCors(req, res, {
+    methods: ["GET", "OPTIONS"],
+    origin: "*",
+    allowedHeaders: [
+      "Content-Type",
+      "Cache-Control",
+      "Pragma",
+      "Expires",
+      "Accept",
+    ],
+  });
 
   const electrum = new ElectrumCluster("TokenStork.com", "1.5.1", 1, 1);
 
