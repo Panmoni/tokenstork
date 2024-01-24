@@ -26,7 +26,10 @@ import { TokenData } from "@/app/interfaces";
 // 6. **Error Handling and Fallbacks**: When an API call fails, consider how this should affect the function's output. For non-critical data, you might provide a default value, whereas for critical data, it might be appropriate to throw an error. This decision should be based on how the data is used downstream.
 
 async function validateDecimals(decimals: any): Promise<number> {
-  if (isNaN(decimals) || decimals < 0 || decimals > 100) {
+  if (decimals === undefined || decimals === null) {
+    return 0;
+  }
+  if (isNaN(decimals) || decimals < 0 || decimals > 8) {
     throw new Error("Invalid decimals value");
   }
   return decimals;
