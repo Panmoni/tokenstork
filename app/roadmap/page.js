@@ -3,7 +3,7 @@ export default function Page() {
     <main className="px-1 sm:px-2 lg:px-4 text-base">
       <h2 className="text-4xl font-extrabold mb-4">
         <span className="text-transparent bg-clip-text bg-gradient-to-r to-accent from-primary">
-          Learn
+          Roadmap
         </span>
       </h2>
       <p className="mb-2">
@@ -26,24 +26,6 @@ export default function Page() {
             target="_blank"
           >
             Mint your First NFTs on Bitcoin Cash (Token Pioneers Tutorial 2)
-          </a>
-        </li>
-        <li>
-          <a
-            href="https://www.bitcoincashsite.com/blog/token-pioneers-cashtokens-tutorial-3"
-            target="_blank"
-          >
-            Understanding and Working with BCMR: CashTokens Metadata (Token
-            Pioneers Tutorial 3)
-          </a>
-        </li>
-        <li>
-          <a
-            href="https://www.bitcoincashsite.com/blog/token-pioneers-cashtokens-tutorial-4"
-            target="_blank"
-          >
-            Create an NFT Ticket & Warrant Canary with CashTokens Parsable NFTs
-            (Token Pioneers Tutorial 4)
           </a>
         </li>
       </ul>
