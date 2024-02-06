@@ -12,6 +12,8 @@
 - set up MariaDB or Postgres, put API into it and pull API data from there to achieve speedier loading.
 - prices in bch and weekly price change (ht JoyFarmer)
 - https://blog.webdevsimplified.com/2023-11/react-server-components/
+- https://demo-nextjs-with-supabase.vercel.app/
+- pull volume stats from cauldron and other data from his indexer API
 
 ## 0.0.4
 - light and dark themes
@@ -22,6 +24,7 @@
 - consider setting up this site as a BCMR server as well.
 - ensure good uptake in search engines
 - integrate the TokenStorkRegistry into the site (BCMR)
+- clerk, hanko, supabase auth?
 
 ## 0.0.5
 - optimize loading time using Lighthouse, etc.
