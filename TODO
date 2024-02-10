@@ -25,6 +25,7 @@
 - ensure good uptake in search engines
 - integrate the TokenStorkRegistry into the site (BCMR)
 - clerk, hanko, supabase auth?
+- endpoint for getting nfts by commitment https://github.com/paytaca/bcmr-indexer/pull/25
 
 ## 0.0.5
 - optimize loading time using Lighthouse, etc.
@@ -81,3 +82,47 @@
 
 ## 2.0.0.
 - add social features
+
+
+---
+## NOTES
+
+https://blocks.tremor.so/get-access $300
+
+- list number of exchanges [https://www.livecoinwatch.com/exchanges]
+- mobile app?
+- inner pages: charts, news specific to that token, rank, price, exchanges, markets (pairs), price performance by month, day, week etc ([https://coinranking.com/coin/ZlZpzOJo43mIo+bitcoincash-bch]), [https://coincodex.com/crypto/dogecoin/], [https://www.livecoinwatch.com/price/Cardano-ADA], embed tweets, [https://www.coingecko.com/en/coins/solana], [https://cardanoassets.com/asset1gayaljphz3tepway6u6ruuty9cee2pj7wch408], [https://coinmarketcap.com/currencies/bitcoin-cash/]
+- heatmap of tokens like [https://coin360.com/], NFT heatmap???
+- watchlist / portfolio [https://coin360.com/watchlist], [https://www.coingecko.com/en/portfolio]
+- NFT directory listing like [https://coin360.com/nft/table] [https://www.coingecko.com/en/nft]
+- heat map for exchange [https://coin360.com/exchange]
+- glossary [https://coin360.com/glossary]
+- embeddable widgets [https://coin360.com/about/widgets], [https://www.livecoinwatch.com/widgets], 
+- api [https://developers.coinranking.com/api]
+- price alerts [https://coincodex.com/alerts/]
+- profit calculator [https://coincodex.com/profit-calculator/]
+- enable pricing to be shown in a variety of currencies (img)
+- ability to customize layout (img)[https://www.livecoinwatch.com/]
+- overview charts [https://www.livecoinwatch.com/crypto-market-cap], [https://www.coingecko.com/en/global-charts], 
+- biggest winners and biggest losers (img) [https://www.coingecko.com/en/highlights ]
+- show website stats on the site… look at those providers of web analytics and be sure they have an API
+- show uptime for key services
+- [https://www.coingecko.com/] lots of ideas to be inspired by here
+- what data can we get from here [https://www.registry.cash/]
+- add a store with unique products, including t-shirts, coffee, books… BCH swagbox full of BCH swag
+- get stuff from tokenexplorer.cash
+- permit people to enter any token category and get explorer-like data from it
+- front page: [https://coinmarketcap.com/view/near-protocol-ecosystem/]
+- countdowns in header (img)
+- aidrops page with coming and past airdrop events
+- [https://kettan007.medium.com/sft-semi-fungible-tokens-implementation-benefits-use-cases-45801388dcc9] SFTs
+- show FDV on inner pages
+- we will do outreach to 20 companies to see if we can build some partnerships to tokenize real-world assets on-chain with CashTokens
+- marketing campaign, tokenize on BCH
+- write up content on tokenization use cases and connect it with bch solutions [https://www.brickken.com/use-cases]. build tools to make these use cases easy(img) offer demos. lots to get inspired by at brickken
+- newsletter signup
+- better, more accurate, clearer and more complete policy statements
+- turn an ICO into a DAO.
+
+
+[https://moneroj.net/metcalfeusd/]
