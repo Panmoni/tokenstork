@@ -47,6 +47,15 @@ function convertToDecimalString(amount: bigint, decimals: number): string {
   return result;
 }
 
+// // Safely convert a number to BigInt, avoiding NaN
+// function safeNumberToBigInt(number: number): bigint {
+//   if (isNaN(number)) {
+//     console.warn("Attempted to convert NaN to BigInt, defaulting to 0");
+//     return BigInt(0);
+//   }
+//   return BigInt(Math.round(number)); // Ensure rounding as BigInt expects an integer
+// }
+
 export async function getTokenData(
   tokenCategory: string,
   fixedPrice: number
@@ -58,6 +67,7 @@ export async function getTokenData(
   try {
     const bcmrResponse = await fetch(bcmrServer + tokenCategory);
     const bcmrData = await bcmrResponse.json();
+    // console.log(bcmrData);
 
     const tokenDecimals = await validateDecimals(bcmrData.token.decimals);
 
@@ -99,6 +109,8 @@ export async function getTokenData(
       tokenCategory,
       chaingraphServer
     );
+    // console.log(tokenReservedSupplyData);
+    console.log(tokenCategory);
 
     let tokenTotalReservedAmountBigInt = BigInt(0);
 
@@ -128,6 +140,9 @@ export async function getTokenData(
     const tokenCirculatingSupplyNumber = Number(tokenCirculatingSupplyString);
 
     const tokenMarketCap = tokenCirculatingSupplyNumber * tokenUSDPrice;
+    console.log(tokenMarketCap);
+
+    // const tokenMarketCapBigInt = safeNumberToBigInt(tokenMarketCap);
 
     const totalValueLocked =
       satoshisToBCH(cauldronLiquidityData.result.bch) * fixedPrice;
