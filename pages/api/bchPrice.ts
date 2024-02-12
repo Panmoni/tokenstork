@@ -18,6 +18,7 @@ export default async function handler(
           "https://tokenstork.com",
           "http://localhost:3000",
           "http://localhost:5173",
+          "https://drop.tokenstork.com",
         ];
 
         if (!origin || allowedOrigins.indexOf(origin) !== -1) {
