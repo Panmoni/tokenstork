@@ -77,6 +77,11 @@ export default function RootLayout({
   return (
     <BCHPriceProvider>
       <html lang="en" className={`${bodyFont.variable} font-sans`}>
+        <script
+          defer
+          data-domain="tokenstork.com"
+          src="https://plausible.io/js/script.js"
+        ></script>
         <body className="container mx-auto">
           <HelloBar />
           <Navbar />
