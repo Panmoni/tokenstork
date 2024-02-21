@@ -27,10 +27,7 @@ export default function Page() {
           issues
         </a>{" "}
         or the{" "}
-        <a
-          href="https://github.com/Panmoni/tokenstork/blob/main/TODO"
-          target="_blank"
-        >
+        <a href="/roadmap" target="_blank">
           roadmap
         </a>
         .
@@ -39,6 +36,16 @@ export default function Page() {
         I welcome your suggestions, criticisms, bug reports and general feedback
         any time. Let me know what functionality would be of assistance to you,
         and I will probably add it!
+      </p>
+
+      <h3 className="text-2xl my-4">TokenStork Flipstarter</h3>
+      <p>
+        The TokenStork flipstarter is now live! Give it a look and maybe make a
+        pledge:{" "}
+        <a href="https://flipstarter.tokenstork.com/en" target="_blank">
+          TokenStork Flipstarter.
+        </a>
+        .
       </p>
 
       <h3 className="text-2xl my-4">Need Help Building?</h3>
