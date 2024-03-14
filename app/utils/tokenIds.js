@@ -28,6 +28,7 @@ const tokenIds = [
   "a3da23aa442a3abb6fc0e633c2078ebea226a51bf3272956f42c1cc329bbb7f3",
   "073a683f56a440ac9648d626d2359d87599a7d8cca38ec4ebd8bdfa8cc4b8d95",
   "8c7a98dcd56bd006693cff17d14fb0132dd9299dabf068e44dde51b477c7f27b",
+  "d56dac1d197160d471df9cdba2720f93bddb134fb391438b34cf6aacbc89526c",
 ];
 
 export default tokenIds;
