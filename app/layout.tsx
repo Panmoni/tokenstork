@@ -79,9 +79,9 @@ export default function RootLayout({
       <html lang="en" className={`${bodyFont.variable} font-sans`}>
         <head>
           <script
-            defer
-            data-domain="tokenstork.com"
-            src="https://plausible.io/js/script.js"
+            src="https://beamanalytics.b-cdn.net/beam.min.js"
+            data-token="c989accf-6494-49a8-ad3a-ee34c91aeedd"
+            async
           ></script>
         </head>
         <body className="container mx-auto">
