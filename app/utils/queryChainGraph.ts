@@ -1,4 +1,22 @@
+import { queryFtAddresses, getTapSwapOrigin } from "./queryChainGraphFT.js"
+
 // HT https://github.com/mr-zwets/token-explorer/blob/main/src/utils/queryChainGraph.ts
+
+
+export async function getCirculatingTokens( tokenIdFt: string ) {
+    // note: chaingraph only returns first 5000 results
+    const resultFtAddresses = await queryFtAddresses(tokenIdFt,0);
+    const ftAddresses = resultFtAddresses.data.output;
+
+    var ttl_ft = 0;
+
+    const ftsPerAddress = {};
+    for(const element of ftAddresses) {
+	    ttl_ft = ttl_ft + parseInt(element.fungible_token_amount);
+    };
+    
+    return ttl_ft 
+}
 
 async function queryChainGraph(queryReq: string, chaingraphUrl: string) {
   const jsonObj = {
