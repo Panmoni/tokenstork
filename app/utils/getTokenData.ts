@@ -3,6 +3,7 @@
 import {
   queryTotalSupplyFT,
   queryAuthchainLength,
+  getCirculatingTokens,
 } from "@/app/utils/queryChainGraph";
 import { satoshisToBCH } from "@/app/utils/presentationUtils";
 
@@ -100,6 +101,10 @@ export async function getTokenData(
     maxSupplyData.data.transaction[0].outputs.forEach((output: any) => {
       maxSupplyBigInt += BigInt(output.fungible_token_amount);
     });
+
+    var new_supply = await getCirculatingTokens( tokenCategory );
+    maxSupplyBigInt = BigInt( new_supply )
+
     const tokenTotalSupplyString = convertToDecimalString(
       maxSupplyBigInt,
       tokenDecimals
