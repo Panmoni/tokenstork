@@ -86,15 +86,19 @@ export default function TokenDataPage() {
         }
         const fixedPrice = parseFloat(bchPrice.toFixed(2));
 
-        const dataPromises = tokenIds.map((category) =>
-          getTokenData(category, fixedPrice)
-        );
+        const dataPromises = tokenIds.map(async (category) => {
+          try {
+            return await getTokenData(category, fixedPrice);
+          } catch (e) {
+            return Promise.resolve(null);
+          }
+        });
         const results = await Promise.all(dataPromises);
-        const allTokenData = results.flat();
+        const allTokenData: TokenData[] = results.flat().filter((d): d is TokenData => d !== null);
         setTokenData(allTokenData);
       } catch (error) {
         if (error instanceof Error) {
-          setError(error.message);
+          setError(`Error fetching token data: ${error.message}`);
         } else {
           setError("An unexpected error occurred");
         }
