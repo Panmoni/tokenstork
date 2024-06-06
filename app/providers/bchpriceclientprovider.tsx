@@ -36,6 +36,13 @@ export const BCHPriceProvider: React.FC<{ children: ReactNode }> = ({
       try {
         const response = await fetch("/api/bchPrice");
         const data = await response.json();
+        if (data.error) {
+          throw Error(data.error);
+        }
+        if (data.USD === undefined) {
+          console.log("internal bch price API response:", data);
+          throw Error("BCH price not set")
+        }
         setBchPrice(data.USD);
       } catch (error) {
         console.error("Error fetching BCH price from internal API:", error);
