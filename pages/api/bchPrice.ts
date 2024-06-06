@@ -7,6 +7,7 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  let errors = [];
   try {
     await NextCors(req, res, {
       methods: ["GET"],
@@ -35,7 +36,7 @@ export default async function handler(
 
     const apiKey = process.env.CRYPTO_COMPARE_KEY;
     if (!apiKey) {
-      throw new Error("CRYPTO_COMPARE_KEY is not set");
+      errors.push("cryptocompare: CRYPTO_COMPARE_KEY is not set")
     }
 
     const options = {
@@ -49,6 +50,8 @@ export default async function handler(
     if (ccResponse.ok && ccData.USD) {
       res.status(200).json({ USD: ccData.USD });
       return;
+    } else {
+      errors.push(`Failed to fetch price from cryptocompare: ${ccResponse.status}`)
     }
 
     // Fallback: CoinGecko API
@@ -62,9 +65,15 @@ export default async function handler(
       return;
     }
 
-    throw new Error("Failed to fetch BCH price from both APIs");
+    errors.push(`Failed to fetch price from coingecko: ${cgResponse.status}`)
+
   } catch (error) {
-    console.error("Error fetching BCH price from internal API:", error);
-    res.status(500).json({ error: "Failed to fetch BCH price from both APIs" });
+    errors.push(`Exception in internal API: ${error}`)
   }
+  // If we haven't returned yet, finding price failed.
+  if (!errors.length) {
+    errors.push("Unknown error");
+  }
+  errors.unshift("Error(s) fetching price in internal API");
+  res.status(500).json({ error: errors.join("; ") });
 }
