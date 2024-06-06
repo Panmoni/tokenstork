@@ -56,13 +56,13 @@ function convertToDecimalString(amount: bigint, decimals: number): string {
 //   }
 //   return BigInt(Math.round(number)); // Ensure rounding as BigInt expects an integer
 // }
+const CAULDRON_INDEXER = "https://indexer.cauldron.quest/cauldron"
 
 export async function getTokenData(
   tokenCategory: string,
   fixedPrice: number
 ): Promise<TokenData[]> {
   const bcmrServer = "https://bcmr.paytaca.com/api/tokens/";
-  const cauldronServer = "https://cauldronapi.panmoni.com";
   const chaingraphServer = "https://gql.chaingraph.pat.mn/v1/graphql";
 
   try {
@@ -73,13 +73,13 @@ export async function getTokenData(
     const tokenDecimals = await validateDecimals(bcmrData.token.decimals);
 
     const cauldronPriceResponse = await fetch(
-      `${cauldronServer}/token_price?category=${tokenCategory}&decimals=${tokenDecimals}`
+      `${CAULDRON_INDEXER}/price/${tokenCategory}/current`
     );
 
     const cauldronPriceData = await cauldronPriceResponse.json();
 
     const cauldronLiquidityResponse = await fetch(
-      `${cauldronServer}/token_liquidity?category=${tokenCategory}`
+      `${CAULDRON_INDEXER}/valuelocked/${tokenCategory}`
     );
     const cauldronLiquidityData = await cauldronLiquidityResponse.json();
 
@@ -129,9 +129,9 @@ export async function getTokenData(
       );
     }
 
-    const tokenUSDPrice = cauldronPriceData?.result
+    const tokenUSDPrice = cauldronPriceData?.price
       ? satoshisToBCH(
-          (cauldronPriceData.result.buy + cauldronPriceData.result.sell) / 2
+          cauldronPriceData.price * Math.pow(10, tokenDecimals)
         ) * fixedPrice
       : 0;
 
@@ -149,8 +149,8 @@ export async function getTokenData(
 
     // const tokenMarketCapBigInt = safeNumberToBigInt(tokenMarketCap);
 
-    const totalValueLocked =
-      satoshisToBCH(cauldronLiquidityData.result.bch) * fixedPrice;
+    const totalValueLocked = cauldronLiquidityData?.satoshis ?
+      satoshisToBCH(cauldronLiquidityData.satoshis) * fixedPrice : 0;
 
     const tokenDescription = bcmrData.description || "No description available";
 
