@@ -86,6 +86,15 @@ export default function TokenDataPage() {
         }
         const fixedPrice = parseFloat(bchPrice.toFixed(2));
 
+    const expire_time = 86400000
+    let expiry;
+    expiry = localStorage.getItem("token_data_cache") || "";
+    if ( expiry == "" || ( parseInt(expiry) - Date.now() ) < 0 )
+    {
+	localStorage.clear();
+	localStorage.setItem( "token_data_cache", String( (Date.now() + expire_time) ) );
+    }
+
         const dataPromises = tokenIds.map(async (category) => {
           try {
             return await getTokenData(category, fixedPrice);

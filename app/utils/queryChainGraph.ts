@@ -4,16 +4,26 @@ import { queryFtAddresses, getTapSwapOrigin } from "./queryChainGraphFT.js"
 
 
 export async function getCirculatingTokens( tokenIdFt: string ) {
-    // note: chaingraph only returns first 5000 results
-    const resultFtAddresses = await queryFtAddresses(tokenIdFt,0);
-    const ftAddresses = resultFtAddresses.data.output;
+    let value;
+    value = localStorage.getItem(tokenIdFt) || "";
+    if ( value == "" )
+    {
+	    // note: chaingraph only returns first 5000 results
+	    const resultFtAddresses = await queryFtAddresses(tokenIdFt,0);
+	    const ftAddresses = resultFtAddresses.data.output;
 
-    var ttl_ft = 0;
+	    var ttl_ft = 0;
 
-    const ftsPerAddress = {};
-    for(const element of ftAddresses) {
-	    ttl_ft = ttl_ft + parseInt(element.fungible_token_amount);
-    };
+	    const ftsPerAddress = {};
+	    for(const element of ftAddresses) {
+		    ttl_ft = ttl_ft + parseInt(element.fungible_token_amount);
+	    };
+        localStorage.setItem(tokenIdFt, String(ttl_ft));
+    } else
+    {
+	    ttl_ft = parseInt(value);
+    }
+
     
     return ttl_ft 
 }
