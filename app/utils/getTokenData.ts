@@ -149,8 +149,11 @@ export async function getTokenData(
 
     // const tokenMarketCapBigInt = safeNumberToBigInt(tokenMarketCap);
 
-    const totalValueLocked = cauldronLiquidityData?.satoshis ?
+    var totalValueLockedRaw = cauldronLiquidityData?.satoshis ?
       satoshisToBCH(cauldronLiquidityData.satoshis) * fixedPrice : 0;
+
+    // the locked token value is missing from this so will now be added this is standard in DeFi
+    const totalValueLocked = totalValueLockedRaw * 2;
 
     const tokenDescription = bcmrData.description || "No description available";
 
