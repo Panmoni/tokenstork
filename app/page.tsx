@@ -20,7 +20,8 @@ import TokenSkeleton from "@/app/components/TokenSkeleton";
 import FormatCategory from "@/app/components/FormatCategory";
 import BottomCards from "@/app/components/BottomCards";
 
-import { InformationCircleIcon } from "@heroicons/react/solid";
+// import { InformationCircleIcon } from "@heroicons/react/solid";
+import { InformationCircleIcon } from "@heroicons/react/24/solid";
 import {
   Flex,
   Icon,

@@ -1,6 +1,7 @@
 import { useState } from "react";
 
-import { ClipboardIcon } from "@heroicons/react/outline";
+// import { ClipboardIcon } from "@heroicons/react/outline";
+import { ClipboardIcon } from "@heroicons/react/24/outline";
 import { Icon } from "@tremor/react";
 
 import Toast from "@/app/components/Toast";
