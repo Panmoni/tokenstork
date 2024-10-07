@@ -37,7 +37,7 @@ export async function getTokenData(
   fixedPrice: number
 ): Promise<TokenData[]> {
   const bcmrServer = "https://bcmr.paytaca.com/api/tokens/";
-  const chaingraphServer = "https://demo.chaingraph.cash/v1/graphql";
+  const chaingraphServer = "https://gql.chaingraph.panmoni.com/api/v1/graphql";
 
   try {
     const bcmrResponse = await fetch(bcmrServer + tokenCategory);
