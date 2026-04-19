@@ -7,10 +7,10 @@ export default async function handler(
   try {
     const url = "https://fear-and-greed-index.p.rapidapi.com/v1/fgi";
 
-    // Check if the API key exists
     const apiKey = process.env.FEAR_AND_GREED_API_KEY;
     if (!apiKey) {
-      throw new Error("FEAR_AND_GREED_API_KEY is not set");
+      res.status(200).json({ fgi: { now: { value: null } } });
+      return;
     }
 
     const options = {
@@ -22,8 +22,14 @@ export default async function handler(
     };
     const response = await fetch(url, options);
     const data = await response.json();
+
+    if (data.error) {
+      res.status(200).json({ fgi: { now: { value: null } } });
+      return;
+    }
+
     res.status(200).json(data);
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch data" });
+    res.status(200).json({ fgi: { now: { value: null } } });
   }
 }
