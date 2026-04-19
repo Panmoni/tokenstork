@@ -17,7 +17,10 @@ const HelloBar: React.FC = () => {
       try {
         const response = await fetch("/api/fearAndGreed");
         const data = await response.json();
-        setFearGreedIndex(data.fgi.now.value);
+        const value = data?.fgi?.now?.value;
+        if (value !== undefined && value !== null) {
+          setFearGreedIndex(value);
+        }
       } catch (error) {
         console.error(error);
       }

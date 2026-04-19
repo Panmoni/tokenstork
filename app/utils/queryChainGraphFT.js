@@ -1,4 +1,31 @@
+const HEX_REGEX = /^[a-fA-F0-9]{64}$/;
+
+export async function queryFtAddresses(tokenId, offset = 0) {
+    if (!HEX_REGEX.test(tokenId)) {
+      throw new Error("Invalid token ID format");
+    }
+    const queryReqTotalSupply = `query {
+        output(
+          offset: ${offset}
+          where: {
+            token_category: {
+              _eq: "\\\\x${tokenId}"
+            }
+            _not: { spent_by: {} }
+          }
+        ) {
+          locking_bytecode,
+          transaction_hash,
+	  fungible_token_amount
+        }
+    }`;
+    return await queryChainGraph(queryReqTotalSupply, "https://gql.chaingraph.pat.mn/v1/graphql");
+}
+
 export async function getTapSwapOrigin(txidParent) {
+  if (!HEX_REGEX.test(txidParent)) {
+    throw new Error("Invalid transaction ID format");
+  }
   const queryParentTxId = `query {
     transaction(
         where: {
@@ -32,25 +59,6 @@ export async function getTapSwapOrigin(txidParent) {
   }`;
   const result2 = await queryChainGraph(getLockingBytecode, "https://gql.chaingraph.pat.mn/v1/graphql");
   return result2.data.transaction[0].outputs[+vout].locking_bytecode;
-}
-
-export async function queryFtAddresses(tokenId, offset = 0) {
-    const queryReqTotalSupply = `query {
-        output(
-          offset: ${offset}
-          where: {
-            token_category: {
-              _eq: "\\\\x${tokenId}"
-            }
-            _not: { spent_by: {} }
-          }
-        ) {
-          locking_bytecode,
-          transaction_hash,
-	  fungible_token_amount
-        }
-    }`;
-    return await queryChainGraph(queryReqTotalSupply, "https://gql.chaingraph.pat.mn/v1/graphql");
 }
 
 async function queryChainGraph(queryReq, chaingraphUrl) {

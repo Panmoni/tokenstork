@@ -1,10 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import HelloBar from "@/app/components/HelloBar";
+import MetricsBar from "@/app/components/MetricsBar";
 import Footer from "@/app/components/Footer";
 import Navbar from "@/app/components/Header";
 import CTA from "@/app/components/CTA";
 import GoogleAnalytics from "./components/GoogleAnalytics";
-import { BCHPriceProvider } from "./providers/bchpriceclientprovider";
 import { Inter } from "next/font/google";
 import "./globals.css";
 
@@ -12,11 +11,6 @@ const bodyFont = Inter({
   subsets: ["latin"],
   variable: "--body-font",
 });
-
-// TODO: add inner pages https://www.tremor.so/docs/components/tracker, https://storybook.tremor.so/?path=/docs/components-list-table--docs
-// TODO: add gradient bg https://kopi.dev/tailwind/gradient-background-animation/ (also has some spacing stuff), https://tailwindcomponents.com/component/button-background-hover-animation
-// TODO: work more on different screen sizes/breakpoints
-// TODO: add custom 404 page is this the doge you were looking for?
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -75,24 +69,22 @@ export default function RootLayout({
   tokenId?: string;
 }) {
   return (
-    <BCHPriceProvider>
-      <html lang="en" className={`${bodyFont.variable} font-sans`}>
-        <head>
-          <script
-            src="https://beamanalytics.b-cdn.net/beam.min.js"
-            data-token="c989accf-6494-49a8-ad3a-ee34c91aeedd"
-            async
-          ></script>
-        </head>
-        <body className="container mx-auto">
-          <HelloBar />
-          <Navbar />
-          {children}
-          <CTA />
-          <Footer />
-          <GoogleAnalytics />
-        </body>
-      </html>
-    </BCHPriceProvider>
+    <html lang="en" className={`${bodyFont.variable} font-sans`}>
+      <head>
+        <script
+          src="https://beamanalytics.b-cdn.net/beam.min.js"
+          data-token={process.env.NEXT_PUBLIC_BEAM_ANALYTICS_TOKEN || ""}
+          async
+        ></script>
+      </head>
+      <body className="bg-white dark:bg-slate-950 min-h-screen">
+        <MetricsBar />
+        <Navbar />
+        {children}
+        <CTA />
+        <Footer />
+        <GoogleAnalytics />
+      </body>
+    </html>
   );
 }

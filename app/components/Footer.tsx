@@ -184,7 +184,7 @@ const Footer = () => {
         </div>
         <p className="mt-4 text-base leading-6 text-center text-gray-700">
           Visit{" "}
-          <a href="https://bitcoincashsite.com/" target="_blank">
+          <a href="https://bchworks.com/" target="_blank">
             BitcoinCashSite.com
           </a>{" "}
           to learn more about BCH today.
