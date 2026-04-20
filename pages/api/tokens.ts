@@ -1,0 +1,219 @@
+// @/pages/api/tokens.ts
+// GET /api/tokens — the directory endpoint. Reads from our Postgres, which is
+// populated by the backfill + tail + enrich workers.
+//
+// Response shape is backward-compatible with the prior SQLite version so
+// existing consumers (useTokenData) keep working.
+
+import type { NextApiRequest, NextApiResponse } from "next";
+import { hexFromBytes, query } from "@/lib/pg";
+
+type TokenType = "FT" | "NFT" | "FT+NFT";
+
+interface TokenApiRow {
+  id: string;                // category hex (32 bytes → 64 hex chars)
+  name: string | null;
+  symbol: string | null;
+  decimals: number;
+  description: string | null;
+  icon: string | null;
+  tokenType: TokenType;
+  isVerifiedOnchain: boolean;
+  isFullyBurned: boolean;
+  currentSupply: string | null;    // NUMERIC as string to preserve precision
+  liveUtxoCount: number | null;
+  liveNftCount: number | null;
+  holderCount: number | null;
+  hasActiveMinting: boolean;
+  firstSeenAt: number;             // Unix seconds
+  genesisBlock: number;
+  updatedAt: number;               // Unix seconds
+}
+
+interface TokensResponse {
+  tokens: TokenApiRow[];
+  count: number;
+  limit: number;
+  offset: number;
+  total: number;
+}
+
+interface DbRow {
+  category: Buffer;
+  token_type: TokenType;
+  genesis_block: number;
+  first_seen_at: Date;
+  name: string | null;
+  symbol: string | null;
+  decimals: number | null;
+  description: string | null;
+  icon_uri: string | null;
+  current_supply: string | null;
+  live_utxo_count: number | null;
+  live_nft_count: number | null;
+  holder_count: number | null;
+  has_active_minting: boolean | null;
+  is_fully_burned: boolean | null;
+  verified_at: Date | null;
+  metadata_fetched_at: Date | null;
+}
+
+function parseLimit(raw: string | null, fallback: number, max: number): number {
+  const n = raw ? Number(raw) : fallback;
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.min(Math.floor(n), max);
+}
+
+function parseOffset(raw: string | null): number {
+  const n = raw ? Number(raw) : 0;
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.floor(n);
+}
+
+const VALID_SORTS: Record<string, string> = {
+  // map sort key → SQL ORDER BY fragment
+  name: "m.name ASC NULLS LAST, t.first_seen_at ASC",
+  supply: "s.current_supply DESC NULLS LAST, m.name ASC NULLS LAST",
+  holders: "s.holder_count DESC NULLS LAST, m.name ASC NULLS LAST",
+  recent: "t.genesis_block DESC, t.first_seen_at DESC",
+  oldest: "t.genesis_block ASC, t.first_seen_at ASC",
+};
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse<TokensResponse | { error: string }>
+) {
+  if (req.method !== "GET") {
+    res.setHeader("Allow", "GET");
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  res.setHeader("Cache-Control", "public, max-age=60");
+
+  try {
+    const params = new URL(req.url || "/", "http://localhost").searchParams;
+
+    const tokenType = params.get("type");
+    const verifiedOnly = params.get("verified") === "true";
+    const isFullyBurnedParam = params.get("isFullyBurned");
+    const symbol = params.get("symbol");
+    const nameSearch = params.get("nameSearch");
+    const minSupplyRaw = params.get("minSupply");
+    const sort = VALID_SORTS[params.get("sort") ?? "name"] ?? VALID_SORTS.name;
+    const limit = parseLimit(params.get("limit"), 100, 1000);
+    const offset = parseOffset(params.get("offset"));
+
+    // Build WHERE clauses with parameterized values — never string-interpolate
+    // user input into SQL.
+    const where: string[] = [];
+    const values: unknown[] = [];
+    const push = (fragment: string, value: unknown) => {
+      values.push(value);
+      where.push(fragment.replace("$$", `$${values.length}`));
+    };
+
+    if (tokenType) {
+      if (tokenType !== "FT" && tokenType !== "NFT" && tokenType !== "FT+NFT") {
+        return res.status(400).json({ error: "invalid type" });
+      }
+      push("t.token_type = $$", tokenType);
+    }
+    if (verifiedOnly) {
+      where.push("s.verified_at IS NOT NULL");
+    }
+    if (isFullyBurnedParam === "true") {
+      where.push("s.is_fully_burned = true");
+    } else if (isFullyBurnedParam === "false") {
+      where.push("(s.is_fully_burned IS NULL OR s.is_fully_burned = false)");
+    }
+    if (symbol) {
+      push("LOWER(m.symbol) = LOWER($$)", symbol);
+    }
+    if (nameSearch) {
+      // pg_trgm gin index on m.name supports ILIKE efficiently.
+      push("m.name ILIKE $$", `%${nameSearch}%`);
+    }
+    if (minSupplyRaw) {
+      // Postgres will coerce a decimal string to NUMERIC cleanly.
+      push("s.current_supply >= $$", minSupplyRaw);
+    }
+
+    const whereClause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
+
+    // Count first, for paginated UI.
+    const countSql = `
+      SELECT COUNT(*)::bigint AS total
+      FROM tokens t
+      LEFT JOIN token_metadata m ON m.category = t.category
+      LEFT JOIN token_state s    ON s.category = t.category
+      ${whereClause}
+    `;
+    const countRes = await query<{ total: string }>(countSql, values);
+    const total = Number(countRes.rows[0]?.total ?? 0);
+
+    const dataSql = `
+      SELECT
+        t.category,
+        t.token_type,
+        t.genesis_block,
+        t.first_seen_at,
+        m.name,
+        m.symbol,
+        m.decimals,
+        m.description,
+        m.icon_uri,
+        m.fetched_at AS metadata_fetched_at,
+        s.current_supply::text AS current_supply,
+        s.live_utxo_count,
+        s.live_nft_count,
+        s.holder_count,
+        s.has_active_minting,
+        s.is_fully_burned,
+        s.verified_at
+      FROM tokens t
+      LEFT JOIN token_metadata m ON m.category = t.category
+      LEFT JOIN token_state s    ON s.category = t.category
+      ${whereClause}
+      ORDER BY ${sort}
+      LIMIT $${values.length + 1} OFFSET $${values.length + 2}
+    `;
+    const dataRes = await query<DbRow>(dataSql, [...values, limit, offset]);
+
+    const tokens: TokenApiRow[] = dataRes.rows.map((row) => {
+      const verifiedAt = row.verified_at?.getTime() ?? null;
+      const firstSeenAt = Math.floor(row.first_seen_at.getTime() / 1000);
+      const metaAt = row.metadata_fetched_at?.getTime();
+      const updatedAtMs = Math.max(verifiedAt ?? 0, metaAt ?? 0, row.first_seen_at.getTime());
+      return {
+        id: hexFromBytes(row.category)!,
+        name: row.name,
+        symbol: row.symbol,
+        decimals: row.decimals ?? 0,
+        description: row.description,
+        icon: row.icon_uri,
+        tokenType: row.token_type,
+        isVerifiedOnchain: row.verified_at !== null,
+        isFullyBurned: row.is_fully_burned ?? false,
+        currentSupply: row.current_supply ?? null,
+        liveUtxoCount: row.live_utxo_count,
+        liveNftCount: row.live_nft_count,
+        holderCount: row.holder_count,
+        hasActiveMinting: row.has_active_minting ?? false,
+        firstSeenAt,
+        genesisBlock: row.genesis_block,
+        updatedAt: Math.floor(updatedAtMs / 1000),
+      };
+    });
+
+    return res.status(200).json({
+      tokens,
+      count: tokens.length,
+      limit,
+      offset,
+      total,
+    });
+  } catch (err) {
+    console.error("[api/tokens] error:", err);
+    return res.status(500).json({ error: "Failed to fetch tokens" });
+  }
+}
