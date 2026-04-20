@@ -16,6 +16,7 @@ const colors = require("tailwindcss/colors");
 // TODO: is Tremor changing the font for the token table??
 
 const config: Config = {
+  darkMode: "class",
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
