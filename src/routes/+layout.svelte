@@ -1,15 +1,30 @@
 <script lang="ts">
 	import '../app.css';
+	import { onMount } from 'svelte';
 	import { env } from '$env/dynamic/public';
-	let { children } = $props();
+	import Header from '$lib/components/Header.svelte';
+	import Footer from '$lib/components/Footer.svelte';
+	import MetricsBar from '$lib/components/MetricsBar.svelte';
+	import HelloBar from '$lib/components/HelloBar.svelte';
+	import CTA from '$lib/components/CTA.svelte';
+	import { bchPrice } from '$lib/stores/bchPrice';
+
+	interface Props {
+		data: { tokensTracked: number };
+		children: () => unknown;
+	}
+
+	let { data, children }: Props = $props();
+
+	onMount(() => {
+		bchPrice.start();
+		return () => bchPrice.stop();
+	});
 </script>
 
 <svelte:head>
 	<title>Token Stork: Discover, Track and Analyze BCH Cash Tokens (0.0.1 beta)</title>
-	<meta
-		name="description"
-		content="Track BCH CashTokens market cap and more with TokenStork."
-	/>
+	<meta name="description" content="Track BCH CashTokens market cap and more with TokenStork." />
 	<meta name="theme-color" content="#4f359b" />
 
 	<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
@@ -46,5 +61,10 @@
 </svelte:head>
 
 <div class="bg-white dark:bg-slate-950 min-h-screen">
+	<MetricsBar tokensTracked={data.tokensTracked} />
+	<HelloBar tokensTracked={data.tokensTracked} />
+	<Header />
 	{@render children()}
+	<CTA />
+	<Footer />
 </div>
