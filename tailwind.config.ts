@@ -17,13 +17,7 @@ const colors = require("tailwindcss/colors");
 
 const config: Config = {
   darkMode: "class",
-  content: [
-    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./components/**/*.{js,ts,jsx,tsx,mdx}",
-    "./app/**/*.{js,ts,jsx,tsx,mdx}",
-    "./src/**/*.{svelte,js,ts}",
-    "./node_modules/@tremor/**/*.{js,ts,jsx,tsx}",
-  ],
+  content: ["./src/**/*.{svelte,js,ts}"],
   theme: {
     colors: {
       transparent: "transparent",
@@ -182,6 +176,6 @@ const config: Config = {
     },
   ],
 
-  plugins: [require("@headlessui/tailwindcss")],
+  plugins: [],
 };
 export default config;
