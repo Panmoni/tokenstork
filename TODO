@@ -3,7 +3,6 @@
 - waiting on netcup server
 - transfer tokenstork.com to cloudflare
 - tokenstork.com needs dns
-- migrate to vite + react? django? svelte? solidjs?
 - update the roadmap, merge notes into roadmap
 
 ## 0.0.3
