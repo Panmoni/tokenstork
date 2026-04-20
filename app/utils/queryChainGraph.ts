@@ -1,4 +1,4 @@
-import { queryFtAddresses, getTapSwapOrigin } from "./queryChainGraphFT.js"
+import { queryFtAddresses, queryFtAddressesAll, getTapSwapOrigin } from "./queryChainGraphFT.js"
 
 // HT https://github.com/mr-zwets/token-explorer/blob/main/src/utils/queryChainGraph.ts
 
@@ -8,9 +8,8 @@ export async function getCirculatingTokens( tokenIdFt: string ) {
     value = localStorage.getItem(tokenIdFt) || "";
     if ( value == "" )
     {
-	    // note: chaingraph only returns first 5000 results
-	    const resultFtAddresses = await queryFtAddresses(tokenIdFt,0);
-	    const ftAddresses = resultFtAddresses.data.output;
+	    // note: chaingraph only returns first 5000 results — use queryFtAddressesAll to paginate
+	    const ftAddresses = await queryFtAddressesAll(tokenIdFt);
 
 	    var ttl_ft = 0;
 
@@ -24,8 +23,8 @@ export async function getCirculatingTokens( tokenIdFt: string ) {
 	    ttl_ft = parseInt(value);
     }
 
-    
-    return ttl_ft 
+
+    return ttl_ft
 }
 
 async function queryChainGraph(queryReq: string, chaingraphUrl: string) {
