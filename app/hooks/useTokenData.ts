@@ -5,9 +5,14 @@ import { useState, useEffect } from "react";
 import { getTokenData } from "@/app/utils/getTokenData";
 import { useBCHPrice } from "@/app/providers/bchpriceclientprovider";
 import { TokenData } from "@/app/interfaces";
-import tokenIds from "@/app/utils/tokenIds";
 
 const EXPIRE_TIME = 86400000; // 24 hours
+
+interface TokenListItem {
+  id: string;
+  name: string | null;
+  symbol: string | null;
+}
 
 export function useTokenData() {
   const { bchPrice } = useBCHPrice();
@@ -27,6 +32,26 @@ export function useTokenData() {
         if (!expiry || parseInt(expiry) - now < 0) {
           localStorage.clear();
           localStorage.setItem("token_data_cache", String(now + EXPIRE_TIME));
+        }
+
+        // Fetch token list from DB API (falls back to empty if DB not set up)
+        let tokenIds: string[] = [];
+        try {
+          const tokensRes = await fetch("/api/tokens", {
+            cache: "no-cache",
+          });
+          if (tokensRes.ok) {
+            const data = await tokensRes.json();
+            tokenIds = data.tokens.map((t: TokenListItem) => t.id);
+          }
+        } catch (e) {
+          console.warn("Could not fetch tokens from DB, using fallback");
+        }
+
+        // Fallback: if DB returns empty, try static tokenIds (for initial dev)
+        if (tokenIds.length === 0) {
+          const { default: fallbackIds } = await import("@/app/utils/tokenIds");
+          tokenIds = fallbackIds;
         }
 
         const results = await Promise.all(
