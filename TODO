@@ -1,5 +1,11 @@
 # TODO
 
+- waiting on netcup server
+- transfer tokenstork.com to cloudflare
+- tokenstork.com needs dns
+- migrate to vite + react? django? svelte? solidjs?
+- update the roadmap, merge notes into roadmap
+
 ## 0.0.3
 - https://github.com/Panmoni/tokenstork/issues/8
 - add inner pages
@@ -9,7 +15,6 @@
 - maybe merge ticker in with name (and update skeleton)
 - skeleton programmatic generation?
 - expand Learn page with more resources, link to bitcoincashsite.com, better UI, etc.
-- set up MariaDB or Postgres, put API into it and pull API data from there to achieve speedier loading.
 - prices in bch and weekly price change (ht JoyFarmer)
 - https://blog.webdevsimplified.com/2023-11/react-server-components/
 - https://demo-nextjs-with-supabase.vercel.app/
@@ -26,7 +31,6 @@ https://blog.webdevsimplified.com/2024-01/next-js-app-router-cache/
 - consider setting up this site as a BCMR server as well.
 - ensure good uptake in search engines
 - integrate the TokenStorkRegistry into the site (BCMR)
-- clerk, hanko, supabase auth?
 - endpoint for getting nfts by commitment https://github.com/paytaca/bcmr-indexer/pull/25
 
 ## 0.0.5
@@ -77,7 +81,7 @@ https://blog.webdevsimplified.com/2024-01/next-js-app-router-cache/
 - add other pertinent BCH chain data.
 
 ## 1.0.0
-- run own chaingraph and BCMR servers.
+
 
 ## 1.5.0
 - offer/track additional products that require on-chain contracts, eg annuities https://unspent.app/contract?opReturn=6a047574786f0141010102f00317a914ae83c90909bf710ef2d948ebf6f957a9219f549c8703884e0b02b00417a914fc133e739da7ad80cb97c254cc6499c761e4b88287&network=mainnet
@@ -85,14 +89,10 @@ https://blog.webdevsimplified.com/2024-01/next-js-app-router-cache/
 ## 2.0.0.
 - add social features
 
-
 ---
 ## NOTES
 
-https://blocks.tremor.so/get-access $300
-
 - list number of exchanges [https://www.livecoinwatch.com/exchanges]
-- mobile app?
 - inner pages: charts, news specific to that token, rank, price, exchanges, markets (pairs), price performance by month, day, week etc ([https://coinranking.com/coin/ZlZpzOJo43mIo+bitcoincash-bch]), [https://coincodex.com/crypto/dogecoin/], [https://www.livecoinwatch.com/price/Cardano-ADA], embed tweets, [https://www.coingecko.com/en/coins/solana], [https://cardanoassets.com/asset1gayaljphz3tepway6u6ruuty9cee2pj7wch408], [https://coinmarketcap.com/currencies/bitcoin-cash/]
 - heatmap of tokens like [https://coin360.com/], NFT heatmap???
 - watchlist / portfolio [https://coin360.com/watchlist], [https://www.coingecko.com/en/portfolio]
