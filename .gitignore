@@ -1,9 +1,9 @@
 node_modules
 .DS_Store
-.env
+.env*
 .env.local
 .next
 package-lock.json
 tsconfig.tsbuildinfo
 scripts/tsconfig.tsbuildinfo
-tokenstork.db
+docs/
