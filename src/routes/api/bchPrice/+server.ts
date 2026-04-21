@@ -3,6 +3,7 @@
 
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
+import { timedFetch } from '$lib/server/fetch';
 import type { RequestHandler } from './$types';
 
 const ALLOWED_ORIGINS = new Set([
@@ -39,9 +40,9 @@ export const GET: RequestHandler = async ({ request }) => {
 			errors.push('cryptocompare: CRYPTO_COMPARE_KEY is not set');
 		}
 
-		const ccResponse = await fetch(
+		const ccResponse = await timedFetch(
 			'https://min-api.cryptocompare.com/data/price?fsym=BCH&tsyms=USD',
-			{ method: 'GET', headers: apiKey ? { Apikey: apiKey } : {} }
+			{ method: 'GET', headers: apiKey ? { Apikey: apiKey } : {}, timeoutMs: 3000 }
 		);
 		const ccData = await ccResponse.json();
 		if (ccResponse.ok && ccData.USD) {
@@ -49,8 +50,9 @@ export const GET: RequestHandler = async ({ request }) => {
 		}
 		errors.push(`Failed to fetch price from cryptocompare: ${ccResponse.status}`);
 
-		const cgResponse = await fetch(
-			'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin-cash&vs_currencies=usd'
+		const cgResponse = await timedFetch(
+			'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin-cash&vs_currencies=usd',
+			{ timeoutMs: 3000 }
 		);
 		const cgData = await cgResponse.json();
 		if (cgResponse.ok && cgData['bitcoin-cash']?.usd) {

@@ -3,9 +3,11 @@
 // data now comes from Postgres via enrich workers.
 
 import { satoshisToBCH } from '$lib/format';
+import { timedFetch } from '$lib/server/fetch';
 
 const BCMR_ENDPOINT = 'https://bcmr.paytaca.com/api/tokens/';
 const CAULDRON_INDEXER = 'https://indexer.cauldron.quest/cauldron';
+const CATEGORY_REGEX = /^[0-9a-f]{64}$/;
 
 export interface BcmrMetadata {
 	name: string | null;
@@ -15,9 +17,16 @@ export interface BcmrMetadata {
 	iconUri: string | null;
 }
 
+function assertValidCategory(category: string): void {
+	if (!CATEGORY_REGEX.test(category)) {
+		throw new Error('external: invalid category (expected 64 lowercase hex chars)');
+	}
+}
+
 export async function fetchBcmr(category: string): Promise<BcmrMetadata | null> {
+	assertValidCategory(category);
 	try {
-		const res = await fetch(BCMR_ENDPOINT + category);
+		const res = await timedFetch(BCMR_ENDPOINT + category, { timeoutMs: 5000 });
 		if (!res.ok) return null;
 		const data = await res.json();
 		return {
@@ -43,10 +52,14 @@ export async function fetchCauldron(
 	decimals: number,
 	bchPriceUSD: number
 ): Promise<CauldronStats> {
+	assertValidCategory(category);
 	let priceUSD = 0;
 	let tvlUSD = 0;
 	try {
-		const priceRes = await fetch(`${CAULDRON_INDEXER}/price/${category}/current`);
+		const priceRes = await timedFetch(
+			`${CAULDRON_INDEXER}/price/${category}/current`,
+			{ timeoutMs: 5000 }
+		);
 		if (priceRes.ok) {
 			const priceData = await priceRes.json();
 			if (priceData?.price) {
@@ -58,7 +71,10 @@ export async function fetchCauldron(
 		console.error('[external] Cauldron price fetch failed:', err);
 	}
 	try {
-		const tvlRes = await fetch(`${CAULDRON_INDEXER}/valuelocked/${category}`);
+		const tvlRes = await timedFetch(
+			`${CAULDRON_INDEXER}/valuelocked/${category}`,
+			{ timeoutMs: 5000 }
+		);
 		if (tvlRes.ok) {
 			const tvlData = await tvlRes.json();
 			if (tvlData?.satoshis) {

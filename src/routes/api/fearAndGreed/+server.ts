@@ -4,6 +4,7 @@
 
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
+import { timedFetch } from '$lib/server/fetch';
 import type { RequestHandler } from './$types';
 
 const NULL_BODY = { fgi: { now: { value: null } } };
@@ -15,12 +16,13 @@ export const GET: RequestHandler = async () => {
 			return json(NULL_BODY);
 		}
 
-		const response = await fetch('https://fear-and-greed-index.p.rapidapi.com/v1/fgi', {
+		const response = await timedFetch('https://fear-and-greed-index.p.rapidapi.com/v1/fgi', {
 			method: 'GET',
 			headers: {
 				'X-RapidAPI-Key': apiKey,
 				'X-RapidAPI-Host': 'fear-and-greed-index.p.rapidapi.com'
-			}
+			},
+			timeoutMs: 3000
 		});
 		const data = await response.json();
 
