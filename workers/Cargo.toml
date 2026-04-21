@@ -1,0 +1,62 @@
+[package]
+name = "workers"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "tokenstork CashToken indexer — Rust workers that populate Postgres from BCHN (+ BlockBook, once landed)"
+
+[lib]
+# Shared modules (bchn, pg) live here; the binaries import via `use workers::{bchn, pg}`.
+
+# Release profile tuned for smallish systemd-managed binaries.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+
+[dependencies]
+# Async runtime.
+tokio = { version = "1", features = ["full"] }
+
+# HTTP client for BCHN RPC (+ later BlockBook). rustls avoids OpenSSL linkage hassle.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip", "deflate"] }
+
+# JSON (de)serialization.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Postgres. Runtime queries (not the `query!` macros) so we don't need
+# DATABASE_URL at compile time and the crate builds on any host.
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "macros", "chrono"] }
+
+# Time — chrono integrates with sqlx for TIMESTAMPTZ columns.
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+
+# Hex <-> bytes for BYTEA columns.
+hex = "0.4"
+
+# Base64 for BCHN RPC basic-auth Authorization header.
+base64 = "0.22"
+
+# Ergonomic errors in binaries; thiserror if/when we grow typed library errors.
+anyhow = "1"
+thiserror = "2"
+
+# Structured logging.
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# ZMQ SUB socket for BCHN hashblock. Pure-Rust implementation — no libzmq
+# native dep required.
+zeromq = { version = "0.4", default-features = false, features = ["tokio-runtime", "all-transport"] }
+
+# Arbitrary-precision integers for NUMERIC(78,0) token supplies and balances.
+num-bigint = "0.4"
+num-traits = "0.2"
+
+# URL-escape category hex when it's used as a path segment in BlockBook URLs.
+# (Hex chars never need escaping, but we're defensive against format drift.)
+percent-encoding = "2"
+
+# sd_notify for the tail binary's systemd Type=notify + WatchdogSec wiring.
+sd-notify = "0.4"

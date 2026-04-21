@@ -10,3 +10,4 @@ tsconfig.tsbuildinfo
 scripts/tsconfig.tsbuildinfo
 docs/
 .claude/
+workers/target
