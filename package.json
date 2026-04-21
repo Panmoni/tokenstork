@@ -37,5 +37,8 @@
     "typescript": "^6.0.3",
     "vite": "^8.0.9",
     "zeromq": "^6.5.0"
+  },
+  "overrides": {
+    "cookie": "^0.7.2"
   }
 }
