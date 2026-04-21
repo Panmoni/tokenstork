@@ -1,0 +1,40 @@
+[Unit]
+Description=tokenstork SvelteKit app (Node adapter)
+Documentation=https://github.com/Panmoni/tokenstork
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=tokenstork
+Group=tokenstork
+WorkingDirectory=/opt/tokenstork
+ExecStart=/usr/bin/node /opt/tokenstork/build/index.js
+Restart=on-failure
+RestartSec=5s
+
+# Bind to localhost — Caddy (or nginx) reverse-proxies 443 in front.
+Environment="HOST=127.0.0.1"
+Environment="PORT=3000"
+Environment="ORIGIN=https://tokenstork.com"
+Environment="NODE_ENV=production"
+
+# Secrets load from /etc/tokenstork/env (chmod 600, owner tokenstork).
+# Required: DATABASE_URL
+# Optional: CRYPTO_COMPARE_KEY, FEAR_AND_GREED_API_KEY, PUBLIC_BEAM_ANALYTICS_TOKEN
+EnvironmentFile=-/etc/tokenstork/env
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/tokenstork
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

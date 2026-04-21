@@ -1,0 +1,36 @@
+# Caddy TLS reverse proxy for the tokenstork SvelteKit app.
+# Place at /etc/caddy/Caddyfile (or include from the distro default).
+# Caddy auto-provisions Let's Encrypt certs for the listed hostnames.
+
+tokenstork.com, www.tokenstork.com, cashtokens.top, www.cashtokens.top {
+	encode zstd gzip
+
+	# Long-lived immutable assets built by Vite.
+	@immutable path /_app/immutable/*
+	header @immutable Cache-Control "public, max-age=31536000, immutable"
+
+	# Favicon + manifest + social images from /public.
+	@assets path *.ico *.png *.webmanifest *.svg *.txt
+	header @assets Cache-Control "public, max-age=86400"
+
+	# Security headers.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
+
+	reverse_proxy 127.0.0.1:3000 {
+		header_up X-Forwarded-Proto https
+		header_up X-Forwarded-Host {host}
+	}
+
+	log {
+		output file /var/log/caddy/tokenstork.log {
+			roll_size 100mb
+			roll_keep 14
+		}
+		format json
+	}
+}
