@@ -1,43 +1,38 @@
-# Caddy TLS reverse proxy for the tokenstork SvelteKit app.
-# Place at /etc/caddy/Caddyfile (or include from the distro default).
-# Caddy auto-provisions Let's Encrypt certs for the listed hostnames.
+# tokenstork.com — serves behind Cloudflare proxy (orange cloud).
+#
+# TLS model:
+# - Cloudflare SSL/TLS mode: Full (strict)
+# - This origin presents a Cloudflare Origin Certificate (15-year validity,
+#   issued from the Cloudflare Origin CA that CF implicitly trusts). No ACME
+#   means renewal never fights the proxy.
+# - www → apex redirect runs at the Cloudflare edge (Page Rule / Redirect
+#   Rule), not here — Caddy only handles the apex.
+# - Logs go to journald (systemd). Use `journalctl -u caddy` to read them.
+#
+# If you're deploying WITHOUT Cloudflare (pure public-IP origin), remove the
+# `tls /etc/caddy/tls/...` line and replace the site address line with e.g.
+# `tokenstork.com, www.tokenstork.com {` — Caddy will auto-provision from
+# Let's Encrypt.
 
-tokenstork.com, www.tokenstork.com, cashtokens.top, www.cashtokens.top {
+tokenstork.com {
+	tls /etc/caddy/tls/tokenstork.com.crt /etc/caddy/tls/tokenstork.com.key
+
 	encode zstd gzip
 
-	# Long-lived immutable assets built by Vite.
 	@immutable path /_app/immutable/*
 	header @immutable Cache-Control "public, max-age=31536000, immutable"
 
-	# Favicon + manifest + social images from /public.
 	@assets path *.ico *.png *.webmanifest *.svg *.txt
 	header @assets Cache-Control "public, max-age=86400"
 
-	# Security headers.
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
-		# CSP tuned for: same-origin assets, Beam Analytics, and BCMR/IPFS image
-		# gateways (arbitrary https img sources; no way to pre-whitelist those).
 		Content-Security-Policy "default-src 'self'; script-src 'self' https://beamanalytics.b-cdn.net; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src 'self' https://beamanalytics.b-cdn.net; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
 	}
 
-	reverse_proxy 127.0.0.1:3000 {
-		# Pin forwarded host to the canonical hostname so an attacker can't
-		# reach upstream with a spoofed Host header. Caddy already strips
-		# hop-by-hop headers; X-Forwarded-For/-Proto are added automatically.
-		header_up X-Forwarded-Host {host}
-		header_up Host {upstream_hostport}
-	}
-
-	log {
-		output file /var/log/caddy/tokenstork.log {
-			roll_size 100mb
-			roll_keep 14
-		}
-		format json
-	}
+	reverse_proxy 127.0.0.1:3000
 }
