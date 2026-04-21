@@ -17,13 +17,20 @@ tokenstork.com, www.tokenstork.com, cashtokens.top, www.cashtokens.top {
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		# CSP tuned for: same-origin assets, Beam Analytics, and BCMR/IPFS image
+		# gateways (arbitrary https img sources; no way to pre-whitelist those).
+		Content-Security-Policy "default-src 'self'; script-src 'self' https://beamanalytics.b-cdn.net; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src 'self' https://beamanalytics.b-cdn.net; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
 	}
 
 	reverse_proxy 127.0.0.1:3000 {
-		header_up X-Forwarded-Proto https
+		# Pin forwarded host to the canonical hostname so an attacker can't
+		# reach upstream with a spoofed Host header. Caddy already strips
+		# hop-by-hop headers; X-Forwarded-For/-Proto are added automatically.
 		header_up X-Forwarded-Host {host}
+		header_up Host {upstream_hostport}
 	}
 
 	log {

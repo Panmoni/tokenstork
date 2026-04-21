@@ -13,7 +13,7 @@ ExecStart=/usr/bin/node /opt/tokenstork/build/index.js
 Restart=on-failure
 RestartSec=5s
 
-# Bind to localhost — Caddy (or nginx) reverse-proxies 443 in front.
+# Bind to localhost — Caddy reverse-proxies 443 in front.
 Environment="HOST=127.0.0.1"
 Environment="PORT=3000"
 Environment="ORIGIN=https://tokenstork.com"
@@ -24,17 +24,36 @@ Environment="NODE_ENV=production"
 # Optional: CRYPTO_COMPARE_KEY, FEAR_AND_GREED_API_KEY, PUBLIC_BEAM_ANALYTICS_TOKEN
 EnvironmentFile=-/etc/tokenstork/env
 
-# Hardening
+# ── Hardening ──────────────────────────────────────────────────────────
 NoNewPrivileges=true
 PrivateTmp=true
+PrivateDevices=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/tokenstork
+ProtectProc=invisible
+ProcSubset=pid
 ProtectKernelTunables=true
 ProtectKernelModules=true
+ProtectKernelLogs=true
 ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
 RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
 LockPersonality=true
+MemoryDenyWriteExecute=false
+# ^ Node's V8 JIT requires writable+executable memory; leave this off.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallArchitectures=native
+UMask=0077
+
+# The app itself never writes to its install directory; Node just reads build/.
+# /tmp is provided by PrivateTmp. No ReadWritePaths needed.
 
 [Install]
 WantedBy=multi-user.target
