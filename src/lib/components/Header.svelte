@@ -2,12 +2,7 @@
 	import { page } from '$app/state';
 	import ThemeSwitcher from './ThemeSwitcher.svelte';
 
-	const navigation = [
-		{ name: 'Tokens', href: '/' },
-		{ name: 'Learn', href: '/learn' },
-		{ name: 'Roadmap', href: '/roadmap' },
-		{ name: 'About', href: '/about' }
-	];
+	const navigation = [{ name: 'Tokens', href: '/' }];
 
 	let mobileMenuOpen = $state(false);
 
