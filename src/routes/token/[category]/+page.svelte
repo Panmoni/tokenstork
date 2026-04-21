@@ -1,19 +1,25 @@
 <script lang="ts">
-	import { getIPFSUrl, humanizeBigNumber, formatMarketCap } from '$lib/format';
+	import { getIPFSUrl, humanizeNumericSupply, formatMarketCap } from '$lib/format';
 	import FormatCategory from '$lib/components/FormatCategory.svelte';
 
 	let { data } = $props();
 
 	const token = $derived(data.token);
-	const decimalSupply = $derived.by(() => {
-		if (!token.currentSupply) return '—';
-		if (token.decimals === 0) return humanizeBigNumber(Number(token.currentSupply));
-		return humanizeBigNumber(Number(token.currentSupply) / 10 ** token.decimals);
-	});
+	const decimalSupply = $derived(
+		humanizeNumericSupply(token.currentSupply, token.decimals)
+	);
 	const marketCapUSD = $derived.by(() => {
 		if (!token.currentSupply || data.priceUSD === 0) return 0;
-		const supply = Number(token.currentSupply) / 10 ** token.decimals;
-		return supply * data.priceUSD;
+		// Integer-shift in BigInt space to keep the integer part exact for supplies > 2^53.
+		try {
+			const base = BigInt(token.currentSupply);
+			const divisor = 10n ** BigInt(Math.max(0, Math.min(8, token.decimals)));
+			const whole = Number(base / divisor);
+			const frac = Number(base % divisor) / Number(divisor);
+			return (whole + frac) * data.priceUSD;
+		} catch {
+			return 0;
+		}
 	});
 </script>
 
@@ -122,9 +128,7 @@
 									<span class="text-slate-400 mr-2">{i + 1}.</span>{holder.address}
 								</td>
 								<td class="px-4 py-3 text-right font-mono">
-									{token.decimals === 0
-										? humanizeBigNumber(Number(holder.balance))
-										: humanizeBigNumber(Number(holder.balance) / 10 ** token.decimals)}
+									{humanizeNumericSupply(holder.balance, token.decimals)}
 								</td>
 								<td class="px-4 py-3 text-right">{holder.nftCount}</td>
 							</tr>
