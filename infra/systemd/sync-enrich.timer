@@ -1,0 +1,13 @@
+[Unit]
+Description=Run tokenstork enrichment every 6 hours
+
+[Timer]
+# Wait 10 min after boot so BlockBook has time to come up, then every 6 h.
+OnBootSec=10min
+OnUnitActiveSec=6h
+# Fire even if the system was down when the last tick should have happened.
+Persistent=true
+Unit=sync-enrich.service
+
+[Install]
+WantedBy=timers.target

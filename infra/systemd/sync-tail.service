@@ -1,0 +1,56 @@
+[Unit]
+Description=tokenstork sync-tail — ZMQ-driven BCHN block follower
+Documentation=https://github.com/Panmoni/tokenstork
+After=network.target postgresql.service bchn.service
+Wants=postgresql.service bchn.service
+
+[Service]
+# Type=notify: the binary calls sd_notify(READY=1) once the initial catch-up
+# completes, and sd_notify(WATCHDOG=1) every WatchdogSec/2. If the main loop
+# hangs (e.g., blocked on a sqlx call), systemd misses a watchdog ping and
+# restarts us under Restart=on-failure.
+Type=notify
+WatchdogSec=120s
+
+User=tokenstork
+Group=tokenstork
+WorkingDirectory=/opt/tokenstork
+ExecStart=/opt/tokenstork/workers/target/release/tail
+Restart=on-failure
+RestartSec=10s
+
+Environment="RUST_LOG=info"
+# The `-` prefix tells systemd to skip the file if missing, so the unit still
+# starts. The binary will then exit immediately with an anyhow chain naming
+# the first missing env var — operator sees the failure via `journalctl` and
+# Restart=on-failure.
+EnvironmentFile=-/etc/tokenstork/env
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectProc=invisible
+ProcSubset=pid
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

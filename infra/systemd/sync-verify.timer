@@ -1,0 +1,13 @@
+[Unit]
+Description=Run tokenstork verify weekly
+
+[Timer]
+# First run 1 hour after boot, then weekly at the same day-of-week / hour.
+OnBootSec=1h
+OnCalendar=weekly
+Persistent=true
+RandomizedDelaySec=30min
+Unit=sync-verify.service
+
+[Install]
+WantedBy=timers.target
