@@ -19,12 +19,9 @@
   "dependencies": {
     "@types/pg": "^8.20.0",
     "autoprefixer": "^10.5.0",
-    "better-sqlite3": "^12.9.0",
-    "electrum-cash": "^3.2.0",
     "pg": "^8.20.0",
     "postcss": "^8.5.10",
-    "tailwindcss": "^3.4.19",
-    "zeromq": "^6.5.0"
+    "tailwindcss": "^3.4.19"
   },
   "devDependencies": {
     "@sveltejs/adapter-node": "^5.5.4",
@@ -32,10 +29,13 @@
     "@sveltejs/vite-plugin-svelte": "^7.0.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.6.0",
+    "better-sqlite3": "^12.9.0",
+    "electrum-cash": "^3.2.0",
     "svelte": "^5.55.4",
     "svelte-check": "^4.4.6",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3",
-    "vite": "^8.0.9"
+    "vite": "^8.0.9",
+    "zeromq": "^6.5.0"
   }
 }
