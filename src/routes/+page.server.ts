@@ -41,11 +41,30 @@ export const load: PageServerLoad = async ({ url }) => {
 	const typeParam = url.searchParams.get('type');
 	const offset = Math.max(Number(url.searchParams.get('offset') ?? 0) || 0, 0);
 
+	const search = (url.searchParams.get('search') ?? '').trim();
+	const searchLimited = search.slice(0, 128);
+
 	const where: string[] = [];
 	const values: unknown[] = [];
 	if (typeParam === 'FT' || typeParam === 'NFT' || typeParam === 'FT+NFT') {
 		values.push(typeParam);
 		where.push(`t.token_type = $${values.length}`);
+	}
+	if (searchLimited) {
+		// A 64-char hex search → exact category lookup (BYTEA = $n).
+		// Otherwise → ILIKE over name and symbol, plus hex prefix of the category.
+		if (/^[0-9a-fA-F]{64}$/.test(searchLimited)) {
+			values.push(Buffer.from(searchLimited.toLowerCase(), 'hex'));
+			where.push(`t.category = $${values.length}`);
+		} else {
+			values.push(`%${searchLimited}%`);
+			const pat = `$${values.length}`;
+			values.push(searchLimited.toLowerCase() + '%');
+			const prefix = `$${values.length}`;
+			where.push(
+				`(m.name ILIKE ${pat} OR LOWER(m.symbol) LIKE ${prefix} OR encode(t.category, 'hex') LIKE ${prefix})`
+			);
+		}
 	}
 	const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
