@@ -38,7 +38,16 @@ tokenstork.com {
 		X-Frame-Options "DENY"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
-		Content-Security-Policy "default-src 'self'; script-src 'self' https://beamanalytics.b-cdn.net; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src 'self' https://beamanalytics.b-cdn.net; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
+		# 'unsafe-inline' on script-src is required for SvelteKit hydration:
+		# SSR emits a small inline <script> tag per response carrying the
+		# page's hydration payload (routing state, load-function data). Without
+		# it, the browser silently blocks the script, hydration never runs,
+		# onMount never fires, and every interactive handler (search box,
+		# filters, theme switcher) is dead. XSS risk is contained because we
+		# never render user-supplied strings via {@html}; Svelte auto-escapes
+		# everything. Proper long-term fix is `kit.csp` with hash mode —
+		# tracked separately.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://beamanalytics.b-cdn.net; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src 'self' https://beamanalytics.b-cdn.net; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
 	}
 
 	reverse_proxy 127.0.0.1:3000
