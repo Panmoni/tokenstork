@@ -1,0 +1,13 @@
+[Unit]
+Description=Run tokenstork BCMR hydrator every 4 hours
+
+[Timer]
+# First run 5 min after boot (give Postgres time to settle), then every 4h.
+OnBootSec=5min
+OnUnitActiveSec=4h
+Persistent=true
+RandomizedDelaySec=2min
+Unit=sync-bcmr.service
+
+[Install]
+WantedBy=timers.target
