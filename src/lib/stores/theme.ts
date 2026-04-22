@@ -2,7 +2,7 @@
 // Replaces next-themes. The toggle sets `dark` on <html> for Tailwind
 // (darkMode: 'class') and `data-theme` for any non-Tailwind consumers.
 
-import { writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import { browser } from '$app/environment';
 
 export type Theme = 'light' | 'dark';
@@ -42,9 +42,7 @@ function createThemeStore() {
 	}
 
 	function toggle() {
-		let current: Theme = 'light';
-		subscribe((v) => (current = v))();
-		setTheme(current === 'dark' ? 'light' : 'dark');
+		setTheme(get({ subscribe }) === 'dark' ? 'light' : 'dark');
 	}
 
 	return { subscribe, init, setTheme, toggle };

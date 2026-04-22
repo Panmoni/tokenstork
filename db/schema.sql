@@ -21,6 +21,10 @@ CREATE TABLE IF NOT EXISTS tokens (
 
 CREATE INDEX IF NOT EXISTS tokens_type_idx          ON tokens (token_type);
 CREATE INDEX IF NOT EXISTS tokens_genesis_block_idx ON tokens (genesis_block);
+-- Range scans on first_seen_at power the "New in 24h / 7d / 30d" counters
+-- rendered on every layout load + the /stats page. At 10k+ rows the seq
+-- scan was the dominant cost of the homepage SSR.
+CREATE INDEX IF NOT EXISTS tokens_first_seen_at_idx ON tokens (first_seen_at DESC);
 
 -- ============================================================================
 -- BCMR-derived metadata: name, symbol, icon, etc. Latest revision per category.

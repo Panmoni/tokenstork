@@ -1,17 +1,20 @@
 <script lang="ts">
 	import '../app.css';
-	import { onMount } from 'svelte';
+	import { onMount, type Snippet } from 'svelte';
 	import { env } from '$env/dynamic/public';
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import MetricsBar from '$lib/components/MetricsBar.svelte';
-	import HelloBar from '$lib/components/HelloBar.svelte';
 	import CTA from '$lib/components/CTA.svelte';
 	import { bchPrice } from '$lib/stores/bchPrice';
 
 	interface Props {
-		data: { tokensTracked: number };
-		children: () => unknown;
+		data: {
+			tokensTracked: number;
+			tailLastBlock: number | null;
+			newIn24h: number;
+		};
+		children: Snippet;
 	}
 
 	let { data, children }: Props = $props();
@@ -61,8 +64,11 @@
 </svelte:head>
 
 <div class="bg-white dark:bg-slate-950 min-h-screen">
-	<MetricsBar tokensTracked={data.tokensTracked} />
-	<HelloBar tokensTracked={data.tokensTracked} />
+	<MetricsBar
+		tokensTracked={data.tokensTracked}
+		tailLastBlock={data.tailLastBlock}
+		newIn24h={data.newIn24h}
+	/>
 	<Header />
 	{@render children()}
 	<CTA />
