@@ -1,9 +1,11 @@
 # TODO
 
-- waiting on netcup server
-- transfer tokenstork.com to cloudflare
-- tokenstork.com needs dns
+- CF: transfer tokenstork.com to cloudflare
+- CF: tokenstork.com redirect www to root
 - update the roadmap, merge notes into roadmap
+- update version to 0.1.0 in package.json
+
+- set up migrations, migrations runner?
 
 ## 0.0.3
 - https://github.com/Panmoni/tokenstork/issues/8
