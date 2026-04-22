@@ -17,6 +17,13 @@
 tokenstork.com {
 	tls /etc/caddy/tls/tokenstork.com.crt /etc/caddy/tls/tokenstork.com.key
 
+	# Access log to stdout → captured by systemd-journald (single-server
+	# deploy). Filter noisy paths that'd fill the journal without value.
+	log {
+		output stdout
+		format json
+	}
+
 	encode zstd gzip
 
 	@immutable path /_app/immutable/*
