@@ -25,16 +25,32 @@ interface DbRow {
 	metadata_fetched_at: Date | null;
 }
 
-// Paytaca's BCMR indexer returns empty-string names for some categories.
-// Treat '' and whitespace-only as missing via NULLIF+BTRIM so they sink to
-// the bottom under `NULLS LAST` instead of sorting ahead of real names (empty
-// string < 'A' in ASCII). Applies everywhere m.name is the ordering key.
+// Bucket names by "quality" so the directory opens with recognisable
+// English-alphabet tokens, not with rows that start with emoji / box-
+// drawing characters / `$` / whitespace. This is a UX sort, not a
+// censorship mechanism — the low-quality rows are still discoverable,
+// just not the first thing a visitor sees.
+//
+//   0 → starts with an ASCII letter (A-Z, a-z) — real-name tokens
+//   1 → starts with an ASCII digit  (0-9) — numeric names, sometimes legit
+//   2 → starts with anything else    — emoji, $, unicode symbols, punctuation
+//   3 → empty or NULL name after trim — no usable metadata at all
+const NAME_QUALITY = `CASE
+	WHEN m.name IS NULL OR BTRIM(m.name) = '' THEN 3
+	WHEN m.name ~ '^[A-Za-z]'                 THEN 0
+	WHEN m.name ~ '^[0-9]'                    THEN 1
+	ELSE                                           2
+END`;
+
+// Treat '' and whitespace-only as missing so they sort alongside NULL
+// under `NULLS LAST`. The ordering key is applied as the secondary sort
+// within each NAME_QUALITY bucket.
 const NAME_SORTABLE = `NULLIF(BTRIM(m.name), '')`;
 
 const VALID_SORTS: Record<string, string> = {
-	name: `${NAME_SORTABLE} ASC NULLS LAST, t.first_seen_at ASC`,
-	supply: `s.current_supply DESC NULLS LAST, ${NAME_SORTABLE} ASC NULLS LAST`,
-	holders: `s.holder_count DESC NULLS LAST, ${NAME_SORTABLE} ASC NULLS LAST`,
+	name: `${NAME_QUALITY}, LOWER(${NAME_SORTABLE}) ASC NULLS LAST, t.first_seen_at ASC`,
+	supply: `s.current_supply DESC NULLS LAST, ${NAME_QUALITY}, ${NAME_SORTABLE} ASC NULLS LAST`,
+	holders: `s.holder_count DESC NULLS LAST, ${NAME_QUALITY}, ${NAME_SORTABLE} ASC NULLS LAST`,
 	recent: 't.genesis_block DESC, t.first_seen_at DESC',
 	oldest: 't.genesis_block ASC, t.first_seen_at ASC'
 };
