@@ -19,7 +19,11 @@ export const load: LayoutServerLoad = async () => {
 			`SELECT tail_last_block FROM sync_state WHERE id = 1`
 		),
 		query<{ total: string }>(
-			`SELECT COUNT(*)::bigint AS total FROM tokens WHERE first_seen_at > now() - INTERVAL '24 hours'`
+			// genesis_time is the chain block's timestamp — "when the token was
+			// minted." first_seen_at is the row's write time in *our* DB, which
+			// for a fresh backfill lumps everything into the last N hours and
+			// produces the wrong answer.
+			`SELECT COUNT(*)::bigint AS total FROM tokens WHERE genesis_time > now() - INTERVAL '24 hours'`
 		)
 	]);
 

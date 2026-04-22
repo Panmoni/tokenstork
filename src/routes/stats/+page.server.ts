@@ -28,15 +28,19 @@ export const load: PageServerLoad = async ({ parent }) => {
 				   FROM tokens
 				   GROUP BY token_type`
 			),
+			// genesis_time is the on-chain block timestamp at which the category
+			// first appeared — "token minted N days ago." `first_seen_at` is our
+			// indexer's row-write time and would lump every category into the last
+			// 24 hours right after a fresh backfill.
 			query<WindowCount>(
 				`SELECT COUNT(*)::bigint AS total
 				   FROM tokens
-				   WHERE first_seen_at > now() - INTERVAL '7 days'`
+				   WHERE genesis_time > now() - INTERVAL '7 days'`
 			),
 			query<WindowCount>(
 				`SELECT COUNT(*)::bigint AS total
 				   FROM tokens
-				   WHERE first_seen_at > now() - INTERVAL '30 days'`
+				   WHERE genesis_time > now() - INTERVAL '30 days'`
 			),
 			// is_fully_burned comes from token_state, which is only populated
 			// once BlockBook-backed enrichment runs. Until Phase 2d lands this
