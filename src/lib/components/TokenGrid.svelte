@@ -26,7 +26,14 @@
 	function navigateWith(mutate: (params: URLSearchParams) => void) {
 		const params = new URLSearchParams(page.url.searchParams);
 		mutate(params);
-		goto(`?${params.toString()}`, { keepFocus: true, noScroll: true });
+		// Build an absolute-path URL explicitly. `goto('?foo=bar')` worked in
+		// older SvelteKit but in 5.x / Svelte 5 the query-only form is
+		// inconsistent — it sometimes no-ops without re-running the server
+		// load. Passing `${pathname}?${query}` is unambiguous. `invalidateAll`
+		// guarantees the +page.server.ts load re-runs.
+		const qs = params.toString();
+		const url = qs ? `${page.url.pathname}?${qs}` : page.url.pathname;
+		goto(url, { keepFocus: true, noScroll: true, invalidateAll: true });
 	}
 
 	function pushParam(key: string, value: string | null) {
