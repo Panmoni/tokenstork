@@ -73,18 +73,33 @@ export const load: PageServerLoad = async ({ url }) => {
 		where.push(`t.token_type = $${values.length}`);
 	}
 	if (searchLimited) {
-		// A 64-char hex search → exact category lookup (BYTEA = $n).
-		// Otherwise → ILIKE over name and symbol, plus hex prefix of the category.
+		// A full 64-char hex query is almost always a paste of a category ID
+		// the user wants the exact page for — short-circuit to a direct BYTEA
+		// lookup instead of falling back to substring matching (which would
+		// work but is needlessly expensive).
 		if (/^[0-9a-fA-F]{64}$/.test(searchLimited)) {
 			values.push(Buffer.from(searchLimited.toLowerCase(), 'hex'));
 			where.push(`t.category = $${values.length}`);
 		} else {
+			// Free-form query: case-insensitive substring across every
+			// user-visible text field — name, symbol, description — plus
+			// substring on the hex category (so a user can paste a partial
+			// hex like "d29eb" and match).
+			//
+			// ILIKE with a leading `%` doesn't use a plain btree index on
+			// `name`, but at 10-20k rows on a single node this is a handful
+			// of ms. The `token_metadata_name_trgm` trigram index can
+			// accelerate name matches if we need to move to pg_trgm's
+			// similarity() operator later (tracked — not today).
 			values.push(`%${searchLimited}%`);
 			const pat = `$${values.length}`;
-			values.push(searchLimited.toLowerCase() + '%');
-			const prefix = `$${values.length}`;
+			values.push(`%${searchLimited.toLowerCase()}%`);
+			const patLower = `$${values.length}`;
 			where.push(
-				`(m.name ILIKE ${pat} OR LOWER(m.symbol) LIKE ${prefix} OR encode(t.category, 'hex') LIKE ${prefix})`
+				`(m.name ILIKE ${pat}
+				  OR m.symbol ILIKE ${pat}
+				  OR m.description ILIKE ${pat}
+				  OR encode(t.category, 'hex') LIKE ${patLower})`
 			);
 		}
 	}

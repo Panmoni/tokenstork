@@ -75,7 +75,7 @@
 		<div class="relative flex-1">
 			<input
 				type="search"
-				placeholder="Search by name, symbol, or category..."
+				placeholder="Search name, symbol, description, or category..."
 				bind:value={searchInput}
 				oninput={onSearchInput}
 				class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all"
