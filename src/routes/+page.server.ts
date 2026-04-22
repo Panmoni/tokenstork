@@ -25,10 +25,16 @@ interface DbRow {
 	metadata_fetched_at: Date | null;
 }
 
+// Paytaca's BCMR indexer returns empty-string names for some categories.
+// Treat '' and whitespace-only as missing via NULLIF+BTRIM so they sink to
+// the bottom under `NULLS LAST` instead of sorting ahead of real names (empty
+// string < 'A' in ASCII). Applies everywhere m.name is the ordering key.
+const NAME_SORTABLE = `NULLIF(BTRIM(m.name), '')`;
+
 const VALID_SORTS: Record<string, string> = {
-	name: 'm.name ASC NULLS LAST, t.first_seen_at ASC',
-	supply: 's.current_supply DESC NULLS LAST, m.name ASC NULLS LAST',
-	holders: 's.holder_count DESC NULLS LAST, m.name ASC NULLS LAST',
+	name: `${NAME_SORTABLE} ASC NULLS LAST, t.first_seen_at ASC`,
+	supply: `s.current_supply DESC NULLS LAST, ${NAME_SORTABLE} ASC NULLS LAST`,
+	holders: `s.holder_count DESC NULLS LAST, ${NAME_SORTABLE} ASC NULLS LAST`,
 	recent: 't.genesis_block DESC, t.first_seen_at DESC',
 	oldest: 't.genesis_block ASC, t.first_seen_at ASC'
 };

@@ -118,7 +118,7 @@
 					{/if}
 					<div class="min-w-0">
 						<div class="font-semibold text-slate-900 dark:text-white truncate group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
-							{token.name ?? '—'}
+							{token.name || '—'}
 							{#if token.symbol}<span class="ml-2 text-xs text-slate-500 font-mono">{token.symbol}</span>{/if}
 						</div>
 						{#if token.description}
@@ -160,7 +160,7 @@
 								<div class="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800" aria-hidden="true"></div>
 							{/if}
 							<div class="min-w-0">
-								<div class="font-semibold text-slate-900 dark:text-white truncate">{token.name ?? '—'}</div>
+								<div class="font-semibold text-slate-900 dark:text-white truncate">{token.name || '—'}</div>
 								<div class="text-sm text-slate-500 font-mono">{token.symbol ?? ''}</div>
 							</div>
 						</div>
