@@ -59,7 +59,7 @@
 		</div>
 
 		<p class="mt-4 text-base leading-6 text-center text-gray-700">
-			Visit <a href="https://bchworks.com/" target="_blank" rel="noopener noreferrer">BitcoinCashSite.com</a> to learn more about BCH today.
+			Visit <a href="https://bchworks.com/" target="_blank" rel="noopener noreferrer">BCHWorks.com</a> to learn more about BCH today.
 		</p>
 		<p class="mt-2 text-base leading-6 text-center text-gray-400">
 			A&nbsp;<a href="https://www.panmoni.com/" target="_blank" rel="noopener noreferrer" title="Panmoni is a Web3 product studio" class="unset gradient-link tracking-wider font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#00abda] to-[#1476ff]">Panmoni</a> project. | version 0.0.2 (beta) | Prices in USD.
