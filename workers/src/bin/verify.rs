@@ -18,6 +18,7 @@ use tracing_subscriber::EnvFilter;
 
 use workers::bchn::{BchnClient, ScanTxOutSet};
 use workers::blockbook::{BlockbookClient, Utxo};
+use workers::env::parse_or_default;
 use workers::pg::{self, bytes_to_hex, mark_verify_run, pick_verify_sample, pool_from_env};
 
 const DEFAULT_SAMPLE: i32 = 50;
@@ -113,10 +114,7 @@ async fn main() -> Result<()> {
     let bchn = BchnClient::from_env().context("building BCHN client")?;
     let bb = BlockbookClient::from_env().context("building BlockBook client")?;
     let pool = pool_from_env().await.context("connecting to Postgres")?;
-    let sample_size: i32 = std::env::var("VERIFY_SAMPLE")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(DEFAULT_SAMPLE);
+    let sample_size: i32 = parse_or_default("VERIFY_SAMPLE", DEFAULT_SAMPLE);
 
     let sample = pick_verify_sample(&pool, sample_size).await?;
     if sample.is_empty() {

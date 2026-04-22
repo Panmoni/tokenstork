@@ -22,6 +22,7 @@ use tracing_subscriber::EnvFilter;
 
 use workers::bchn::NftCapability;
 use workers::blockbook::{BlockbookClient, Utxo, normalize_address};
+use workers::env::parse_or_default;
 use workers::pg::{
     self, HolderWrite, NftWrite, TokenStateWrite, bytes_to_hex, mark_enrich_run,
     pick_enrichment_batch, pool_from_env, write_token_state,
@@ -171,10 +172,7 @@ async fn main() -> Result<()> {
 
     let bb = BlockbookClient::from_env().context("building BlockBook client")?;
     let pool = pool_from_env().await.context("connecting to Postgres")?;
-    let batch_size: i32 = std::env::var("ENRICH_BATCH")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(DEFAULT_BATCH);
+    let batch_size: i32 = parse_or_default("ENRICH_BATCH", DEFAULT_BATCH);
 
     // Sanity-check BlockBook is alive + in sync.
     let info = bb.get_node_info().await.context("blockbook /api/v2/")?;

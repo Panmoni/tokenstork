@@ -103,8 +103,13 @@ CREATE TABLE IF NOT EXISTS sync_state (
   tail_last_block      INTEGER,                                        -- highest block the tail worker has scanned
   last_enrich_run_at   TIMESTAMPTZ,
   last_verify_run_at   TIMESTAMPTZ,
+  last_bcmr_run_at     TIMESTAMPTZ,                                    -- last Phase 4b BCMR-hydration pass
   updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Additive column for deployments that were brought up before Phase 4b landed.
+-- Idempotent — safe to re-run.
+ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_bcmr_run_at TIMESTAMPTZ;
 
 -- Ensure the singleton row exists on first deploy.
 INSERT INTO sync_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING;

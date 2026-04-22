@@ -448,6 +448,106 @@ pub async fn mark_verify_run(pool: &PgPool) -> Result<()> {
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// BCMR helpers (Phase 4b).
+// ---------------------------------------------------------------------------
+
+/// Pick up to `limit` categories that need BCMR hydration. Priority:
+///
+/// 1. Categories with no `token_metadata` row yet.
+/// 2. Rows older than `stale_hours` (refreshes both successful and
+///    `paytaca-missing` entries — a project might publish BCMR after we
+///    first looked).
+///
+/// Randomized within a priority. Stale window is typically a week for
+/// successful fetches and a week for 404s too — we trust the worker's
+/// recheck cadence rather than distinguishing here.
+pub async fn pick_bcmr_batch(
+    pool: &PgPool,
+    stale_hours: i32,
+    limit: i32,
+) -> Result<Vec<Vec<u8>>> {
+    let rows: Vec<(Vec<u8>,)> = sqlx::query_as(
+        r#"
+        WITH candidates AS (
+          SELECT t.category, m.fetched_at
+            FROM tokens t
+            LEFT JOIN token_metadata m ON m.category = t.category
+        )
+        SELECT category
+          FROM candidates
+         WHERE fetched_at IS NULL
+            OR fetched_at < now() - $1 * interval '1 hour'
+         ORDER BY fetched_at NULLS FIRST, random()
+         LIMIT $2
+        "#,
+    )
+    .bind(stale_hours)
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+    .context("picking BCMR batch")?;
+    Ok(rows.into_iter().map(|(c,)| c).collect())
+}
+
+/// One row's worth of BCMR data plus the provenance tag. `bcmr_source` is
+/// `"paytaca"` on a hit, `"paytaca-missing"` on a 404 (so the next batch
+/// picker skips us until the stale window elapses).
+#[derive(Debug, Clone)]
+pub struct TokenMetadataWrite {
+    pub category: Vec<u8>,
+    pub name: Option<String>,
+    pub symbol: Option<String>,
+    pub decimals: i16,
+    pub description: Option<String>,
+    pub icon_uri: Option<String>,
+    pub bcmr_source: &'static str,
+}
+
+/// Upsert into `token_metadata` keyed on `category`. Refreshes every field
+/// on conflict — stale rows get replaced.
+pub async fn upsert_token_metadata(pool: &PgPool, w: &TokenMetadataWrite) -> Result<()> {
+    sqlx::query(
+        r#"
+        INSERT INTO token_metadata
+            (category, name, symbol, decimals, description, icon_uri,
+             bcmr_source, fetched_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+        ON CONFLICT (category) DO UPDATE SET
+            name         = EXCLUDED.name,
+            symbol       = EXCLUDED.symbol,
+            decimals     = EXCLUDED.decimals,
+            description  = EXCLUDED.description,
+            icon_uri     = EXCLUDED.icon_uri,
+            bcmr_source  = EXCLUDED.bcmr_source,
+            fetched_at   = EXCLUDED.fetched_at
+        "#,
+    )
+    .bind(&w.category)
+    .bind(&w.name)
+    .bind(&w.symbol)
+    .bind(w.decimals)
+    .bind(&w.description)
+    .bind(&w.icon_uri)
+    .bind(w.bcmr_source)
+    .execute(pool)
+    .await
+    .with_context(|| format!("upsert token_metadata for {}", bytes_to_hex(&w.category)))?;
+    Ok(())
+}
+
+pub async fn mark_bcmr_run(pool: &PgPool) -> Result<()> {
+    sqlx::query(
+        "UPDATE sync_state
+            SET last_bcmr_run_at = now(), updated_at = now()
+          WHERE id = 1",
+    )
+    .execute(pool)
+    .await
+    .context("mark_bcmr_run")?;
+    Ok(())
+}
+
 /// Ensure the pool is closed before a binary exits — keeps Postgres from
 /// logging warnings about abruptly terminated sessions.
 pub async fn shutdown(pool: PgPool) {
