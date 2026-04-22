@@ -92,8 +92,17 @@ impl BchnClient {
         if auth_user_pass.is_empty() {
             bail!("BCHN auth is empty");
         }
+        // BCHN's HTTP server closes idle keep-alive connections faster than
+        // reqwest's default 90 s pool timeout. On a 30 s poll cadence (the
+        // tail's fallback interval) the first request after idle finds a
+        // half-closed socket and errors with "error sending request", then
+        // the retry succeeds — spamming WARNs while data flow is fine.
+        // Disable pooling: one extra TCP handshake per localhost RPC, which
+        // is negligible, vs. silent retries masking the day retries stop
+        // working.
         let http = Client::builder()
             .timeout(REQUEST_TIMEOUT)
+            .pool_max_idle_per_host(0)
             .build()
             .context("building reqwest client")?;
         let encoded = BASE64.encode(auth_user_pass.as_bytes());
