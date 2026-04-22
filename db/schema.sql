@@ -101,15 +101,17 @@ CREATE TABLE IF NOT EXISTS sync_state (
   backfill_complete    BOOLEAN     NOT NULL DEFAULT false,
   backfill_through     INTEGER,                                        -- highest block the backfill worker has covered
   tail_last_block      INTEGER,                                        -- highest block the tail worker has scanned
+  last_tail_run_at     TIMESTAMPTZ,                                    -- every tail poll tick updates this (even when no new blocks)
   last_enrich_run_at   TIMESTAMPTZ,
   last_verify_run_at   TIMESTAMPTZ,
   last_bcmr_run_at     TIMESTAMPTZ,                                    -- last Phase 4b BCMR-hydration pass
   updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Additive column for deployments that were brought up before Phase 4b landed.
+-- Additive columns for deployments that were brought up before these landed.
 -- Idempotent — safe to re-run.
 ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_bcmr_run_at TIMESTAMPTZ;
+ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_tail_run_at TIMESTAMPTZ;
 
 -- Ensure the singleton row exists on first deploy.
 INSERT INTO sync_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING;

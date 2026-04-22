@@ -239,6 +239,22 @@ pub async fn save_tail_last_block(pool: &PgPool, height: i32) -> Result<()> {
     Ok(())
 }
 
+/// Touch the tail's last-run timestamp on every poll tick (and every ZMQ
+/// event), regardless of whether new blocks were found. Lets an external
+/// watchdog distinguish "tail is alive but chain is quiet" from "tail
+/// stopped polling".
+pub async fn mark_tail_run(pool: &PgPool) -> Result<()> {
+    sqlx::query(
+        "UPDATE sync_state
+            SET last_tail_run_at = now(), updated_at = now()
+          WHERE id = 1",
+    )
+    .execute(pool)
+    .await
+    .context("mark_tail_run")?;
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Enrichment helpers.
 // ---------------------------------------------------------------------------

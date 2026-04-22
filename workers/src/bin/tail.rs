@@ -34,8 +34,8 @@ use tracing_subscriber::EnvFilter;
 
 use workers::bchn::{BchnClient, Block, HashBlockSubscriber, zmq_url_from_env};
 use workers::pg::{
-    self, FoundCategory, TokenType, load_sync_state, pool_from_env, save_tail_last_block,
-    upsert_tokens,
+    self, FoundCategory, TokenType, load_sync_state, mark_tail_run, pool_from_env,
+    save_tail_last_block, upsert_tokens,
 };
 
 const POLL_FALLBACK: Duration = Duration::from_secs(30);
@@ -135,6 +135,12 @@ async fn catch_up_to_tip(
     bchn: &BchnClient,
     last_seen: i32,
 ) -> i32 {
+    // Touch last_tail_run_at regardless of outcome so a staleness watchdog
+    // sees the tail is alive even during a long quiet stretch on BCH.
+    if let Err(e) = mark_tail_run(pool).await {
+        warn!(error = %e, "mark_tail_run failed; observability only, continuing");
+    }
+
     let tip = match bchn.get_block_count().await {
         Ok(t) => t,
         Err(e) => {
