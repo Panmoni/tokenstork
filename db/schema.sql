@@ -98,25 +98,46 @@ CREATE TABLE IF NOT EXISTS nft_instances (
 CREATE INDEX IF NOT EXISTS nft_instances_owner_idx ON nft_instances (owner_address);
 
 -- ============================================================================
+-- Per-venue listings: which DEXs / indexers currently list each token and
+-- what price / TVL they report. Populated by `sync-cauldron` (and future
+-- `sync-fex`, `sync-tapswap`, ...). Raw values from the venue — BCH / USD
+-- conversion happens at render time using the live BCH price, so these
+-- rows don't go stale just because BCH moved $1.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS token_venue_listings (
+  venue           TEXT        NOT NULL,                                -- 'cauldron', 'fex', 'tapswap', ...
+  category        BYTEA       NOT NULL REFERENCES tokens(category) ON DELETE CASCADE,
+  price_sats      DOUBLE PRECISION,                                    -- raw per-smallest-unit price from venue
+  tvl_satoshis    BIGINT,                                              -- raw locked BCH side (in satoshis) from venue
+  first_listed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (venue, category)
+);
+
+CREATE INDEX IF NOT EXISTS token_venue_listings_category_idx ON token_venue_listings (category);
+
+-- ============================================================================
 -- Single-row sync bookkeeping. Replaces the old __sync_info hack that stuffed
 -- sync state into a fake tokens row.
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS sync_state (
-  id                   SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
-  backfill_complete    BOOLEAN     NOT NULL DEFAULT false,
-  backfill_through     INTEGER,                                        -- highest block the backfill worker has covered
-  tail_last_block      INTEGER,                                        -- highest block the tail worker has scanned
-  last_tail_run_at     TIMESTAMPTZ,                                    -- every tail poll tick updates this (even when no new blocks)
-  last_enrich_run_at   TIMESTAMPTZ,
-  last_verify_run_at   TIMESTAMPTZ,
-  last_bcmr_run_at     TIMESTAMPTZ,                                    -- last Phase 4b BCMR-hydration pass
-  updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+  id                    SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  backfill_complete     BOOLEAN     NOT NULL DEFAULT false,
+  backfill_through      INTEGER,                                       -- highest block the backfill worker has covered
+  tail_last_block       INTEGER,                                       -- highest block the tail worker has scanned
+  last_tail_run_at      TIMESTAMPTZ,                                   -- every tail poll tick updates this (even when no new blocks)
+  last_enrich_run_at    TIMESTAMPTZ,
+  last_verify_run_at    TIMESTAMPTZ,
+  last_bcmr_run_at      TIMESTAMPTZ,                                   -- last Phase 4b BCMR-hydration pass
+  last_cauldron_run_at  TIMESTAMPTZ,                                   -- last Phase 4d Cauldron-listings pass
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- Additive columns for deployments that were brought up before these landed.
 -- Idempotent — safe to re-run.
-ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_bcmr_run_at TIMESTAMPTZ;
-ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_tail_run_at TIMESTAMPTZ;
+ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_bcmr_run_at     TIMESTAMPTZ;
+ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_tail_run_at     TIMESTAMPTZ;
+ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_cauldron_run_at TIMESTAMPTZ;
 
 -- Ensure the singleton row exists on first deploy.
 INSERT INTO sync_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING;

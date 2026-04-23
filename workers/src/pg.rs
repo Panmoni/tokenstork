@@ -564,6 +564,116 @@ pub async fn mark_bcmr_run(pool: &PgPool) -> Result<()> {
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Venue-listings helpers (Phase 4d — currently only Cauldron, but the
+// `venue` column is a string to keep the shape open for Fex / Tapswap /
+// Jazz when they're added).
+// ---------------------------------------------------------------------------
+
+/// One row-worth of data for an upsert into `token_venue_listings`.
+/// Values are raw-from-the-venue; USD conversion happens at render time.
+pub struct VenueListingWrite<'a> {
+    pub venue: &'a str,
+    pub category: Vec<u8>,
+    pub price_sats: Option<f64>,
+    pub tvl_satoshis: Option<i64>,
+}
+
+/// Categories the Cauldron worker should check — only fungible tokens
+/// (pure NFTs have no Cauldron market). Ordered by genesis_block so the
+/// same category always hits Cauldron at roughly the same point in a
+/// run; useful for operator debugging ("why did we get 429 at 12:13 UTC
+/// every time?" — now there's a consistent progression).
+pub async fn pick_cauldron_candidates(pool: &PgPool) -> Result<Vec<Vec<u8>>> {
+    let rows: Vec<(Vec<u8>,)> = sqlx::query_as(
+        "SELECT category
+           FROM tokens
+          WHERE token_type IN ('FT', 'FT+NFT')
+          ORDER BY genesis_block ASC",
+    )
+    .fetch_all(pool)
+    .await
+    .context("pick_cauldron_candidates")?;
+    Ok(rows.into_iter().map(|(c,)| c).collect())
+}
+
+pub async fn upsert_venue_listing(pool: &PgPool, w: &VenueListingWrite<'_>) -> Result<()> {
+    sqlx::query(
+        r#"
+        INSERT INTO token_venue_listings
+            (venue, category, price_sats, tvl_satoshis, first_listed_at, updated_at)
+        VALUES ($1, $2, $3, $4, now(), now())
+        ON CONFLICT (venue, category) DO UPDATE
+            SET price_sats   = EXCLUDED.price_sats,
+                tvl_satoshis = EXCLUDED.tvl_satoshis,
+                updated_at   = now()
+        "#,
+    )
+    .bind(w.venue)
+    .bind(&w.category)
+    .bind(w.price_sats)
+    .bind(w.tvl_satoshis)
+    .execute(pool)
+    .await
+    .with_context(|| {
+        format!(
+            "upsert token_venue_listings for venue={} category={}",
+            w.venue,
+            bytes_to_hex(&w.category)
+        )
+    })?;
+    Ok(())
+}
+
+/// Remove rows whose categories are NOT in the `keep` list — i.e., the
+/// venue used to list this token but no longer does. Only called after a
+/// clean run (no hard fetch errors); a partial run that missed a token
+/// due to a transient 5xx would otherwise incorrectly "delist" it.
+///
+/// **Never call with an empty `keep` slice** — the caller must already
+/// have refused to prune in that case (e.g. a total venue outage where
+/// every category 404'd). We also defend in depth here: Postgres treats
+/// `x <> ALL(ARRAY[]::bytea[])` as vacuous-truth TRUE, so an empty-array
+/// DELETE would wipe every row for the venue. Early-return a 0 instead.
+///
+/// Verified behaviour: feeding a 1-element `keep` must delete every row
+/// for the venue whose `category` isn't that one byte-string. Worth an
+/// operational sanity check on carson after the first full run: count
+/// `token_venue_listings WHERE venue='cauldron'` before vs. after the
+/// prune step and confirm the delta matches the expected delistings.
+pub async fn prune_stale_venue_listings(
+    pool: &PgPool,
+    venue: &str,
+    keep: &[Vec<u8>],
+) -> Result<u64> {
+    if keep.is_empty() {
+        return Ok(0);
+    }
+    let res = sqlx::query(
+        "DELETE FROM token_venue_listings
+          WHERE venue = $1
+            AND category <> ALL($2)",
+    )
+    .bind(venue)
+    .bind(keep)
+    .execute(pool)
+    .await
+    .with_context(|| format!("prune_stale_venue_listings venue={}", venue))?;
+    Ok(res.rows_affected())
+}
+
+pub async fn mark_cauldron_run(pool: &PgPool) -> Result<()> {
+    sqlx::query(
+        "UPDATE sync_state
+            SET last_cauldron_run_at = now(), updated_at = now()
+          WHERE id = 1",
+    )
+    .execute(pool)
+    .await
+    .context("mark_cauldron_run")?;
+    Ok(())
+}
+
 /// Ensure the pool is closed before a binary exits — keeps Postgres from
 /// logging warnings about abruptly terminated sessions.
 pub async fn shutdown(pool: PgPool) {

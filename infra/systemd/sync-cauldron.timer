@@ -1,0 +1,15 @@
+[Unit]
+Description=Run tokenstork Cauldron listings refresh every 4 hours
+
+[Timer]
+# First run 10 min after boot (after BCMR has had a chance to settle)
+# then every 4h. Stagger of 2 min random so parallel deploys across
+# multiple boxes don't all hit Cauldron at the same second.
+OnBootSec=10min
+OnUnitActiveSec=4h
+Persistent=true
+RandomizedDelaySec=2min
+Unit=sync-cauldron.service
+
+[Install]
+WantedBy=timers.target
