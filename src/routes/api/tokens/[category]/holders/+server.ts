@@ -2,6 +2,7 @@
 
 import { json, error, isHttpError } from '@sveltejs/kit';
 import { bytesFromHex, query } from '$lib/server/db';
+import { NOT_MODERATED_CLAUSE } from '$lib/moderation';
 import type { RequestHandler } from './$types';
 
 const HEX_REGEX = /^[0-9a-fA-F]{64}$/;
@@ -32,6 +33,26 @@ export const GET: RequestHandler = async ({ params, url, setHeaders }) => {
 
 	try {
 		const categoryBytes = bytesFromHex(category);
+
+		// Existence + moderation guard. Collapsed into a single query so the
+		// common "listed and not hidden" case is one round-trip. Returns 0
+		// rows if the category doesn't exist in `tokens` OR is in
+		// `token_moderation`. We translate both to 410 so the response
+		// doesn't reveal which case applies (prevents probing for hidden
+		// categories via this endpoint). Shared NOT_MODERATED_CLAUSE from
+		// $lib/moderation keeps the predicate consistent with the list
+		// queries.
+		const guardRes = await query(
+			`SELECT 1
+			   FROM tokens t
+			  WHERE t.category = $1
+			    AND ${NOT_MODERATED_CLAUSE}
+			  LIMIT 1`,
+			[categoryBytes]
+		);
+		if (guardRes.rows.length === 0) {
+			error(410, 'This token is not available.');
+		}
 
 		const countRes = await query<{ total: string }>(
 			`SELECT COUNT(*)::bigint AS total FROM token_holders WHERE category = $1`,

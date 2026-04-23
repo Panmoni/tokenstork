@@ -11,7 +11,11 @@
 		Error {page.status}
 	</p>
 	<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent mb-6">
-		{page.status === 404 ? 'Page not found' : 'Something went wrong'}
+		{page.status === 404
+			? 'Page not found'
+			: page.status === 410
+				? 'Token hidden'
+				: 'Something went wrong'}
 	</h1>
 	{#if page.error?.message}
 		<p class="text-slate-600 dark:text-slate-300 mb-6">{page.error.message}</p>

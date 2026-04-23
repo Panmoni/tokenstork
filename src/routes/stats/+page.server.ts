@@ -8,6 +8,7 @@
 // counters remain local to this page — they aren't useful on every request.
 
 import { query } from '$lib/server/db';
+import { NOT_MODERATED_CLAUSE } from '$lib/moderation';
 import type { PageServerLoad } from './$types';
 
 interface TypeCount {
@@ -22,11 +23,17 @@ interface WindowCount {
 export const load: PageServerLoad = async ({ parent }) => {
 	const [parentData, pageResults] = await Promise.all([
 		parent(),
+		// Every counter excludes moderation-hidden categories via the shared
+		// NOT_MODERATED_CLAUSE fragment ($lib/moderation). The burned count
+		// joins through `tokens t` rather than reading `token_state` directly
+		// so the same clause applies — a hidden-but-burned token shouldn't
+		// inflate the counter.
 		Promise.allSettled([
 			query<TypeCount>(
-				`SELECT token_type, COUNT(*)::bigint AS total
-				   FROM tokens
-				   GROUP BY token_type`
+				`SELECT t.token_type, COUNT(*)::bigint AS total
+				   FROM tokens t
+				  WHERE ${NOT_MODERATED_CLAUSE}
+				  GROUP BY t.token_type`
 			),
 			// genesis_time is the on-chain block timestamp at which the category
 			// first appeared — "token minted N days ago." `first_seen_at` is our
@@ -34,13 +41,15 @@ export const load: PageServerLoad = async ({ parent }) => {
 			// 24 hours right after a fresh backfill.
 			query<WindowCount>(
 				`SELECT COUNT(*)::bigint AS total
-				   FROM tokens
-				   WHERE genesis_time > now() - INTERVAL '7 days'`
+				   FROM tokens t
+				  WHERE t.genesis_time > now() - INTERVAL '7 days'
+				    AND ${NOT_MODERATED_CLAUSE}`
 			),
 			query<WindowCount>(
 				`SELECT COUNT(*)::bigint AS total
-				   FROM tokens
-				   WHERE genesis_time > now() - INTERVAL '30 days'`
+				   FROM tokens t
+				  WHERE t.genesis_time > now() - INTERVAL '30 days'
+				    AND ${NOT_MODERATED_CLAUSE}`
 			),
 			// is_fully_burned comes from token_state, which is only populated
 			// once BlockBook-backed enrichment runs. Until Phase 2d lands this
@@ -48,8 +57,10 @@ export const load: PageServerLoad = async ({ parent }) => {
 			// UI and render an explanatory placeholder.
 			query<WindowCount>(
 				`SELECT COUNT(*)::bigint AS total
-				   FROM token_state
-				   WHERE is_fully_burned = true`
+				   FROM tokens t
+				   JOIN token_state s ON s.category = t.category
+				  WHERE s.is_fully_burned = true
+				    AND ${NOT_MODERATED_CLAUSE}`
 			)
 		])
 	]);

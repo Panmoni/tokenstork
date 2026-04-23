@@ -28,6 +28,7 @@ interface TokenRow {
 	has_active_minting: boolean | null;
 	is_fully_burned: boolean | null;
 	verified_at: Date | null;
+	is_moderated: boolean;
 }
 
 interface HolderRow {
@@ -56,6 +57,9 @@ export const load: PageServerLoad = async ({ params, fetch }) => {
 
 	const categoryBytes = bytesFromHex(category);
 
+	// One query instead of two: LEFT JOIN token_moderation and return an
+	// `is_moderated` boolean alongside the row. Saves a round-trip on
+	// every detail-page render. 404 for missing category, 410 for hidden.
 	const tokenRes = await query<TokenRow>(
 		`SELECT
 			t.category,
@@ -73,16 +77,24 @@ export const load: PageServerLoad = async ({ params, fetch }) => {
 			s.holder_count,
 			s.has_active_minting,
 			s.is_fully_burned,
-			s.verified_at
+			s.verified_at,
+			(mod.category IS NOT NULL) AS is_moderated
 		   FROM tokens t
-		   LEFT JOIN token_metadata m ON m.category = t.category
-		   LEFT JOIN token_state s    ON s.category = t.category
+		   LEFT JOIN token_metadata  m   ON m.category  = t.category
+		   LEFT JOIN token_state     s   ON s.category  = t.category
+		   LEFT JOIN token_moderation mod ON mod.category = t.category
 		  WHERE t.category = $1`,
 		[categoryBytes]
 	);
 
 	if (tokenRes.rows.length === 0) {
 		error(404, 'token not found');
+	}
+	if (tokenRes.rows[0].is_moderated) {
+		// 410 Gone so search engines drop the URL (versus 404 "never
+		// existed"). Reason / note are operator-private — user-visible
+		// message is intentionally terse.
+		error(410, 'This token has been hidden from the tokenstork directory.');
 	}
 
 	const row = tokenRes.rows[0];

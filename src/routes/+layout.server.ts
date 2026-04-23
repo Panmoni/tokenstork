@@ -10,11 +10,20 @@
 // layout never 500s over a stats hiccup.
 
 import { query } from '$lib/server/db';
+import { NOT_MODERATED_CLAUSE } from '$lib/moderation';
 import type { LayoutServerLoad } from './$types';
 
 export const load: LayoutServerLoad = async () => {
+	// Every tokens-reading query excludes moderation-hidden categories via
+	// NOT_MODERATED_CLAUSE ($lib/moderation) — single source of truth so
+	// schema evolution is one-line governance. The `sync_state` query is
+	// untouched (no tokens join).
 	const [tokensTrackedRes, syncRes, newIn24hRes] = await Promise.allSettled([
-		query<{ total: string }>(`SELECT COUNT(*)::bigint AS total FROM tokens`),
+		query<{ total: string }>(
+			`SELECT COUNT(*)::bigint AS total
+			   FROM tokens t
+			  WHERE ${NOT_MODERATED_CLAUSE}`
+		),
 		query<{ tail_last_block: number | null }>(
 			`SELECT tail_last_block FROM sync_state WHERE id = 1`
 		),
@@ -23,7 +32,10 @@ export const load: LayoutServerLoad = async () => {
 			// minted." first_seen_at is the row's write time in *our* DB, which
 			// for a fresh backfill lumps everything into the last N hours and
 			// produces the wrong answer.
-			`SELECT COUNT(*)::bigint AS total FROM tokens WHERE genesis_time > now() - INTERVAL '24 hours'`
+			`SELECT COUNT(*)::bigint AS total
+			   FROM tokens t
+			  WHERE t.genesis_time > now() - INTERVAL '24 hours'
+			    AND ${NOT_MODERATED_CLAUSE}`
 		)
 	]);
 

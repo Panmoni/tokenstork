@@ -2,6 +2,7 @@
 // directly (no /api/tokens round trip — the app and DB share a process).
 
 import { query, hexFromBytes } from '$lib/server/db';
+import { NOT_MODERATED_CLAUSE } from '$lib/moderation';
 import type { PageServerLoad } from './$types';
 import type { TokenApiRow, TokenType } from '$lib/types';
 
@@ -72,7 +73,12 @@ export const load: PageServerLoad = async ({ url }) => {
 	const search = (url.searchParams.get('search') ?? '').trim();
 	const searchLimited = search.slice(0, 128);
 
-	const where: string[] = [];
+	// Moderation filter is always on — categories in token_moderation are
+	// hidden from the directory, the public API, the stats counters, and
+	// all search / filter / sort modes. Underlying tokens rows are left
+	// in place; a DELETE from token_moderation un-hides. Fragment lives
+	// in $lib/moderation so every read path shares one source of truth.
+	const where: string[] = [NOT_MODERATED_CLAUSE];
 	const values: unknown[] = [];
 	if (typeParam === 'FT' || typeParam === 'NFT' || typeParam === 'FT+NFT') {
 		values.push(typeParam);

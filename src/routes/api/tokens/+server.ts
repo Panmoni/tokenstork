@@ -3,6 +3,7 @@
 
 import { json, error, isHttpError } from '@sveltejs/kit';
 import { hexFromBytes, query } from '$lib/server/db';
+import { NOT_MODERATED_CLAUSE } from '$lib/moderation';
 import type { RequestHandler } from './$types';
 
 type TokenType = 'FT' | 'NFT' | 'FT+NFT';
@@ -83,7 +84,9 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 		const limit = parseLimit(params.get('limit'), 100, 1000);
 		const offset = parseOffset(params.get('offset'));
 
-		const where: string[] = [];
+		// Moderation filter is always on — the public API respects the same
+		// blocklist as the directory. Fragment lives in $lib/moderation.
+		const where: string[] = [NOT_MODERATED_CLAUSE];
 		const values: unknown[] = [];
 		const push = (fragment: string, value: unknown) => {
 			values.push(value);

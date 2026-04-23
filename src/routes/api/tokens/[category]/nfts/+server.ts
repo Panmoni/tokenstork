@@ -2,6 +2,7 @@
 
 import { json, error, isHttpError } from '@sveltejs/kit';
 import { bytesFromHex, hexFromBytes, query } from '$lib/server/db';
+import { NOT_MODERATED_CLAUSE } from '$lib/moderation';
 import type { RequestHandler } from './$types';
 
 const HEX_REGEX = /^[0-9a-fA-F]{64}$/;
@@ -37,6 +38,23 @@ export const GET: RequestHandler = async ({ params, url, setHeaders }) => {
 
 	try {
 		const categoryBytes = bytesFromHex(category);
+
+		// Existence + moderation guard. Same pattern as the holders endpoint:
+		// collapse "exists in tokens AND not in moderation" into a single
+		// query, translate any miss to 410 so probing for hidden categories
+		// doesn't leak info. Shared NOT_MODERATED_CLAUSE from $lib/moderation.
+		const guardRes = await query(
+			`SELECT 1
+			   FROM tokens t
+			  WHERE t.category = $1
+			    AND ${NOT_MODERATED_CLAUSE}
+			  LIMIT 1`,
+			[categoryBytes]
+		);
+		if (guardRes.rows.length === 0) {
+			error(410, 'This token is not available.');
+		}
+
 		const whereParts: string[] = ['category = $1'];
 		const queryValues: unknown[] = [categoryBytes];
 		if (capability) {
