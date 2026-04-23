@@ -117,6 +117,45 @@ CREATE TABLE IF NOT EXISTS token_venue_listings (
 CREATE INDEX IF NOT EXISTS token_venue_listings_category_idx ON token_venue_listings (category);
 
 -- ============================================================================
+-- Moderation blocklist. Operator-maintained. Categories here are filtered
+-- from every directory / API / stats query and return 410 Gone on direct
+-- URL access. Underlying `tokens` / `token_metadata` / `token_state` rows
+-- are untouched — re-admitting a token is a single DELETE.
+--
+-- Runbook: docs/moderation-runbook.md (gitignored).
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS token_moderation (
+  category         BYTEA       PRIMARY KEY REFERENCES tokens(category) ON DELETE CASCADE,
+  reason           TEXT        NOT NULL CHECK (reason IN ('spam','phishing','offensive','fraud','illegal','other')),
+  moderator_note   TEXT,                                              -- free-form operator context; never shown to visitors
+  hidden_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ============================================================================
+-- User-submitted reports. The public `Report this token` form POSTs here
+-- via /api/tokens/<cat>/report. Reports are persisted first; alert dispatch
+-- is best-effort (webhook-based — see src/lib/server/reportAlert.ts).
+-- The operator triages via `SELECT * FROM token_reports WHERE status = 'new'`
+-- and either actions the category into `token_moderation` or dismisses.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS token_reports (
+  id               BIGSERIAL   PRIMARY KEY,
+  category         BYTEA       NOT NULL REFERENCES tokens(category) ON DELETE CASCADE,
+  reason           TEXT        NOT NULL CHECK (reason IN ('spam','phishing','offensive','fraud','illegal','other')),
+  details          TEXT,                                              -- reporter's free-form note, UI-limited to 2000 chars
+  reporter_email   TEXT,                                              -- optional; no SMTP validation beyond length cap
+  reporter_ip      INET,                                              -- for rate-limit debugging + abuse tracking; never rendered publicly
+  status           TEXT        NOT NULL DEFAULT 'new'
+                                CHECK (status IN ('new','reviewed','actioned','dismissed')),
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  reviewed_at      TIMESTAMPTZ,
+  moderator_note   TEXT                                              -- what the operator did, e.g. "hidden under 'offensive'"
+);
+
+CREATE INDEX IF NOT EXISTS token_reports_status_idx   ON token_reports (status, created_at DESC);
+CREATE INDEX IF NOT EXISTS token_reports_category_idx ON token_reports (category);
+
+-- ============================================================================
 -- Single-row sync bookkeeping. Replaces the old __sync_info hack that stuffed
 -- sync state into a fake tokens row.
 -- ============================================================================
