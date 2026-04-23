@@ -1,5 +1,10 @@
 <script lang="ts">
 	import { getIPFSUrl, humanizeNumericSupply, formatMarketCap } from '$lib/format';
+	import {
+		REPORT_REASONS,
+		REPORT_REASON_LABELS,
+		type ReportReason
+	} from '$lib/moderation';
 	import FormatCategory from '$lib/components/FormatCategory.svelte';
 
 	let { data } = $props();
@@ -21,6 +26,41 @@
 			return 0;
 		}
 	});
+
+	// Report form — closed by default; opens inline on click. No modal, no
+	// extra deps. URL is the source of truth elsewhere; here the form is
+	// purely local state so it doesn't survive navigation.
+	let showReport = $state(false);
+	let reportReason = $state<ReportReason>('offensive');
+	let reportDetails = $state('');
+	let reportEmail = $state('');
+	let reportStatus = $state<'idle' | 'submitting' | 'ok' | 'ratelimited' | 'error'>('idle');
+
+	async function submitReport(e: SubmitEvent) {
+		e.preventDefault();
+		if (reportStatus === 'submitting' || reportStatus === 'ok') return;
+		reportStatus = 'submitting';
+		try {
+			const res = await fetch(`/api/tokens/${token.id}/report`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					reason: reportReason,
+					details: reportDetails.trim() || undefined,
+					reporter_email: reportEmail.trim() || undefined
+				})
+			});
+			if (res.status === 204) {
+				reportStatus = 'ok';
+			} else if (res.status === 429) {
+				reportStatus = 'ratelimited';
+			} else {
+				reportStatus = 'error';
+			}
+		} catch {
+			reportStatus = 'error';
+		}
+	}
 </script>
 
 <svelte:head>
@@ -139,7 +179,115 @@
 		</section>
 	{/if}
 
-	<div class="text-sm">
+	<div class="flex items-center justify-between text-sm mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
 		<a href="/" class="text-violet-600 hover:underline">← All tokens</a>
+		{#if !showReport && reportStatus !== 'ok'}
+			<button
+				type="button"
+				onclick={() => (showReport = true)}
+				class="text-xs text-slate-500 hover:text-violet-600 dark:text-slate-400 dark:hover:text-violet-400"
+			>
+				Report this token
+			</button>
+		{/if}
 	</div>
+
+	{#if showReport || reportStatus === 'ok'}
+		<section
+			class="mt-6 p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30"
+			aria-label="Report this token"
+		>
+			{#if reportStatus === 'ok'}
+				<h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-2">
+					Thanks — we'll review it.
+				</h2>
+				<p class="text-sm text-slate-600 dark:text-slate-400">
+					Your report has been recorded. The operator will triage it shortly.
+				</p>
+			{:else}
+				<h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-1">
+					Report this token
+				</h2>
+				<p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
+					Flag content you believe violates good-faith use of the directory.
+					Your report is anonymous by default; leave an email only if you'd
+					like a follow-up.
+				</p>
+				<form onsubmit={submitReport} class="space-y-3">
+					<div>
+						<label for="report-reason" class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+							Reason
+						</label>
+						<select
+							id="report-reason"
+							bind:value={reportReason}
+							disabled={reportStatus === 'submitting'}
+							class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+						>
+							{#each REPORT_REASONS as r (r)}
+								<option value={r}>{REPORT_REASON_LABELS[r]}</option>
+							{/each}
+						</select>
+					</div>
+					<div>
+						<label for="report-details" class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+							Details <span class="text-slate-400 font-normal">(optional)</span>
+						</label>
+						<textarea
+							id="report-details"
+							bind:value={reportDetails}
+							disabled={reportStatus === 'submitting'}
+							maxlength={2000}
+							rows={4}
+							placeholder="Why is this token problematic? Any context you can share helps us triage."
+							class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 resize-y"
+						></textarea>
+					</div>
+					<div>
+						<label for="report-email" class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+							Your email <span class="text-slate-400 font-normal">(optional; for follow-up only)</span>
+						</label>
+						<input
+							id="report-email"
+							type="email"
+							bind:value={reportEmail}
+							disabled={reportStatus === 'submitting'}
+							maxlength={200}
+							placeholder="you@example.com"
+							class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
+						/>
+					</div>
+					{#if reportStatus === 'ratelimited'}
+						<p class="text-sm text-amber-600 dark:text-amber-400">
+							You've submitted several reports recently. Please wait a bit before sending another.
+						</p>
+					{:else if reportStatus === 'error'}
+						<p class="text-sm text-red-600 dark:text-red-400">
+							Couldn't submit right now. Please try again in a moment.
+						</p>
+					{/if}
+					<div class="flex items-center gap-3 pt-1">
+						<button
+							type="submit"
+							disabled={reportStatus === 'submitting'}
+							class="px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed"
+						>
+							{reportStatus === 'submitting' ? 'Sending…' : 'Submit report'}
+						</button>
+						<button
+							type="button"
+							onclick={() => {
+								showReport = false;
+								reportStatus = 'idle';
+							}}
+							disabled={reportStatus === 'submitting'}
+							class="text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 disabled:opacity-50"
+						>
+							Cancel
+						</button>
+					</div>
+				</form>
+			{/if}
+		</section>
+	{/if}
 </main>
