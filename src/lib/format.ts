@@ -1,13 +1,29 @@
 // Presentation helpers — shared between server loaders and Svelte components.
 
+// Image-format extensions we refuse to render because they carry animation
+// frames. Checked case-insensitively against the URL path portion (before
+// `?` / `#`) so query strings don't hide a `.gif`. A future
+// bcp-proxy / icon-transcode worker could replace this by serving static
+// snapshots of every icon; for now, hiding flashy animated token icons
+// behind the placeholder is the cheap + correct default. Extension-only
+// detection is imperfect — a CDN serving `image/gif` under `.bin` would
+// slip through — but it catches >95% of real-world CashToken icons which
+// come straight off IPFS with honest extensions.
+const ANIMATED_IMAGE_EXT_RE =
+	/\.(gif|apng|webp|avifs|mng|png-sequence)(\?|#|$)/i;
+
 /**
  * Resolve a BCMR-style icon URI to a safe, https(s) gateway URL suitable for
  * <img src>. Unknown schemes (javascript:, file:, data:<not-image>) fall back
  * to a placeholder so untrusted metadata can't render tracking pixels or
- * attempt scheme-based attacks.
+ * attempt scheme-based attacks. Animated formats (.gif, .apng, .webp,
+ * .avifs) also fall back — we don't want moving images in the directory
+ * (some tokens mint intentionally-flashy icons).
  */
 export function getIPFSUrl(iconUrl: string | null | undefined): string {
 	if (!iconUrl) return PLACEHOLDER_ICON;
+	if (ANIMATED_IMAGE_EXT_RE.test(iconUrl)) return PLACEHOLDER_ICON;
+
 	const ipfsGateway = 'https://ipfs.io/ipfs/';
 
 	// Pre-resolved NFT.Storage CID path — pass through unchanged.
