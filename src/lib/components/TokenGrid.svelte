@@ -1,7 +1,13 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { getIPFSUrl, humanizeNumericSupply } from '$lib/format';
+	import {
+		getIPFSUrl,
+		humanizeNumericSupply,
+		formatVenuePriceUSD,
+		formatVenueTvlUSD
+	} from '$lib/format';
+	import { bchPrice } from '$lib/stores/bchPrice';
 	import FormatCategory from './FormatCategory.svelte';
 	import type { TokenApiRow, TokenType } from '$lib/types';
 
@@ -22,6 +28,7 @@
 		(page.url.searchParams.get('type') as TokenType) ?? 'all'
 	);
 	const sort = $derived(page.url.searchParams.get('sort') ?? 'name');
+	const onlyCauldron = $derived(page.url.searchParams.get('cauldron') === '1');
 
 	function navigateWith(mutate: (params: URLSearchParams) => void) {
 		const params = new URLSearchParams(page.url.searchParams);
@@ -57,6 +64,10 @@
 
 	function setType(value: string) {
 		pushParam('type', value === 'all' ? null : value);
+	}
+
+	function toggleCauldron(checked: boolean) {
+		pushParam('cauldron', checked ? '1' : null);
 	}
 
 	function setPage(newOffset: number) {
@@ -96,28 +107,49 @@
 			<option value="NFT">NFT</option>
 			<option value="FT+NFT">FT + NFT</option>
 		</select>
+		<label
+			class="flex items-center gap-2 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-700 dark:text-slate-300 cursor-pointer select-none hover:border-violet-500 transition-colors"
+			title="Only show tokens currently listed on the Cauldron DEX"
+		>
+			<input
+				type="checkbox"
+				checked={onlyCauldron}
+				onchange={(e) => toggleCauldron((e.currentTarget as HTMLInputElement).checked)}
+				class="w-4 h-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+			/>
+			On Cauldron
+		</label>
 	</div>
 
-	<!-- Desktop: 12-col grid. The name column is the link; category column is sibling (no nesting). -->
+	<!--
+		Desktop 12-col grid. Columns rebalance to fit Price + TVL:
+		Token(3) Type(1) Price(2) TVL(2) Supply(1) Holders(1) NFTs(1) Category(1).
+		NFTs + Holders + live-supply stats still show at col-span-1 since they're
+		compact integers and the detail page is always one click away for depth.
+	-->
 	<div class="hidden md:block overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
 		<div class="grid grid-cols-12 gap-2 px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-			<button type="button" class="col-span-4 text-left cursor-pointer hover:text-violet-600 dark:hover:text-violet-400" onclick={() => setSort('name')}>
+			<button type="button" class="col-span-3 text-left cursor-pointer hover:text-violet-600 dark:hover:text-violet-400" onclick={() => setSort('name')}>
 				Token {sort === 'name' ? '↕' : ''}
 			</button>
 			<div class="col-span-1">Type</div>
-			<button type="button" class="col-span-2 text-right cursor-pointer hover:text-violet-600 dark:hover:text-violet-400" onclick={() => setSort('supply')}>
+			<div class="col-span-2 text-right">Price</div>
+			<button type="button" class="col-span-2 text-right cursor-pointer hover:text-violet-600 dark:hover:text-violet-400" onclick={() => setSort('tvl')}>
+				TVL {sort === 'tvl' ? '↓' : ''}
+			</button>
+			<button type="button" class="col-span-1 text-right cursor-pointer hover:text-violet-600 dark:hover:text-violet-400" onclick={() => setSort('supply')}>
 				Supply {sort === 'supply' ? '↓' : ''}
 			</button>
-			<button type="button" class="col-span-2 text-right cursor-pointer hover:text-violet-600 dark:hover:text-violet-400" onclick={() => setSort('holders')}>
+			<button type="button" class="col-span-1 text-right cursor-pointer hover:text-violet-600 dark:hover:text-violet-400" onclick={() => setSort('holders')}>
 				Holders {sort === 'holders' ? '↓' : ''}
 			</button>
-			<div class="col-span-2 text-right">NFTs</div>
+			<div class="col-span-1 text-right">NFTs</div>
 			<div class="col-span-1 text-right">Category</div>
 		</div>
 
 		{#each tokens as token (token.id)}
 			<div class="grid grid-cols-12 gap-2 px-4 py-4 items-center border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-				<a href={`/token/${token.id}`} class="col-span-4 flex items-center gap-3 min-w-0 no-underline group">
+				<a href={`/token/${token.id}`} class="col-span-3 flex items-center gap-3 min-w-0 no-underline group">
 					{#if token.icon}
 						<img src={getIPFSUrl(token.icon)} alt="" class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800" loading="lazy" />
 					{:else}
@@ -139,12 +171,18 @@
 					</span>
 				</div>
 				<div class="col-span-2 text-right font-mono text-sm text-slate-700 dark:text-slate-300">
+					{formatVenuePriceUSD(token.cauldronPriceSats, token.decimals, $bchPrice.bchPrice)}
+				</div>
+				<div class="col-span-2 text-right font-mono text-sm text-slate-700 dark:text-slate-300">
+					{formatVenueTvlUSD(token.cauldronTvlSatoshis, $bchPrice.bchPrice)}
+				</div>
+				<div class="col-span-1 text-right font-mono text-xs text-slate-700 dark:text-slate-300">
 					{humanizeNumericSupply(token.currentSupply, token.decimals)}
 				</div>
-				<div class="col-span-2 text-right text-sm text-slate-700 dark:text-slate-300">
+				<div class="col-span-1 text-right text-xs text-slate-700 dark:text-slate-300">
 					{token.holderCount ?? '-'}
 				</div>
-				<div class="col-span-2 text-right text-sm text-slate-700 dark:text-slate-300">
+				<div class="col-span-1 text-right text-xs text-slate-700 dark:text-slate-300">
 					{token.liveNftCount ?? '-'}
 				</div>
 				<div class="col-span-1 text-right">
@@ -154,7 +192,7 @@
 		{/each}
 	</div>
 
-	<!-- Mobile: anchor wraps the name/stat block; FormatCategory sits as a sibling below. -->
+	<!-- Mobile card layout — Price + TVL shown only when relevant (listed). -->
 	<div class="md:hidden grid gap-3">
 		{#each tokens as token (token.id)}
 			<div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 hover:shadow-lg hover:border-violet-200 dark:hover:border-violet-800 transition-all">
@@ -175,6 +213,18 @@
 							{token.tokenType}
 						</span>
 					</div>
+					{#if token.cauldronPriceSats != null}
+						<div class="grid grid-cols-2 gap-2 text-sm mb-2">
+							<div>
+								<div class="text-xs text-slate-500 mb-1">Price</div>
+								<div class="font-mono">{formatVenuePriceUSD(token.cauldronPriceSats, token.decimals, $bchPrice.bchPrice)}</div>
+							</div>
+							<div>
+								<div class="text-xs text-slate-500 mb-1">TVL</div>
+								<div class="font-mono">{formatVenueTvlUSD(token.cauldronTvlSatoshis, $bchPrice.bchPrice)}</div>
+							</div>
+						</div>
+					{/if}
 					<div class="grid grid-cols-3 gap-2 text-sm">
 						<div>
 							<div class="text-xs text-slate-500 mb-1">Supply</div>

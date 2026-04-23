@@ -23,6 +23,8 @@ interface DbRow {
 	is_fully_burned: boolean | null;
 	verified_at: Date | null;
 	metadata_fetched_at: Date | null;
+	cauldron_price_sats: number | null;
+	cauldron_tvl_satoshis: string | null;
 }
 
 // Bucket names by "quality" so the directory opens with recognisable
@@ -51,6 +53,9 @@ const VALID_SORTS: Record<string, string> = {
 	name: `${NAME_QUALITY}, LOWER(${NAME_SORTABLE}) ASC NULLS LAST, t.first_seen_at ASC`,
 	supply: `s.current_supply DESC NULLS LAST, ${NAME_QUALITY}, ${NAME_SORTABLE} ASC NULLS LAST`,
 	holders: `s.holder_count DESC NULLS LAST, ${NAME_QUALITY}, ${NAME_SORTABLE} ASC NULLS LAST`,
+	// When sorting by TVL, put Cauldron-listed tokens first (highest TVL at
+	// the top); unlisted tokens sink to the bottom via NULLS LAST.
+	tvl: `vl_cauldron.tvl_satoshis DESC NULLS LAST, ${NAME_QUALITY}, ${NAME_SORTABLE} ASC NULLS LAST`,
 	recent: 't.genesis_block DESC, t.first_seen_at DESC',
 	oldest: 't.genesis_block ASC, t.first_seen_at ASC'
 };
@@ -61,6 +66,7 @@ export const load: PageServerLoad = async ({ url }) => {
 	const sortKey = url.searchParams.get('sort') ?? 'name';
 	const sort = VALID_SORTS[sortKey] ?? VALID_SORTS.name;
 	const typeParam = url.searchParams.get('type');
+	const onlyCauldron = url.searchParams.get('cauldron') === '1';
 	const offset = Math.max(Number(url.searchParams.get('offset') ?? 0) || 0, 0);
 
 	const search = (url.searchParams.get('search') ?? '').trim();
@@ -71,6 +77,12 @@ export const load: PageServerLoad = async ({ url }) => {
 	if (typeParam === 'FT' || typeParam === 'NFT' || typeParam === 'FT+NFT') {
 		values.push(typeParam);
 		where.push(`t.token_type = $${values.length}`);
+	}
+	if (onlyCauldron) {
+		// LEFT JOIN below always populates vl_cauldron for every row; adding
+		// `vl_cauldron.category IS NOT NULL` filters to listed rows without
+		// a second subquery.
+		where.push(`vl_cauldron.category IS NOT NULL`);
 	}
 	if (searchLimited) {
 		// A full 64-char hex query is almost always a paste of a category ID
@@ -105,13 +117,21 @@ export const load: PageServerLoad = async ({ url }) => {
 	}
 	const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
+	// vl_cauldron is a LEFT JOIN so every row can still surface price/TVL
+	// columns when the token is listed, and unlisted tokens just get NULLs.
+	// When the "onlyCauldron" filter is on, the WHERE clause above promotes
+	// the LEFT JOIN into an effective INNER JOIN via `IS NOT NULL`.
+	const fromJoins = `
+		FROM tokens t
+		LEFT JOIN token_metadata m ON m.category = t.category
+		LEFT JOIN token_state    s ON s.category = t.category
+		LEFT JOIN token_venue_listings vl_cauldron
+			ON vl_cauldron.category = t.category AND vl_cauldron.venue = 'cauldron'
+	`;
+
 	try {
 		const countRes = await query<{ total: string }>(
-			`SELECT COUNT(*)::bigint AS total
-			   FROM tokens t
-			   LEFT JOIN token_metadata m ON m.category = t.category
-			   LEFT JOIN token_state s    ON s.category = t.category
-			   ${whereClause}`,
+			`SELECT COUNT(*)::bigint AS total ${fromJoins} ${whereClause}`,
 			values
 		);
 		const total = Number(countRes.rows[0]?.total ?? 0);
@@ -134,10 +154,10 @@ export const load: PageServerLoad = async ({ url }) => {
 				s.holder_count,
 				s.has_active_minting,
 				s.is_fully_burned,
-				s.verified_at
-			   FROM tokens t
-			   LEFT JOIN token_metadata m ON m.category = t.category
-			   LEFT JOIN token_state s    ON s.category = t.category
+				s.verified_at,
+				vl_cauldron.price_sats    AS cauldron_price_sats,
+				vl_cauldron.tvl_satoshis::text AS cauldron_tvl_satoshis
+			   ${fromJoins}
 			   ${whereClause}
 			   ORDER BY ${sort}
 			   LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
@@ -153,6 +173,14 @@ export const load: PageServerLoad = async ({ url }) => {
 				metaAt ?? 0,
 				row.first_seen_at.getTime()
 			);
+			// node-pg returns BIGINT as a string to preserve precision. Parse
+			// to number at the edge — TVL in satoshis tops out at ~2.1e15
+			// (21M BCH), well under Number.MAX_SAFE_INTEGER (~9e15).
+			let tvl: number | null = null;
+			if (row.cauldron_tvl_satoshis != null) {
+				const parsed = Number(row.cauldron_tvl_satoshis);
+				if (Number.isFinite(parsed)) tvl = parsed;
+			}
 			return {
 				id: hexFromBytes(row.category)!,
 				name: row.name,
@@ -170,7 +198,9 @@ export const load: PageServerLoad = async ({ url }) => {
 				hasActiveMinting: row.has_active_minting ?? false,
 				firstSeenAt,
 				genesisBlock: row.genesis_block,
-				updatedAt: Math.floor(updatedAtMs / 1000)
+				updatedAt: Math.floor(updatedAtMs / 1000),
+				cauldronPriceSats: row.cauldron_price_sats,
+				cauldronTvlSatoshis: tvl
 			};
 		});
 

@@ -102,6 +102,49 @@ function bigintToApproxNumber(n: bigint): number {
 	return Number(n);
 }
 
+/**
+ * Convert a Cauldron venue-listing price (sats per smallest-unit-of-token,
+ * the raw value we store in `token_venue_listings`) into a dollar string.
+ *
+ * The source number for, say, a token with 8 decimals and $1 per whole
+ * token when BCH = $460 is `(100_000_000 / 460) / 10^8` ≈ `2.17e-3` sats
+ * per smallest unit. To get USD-per-whole-token: multiply by `10^decimals`,
+ * divide by `10^8` (sats → BCH), multiply by the live BCH/USD rate.
+ */
+export function formatVenuePriceUSD(
+	priceSats: number | null | undefined,
+	decimals: number,
+	bchPriceUSD: number | null | undefined
+): string {
+	if (priceSats == null || bchPriceUSD == null || bchPriceUSD <= 0) return '—';
+	if (!Number.isFinite(priceSats) || priceSats <= 0) return '—';
+	const bchPerToken = (priceSats * Math.pow(10, decimals)) / 1e8;
+	const usd = bchPerToken * bchPriceUSD;
+	if (!Number.isFinite(usd) || usd <= 0) return '—';
+	if (usd >= 1) return `$${usd.toFixed(2)}`;
+	if (usd >= 0.01) return `$${usd.toFixed(4)}`;
+	return `$${usd.toFixed(6)}`;
+}
+
+/**
+ * Convert raw locked-BCH-side satoshis (the `tvl_satoshis` column value)
+ * into a compact USD TVL string. Cauldron is a double-sided AMM so
+ * total pool value is `2 × bch_side`, matching the calc in external.ts.
+ */
+export function formatVenueTvlUSD(
+	tvlSatoshis: number | null | undefined,
+	bchPriceUSD: number | null | undefined
+): string {
+	if (tvlSatoshis == null || bchPriceUSD == null || bchPriceUSD <= 0) return '—';
+	if (!Number.isFinite(tvlSatoshis) || tvlSatoshis <= 0) return '—';
+	const usd = (tvlSatoshis / 1e8) * bchPriceUSD * 2;
+	if (!Number.isFinite(usd) || usd <= 0) return '—';
+	if (usd >= 1_000_000) return `$${(usd / 1_000_000).toFixed(2)}M`;
+	if (usd >= 1_000) return `$${(usd / 1_000).toFixed(1)}k`;
+	if (usd >= 1) return `$${usd.toFixed(0)}`;
+	return `$${usd.toFixed(2)}`;
+}
+
 export function formatMarketCap(marketCap: string): string {
 	if (marketCap === 'N/A' || marketCap === '0') {
 		return '-';

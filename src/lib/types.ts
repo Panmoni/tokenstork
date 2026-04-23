@@ -20,6 +20,13 @@ export interface TokenApiRow {
 	firstSeenAt: number;
 	genesisBlock: number;
 	updatedAt: number;
+
+	// Per-venue listing data. Populated by the `sync-cauldron` worker (and
+	// future `sync-fex`, `sync-tapswap`, ...). Values are raw from the
+	// venue — USD conversion happens at render time using the live BCH
+	// price. Null for tokens not currently listed on that venue.
+	cauldronPriceSats: number | null;
+	cauldronTvlSatoshis: number | null;
 }
 
 export interface TokensResponse {
