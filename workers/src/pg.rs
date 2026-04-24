@@ -674,6 +674,184 @@ pub async fn mark_cauldron_run(pool: &PgPool) -> Result<()> {
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Tapswap P2P listings helpers. Populate `tapswap_offers` rows recognised by
+// the Tapswap walker (either the oneshot `tapswap-backfill` binary or the
+// incremental scan inside `sync-tail`'s `process_block`).
+//
+// Day-one ships offers as `status='open'` only — spend detection (close
+// transitions to 'taken' / 'cancelled') is a follow-up commit. The upsert
+// is `ON CONFLICT DO NOTHING` because a listing's fields are immutable once
+// on chain; the only thing that changes about it later is its lifecycle,
+// which the future spend-walker will handle via a separate UPDATE path.
+//
+// Operational note: because we `DO NOTHING` on id-conflict, a parser bug fix
+// does NOT retroactively correct rows already written by the buggy parser —
+// those rows stick until deleted. After a material change to
+// `workers/src/tapswap.rs` that affects decoded fields (not just the reject
+// set), reset the table and rerun the backfill:
+//   sudo -u bchn psql -d tokenstork -c "TRUNCATE tapswap_offers;"
+//   sudo -u bchn psql -d tokenstork -c \
+//     "UPDATE sync_state SET last_tapswap_backfill_through = NULL WHERE id = 1;"
+//   sudo systemctl start sync-tapswap-backfill.service
+// A follow-up may add a `parser_version` column + `DO UPDATE WHERE
+// parser_version < $X` to automate this.
+// ---------------------------------------------------------------------------
+
+/// Row insert for a single open Tapswap offer. Decimal-string fields mirror
+/// the convention established by `current_supply` / `balance` elsewhere in
+/// this module — sqlx implicit-casts `TEXT -> NUMERIC`.
+pub struct OfferWrite {
+    /// Listing tx txid (raw 32 bytes).
+    pub id: [u8; 32],
+    // "has" side — what the maker is offering (from outputs[0].tokenData):
+    pub has_category: Option<[u8; 32]>,
+    pub has_amount: Option<String>, // NUMERIC(78,0)-formatted
+    pub has_commitment: Option<Vec<u8>>,
+    pub has_capability: Option<&'static str>, // 'none' | 'mutable' | 'minting'
+    pub has_sats: i64,
+    // "want" side — what the maker wants in return (from OP_RETURN chunks 4-7):
+    pub want_category: Option<[u8; 32]>,
+    pub want_amount: Option<String>,
+    pub want_commitment: Option<Vec<u8>>,
+    pub want_capability: Option<&'static str>,
+    pub want_sats: i64,
+    // Metadata:
+    pub fee_sats: i64,
+    pub maker_pkh: [u8; 20], // raw bytes; UI renders as cashaddr at display time
+    pub listed_block: i32,
+    pub listed_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Insert one offer. Idempotent — re-running the backfill over overlapping
+/// block ranges is safe (ON CONFLICT DO NOTHING on the primary key).
+pub async fn upsert_tapswap_offer(pool: &PgPool, o: &OfferWrite) -> Result<()> {
+    sqlx::query(
+        r#"
+        INSERT INTO tapswap_offers
+            (id, has_category, has_amount, has_commitment, has_capability, has_sats,
+             want_category, want_amount, want_commitment, want_capability, want_sats,
+             fee_sats, maker_pkh, listed_block, listed_at, status)
+        VALUES
+            ($1, $2, $3, $4, $5, $6,
+             $7, $8, $9, $10, $11,
+             $12, $13, $14, $15, 'open')
+        ON CONFLICT (id) DO NOTHING
+        "#,
+    )
+    .bind(o.id.as_slice())
+    .bind(o.has_category.as_ref().map(|c| c.as_slice()))
+    .bind(o.has_amount.as_deref())
+    .bind(o.has_commitment.as_deref())
+    .bind(o.has_capability)
+    .bind(o.has_sats)
+    .bind(o.want_category.as_ref().map(|c| c.as_slice()))
+    .bind(o.want_amount.as_deref())
+    .bind(o.want_commitment.as_deref())
+    .bind(o.want_capability)
+    .bind(o.want_sats)
+    .bind(o.fee_sats)
+    .bind(o.maker_pkh.as_slice())
+    .bind(o.listed_block)
+    .bind(o.listed_at)
+    .execute(pool)
+    .await
+    .with_context(|| format!("upsert_tapswap_offer {}", bytes_to_hex(&o.id)))?;
+    Ok(())
+}
+
+/// Batch version for the backfill's block-level flushes. Wraps the
+/// individual inserts in one transaction so a mid-batch failure rolls back
+/// cleanly and the backfill can resume from the last good checkpoint.
+pub async fn upsert_tapswap_offers_batch(pool: &PgPool, batch: &[OfferWrite]) -> Result<usize> {
+    if batch.is_empty() {
+        return Ok(0);
+    }
+    let mut tx = pool.begin().await.context("begin tapswap batch tx")?;
+    for o in batch {
+        sqlx::query(
+            r#"
+            INSERT INTO tapswap_offers
+                (id, has_category, has_amount, has_commitment, has_capability, has_sats,
+                 want_category, want_amount, want_commitment, want_capability, want_sats,
+                 fee_sats, maker_pkh, listed_block, listed_at, status)
+            VALUES
+                ($1, $2, $3, $4, $5, $6,
+                 $7, $8, $9, $10, $11,
+                 $12, $13, $14, $15, 'open')
+            ON CONFLICT (id) DO NOTHING
+            "#,
+        )
+        .bind(o.id.as_slice())
+        .bind(o.has_category.as_ref().map(|c| c.as_slice()))
+        .bind(o.has_amount.as_deref())
+        .bind(o.has_commitment.as_deref())
+        .bind(o.has_capability)
+        .bind(o.has_sats)
+        .bind(o.want_category.as_ref().map(|c| c.as_slice()))
+        .bind(o.want_amount.as_deref())
+        .bind(o.want_commitment.as_deref())
+        .bind(o.want_capability)
+        .bind(o.want_sats)
+        .bind(o.fee_sats)
+        .bind(o.maker_pkh.as_slice())
+        .bind(o.listed_block)
+        .bind(o.listed_at)
+        .execute(&mut *tx)
+        .await
+        .with_context(|| {
+            format!(
+                "upsert_tapswap_offers_batch (id {})",
+                bytes_to_hex(&o.id)
+            )
+        })?;
+    }
+    tx.commit().await.context("commit tapswap batch tx")?;
+    Ok(batch.len())
+}
+
+/// Read the Tapswap backfill checkpoint (NULL before first run).
+pub async fn load_tapswap_backfill_through(pool: &PgPool) -> Result<Option<i32>> {
+    let row: (Option<i32>,) = sqlx::query_as(
+        "SELECT last_tapswap_backfill_through FROM sync_state WHERE id = 1",
+    )
+    .fetch_one(pool)
+    .await
+    .context("load_tapswap_backfill_through")?;
+    Ok(row.0)
+}
+
+/// Advance the Tapswap backfill checkpoint. Called every CHECKPOINT_EVERY
+/// blocks by the backfill binary so a mid-run crash can resume from where
+/// we left off.
+pub async fn save_tapswap_backfill_through(pool: &PgPool, height: i32) -> Result<()> {
+    sqlx::query(
+        "UPDATE sync_state
+            SET last_tapswap_backfill_through = $1,
+                updated_at = now()
+          WHERE id = 1",
+    )
+    .bind(height)
+    .execute(pool)
+    .await
+    .context("save_tapswap_backfill_through")?;
+    Ok(())
+}
+
+/// Touch `last_tapswap_run_at` — observability only, lets the Phase 7
+/// staleness watchdog notice if the Tapswap walker stops without crashing.
+pub async fn mark_tapswap_run(pool: &PgPool) -> Result<()> {
+    sqlx::query(
+        "UPDATE sync_state
+            SET last_tapswap_run_at = now(), updated_at = now()
+          WHERE id = 1",
+    )
+    .execute(pool)
+    .await
+    .context("mark_tapswap_run")?;
+    Ok(())
+}
+
 /// Ensure the pool is closed before a binary exits — keeps Postgres from
 /// logging warnings about abruptly terminated sessions.
 pub async fn shutdown(pool: PgPool) {

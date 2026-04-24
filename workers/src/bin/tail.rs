@@ -34,9 +34,11 @@ use tracing_subscriber::EnvFilter;
 
 use workers::bchn::{BchnClient, Block, HashBlockSubscriber, zmq_url_from_env};
 use workers::pg::{
-    self, FoundCategory, TokenType, load_sync_state, mark_tail_run, pool_from_env,
-    save_tail_last_block, upsert_tokens,
+    self, FoundCategory, OfferWrite, TokenType, load_sync_state, mark_tail_run,
+    mark_tapswap_run, pool_from_env, save_tail_last_block, upsert_tapswap_offers_batch,
+    upsert_tokens,
 };
+use workers::tapswap::try_decode_tx;
 
 const POLL_FALLBACK: Duration = Duration::from_secs(30);
 const ZMQ_BACKOFF_INITIAL: Duration = Duration::from_secs(5);
@@ -50,8 +52,27 @@ fn init_tracing() {
         .try_init();
 }
 
-/// Walk one block's transactions, collect distinct categories, and upsert.
-async fn process_block(pool: &pg::PgPool, block: &Block) -> Result<usize> {
+/// Per-block counts returned by `process_block` so the caller can log
+/// both the token walker and the Tapswap walker's contributions.
+struct BlockStats {
+    tokens_touched: usize,
+    tapswap_written: usize,
+}
+
+/// Walk one block's transactions twice:
+///  1. Collect distinct token categories (existing behaviour) → `tokens`.
+///  2. Detect MPSW Tapswap listings → `tapswap_offers`.
+///
+/// One block fetch per tail tick; the second walker is cheap because we're
+/// already iterating every output for the token walker.
+async fn process_block(pool: &pg::PgPool, block: &Block) -> Result<BlockStats> {
+    let height: i32 = block
+        .height
+        .try_into()
+        .context("block.height does not fit in i32")?;
+    let time = block.time;
+
+    // --- Pass 1: tokens ---
     let mut found: HashMap<String, (TokenType, String)> = HashMap::new();
     for tx in &block.tx {
         let mut per_tx: HashMap<String, (bool, bool)> = HashMap::new();
@@ -70,29 +91,65 @@ async fn process_block(pool: &pg::PgPool, block: &Block) -> Result<usize> {
         merge_into_found(&mut found, &per_tx, &tx.txid);
     }
 
-    if found.is_empty() {
-        return Ok(0);
+    let tokens_touched = if found.is_empty() {
+        0
+    } else {
+        let mut rows: Vec<FoundCategory> = Vec::with_capacity(found.len());
+        for (cat_hex, (token_type, txid_hex)) in found {
+            rows.push(FoundCategory {
+                category: pg::hex_to_bytes(&cat_hex)?,
+                token_type,
+                genesis_txid: pg::hex_to_bytes(&txid_hex)?,
+                genesis_block: height,
+                genesis_time: time,
+            });
+        }
+        upsert_tokens(pool, &rows).await?
+    };
+
+    // --- Pass 2: Tapswap listings ---
+    let mut tapswap_batch: Vec<OfferWrite> = Vec::new();
+    for tx in &block.tx {
+        match try_decode_tx(tx, height, time) {
+            Ok(Some(offer)) => tapswap_batch.push(offer),
+            Ok(None) => {}
+            Err(e) => {
+                warn!(
+                    tx = %tx.txid,
+                    height,
+                    error = %e,
+                    "Tapswap listing decode failed; skipping"
+                );
+            }
+        }
     }
+    // If the Tapswap batch upsert errors we propagate rather than logging +
+    // continuing. `save_tail_last_block` in the caller only runs after
+    // `process_block` returns Ok, so a Tapswap failure leaves the checkpoint
+    // un-advanced and the next tick re-processes this block. The tokens
+    // upsert from Pass 1 is already committed — re-running it is idempotent
+    // (ON CONFLICT DO NOTHING). Silently dropping offers here would cause
+    // permanent data loss: `sync-tail` never revisits past blocks, and
+    // `tapswap-backfill` is a manual operator action.
+    let tapswap_written = if tapswap_batch.is_empty() {
+        0
+    } else {
+        let n = upsert_tapswap_offers_batch(pool, &tapswap_batch)
+            .await
+            .with_context(|| format!("tapswap batch upsert at height {height}"))?;
+        // Observability timestamp — the staleness watchdog uses this to
+        // distinguish "tail processing blocks, no Tapswap activity" from
+        // "tail stopped".
+        if let Err(e) = mark_tapswap_run(pool).await {
+            warn!(error = %e, "mark_tapswap_run failed; observability only");
+        }
+        n
+    };
 
-    let height: i32 = block
-        .height
-        .try_into()
-        .context("block.height does not fit in i32")?;
-    let time = block.time;
-
-    let mut rows: Vec<FoundCategory> = Vec::with_capacity(found.len());
-    for (cat_hex, (token_type, txid_hex)) in found {
-        rows.push(FoundCategory {
-            category: pg::hex_to_bytes(&cat_hex)?,
-            token_type,
-            genesis_txid: pg::hex_to_bytes(&txid_hex)?,
-            genesis_block: height,
-            genesis_time: time,
-        });
-    }
-
-    let written = upsert_tokens(pool, &rows).await?;
-    Ok(written)
+    Ok(BlockStats {
+        tokens_touched,
+        tapswap_written,
+    })
 }
 
 fn merge_into_found(
@@ -116,12 +173,17 @@ async fn catch_up(pool: &pg::PgPool, bchn: &BchnClient, from: i32, to: i32) -> R
             .get_block_by_height(h as u64)
             .await
             .with_context(|| format!("fetching block {h}"))?;
-        let n = process_block(pool, &block).await?;
+        let stats = process_block(pool, &block).await?;
         save_tail_last_block(pool, h).await?;
-        if n > 0 {
-            info!(height = h, touched = n, "block processed");
+        if stats.tokens_touched > 0 || stats.tapswap_written > 0 {
+            info!(
+                height = h,
+                touched = stats.tokens_touched,
+                tapswap_written = stats.tapswap_written,
+                "block processed"
+            );
         } else {
-            info!(height = h, "block processed (no tokens)");
+            info!(height = h, "block processed (no tokens, no listings)");
         }
     }
     Ok(())

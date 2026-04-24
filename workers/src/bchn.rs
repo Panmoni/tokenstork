@@ -322,12 +322,50 @@ pub struct Block {
 pub struct Tx {
     pub txid: String,
     pub vout: Vec<Vout>,
+    /// Inputs. The Tapswap walker (and future spend-detection walkers) need
+    /// the unlocking scriptSig to recognize closes. Token-walker paths that
+    /// only read `vout` ignore this field, so it's additive.
+    #[serde(default)]
+    pub vin: Vec<Vin>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Vin {
+    /// Missing on the coinbase input of a block's first tx.
+    pub txid: Option<String>,
+    /// Missing on coinbase.
+    pub vout: Option<u32>,
+    #[serde(rename = "scriptSig", default)]
+    pub script_sig: Option<ScriptSig>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ScriptSig {
+    pub hex: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Vout {
     #[serde(rename = "tokenData")]
     pub token_data: Option<TokenData>,
+    /// The raw locking bytecode as hex. Needed for the Tapswap walker to
+    /// cheaply prefix-match for MPSW listings; string-prefix compare against
+    /// "6a044d505357010404" avoids hex-decoding every output.
+    #[serde(rename = "scriptPubKey", default)]
+    pub script_pub_key: ScriptPubKey,
+    /// Output value in BCH (BCHN's verbose JSON emits a float). Convert to
+    /// sats via `(value * 1e8).round() as i64` at the call site. For the
+    /// positive 21M-BCH magnitudes and 8-decimal values BCH uses, the f64
+    /// representation is exact. Defaults to 0.0 if the field is absent
+    /// (shouldn't happen in practice but keeps parsing resilient).
+    #[serde(default)]
+    pub value: f64,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct ScriptPubKey {
+    #[serde(default)]
+    pub hex: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -374,7 +412,7 @@ pub struct Nft {
     pub commitment: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum NftCapability {
     None,

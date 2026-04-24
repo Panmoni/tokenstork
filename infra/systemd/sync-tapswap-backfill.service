@@ -1,0 +1,52 @@
+[Unit]
+Description=tokenstork sync-tapswap-backfill — cold-walk blocks 794,520 → tip to hydrate tapswap_offers
+Documentation=https://github.com/Panmoni/tokenstork
+After=network.target postgresql.service bchn.service
+Wants=postgresql.service
+
+[Service]
+Type=oneshot
+User=tokenstork
+Group=tokenstork
+WorkingDirectory=/opt/tokenstork
+ExecStart=/opt/tokenstork/workers/target/release/tapswap-backfill
+
+Environment="RUST_LOG=info"
+# `-` prefix: start even if /etc/tokenstork/env is missing. The binary will
+# then exit with an anyhow chain naming the first missing env var — operator
+# sees the failure in journalctl.
+EnvironmentFile=-/etc/tokenstork/env
+
+# Hardening — same profile as sync-bcmr / sync-cauldron / sync-enrich /
+# sync-verify / sync-tail.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectProc=invisible
+ProcSubset=pid
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallArchitectures=native
+UMask=0077
+
+# Cold backfill is ~51 minutes at normal RPC rates for a fresh carson.
+# Generous timeout so a slow first run doesn't get reaped.
+TimeoutStartSec=2h
+
+# No .timer — this is a oneshot operator-triggered unit. Ongoing incremental
+# updates ride on sync-tail.service. See plan file for the rationale.

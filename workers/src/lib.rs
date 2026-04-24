@@ -11,3 +11,4 @@ pub mod blockbook;
 pub mod cauldron;
 pub mod env;
 pub mod pg;
+pub mod tapswap;
