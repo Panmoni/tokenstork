@@ -48,8 +48,25 @@ run_as_tokenstork() {
 	sudo -u tokenstork bash -l -c "$1"
 }
 
+# Capture our own hash before `git pull` can update redeploy.sh on disk
+# out from under us. Compared post-pull so a self-update can re-exec.
+SELF="$(readlink -f "$0")"
+SELF_HASH="$(sha256sum "${SELF}" | cut -d' ' -f1)"
+
 echo "==> [1/7] git pull in ${REPO_DIR}"
 run_as_tokenstork "cd ${REPO_DIR} && git pull --ff-only"
+
+# Bash reads this script into memory at launch, so if the git pull above
+# just updated redeploy.sh on disk, we're still running the old copy in
+# memory. Without this re-exec, changes to redeploy.sh only take effect
+# on the NEXT deploy — surprising in exactly the wrong way (we've been
+# bitten twice). `exec` replaces the current process with the new
+# script; step 1's git pull will run again on the new version, but
+# it's a no-op since we're at HEAD.
+if [ "$(sha256sum "${SELF}" | cut -d' ' -f1)" != "${SELF_HASH}" ]; then
+	echo "==> redeploy.sh was updated — re-exec'ing with the new version"
+	exec "${SELF}" "$@"
+fi
 
 echo "==> [2/7] SvelteKit: npm ci + build"
 run_as_tokenstork "cd ${REPO_DIR} && npm ci && npm run build"
