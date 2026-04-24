@@ -1,0 +1,31 @@
+--- /tmp/blockbook.go.bak	2026-04-24 22:15:21.061066281 +0000
++++ /opt/blockbook-src/blockbook.go	2026-04-24 22:15:21.101068876 +0000
+@@ -55,6 +55,7 @@
+ 	synchronize = flag.Bool("sync", false, "synchronizes until tip, if together with zeromq, keeps index synchronized")
+ 	repair      = flag.Bool("repair", false, "repair the database")
+ 	fixUtxo     = flag.Bool("fixutxo", false, "check and fix utxo db and exit")
++	resetInconsistentState = flag.Bool("resetinconsistentstate", false, "clear the inconsistent-state flag left after an ungraceful shutdown during bulk connect, and exit")
+ 	prof        = flag.String("prof", "", "http server binding [address]:port of the interface to profiling data /debug/pprof/ (default no profiling)")
+ 
+ 	syncChunk   = flag.Int("chunk", 100, "block chunk size for processing in bulk mode")
+@@ -213,6 +214,20 @@
+ 		}
+ 		return exitCodeOK
+ 	}
++
++	if *resetInconsistentState {
++		if internalState.DbState == common.DbStateInconsistent {
++			internalState.DbState = common.DbStateClosed
++			if err = index.StoreInternalState(internalState); err != nil {
++				glog.Error("StoreInternalState: ", err)
++				return exitCodeFatal
++			}
++			glog.Info("internalState: cleared inconsistent-state flag; database is now in closed state")
++		} else {
++			glog.Info("internalState: not in inconsistent state; nothing to do")
++		}
++		return exitCodeOK
++	}
+ 
+ 	if internalState.DbState != common.DbStateClosed {
+ 		if internalState.DbState == common.DbStateInconsistent {

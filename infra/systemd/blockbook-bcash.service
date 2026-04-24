@@ -1,0 +1,61 @@
+[Unit]
+Description=BlockBook BCH indexer (cashtokens-aware)
+After=bchn.service network.target
+Wants=bchn.service
+Documentation=https://github.com/mainnet-pat/blockbook
+
+[Service]
+Type=simple
+User=blockbook-bcash
+Group=blockbook-bcash
+WorkingDirectory=/opt/blockbook-src
+ExecStart=/opt/blockbook-src/blockbook \
+    -blockchaincfg=/etc/blockbook-bcash/blockchaincfg.json \
+    -datadir=/var/lib/blockbook-bcash/db \
+    -sync \
+    -internal=127.0.0.1:9031 \
+    -public=127.0.0.1:9131 \
+    -certfile= \
+    -logtostderr
+Restart=on-failure
+RestartSec=30s
+
+# TimeoutStopSec=900 gives RocksDB room to flush its write-ahead log and close
+# column families cleanly during shutdown. Previous 600s killed mid-flush
+# once under load; raising it costs nothing when shutdown is fast.
+TimeoutStopSec=900s
+
+# Memory guardrails. 16 GB box; BCHN + Postgres + SvelteKit + workers already
+# need ~5-6 GB combined. BlockBook's IBD-phase working set naturally grows
+# past 10 GB if uncapped (observed: OOM-killed at anon-rss 10,697,728 kB
+# during a deploy that also ran `cargo build --release` concurrently).
+#
+# MemoryHigh is a soft throttle — cgroup v2 puts the process under heavy
+# reclaim pressure once exceeded, but doesn't kill it. BlockBook's RocksDB
+# block cache is the main consumer and responds well to reclaim.
+#
+# MemoryMax is the hard kill line. Set above MemoryHigh so the throttle
+# gets a chance to work first. 7 GB leaves ~9 GB for everything else on
+# the box, which is comfortable given the steady-state budget.
+#
+# OOMPolicy=stop means systemd's own OOM handler will stop() the unit
+# rather than letting RestartSec loop us into rapid crash cycles if we
+# do hit MemoryMax.
+MemoryHigh=6G
+MemoryMax=7G
+OOMPolicy=stop
+
+# Hardening profile matching sync-tail / sync-cauldron / tokenstork.service.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/blockbook-bcash
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+SystemCallFilter=@system-service
+
+[Install]
+WantedBy=multi-user.target
