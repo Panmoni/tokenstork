@@ -6,6 +6,7 @@
 import { error } from '@sveltejs/kit';
 import { query, hexFromBytes, bytesFromHex } from '$lib/server/db';
 import { fetchBcmr, fetchCauldron } from '$lib/server/external';
+import { computeMcapTvlThresholdSats } from '$lib/server/mcapThreshold';
 import type { PageServerLoad } from './$types';
 import type { TokenType } from '$lib/types';
 
@@ -115,7 +116,7 @@ export const load: PageServerLoad = async ({ params, fetch }) => {
 
 	const row = tokenRes.rows[0];
 
-	const [holdersRes, bchPriceUSD, bcmr, tapswapRes] = await Promise.all([
+	const [holdersRes, bchPriceUSD, bcmr, tapswapRes, mcapTvlThresholdSats] = await Promise.all([
 		query<HolderRow>(
 			`SELECT address, balance::text AS balance, nft_count
 			   FROM token_holders
@@ -159,7 +160,8 @@ export const load: PageServerLoad = async ({ params, fetch }) => {
 			  ORDER BY want_sats ASC
 			  LIMIT 20`,
 			[categoryBytes]
-		)
+		),
+		computeMcapTvlThresholdSats()
 	]);
 
 	const decimals = row.decimals ?? bcmr?.decimals ?? 0;
@@ -222,6 +224,11 @@ export const load: PageServerLoad = async ({ params, fetch }) => {
 		})),
 		priceUSD: cauldron.priceUSD,
 		tvlUSD: cauldron.tvlUSD,
-		bchPriceUSD
+		bchPriceUSD,
+		// Low-liquidity gate for the Market cap card (issue #8). Convert the
+		// satoshi threshold into USD with the same 2x factor fetchCauldron
+		// uses for tvlUSD (Cauldron is a double-sided AMM) so the comparison
+		// against `tvlUSD` is apples-to-apples.
+		mcapTvlThresholdUSD: (mcapTvlThresholdSats / 1e8) * bchPriceUSD * 2
 	};
 };

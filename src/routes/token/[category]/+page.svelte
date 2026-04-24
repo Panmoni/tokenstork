@@ -307,9 +307,9 @@
 				{data.tvlUSD > 0 ? formatMarketCap(data.tvlUSD.toString()) : '—'}
 			</div>
 		</div>
-		{#if marketCapUSD > 0}
+		{#if marketCapUSD > 0 && data.tvlUSD >= data.mcapTvlThresholdUSD}
 			<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 col-span-2 md:col-span-1">
-				<div class="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Market cap</div>
+				<div class="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1" title="Hidden for tokens whose Cauldron TVL is below the average TVL of the top half of listed tokens — caps derived from negligible liquidity would skew rankings.">Market cap</div>
 				<div class="text-xl font-mono">{formatMarketCap(marketCapUSD.toString())}</div>
 			</div>
 		{/if}

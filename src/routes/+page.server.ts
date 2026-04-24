@@ -2,6 +2,7 @@
 // directly (no /api/tokens round trip — the app and DB share a process).
 
 import { query, hexFromBytes } from '$lib/server/db';
+import { computeMcapTvlThresholdSats } from '$lib/server/mcapThreshold';
 import { NOT_MODERATED_CLAUSE } from '$lib/moderation';
 import type { PageServerLoad } from './$types';
 import type { TokenApiRow, TokenType } from '$lib/types';
@@ -239,10 +240,13 @@ export const load: PageServerLoad = async ({ url }) => {
 	`;
 
 	try {
-		const countRes = await query<{ total: string }>(
-			`SELECT COUNT(*)::bigint AS total ${fromJoins} ${whereClause}`,
-			values
-		);
+		const [countRes, mcapTvlThresholdSats] = await Promise.all([
+			query<{ total: string }>(
+				`SELECT COUNT(*)::bigint AS total ${fromJoins} ${whereClause}`,
+				values
+			),
+			computeMcapTvlThresholdSats()
+		]);
 		const total = Number(countRes.rows[0]?.total ?? 0);
 
 		const dataRes = await query<DbRow>(
@@ -347,6 +351,7 @@ export const load: PageServerLoad = async ({ url }) => {
 			total,
 			limit: PAGE_SIZE,
 			offset,
+			mcapTvlThresholdSats,
 			error: null
 		};
 	} catch (err) {
@@ -356,6 +361,7 @@ export const load: PageServerLoad = async ({ url }) => {
 			total: 0,
 			limit: PAGE_SIZE,
 			offset: 0,
+			mcapTvlThresholdSats: 0,
 			error: 'Directory is temporarily unavailable.'
 		};
 	}

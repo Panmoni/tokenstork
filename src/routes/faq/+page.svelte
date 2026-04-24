@@ -263,6 +263,36 @@
 			</div>
 		</details>
 
+		<details id="faq-mcap-hidden" class="group p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 scroll-mt-20">
+			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
+				<span>Why is the Market cap blank for some tokens?</span>
+				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
+			</summary>
+			<div class="mt-3 text-slate-600 dark:text-slate-300 space-y-2">
+				<p>
+					A token's market cap is <em>price × circulating supply</em>, and the price
+					we have comes from its Cauldron AMM pool. When a pool holds only a few
+					dollars of liquidity, a single dust-sized swap can move that price by
+					orders of magnitude — and multiplying it by a billion-unit supply yields
+					a "cap" that looks enormous but means nothing. Left in the rankings,
+					those numbers shove genuinely-traded tokens down the page.
+				</p>
+				<p>
+					So we hide the MCap figure for any token whose Cauldron TVL is
+					<strong>below the average TVL of the top half of currently listed
+					tokens</strong>. The threshold is recomputed on every page load — as
+					more deep pools get listed the bar rises; if liquidity dries up across
+					the top end it falls. No hardcoded dollar floor to age out.
+				</p>
+				<p>
+					The token itself is unchanged: price, TVL, supply, holders, sparkline,
+					and the detail page are all still shown. Only the misleading derived
+					figure is withheld. Tokens with no Cauldron pool at all never had a
+					derivable market cap in the first place.
+				</p>
+			</div>
+		</details>
+
 		<details class="group p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
 				<span>Where do token names, symbols, and icons come from?</span>

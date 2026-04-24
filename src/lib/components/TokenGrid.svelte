@@ -18,9 +18,13 @@
 		total: number;
 		limit: number;
 		offset: number;
+		// Server-computed gate (satoshis): tokens whose Cauldron TVL is below
+		// this value have their MCap cell blanked. See issue #8 — low-TVL
+		// tokens otherwise produce nonsense caps that pollute the rankings.
+		mcapTvlThresholdSats: number;
 	}
 
-	let { tokens, total, limit, offset }: Props = $props();
+	let { tokens, total, limit, offset, mcapTvlThresholdSats }: Props = $props();
 
 	// Format a % change as "+1.23%" / "-4.56%". Rounded to 2dp; "—" for null
 	// windows (insufficient history). Color is applied by the caller via
@@ -42,13 +46,19 @@
 	// cancels out because price is per-smallest-unit and supply is in
 	// smallest units. `currentSupply` is a NUMERIC(78,0) string; Number()
 	// is safe up to ~2^53 which comfortably covers realistic market caps.
+	// Returns null when the token's Cauldron TVL is below the low-liquidity
+	// gate: such caps are derived from negligible on-venue depth and skew
+	// rankings.
 	function marketCapUSD(
 		priceSats: number | null,
 		supplyRaw: string | null,
 		_decimals: number,
-		bchUSD: number | null
+		bchUSD: number | null,
+		tvlSats: number | null,
+		tvlThresholdSats: number
 	): number | null {
 		if (priceSats == null || supplyRaw == null || !bchUSD) return null;
+		if (tvlSats == null || tvlSats < tvlThresholdSats) return null;
 		const supply = Number(supplyRaw);
 		if (!Number.isFinite(supply) || supply <= 0) return null;
 		return (priceSats * supply * bchUSD) / 1e8;
@@ -203,7 +213,7 @@
 			<div class="text-right" title="Price change vs. the nearest history point ≥1h old. Cauldron syncs every 4h, so this often reflects the ~4h mark.">1h</div>
 			<div class="text-right" title="Price change vs. the nearest history point ≥24h old">24h</div>
 			<div class="text-right" title="Price change vs. the nearest history point ≥7d old">7d</div>
-			<div class="text-right" title="Price × circulating supply">MCap</div>
+			<div class="text-right" title="Price × circulating supply. Hidden for tokens whose Cauldron TVL is below the average TVL of the top half of listed tokens — those caps are derived from negligible liquidity and would skew rankings.">MCap</div>
 			<button type="button" class="text-right cursor-pointer hover:text-violet-600 dark:hover:text-violet-400" onclick={() => setSort('tvl')}>
 				TVL {sort === 'tvl' ? '↓' : ''}
 			</button>
@@ -253,7 +263,7 @@
 					{fmtPct(token.priceChange7dPct)}
 				</div>
 				<div class="text-right font-mono text-sm text-slate-700 dark:text-slate-300">
-					{compactUSD(marketCapUSD(token.cauldronPriceSats, token.currentSupply, token.decimals, $bchPrice.bchPrice))}
+					{compactUSD(marketCapUSD(token.cauldronPriceSats, token.currentSupply, token.decimals, $bchPrice.bchPrice, token.cauldronTvlSatoshis, mcapTvlThresholdSats))}
 				</div>
 				<div class="text-right font-mono text-sm text-slate-700 dark:text-slate-300">
 					{formatVenueTvlUSD(token.cauldronTvlSatoshis, $bchPrice.bchPrice)}
