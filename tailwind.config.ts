@@ -31,6 +31,11 @@ const config: Config = {
       pink: colors.pink,
       red: colors.red,
       amber: colors.amber,
+      // rose is used by the directory grid for negative-% change columns
+      // and for down-trending sparkline strokes. Tailwind's `theme.colors`
+      // object fully replaces the default palette, so anything not listed
+      // here silently resolves to no CSS. Add cautiously.
+      rose: colors.rose,
     },
     fontSize: {
       sm: "0.8rem",
@@ -45,6 +50,10 @@ const config: Config = {
       center: true,
     },
   },
-  plugins: [],
+  plugins: [
+    // Powers shadcn-svelte's animate-in / fade-in-0 / zoom-in-95 classes
+    // on the Tooltip + future overlay components (dialogs, dropdowns).
+    require("tailwindcss-animate"),
+  ],
 };
 export default config;
