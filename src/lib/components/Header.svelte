@@ -2,7 +2,16 @@
 	import { page } from '$app/state';
 	import ThemeSwitcher from './ThemeSwitcher.svelte';
 
-	const navigation = [{ name: 'Tokens', href: '/' }];
+	// Nav entries render left-to-right on desktop and top-down in the
+	// mobile drawer. Terms/Privacy live under the /tos page as anchors
+	// and stay in the footer — the header is for primary navigation.
+	const navigation = [
+		{ name: 'Tokens', href: '/' },
+		{ name: 'Stats', href: '/stats' },
+		{ name: 'Learn', href: '/learn' },
+		{ name: 'Roadmap', href: '/roadmap' },
+		{ name: 'About', href: '/about' }
+	];
 
 	let mobileMenuOpen = $state(false);
 
@@ -59,7 +68,7 @@
 			</div>
 		</div>
 
-		<div class="md:hidden overflow-hidden transition-all duration-300 {mobileMenuOpen ? 'max-h-64 opacity-100' : 'max-h-0 opacity-0'}">
+		<div class="md:hidden overflow-hidden transition-all duration-300 {mobileMenuOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}">
 			<div class="py-4 space-y-1 border-t border-slate-200 dark:border-slate-800">
 				{#each navigation as item (item.name)}
 					{@const active = pathname === item.href}

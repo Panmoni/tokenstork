@@ -127,12 +127,6 @@
 					</TooltipContent>
 				</Tooltip>
 			</div>
-			<a
-				href="/stats"
-				class="text-xs font-medium text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 no-underline"
-			>
-				Stats →
-			</a>
 		</div>
 
 		<div class="md:hidden grid grid-cols-2 gap-2 py-1">
