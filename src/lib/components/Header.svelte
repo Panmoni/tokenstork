@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import ThemeSwitcher from './ThemeSwitcher.svelte';
 
@@ -17,6 +18,29 @@
 	let mobileMenuOpen = $state(false);
 
 	const pathname = $derived(page.url.pathname);
+
+	// Header search — only surfaces on non-home pages. The home page
+	// already has its own full-width, debounced, live-filtering search
+	// box at the top of TokenGrid, and duplicating that here would
+	// compete with it for focus + URL state. On other pages the
+	// visitor has no search surface, so a compact "jump to the
+	// directory filtered by X" input makes sense.
+	//
+	// Behavior: local input state, submit on <form> to /?search=<val>.
+	// No debounce; the input isn't live-filtering anything on this
+	// page, it's a navigation shortcut.
+	const showSearch = $derived(pathname !== '/');
+	let headerSearch = $state('');
+
+	function submitHeaderSearch(e: Event) {
+		e.preventDefault();
+		const q = headerSearch.trim();
+		if (q) {
+			goto(`/?search=${encodeURIComponent(q)}`);
+			headerSearch = '';
+			mobileMenuOpen = false;
+		}
+	}
 </script>
 
 <header class="sticky top-0 z-50 backdrop-blur-xl bg-white/80 dark:bg-slate-950/80 border-b border-slate-200 dark:border-slate-800">
@@ -45,7 +69,28 @@
 				{/each}
 			</div>
 
-			<div class="hidden md:flex md:items-center md:gap-4">
+			<div class="hidden md:flex md:items-center md:gap-3">
+				{#if showSearch}
+					<!--
+						Hidden until `lg` (1024px+) because at md (768-1023px)
+						the logo + 6-item nav + 224px search + ThemeSwitcher
+						overflows the container. Mobile drawer still carries
+						the search below that breakpoint.
+					-->
+					<form onsubmit={submitHeaderSearch} class="relative hidden lg:block">
+						<input
+							type="search"
+							placeholder="Search tokens…"
+							bind:value={headerSearch}
+							maxlength="128"
+							class="w-56 pl-9 pr-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+							aria-label="Search tokens"
+						/>
+						<svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+						</svg>
+					</form>
+				{/if}
 				<ThemeSwitcher />
 			</div>
 
@@ -69,8 +114,23 @@
 			</div>
 		</div>
 
-		<div class="md:hidden overflow-hidden transition-all duration-300 {mobileMenuOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}">
+		<div class="md:hidden overflow-hidden transition-all duration-300 {mobileMenuOpen ? 'max-h-[32rem] opacity-100' : 'max-h-0 opacity-0'}">
 			<div class="py-4 space-y-1 border-t border-slate-200 dark:border-slate-800">
+				{#if showSearch}
+					<form onsubmit={submitHeaderSearch} class="relative mb-2 px-2">
+						<input
+							type="search"
+							placeholder="Search tokens…"
+							bind:value={headerSearch}
+							maxlength="128"
+							class="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+							aria-label="Search tokens"
+						/>
+						<svg class="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+						</svg>
+					</form>
+				{/if}
 				{#each navigation as item (item.name)}
 					{@const active = pathname === item.href}
 					<a
