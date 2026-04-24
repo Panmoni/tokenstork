@@ -1,12 +1,15 @@
 [Unit]
-Description=Run tokenstork BCMR hydrator every 4 hours
+Description=Run tokenstork BCMR hydrator hourly
 
 [Timer]
-# First run 5 min after boot (give Postgres time to settle), then every 4h.
+# First run 5 min after boot (give Postgres time to settle), then
+# hourly. The worker is stale-first so steady-state load against
+# Paytaca is capped by CAULDRON_MAX_RPS in the env; new categories +
+# freshly-updated manifests hydrate within an hour of landing.
 OnBootSec=5min
-OnUnitActiveSec=4h
+OnUnitActiveSec=1h
 Persistent=true
-RandomizedDelaySec=2min
+RandomizedDelaySec=1min
 Unit=sync-bcmr.service
 
 [Install]

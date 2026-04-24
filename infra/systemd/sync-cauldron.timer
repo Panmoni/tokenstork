@@ -1,14 +1,15 @@
 [Unit]
-Description=Run tokenstork Cauldron listings refresh every 4 hours
+Description=Run tokenstork Cauldron listings refresh every 10 minutes
 
 [Timer]
-# First run 10 min after boot (after BCMR has had a chance to settle)
-# then every 4h. Stagger of 2 min random so parallel deploys across
-# multiple boxes don't all hit Cauldron at the same second.
+# First run 10 min after boot (after BCMR has had a chance to settle),
+# then every 10 min. Cost: ~317 req / 10 min ≈ 0.5 req/s sustained
+# against indexer.cauldron.quest and ~45k token_price_history rows/day
+# (~13M/year before the schema's 90-day retention kicks in).
 OnBootSec=10min
-OnUnitActiveSec=4h
+OnUnitActiveSec=10min
 Persistent=true
-RandomizedDelaySec=2min
+RandomizedDelaySec=30s
 Unit=sync-cauldron.service
 
 [Install]
