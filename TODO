@@ -1,135 +1,183 @@
 # TODO
 
-- CF: transfer tokenstork.com to cloudflare
-- CF: tokenstork.com redirect www to root
-- update the roadmap, merge notes into roadmap
-- update version to 0.1.0 in package.json
-
-- set up migrations, migrations runner?
-
-## 0.0.3
-- https://github.com/Panmoni/tokenstork/issues/8
-- add inner pages
-- ensure use of Link component esp for internal links
-- get breakpoints confirmed working/optimized
-- remove tokenid from front page
-- maybe merge ticker in with name (and update skeleton)
-- skeleton programmatic generation?
-- expand Learn page with more resources, link to bitcoincashsite.com, better UI, etc.
-- prices in bch and weekly price change (ht JoyFarmer)
-- https://blog.webdevsimplified.com/2023-11/react-server-components/
-- https://demo-nextjs-with-supabase.vercel.app/
-- pull volume stats from cauldron and other data from his indexer API
-- promote @TokenStork on X
-https://blog.webdevsimplified.com/2024-01/next-js-app-router-cache/
-
-## 0.0.4
-- light and dark themes
-- add a couple more API calls to the HelloBar, eg crypto FGI, https://min-api.cryptocompare.com/documentation
-- NFT tab on front page
-- custom 404 page
-- add search bar to token table
-- consider setting up this site as a BCMR server as well.
-- ensure good uptake in search engines
-- integrate the TokenStorkRegistry into the site (BCMR)
-- endpoint for getting nfts by commitment https://github.com/paytaca/bcmr-indexer/pull/25
-
-## 0.0.5
-- optimize loading time using Lighthouse, etc.
-- https://developer.chrome.com/docs/lighthouse/performance/offscreen-images/
-- https://web.dev/articles/optimize-cls
-- https://developer.chrome.com/docs/lighthouse/best-practices/csp-xss/
-- maybe add CRC20 tab https://gitlab.com/0353F40E/crc20-to-bcmr/-/blob/master/bcmr/bitcoin-cash-metadata-registry.json?ref_type=heads, https://t.me/cashtoken_devs/13114 liquidity
-- show fees in header https://bitcoinfees.cash/. Perhaps use chaingraph to get last block `fee_satoshis` and divide by `transaction_count` to get avg sats per transaction and convert to decimal BCH and multiply by current price.
-
-## 0.0.6
-- list all NFT projects
-- tapswap integration
-- confetti on click of header logo?
-- parallelize and optimize loading speed of pages, streaming, suspense, islands, etc.
-
-## 0.0.7
-- custom site themes
-- add badges for tokens that have been updated recently and that are listed in various BCMR registries, eg otr.cash.
-
-## 0.0.8
-- Integrate Wallet Connect 2.
-- add historical price graphs.
-
-## 0.0.9
-- comprehensive error-checking and tests.
-- error.tsx
-- https://nextjs.org/docs/app/building-your-application/routing/error-handling
-- improve accessibility, aria labels, etc.
-
-## 0.1.0
-- add ability to create FTs and NFTs.
-
-## 0.2.0
-- add ability to create ICOs and have oversight and continuity for them, with milestones, DAO formation, investors can vote on release of payments or return pro rate to investors, community engagement and update tools.
-- ICOs ...> stock exchange?
-- add trading volume tracking.
-
-## 0.5.0
-- add ability to create BCMR identities for people and organizations.
-- add portfolio/watchlist functionality.
-
-## 0.7.0
-- add token management tools (metadata updates, dividends, mass distribution, airdrops, ability to secure authbase, etc.)
-- show updates when tokens update their BCMR data.
-
-## 0.9.0
-- add other pertinent BCH chain data.
-
-## 1.0.0
-
-
-## 1.5.0
-- offer/track additional products that require on-chain contracts, eg annuities https://unspent.app/contract?opReturn=6a047574786f0141010102f00317a914ae83c90909bf710ef2d948ebf6f957a9219f549c8703884e0b02b00417a914fc133e739da7ad80cb97c254cc6499c761e4b88287&network=mainnet
-
-## 2.0.0.
-- add social features
+Scratchpad roadmap. Detailed design + progress log lives in [docs/cashtoken-index-plan.md](docs/cashtoken-index-plan.md); this file is the shortlist.
 
 ---
-## NOTES
 
-- list number of exchanges [https://www.livecoinwatch.com/exchanges]
-- inner pages: charts, news specific to that token, rank, price, exchanges, markets (pairs), price performance by month, day, week etc ([https://coinranking.com/coin/ZlZpzOJo43mIo+bitcoincash-bch]), [https://coincodex.com/crypto/dogecoin/], [https://www.livecoinwatch.com/price/Cardano-ADA], embed tweets, [https://www.coingecko.com/en/coins/solana], [https://cardanoassets.com/asset1gayaljphz3tepway6u6ruuty9cee2pj7wch408], [https://coinmarketcap.com/currencies/bitcoin-cash/]
-- heatmap of tokens like [https://coin360.com/], NFT heatmap???
-- watchlist / portfolio [https://coin360.com/watchlist], [https://www.coingecko.com/en/portfolio]
-- NFT directory listing like [https://coin360.com/nft/table] [https://www.coingecko.com/en/nft]
-- heat map for exchange [https://coin360.com/exchange]
-- glossary [https://coin360.com/glossary]
-- embeddable widgets [https://coin360.com/about/widgets], [https://www.livecoinwatch.com/widgets], 
-- api [https://developers.coinranking.com/api]
-- price alerts [https://coincodex.com/alerts/]
-- profit calculator [https://coincodex.com/profit-calculator/]
-- enable pricing to be shown in a variety of currencies (img)
-- ability to customize layout (img)[https://www.livecoinwatch.com/]
-- overview charts [https://www.livecoinwatch.com/crypto-market-cap], [https://www.coingecko.com/en/global-charts], 
-- biggest winners and biggest losers (img) [https://www.coingecko.com/en/highlights ]
-- show website stats on the site… look at those providers of web analytics and be sure they have an API
-- show uptime for key services
-- [https://www.coingecko.com/] lots of ideas to be inspired by here
-- what data can we get from here [https://www.registry.cash/]
-- add a store with unique products, including t-shirts, coffee, books… BCH swagbox full of BCH swag
-- get stuff from tokenexplorer.cash
-- permit people to enter any token category and get explorer-like data from it
-- front page: [https://coinmarketcap.com/view/near-protocol-ecosystem/]
-- countdowns in header (img)
-- aidrops page with coming and past airdrop events
-- [https://kettan007.medium.com/sft-semi-fungible-tokens-implementation-benefits-use-cases-45801388dcc9] SFTs
-- show FDV on inner pages
-- we will do outreach to 20 companies to see if we can build some partnerships to tokenize real-world assets on-chain with CashTokens
-- marketing campaign, tokenize on BCH
-- write up content on tokenization use cases and connect it with bch solutions [https://www.brickken.com/use-cases]. build tools to make these use cases easy(img) offer demos. lots to get inspired by at brickken
-- newsletter signup
-- better, more accurate, clearer and more complete policy statements
-- turn an ICO into a DAO.
+## Operator — on carson / registrar
 
+- Pick a webhook destination (Discord channel webhook / ntfy topic / Telegram bot URL / ...), then add to `/etc/tokenstork/env`:
+  ```
+  REPORT_WEBHOOK_URL=...
+  REPORT_WEBHOOK_SECRET=<optional-shared-secret>
+  ```
+  then `sudo /opt/tokenstork/infra/redeploy.sh` again (or just `sudo systemctl restart tokenstork.service`).
+- Dismiss the test report afterwards:
+  ```sql
+  UPDATE token_reports SET status='dismissed', reviewed_at=now(), moderator_note='deploy smoke test'
+   WHERE details = 'deploy smoke test — please ignore';
+  ```
+- CF: transfer `tokenstork.com` to Cloudflare as registrar.
+- Copy `/etc/tokenstork/env` into the password manager (one-off, high blast-radius on loss).
 
-[https://moneroj.net/metcalfeusd/]
+---
 
-https://tokenized.com/
+## Now — blockers + actively-in-flight
 
-https://www.reddit.com/r/BCHCashTokens/comments/1aoasq3/how_to_use_chaingraph_to_list_owners_of_some/
+- **Phase 2d — BlockBook** (IBD started on carson 2026-04-24, 8-18h). Once in sync: add `BLOCKBOOK_URL=http://127.0.0.1:9131` to `/etc/tokenstork/env`; enable `sync-enrich.timer` + `sync-verify.timer`; the `—` placeholders for holder count / live UTXOs / live NFTs / fully-burned count flip to real data. Unblocks items below marked *(blocked on BlockBook)*.
+- **Verify + close [#14](https://github.com/Panmoni/tokenstork/issues/14) (XLV max-supply miscount)** post-BlockBook. Pull XLV's category hex, run `enrich` one-shot, confirm `current_supply` matches post-burn total (~61000.57996200 as of 2024-09-09, modulo burns since). *(blocked on BlockBook)*
+- **Verify sparklines populate end-to-end ~2026-05-01** (one week post-Phase-4f deploy, 2026-04-24). Expected: 317 Cauldron listings × ~6 points/day × 7 days ≈ 13,000+ rows in `token_price_history`. Runbook:
+  ```
+  sudo -u bchn psql -d tokenstork -c "SELECT COUNT(*) FROM token_price_history;"
+  sudo -u bchn psql -d tokenstork -c "SELECT last_cauldron_run_at, now() - last_cauldron_run_at AS staleness FROM sync_state WHERE id = 1;"
+  ```
+  UI smoke at <https://tokenstork.com/>: sparklines colored, 1h/24h/7d columns populated, MetricsBar shows real Total TVL.
+
+---
+
+## Next — short list, roughly in order
+
+- **Operational hardening** — `pg_dump` nightly timer with 7-daily / 4-weekly retention + weekly offsite ship (Backblaze B2 or Hetzner Storage Box, ~€1/mo); UptimeRobot free-tier on `/api/tokens?limit=1`; tail-staleness watchdog timer using `sync_state.last_tail_run_at`; weekly Netcup snapshot toggle.
+- **Icon safety pipeline — CSAM + NSFW gating** for every BCMR image. Supersedes the earlier "transcode worker" idea. Default-deny: no image byte reaches a visitor until scanned + marked `cleared`; otherwise render the SVG placeholder. Cloudflare CSAM Scanning Tool + cloud NSFW API (GCV SafeSearch or AWS Rekognition, ~$20 one-shot + <$5/mo), transcode to static WebP, serve from `/var/lib/tokenstork/icons/<sha256>.webp` via Caddy. New `icon_moderation` + `icon_url_scan` tables. Full design in the plan doc. Legal: mandatory NCMEC reporting under 18 U.S.C. § 2258A; CF's tool auto-files. Ship **before** wallet login.
+- **Watchlist (anonymous, localStorage first)** — star button on token cards + detail page; persists category IDs to `localStorage['tokenstork:watchlist']`. New `/watchlist` route reads IDs and routes through existing `TokenGrid` + a `?ids=<csv>` loader. Header shows "Watchlist (N)" when non-empty. Foundation for wallet-login portfolio.
+- **Fex.cash on-chain indexer** (plan + recon landed at [docs/fex-plan.md](docs/fex-plan.md)). New `sync-fex` Rust worker modelled on `sync-cauldron`, scans asset P2SH `a9142b389120e9c741fbc5dbcd51fc4170d6640b9d3687` via `scantxoutset`. 10 pools, 15.14 BCH total. ~1.25 days. Ship after BlockBook so the directory isn't fighting two rollouts. Reuses `token_venue_listings` with `venue='fex'`.
+- **Cross-venue arbitrage scanner** — new `/arbitrage` page. For categories with BOTH `token_venue_listings(venue='cauldron')` AND open `tapswap_offers`, compute the spread after fees (Cauldron ~0.3%, Tapswap 3%, mining-fee buffer, Cauldron slippage vs TVL). Surface spreads >2%. Pure SQL (CTE joining the two tables), no new worker.
+- **Expanded `/stats` page** — pick 3-5 from: top gainers/losers 24h, largest TVL movers 24h, most-listed on Tapswap, ecosystem growth curve (genesis_time weekly buckets), metadata completeness %, decimals distribution, active minting count, supply-bracket distribution, Cauldron × Tapswap Venn, 30-day ecosystem TVL sparkline, genesis-block histogram. My pick: gainers/losers + growth curve + venue Venn + metadata completeness + active minting. ~1 day.
+- **Long-horizon charts + per-day volume on token detail page** — replace the inline 7-day sparkline with a real line chart (native SVG, no heavy JS libs) + range toggles 24h/7d/30d/90d/1y/all. Second series: per-day volume derived from consecutive `token_price_history` TVL deltas. Data source already accumulating since Phase 4f.
+- **Holder distribution + concentration metrics** on the token detail page — top 10 holders bar chart, Gini, Herfindahl, "top-10 hold X%" headline. *(blocked on BlockBook — `token_holders` empty until enrichment runs.)*
+- **Runbook** — collect failure-mode recipes into `docs/runbook.md` for the tired 3am self.
+
+---
+
+## Later — wallet login + the features that stack on it
+
+- **BCH wallet login** — `/api/auth/challenge` → wallet signs canonical message → `/api/auth/verify` recovers the address (via libauth ECDSA). Session cookie (HttpOnly, SameSite=Strict, 30-day). Schema: `users(cashaddr PK)`, `auth_challenges(nonce PK, expires_at)`, `sessions(id PK, cashaddr FK)`. Hard constraint: wallet signing only — no email/password, no OAuth, no magic links. Day-one UX is a `/login` page with "paste (cashaddr, signature)" for universal wallet support; Paytaca Connect / WalletConnect later. On first login, prompt to merge localStorage watchlist into `user_watchlist`. Full heavy-duty 3-pass review before ship.
+- **User watchlist + portfolio** (unlocks after wallet login): `user_watchlist` cross-device; later `user_portfolio` with manual buy entries OR derive from on-chain holdings at the linked address via BlockBook.
+- **CSV export** on `/api/tokens` (`?format=csv`) and a new `/api/tokens/<cat>/history`. Power-user credibility at couple-of-hours cost.
+- **Per-user price alerts** (wallet-delivered notification via the wallet's messaging layer, or optional email-as-metadata-only; never used for login).
+- **Personal annotations** on tokens ("this one was the rug").
+
+---
+
+## Content + polish
+
+- Better logos for Tapswap, Fex, Cauldron.
+- Major information update on bchworks.com (use claude-chrome).
+- Custom 404 page.
+- Normalize empty-string BCMR `name` to `NULL` at upsert time in [workers/src/bin/bcmr.rs](workers/src/bin/bcmr.rs). Today stored as `''` and defended against in SQL.
+- Future CSP tightening — migrate from Caddyfile CSP (`'unsafe-inline'` on script-src) to `kit.csp { mode: 'hash' }` in [svelte.config.js](svelte.config.js) so SvelteKit advertises SHA-256 of its own inline hydration script.
+- Fuzzy search using the existing `token_metadata_name_trgm` index — `ORDER BY similarity(name, $q) DESC` with a minimum-score cutoff so "grm" matches "GRIM" and "suhi" matches "sushi". Optional step-up from the current ILIKE.
+- Update `package.json` version to `0.1.0` once the ecosystem dashboard expansion ships.
+- Migrations framework / runner (deferred until we need a multi-step schema change — today `db/schema.sql` idempotent is enough).
+- Regular sync of the TokenStork BCMR registry with OTR.
+- Integrate the TokenStork BCMR registry into the site.
+- Phase 4c — on-chain BCMR walker (`bcmr_revision` audit column). Deferred unless Paytaca becomes unreliable.
+
+---
+
+## Feature roadmap
+
+### 0.1.0 — ecosystem dashboard maturity
+- BlockBook-driven enrichment live (holder counts, live UTXOs, live NFTs, fully-burned).
+- Icon safety pipeline live.
+- Watchlist (anonymous) live.
+- Fex indexer live.
+- Arbitrage scanner live.
+- `/stats` expanded.
+- Operational hardening live.
+
+### 0.2.0 — accounts + persistence
+- BCH wallet login.
+- User watchlist + portfolio.
+- CSV export + history endpoint.
+- Long-horizon charts + volume on token detail page.
+- Holder distribution + concentration on token detail page.
+
+### 0.3.0 — ecosystem leaderboards (tokenaut.cash-inspired)
+- `/defi` — aggregate BCH locked across covenant families (Cauldron + AnyHedge + Moria + BCH Bull + BCH Guru + Badgers + Emerald DAO + BCH PUMP). Headline "Total BCH locked in DeFi". Columns: name, icon, category, live TVL (BCH + USD), status, active_contracts, total_contract_txs, 7-day Δ%, tx velocity. Covenant script-family registry is ~1 week of reverse-engineering across top 8 projects.
+- `/nft` — NFT collections leaderboard: minted/max_supply, mint_price, mint_revenue, floor_price, holders, last_mint, mints_7d. Floor derived from Cauldron NFT-commitment pools + Tapswap P2P asks. Differentiators Tokenaut cannot match: holder count, Gini, last-mint time, mints_7d, burn events, live floor.
+- Projects/Issuers layer — new `projects` + `token_project` tables. Seed from hand-curated `db/seed/projects.json` (~30 entries). Directory gains `?category=forwards` chip; token detail gains "Issued by …".
+- Category maturity badge — `active / dormant (no on-chain activity in 90d) / burned-out / abandoned`.
+- Launch-date first-class: "Minted May 19, 2023" on cards + sort-by-age.
+- Filter chips on directory backed by category / status / use-case.
+- Repo badge (BCMR `uris.repo`/`uris.github` → GitHub link-badge).
+- Wallet-support badges ("Listed in Zapit / Paytaca / Cashonize / Electron Cash", periodic scrape).
+
+### 0.4.0 — content + integrations
+- Integrate TokenStokRegistry + regular OTR sync.
+- CRC20 tab ([reference](https://gitlab.com/0353F40E/crc20-to-bcmr/-/blob/master/bcmr/bitcoin-cash-metadata-registry.json?ref_type=heads), [devs channel](https://t.me/cashtoken_devs/13114)).
+- Fees in header — last-block `fee_satoshis / transaction_count` via Chaingraph, or equivalent off BCHN direct.
+- Additional HelloBar/metrics API calls (crypto FGI via [cryptocompare](https://min-api.cryptocompare.com/documentation), etc.).
+- Endpoint for getting NFTs by commitment ([paytaca PR #25](https://github.com/paytaca/bcmr-indexer/pull/25)).
+- Events/airdrops page (curator-maintained JSON of upcoming mints / airdrops / flipstarters tied to categories).
+- Header transparency widget — sync lag (head vs tip) + BlockBook uptime.
+
+### 0.5.0 — performance + a11y
+- Lighthouse pass. Responsive images ([offscreen-images](https://developer.chrome.com/docs/lighthouse/performance/offscreen-images/)), CLS ([optimize-cls](https://web.dev/articles/optimize-cls)), CSP/XSS hardening ([csp-xss](https://developer.chrome.com/docs/lighthouse/best-practices/csp-xss/)).
+- Parallelize page loads: streaming, suspense, islands.
+- Comprehensive error-checking + tests.
+- A11y sweep: aria labels, keyboard nav, screen-reader trend summaries.
+- Custom site themes.
+- Responsive breakpoint audit.
+- Ensure strong search-engine uptake.
+
+### 0.7.0 — token creation + wallet integration
+- WalletConnect 2 integration.
+- Create FTs and NFTs from the UI.
+- Historical price graphs.
+- Token management tools (metadata updates, dividends, mass distribution, airdrops, secure authbase).
+- Updates feed when tokens update their BCMR data.
+- Badges for tokens updated recently + listed in various BCMR registries (e.g. otr.cash).
+
+### 0.9.0 — BCMR identity + surrounding chain data
+- BCMR identities for people + organizations.
+- Other BCH chain data surfaced throughout.
+
+### 1.0.0 — ICOs + trading
+- Create ICOs with oversight + milestone-gated releases; investor voting on payments or pro-rata returns; community update tools.
+- Trading volume tracking.
+- ICOs → stock exchange?
+
+### 1.5.0 — real-world contracts
+- Additional on-chain products, e.g. annuities ([example](https://unspent.app/contract?opReturn=6a047574786f0141010102f00317a914ae83c90909bf710ef2d948ebf6f957a9219f549c8703884e0b02b00417a914fc133e739da7ad80cb97c254cc6499c761e4b88287&network=mainnet)).
+- Outreach to ~20 companies for RWA tokenization partnerships on CashTokens.
+- Content on tokenization use cases, connected to BCH solutions ([brickken](https://www.brickken.com/use-cases)). Build tools + demos.
+
+### 2.0.0
+- Social features.
+
+---
+
+## NOTES — ideas to pull from later
+
+- List number of exchanges ([livecoinwatch](https://www.livecoinwatch.com/exchanges)).
+- Richer inner pages: charts, news specific to token, rank, price, exchanges, markets (pairs), price performance by month/day/week. References: [coinranking/bch](https://coinranking.com/coin/ZlZpzOJo43mIo+bitcoincash-bch), [coincodex/doge](https://coincodex.com/crypto/dogecoin/), [livecoinwatch/ada](https://www.livecoinwatch.com/price/Cardano-ADA), embed tweets, [coingecko/sol](https://www.coingecko.com/en/coins/solana), [cardanoassets](https://cardanoassets.com/asset1gayaljphz3tepway6u6ruuty9cee2pj7wch408), [coinmarketcap/bch](https://coinmarketcap.com/currencies/bitcoin-cash/).
+- Heatmap of tokens like [coin360](https://coin360.com/). NFT heatmap.
+- Watchlist / portfolio ([coin360](https://coin360.com/watchlist), [coingecko](https://www.coingecko.com/en/portfolio)).
+- NFT directory listing like [coin360/nft](https://coin360.com/nft/table), [coingecko/nft](https://www.coingecko.com/en/nft).
+- Heatmap for exchanges ([coin360](https://coin360.com/exchange)).
+- Glossary ([coin360](https://coin360.com/glossary)).
+- Embeddable widgets ([coin360](https://coin360.com/about/widgets), [livecoinwatch](https://www.livecoinwatch.com/widgets)).
+- Public API ([coinranking](https://developers.coinranking.com/api)).
+- Price alerts ([coincodex](https://coincodex.com/alerts/)).
+- Profit calculator ([coincodex](https://coincodex.com/profit-calculator/)).
+- Pricing in a variety of currencies.
+- User-customizable layout ([livecoinwatch](https://www.livecoinwatch.com/)).
+- Overview charts ([livecoinwatch](https://www.livecoinwatch.com/crypto-market-cap), [coingecko](https://www.coingecko.com/en/global-charts)).
+- Biggest winners + losers ([coingecko](https://www.coingecko.com/en/highlights)).
+- Show website stats on the site — check which analytics providers have an API.
+- Uptime for key services.
+- Lots to pull from [coingecko](https://www.coingecko.com/).
+- What data can we get from [registry.cash](https://www.registry.cash/)?
+- Store with unique products (t-shirts, coffee, books, BCH swagbox).
+- Data from tokenexplorer.cash.
+- Permit arbitrary token-category → explorer-like data.
+- Front-page category hubs ([cmc near ecosystem](https://coinmarketcap.com/view/near-protocol-ecosystem/)).
+- Countdowns in header.
+- Airdrops page (coming + past).
+- SFTs ([writeup](https://kettan007.medium.com/sft-semi-fungible-tokens-implementation-benefits-use-cases-45801388dcc9)).
+- FDV on inner pages.
+- Newsletter signup.
+- Stronger policy statements.
+- Turn an ICO into a DAO.
+- Reference links: [moneroj metcalfeusd](https://moneroj.net/metcalfeusd/), [tokenized.com](https://tokenized.com/), [chaingraph owners-of-category example](https://www.reddit.com/r/BCHCashTokens/comments/1aoasq3/how_to_use_chaingraph_to_list_owners_of_some/).

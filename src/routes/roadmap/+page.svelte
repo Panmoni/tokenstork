@@ -52,7 +52,7 @@
 			bullets: [
 				'1h / 24h / 7d price-change columns.',
 				'7-day sparkline per token.',
-				'Market cap column.',
+				'Market cap column — hidden for low-liquidity tokens so the figure is never misleading.',
 				'Default TVL-desc sort so listed tokens surface first.'
 			]
 		},
@@ -62,48 +62,82 @@
 			bullets: [
 				'Light / dark mode with pre-hydration bootstrap.',
 				'Full-text search across name, symbol, description, and category.',
-				'Moderation blocklist to hide abusive tokens.',
-				'Public "report a token" form.'
+				'Moderation blocklist + public /moderated transparency page.',
+				'Public "report a token" form.',
+				'Animated-image policy — the directory is still-image only.'
 			]
 		}
 	];
 
 	const planned: Item[] = [
 		{
-			title: 'Spend detection for Tapswap listings',
-			status: 'planned',
-			bullets: [
-				'Close-lifecycle transitions (open → taken / cancelled).',
-				'Makes stats + detail page offer counts precise rather than slowly stale.'
-			]
-		},
-		{
 			title: 'BlockBook integration (enrichment + verify)',
 			status: 'planned',
 			bullets: [
 				'Unlocks live holder counts, NFT instance lists, and the "fully burned" counter on /stats.',
-				'Weekly canary comparing our index against BlockBook to catch drift.'
+				'Closes an old max-supply edge case on high-activity addresses.',
+				'Weekly canary comparing our index against BlockBook to catch drift.',
+				'Initial sync currently running.'
 			]
 		},
 		{
-			title: 'Icon transcode worker',
+			title: 'Icon safety pipeline',
 			status: 'planned',
 			bullets: [
-				'Fetch → transcode → cache icons locally so IPFS flakiness and animated-GIF spam stop bleeding into the grid.',
-				'Pairs with the moderation blocklist for per-icon suppression.'
+				'Fetch → CSAM + NSFW scan → transcode to WebP → serve from our origin.',
+				'Default-deny: the SVG placeholder is shown until each icon is explicitly cleared.',
+				'Replaces the earlier transcode-only plan.'
 			]
 		},
 		{
-			title: 'Fuzzy search',
+			title: 'Operational hardening',
 			status: 'planned',
 			bullets: [
-				'Upgrade the current ILIKE substring to pg_trgm similarity so "grm" matches "GRIM" and "suhi" matches "sushi".'
+				'Nightly Postgres backups with offsite ship.',
+				'Uptime monitoring on the public API.',
+				'Tail-staleness watchdog so a silently-stopped indexer gets noticed.',
+				'Weekly VPS snapshot toggle.'
 			]
 		},
 		{
-			title: 'Tags on tokens',
+			title: 'Anonymous watchlist',
 			status: 'planned',
 			bullets: [
+				'Star button on token cards + a /watchlist route, backed by localStorage.',
+				'Foundation for a cross-device portfolio once wallet login ships.'
+			]
+		},
+		{
+			title: 'Fex.cash — third venue',
+			status: 'planned',
+			bullets: [
+				'On-chain UTXO walker for the Fex AMM pools; no public indexer needed.',
+				'Adds an "On Fex" directory filter + venue badge.',
+				'Small ecosystem today (~10 pools) but feeds the arbitrage scanner real content.'
+			]
+		},
+		{
+			title: 'Cross-venue arbitrage + richer /stats',
+			status: 'planned',
+			bullets: [
+				'New /arbitrage page surfacing Cauldron ↔ Tapswap price gaps (after fees + slippage).',
+				'Expanded /stats ecosystem dashboard: top gainers/losers, growth curve, venue overlap, metadata completeness, active-minting count.'
+			]
+		},
+		{
+			title: 'Richer token detail page',
+			status: 'planned',
+			bullets: [
+				'Long-horizon price + volume charts with 24h / 7d / 30d / 90d / 1y / all ranges.',
+				'Holder distribution + concentration metrics (top-10, Gini, Herfindahl) — needs BlockBook.',
+				'Tapswap spend-lifecycle detection so stale offers drop off.'
+			]
+		},
+		{
+			title: 'Search + tagging polish',
+			status: 'planned',
+			bullets: [
+				'Fuzzy search via pg_trgm similarity ("grm" matches "GRIM", "suhi" matches "sushi").',
 				'Community-submitted tags for filtering the directory (stablecoin, memecoin, utility, DAO, etc.).'
 			]
 		}
@@ -111,18 +145,30 @@
 
 	const later: Item[] = [
 		{
-			title: 'Wallet auth + token creation UI',
+			title: 'BCH wallet login',
 			status: 'later',
 			bullets: [
-				'WalletConnect / CashConnect login.',
-				'Mint fungible tokens and their BCMR metadata via a web form — no CLI required.'
+				'Challenge / response signed by the user\'s wallet — no email, no password, no OAuth.',
+				'Unlocks cross-device watchlist, portfolio with P&L, price alerts, and personal annotations.',
+				'CSV export on the directory + per-token history endpoint for power users.'
 			]
 		},
 		{
-			title: 'Watchlist / portfolio / alerts',
+			title: 'Token creation UI',
 			status: 'later',
 			bullets: [
-				'Per-user watchlists, comparison views, price alerts, simple profit calculator.'
+				'Mint fungible tokens and NFTs + their BCMR metadata via a web form — no CLI required.',
+				'WalletConnect 2 / CashConnect integration.',
+				'Token management: metadata updates, dividends, mass distribution, airdrops, authbase hardening.'
+			]
+		},
+		{
+			title: 'Ecosystem leaderboards',
+			status: 'later',
+			bullets: [
+				'/defi page — BCH locked across covenant families (Cauldron, AnyHedge, Moria, BCH Bull, BCH Guru, Badgers, Emerald DAO, BCH PUMP). Headline "Total BCH locked in DeFi".',
+				'/nft page — minted / max supply, mint price, mint revenue, floor price, holders, last mint, mints in the last 7 days.',
+				'Backed by a hand-curated projects/issuers layer that also powers category filter chips.'
 			]
 		},
 		{
@@ -137,8 +183,9 @@
 			title: 'On-chain fundraising + dividends',
 			status: 'later',
 			bullets: [
-				'Launch ICOs via form with accountability milestones and transparent treasury.',
-				'Dividend distribution tool.'
+				'Launch ICOs via form with accountability milestones + transparent treasury + investor voting.',
+				'Dividend distribution tool.',
+				'Trading-volume tracking.'
 			]
 		},
 		{
@@ -146,17 +193,9 @@
 			status: 'later',
 			bullets: [
 				'Exchanges tab (volumes, pairs, founding).',
-				'Dapps tab and news tab.',
+				'Dapps tab + news tab.',
 				'Comments + reviews on tokens, dapps, NFT series.',
-				'Airdrops calendar.'
-			]
-		},
-		{
-			title: 'Additional DEX venues',
-			status: 'later',
-			bullets: [
-				'Fex.cash AMM — needs a custom UTXO walker (no public indexer today).',
-				'Deferred until upstream ships indexing or we decide building our own is worth it.'
+				'Airdrops calendar + upcoming events.'
 			]
 		}
 	];
