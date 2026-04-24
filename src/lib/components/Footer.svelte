@@ -118,14 +118,14 @@
 
 			<p class="text-sm text-slate-600 dark:text-slate-300 text-center sm:text-right">
 				A
+				<img src="/panmoni.svg" alt="" class="inline h-[1em] w-[1em] align-[-0.15em] mx-0.5" aria-hidden="true" />
 				<a
 					href="https://www.panmoni.com/"
 					target="_blank"
 					rel="noopener noreferrer"
 					title="Panmoni is a Web3 product studio"
-					class="gradient-link tracking-wider font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#00abda] to-[#1476ff] inline-flex items-center gap-1.5"
-				>
-					<img src="/panmoni.svg" alt="" class="h-4 w-4 inline-block align-middle" aria-hidden="true" />Panmoni</a>
+					class="gradient-link tracking-wider font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#00abda] to-[#1476ff]"
+				>Panmoni</a>
 				project. · v0.0.2 (beta) · Prices in USD
 			</p>
 		</div>
