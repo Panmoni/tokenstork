@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { bchPrice } from '$lib/stores/bchPrice';
+	import { Tooltip, TooltipTrigger, TooltipContent } from '$lib/components/ui/tooltip';
 
 	interface Props {
 		tokensTracked: number;
@@ -32,64 +33,99 @@
 	<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-3">
 		<div class="hidden md:flex items-center justify-between">
 			<div class="flex items-center gap-8">
-				<div class="flex items-center gap-2">
-					<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-						Tracked
-					</span>
-					<span class="px-3 py-1 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 font-semibold text-sm">
-						{fmt(tokensTracked)}
-					</span>
-				</div>
-				<div class="flex items-center gap-2" title="Distinct tokens with an open listing on Cauldron or Tapswap">
-					<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-						Listed
-					</span>
-					<span class="font-semibold text-slate-900 dark:text-white text-sm">
-						{fmt(listedCount)}
-					</span>
-				</div>
-				<div class="flex items-center gap-2" title="Sum of Cauldron TVL across all listed tokens">
-					<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-						Total TVL
-					</span>
-					{#if tvlUSD !== null}
-						<span class="font-semibold text-slate-900 dark:text-white text-sm font-mono">
-							{compactUSD(tvlUSD)}
-						</span>
-					{:else}
-						<span class="inline-block w-14 h-4 bg-slate-200 dark:bg-slate-700 rounded animate-pulse"></span>
-					{/if}
-				</div>
-				<div class="flex items-center gap-2" title="CashTokens first seen in the last 24 hours">
-					<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-						New 24h
-					</span>
-					<span class="font-semibold text-slate-900 dark:text-white text-sm">
-						{fmt(newIn24h)}
-					</span>
-				</div>
-				{#if tailLastBlock !== null}
-					<div class="flex items-center gap-2" title="Latest BCH block scanned by our tail worker">
+				<Tooltip>
+					<TooltipTrigger class="flex items-center gap-2 cursor-default">
 						<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-							Block
+							Tracked
 						</span>
-						<span class="font-mono text-sm text-slate-700 dark:text-slate-300">
-							{fmt(tailLastBlock)}
+						<span class="px-3 py-1 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 font-semibold text-sm">
+							{fmt(tokensTracked)}
 						</span>
-					</div>
+					</TooltipTrigger>
+					<TooltipContent>
+						Every CashToken category our indexer has ever seen since activation block 792,772 — fungible and non-fungible, active or long-dead. Minus the ones hidden by moderation.
+					</TooltipContent>
+				</Tooltip>
+
+				<Tooltip>
+					<TooltipTrigger class="flex items-center gap-2 cursor-default">
+						<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+							Listed
+						</span>
+						<span class="font-semibold text-slate-900 dark:text-white text-sm">
+							{fmt(listedCount)}
+						</span>
+					</TooltipTrigger>
+					<TooltipContent>
+						Subset of Tracked — tokens you can actually buy or sell right now. Has a Cauldron AMM price or an open Tapswap P2P listing.
+					</TooltipContent>
+				</Tooltip>
+
+				<Tooltip>
+					<TooltipTrigger class="flex items-center gap-2 cursor-default">
+						<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+							Total TVL
+						</span>
+						{#if tvlUSD !== null}
+							<span class="font-semibold text-slate-900 dark:text-white text-sm font-mono">
+								{compactUSD(tvlUSD)}
+							</span>
+						{:else}
+							<span class="inline-block w-14 h-4 bg-slate-200 dark:bg-slate-700 rounded animate-pulse"></span>
+						{/if}
+					</TooltipTrigger>
+					<TooltipContent>
+						Sum of BCH locked in Cauldron AMM pools across every listed token, priced in USD at the current BCH rate. P2P offers on Tapswap aren't counted — those aren't pooled liquidity.
+					</TooltipContent>
+				</Tooltip>
+
+				<Tooltip>
+					<TooltipTrigger class="flex items-center gap-2 cursor-default">
+						<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+							New 24h
+						</span>
+						<span class="font-semibold text-slate-900 dark:text-white text-sm">
+							{fmt(newIn24h)}
+						</span>
+					</TooltipTrigger>
+					<TooltipContent>
+						Categories whose genesis transaction was mined in the last 24 hours. Counted by on-chain block time, not our DB row-write time.
+					</TooltipContent>
+				</Tooltip>
+
+				{#if tailLastBlock !== null}
+					<Tooltip>
+						<TooltipTrigger class="flex items-center gap-2 cursor-default">
+							<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+								Block
+							</span>
+							<span class="font-mono text-sm text-slate-700 dark:text-slate-300">
+								{fmt(tailLastBlock)}
+							</span>
+						</TooltipTrigger>
+						<TooltipContent>
+							Latest BCH block our tail worker has scanned for new CashToken categories and Tapswap listings. Typically sub-second behind tip via ZMQ.
+						</TooltipContent>
+					</Tooltip>
 				{/if}
-				<div class="flex items-center gap-2" title="BCH price, refreshed every 5 min">
-					<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-						BCH
-					</span>
-					{#if $bchPrice.bchPrice}
-						<span class="font-mono text-slate-900 dark:text-white font-semibold text-sm">
-							${$bchPrice.bchPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+
+				<Tooltip>
+					<TooltipTrigger class="flex items-center gap-2 cursor-default">
+						<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+							BCH
 						</span>
-					{:else}
-						<span class="inline-block w-16 h-4 bg-slate-200 dark:bg-slate-700 rounded animate-pulse"></span>
-					{/if}
-				</div>
+						{#if $bchPrice.bchPrice}
+							<span class="font-mono text-slate-900 dark:text-white font-semibold text-sm">
+								${$bchPrice.bchPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+							</span>
+						{:else}
+							<span class="inline-block w-16 h-4 bg-slate-200 dark:bg-slate-700 rounded animate-pulse"></span>
+						{/if}
+					</TooltipTrigger>
+					<TooltipContent>
+						BCH spot price in USD, refreshed every 5 minutes. Used across the site to convert BCH-denominated prices (Cauldron, Tapswap) to USD.
+					</TooltipContent>
+				</Tooltip>
 			</div>
 			<a
 				href="/stats"

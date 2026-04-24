@@ -6,6 +6,7 @@
 	import Footer from '$lib/components/Footer.svelte';
 	import MetricsBar from '$lib/components/MetricsBar.svelte';
 	import CTA from '$lib/components/CTA.svelte';
+	import { TooltipProvider } from '$lib/components/ui/tooltip';
 	import { bchPrice } from '$lib/stores/bchPrice';
 
 	interface Props {
@@ -65,16 +66,18 @@
 	{/if}
 </svelte:head>
 
-<div class="bg-white dark:bg-slate-950 min-h-screen">
-	<MetricsBar
-		tokensTracked={data.tokensTracked}
-		tailLastBlock={data.tailLastBlock}
-		newIn24h={data.newIn24h}
-		totalTvlSats={data.totalTvlSats}
-		listedCount={data.listedCount}
-	/>
-	<Header />
-	{@render children()}
-	<CTA />
-	<Footer />
-</div>
+<TooltipProvider>
+	<div class="bg-white dark:bg-slate-950 min-h-screen">
+		<MetricsBar
+			tokensTracked={data.tokensTracked}
+			tailLastBlock={data.tailLastBlock}
+			newIn24h={data.newIn24h}
+			totalTvlSats={data.totalTvlSats}
+			listedCount={data.listedCount}
+		/>
+		<Header />
+		{@render children()}
+		<CTA />
+		<Footer />
+	</div>
+</TooltipProvider>
