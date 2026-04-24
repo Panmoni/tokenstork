@@ -26,6 +26,7 @@ interface DbRow {
 	metadata_fetched_at: Date | null;
 	cauldron_price_sats: number | null;
 	cauldron_tvl_satoshis: string | null;
+	tapswap_listing_count: string | null;
 }
 
 // Bucket names by "quality" so the directory opens with recognisable
@@ -68,6 +69,7 @@ export const load: PageServerLoad = async ({ url }) => {
 	const sort = VALID_SORTS[sortKey] ?? VALID_SORTS.name;
 	const typeParam = url.searchParams.get('type');
 	const onlyCauldron = url.searchParams.get('cauldron') === '1';
+	const onlyTapswap = url.searchParams.get('tapswap') === '1';
 	const offset = Math.max(Number(url.searchParams.get('offset') ?? 0) || 0, 0);
 
 	const search = (url.searchParams.get('search') ?? '').trim();
@@ -89,6 +91,12 @@ export const load: PageServerLoad = async ({ url }) => {
 		// `vl_cauldron.category IS NOT NULL` filters to listed rows without
 		// a second subquery.
 		where.push(`vl_cauldron.category IS NOT NULL`);
+	}
+	if (onlyTapswap) {
+		// Same idiom as cauldron: promote the LEFT JOIN to effective INNER
+		// when the filter is active. `has_category IS NOT NULL` catches the
+		// has-side listings — someone is SELLING this token on Tapswap.
+		where.push(`vl_tapswap.category IS NOT NULL`);
 	}
 	if (searchLimited) {
 		// A full 64-char hex query is almost always a paste of a category ID
@@ -123,16 +131,37 @@ export const load: PageServerLoad = async ({ url }) => {
 	}
 	const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
-	// vl_cauldron is a LEFT JOIN so every row can still surface price/TVL
-	// columns when the token is listed, and unlisted tokens just get NULLs.
-	// When the "onlyCauldron" filter is on, the WHERE clause above promotes
-	// the LEFT JOIN into an effective INNER JOIN via `IS NOT NULL`.
+	// vl_cauldron: one row per (venue, category) in token_venue_listings.
+	// vl_tapswap: an aggregate subquery — Tapswap has many offers per
+	// category (N rows in tapswap_offers → 1 row here). We expose
+	// listing_count to the UI; floor-ask aggregation is deferred to a
+	// follow-up because FT/NFT listings aren't comparable on a single axis.
+	//
+	// Both are LEFT JOINs: rows missing from a venue table still appear in
+	// the directory. When a "onlyX" filter is active, the WHERE clause
+	// promotes the LEFT JOIN to an effective INNER via `IS NOT NULL`.
 	const fromJoins = `
 		FROM tokens t
 		LEFT JOIN token_metadata m ON m.category = t.category
 		LEFT JOIN token_state    s ON s.category = t.category
 		LEFT JOIN token_venue_listings vl_cauldron
 			ON vl_cauldron.category = t.category AND vl_cauldron.venue = 'cauldron'
+		LEFT JOIN (
+			-- Defense-in-depth: exclude moderated categories inside the
+			-- subquery too. The outer WHERE already filters them out via
+			-- NOT_MODERATED_CLAUSE so nothing leaks today, but pushing the
+			-- filter into the aggregation keeps moderated tokens' offers
+			-- out of the COUNT even if a future refactor drops the outer
+			-- guard.
+			SELECT has_category AS category, COUNT(*)::bigint AS listing_count
+			  FROM tapswap_offers o
+			 WHERE o.status = 'open'
+			   AND o.has_category IS NOT NULL
+			   AND NOT EXISTS (
+			     SELECT 1 FROM token_moderation mod WHERE mod.category = o.has_category
+			   )
+			 GROUP BY has_category
+		) vl_tapswap ON vl_tapswap.category = t.category
 	`;
 
 	try {
@@ -162,7 +191,8 @@ export const load: PageServerLoad = async ({ url }) => {
 				s.is_fully_burned,
 				s.verified_at,
 				vl_cauldron.price_sats    AS cauldron_price_sats,
-				vl_cauldron.tvl_satoshis::text AS cauldron_tvl_satoshis
+				vl_cauldron.tvl_satoshis::text AS cauldron_tvl_satoshis,
+				vl_tapswap.listing_count::text AS tapswap_listing_count
 			   ${fromJoins}
 			   ${whereClause}
 			   ORDER BY ${sort}
@@ -206,7 +236,10 @@ export const load: PageServerLoad = async ({ url }) => {
 				genesisBlock: row.genesis_block,
 				updatedAt: Math.floor(updatedAtMs / 1000),
 				cauldronPriceSats: row.cauldron_price_sats,
-				cauldronTvlSatoshis: tvl
+				cauldronTvlSatoshis: tvl,
+				tapswapListingCount: row.tapswap_listing_count
+					? Number(row.tapswap_listing_count)
+					: 0
 			};
 		});
 

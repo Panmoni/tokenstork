@@ -37,6 +37,22 @@ interface HolderRow {
 	nft_count: number;
 }
 
+interface TapswapOfferRow {
+	id: Buffer;
+	has_amount: string | null;
+	has_commitment: Buffer | null;
+	has_capability: 'none' | 'mutable' | 'minting' | null;
+	has_sats: string;
+	want_sats: string;
+	want_category: Buffer | null;
+	want_amount: string | null;
+	want_commitment: Buffer | null;
+	want_capability: 'none' | 'mutable' | 'minting' | null;
+	maker_pkh: Buffer;
+	listed_block: number;
+	listed_at: Date;
+}
+
 async function fetchBchPrice(fetch: typeof globalThis.fetch): Promise<number> {
 	try {
 		const res = await fetch('/api/bchPrice', {
@@ -99,7 +115,7 @@ export const load: PageServerLoad = async ({ params, fetch }) => {
 
 	const row = tokenRes.rows[0];
 
-	const [holdersRes, bchPriceUSD, bcmr] = await Promise.all([
+	const [holdersRes, bchPriceUSD, bcmr, tapswapRes] = await Promise.all([
 		query<HolderRow>(
 			`SELECT address, balance::text AS balance, nft_count
 			   FROM token_holders
@@ -109,7 +125,41 @@ export const load: PageServerLoad = async ({ params, fetch }) => {
 			[categoryBytes]
 		),
 		fetchBchPrice(fetch),
-		fetchBcmr(category)
+		fetchBcmr(category),
+		// Open Tapswap offers with this category on the "has" side
+		// (someone selling this token). Sorted by want_sats ASC so the
+		// cheapest asks render first. Limit 20 — detail page doesn't need
+		// a full paginated listing browser; Tapswap's own UI does that.
+		//
+		// Moderation: the tokenRes query above already throws 410 before
+		// this fires for hidden categories, so the NOT EXISTS clause is
+		// belt-and-braces. Keeping the guard inside the SQL means a future
+		// refactor that parallelises the moderation probe with this fetch
+		// won't leak.
+		query<TapswapOfferRow>(
+			`SELECT id,
+			        has_amount::text    AS has_amount,
+			        has_commitment,
+			        has_capability,
+			        has_sats::text      AS has_sats,
+			        want_sats::text     AS want_sats,
+			        want_category,
+			        want_amount::text   AS want_amount,
+			        want_commitment,
+			        want_capability,
+			        maker_pkh,
+			        listed_block,
+			        listed_at
+			   FROM tapswap_offers
+			  WHERE has_category = $1
+			    AND status = 'open'
+			    AND NOT EXISTS (
+			      SELECT 1 FROM token_moderation mod WHERE mod.category = $1
+			    )
+			  ORDER BY want_sats ASC
+			  LIMIT 20`,
+			[categoryBytes]
+		)
 	]);
 
 	const decimals = row.decimals ?? bcmr?.decimals ?? 0;
@@ -138,6 +188,21 @@ export const load: PageServerLoad = async ({ params, fetch }) => {
 			address: h.address,
 			balance: h.balance,
 			nftCount: h.nft_count
+		})),
+		tapswapOffers: tapswapRes.rows.map((o) => ({
+			id: hexFromBytes(o.id)!,
+			hasAmount: o.has_amount,
+			hasCommitment: o.has_commitment ? hexFromBytes(o.has_commitment) : null,
+			hasCapability: o.has_capability,
+			hasSats: o.has_sats,
+			wantSats: o.want_sats,
+			wantCategory: o.want_category ? hexFromBytes(o.want_category) : null,
+			wantAmount: o.want_amount,
+			wantCommitment: o.want_commitment ? hexFromBytes(o.want_commitment) : null,
+			wantCapability: o.want_capability,
+			makerPkhHex: hexFromBytes(o.maker_pkh)!,
+			listedBlock: o.listed_block,
+			listedAt: Math.floor(o.listed_at.getTime() / 1000)
 		})),
 		priceUSD: cauldron.priceUSD,
 		tvlUSD: cauldron.tvlUSD,

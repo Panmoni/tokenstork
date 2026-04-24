@@ -149,6 +149,75 @@
 		</div>
 	</div>
 
+	{#if data.tapswapOffers.length > 0}
+		<section class="mb-8">
+			<div class="flex items-baseline justify-between mb-4">
+				<h2 class="text-xl font-bold text-slate-900 dark:text-white">
+					Open listings on Tapswap (P2P)
+					<span class="ml-2 text-sm font-normal text-slate-500">{data.tapswapOffers.length}</span>
+				</h2>
+				<a
+					href={`https://tapswap.cash/?category=${token.id}`}
+					target="_blank"
+					rel="noopener noreferrer"
+					class="text-sm text-violet-600 hover:underline"
+				>
+					View on Tapswap →
+				</a>
+			</div>
+			<div class="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
+				<table class="w-full text-sm">
+					<thead class="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+						<tr>
+							<th class="text-left px-4 py-3">Offering</th>
+							<th class="text-right px-4 py-3">Asking</th>
+							<th class="text-right px-4 py-3">USD</th>
+							<th class="text-left px-4 py-3">Maker</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each data.tapswapOffers as offer (offer.id)}
+							{@const wantSatsNum = Number(offer.wantSats)}
+							{@const wantBch = Number.isFinite(wantSatsNum) ? wantSatsNum / 1e8 : 0}
+							{@const wantUsd = wantBch * (data.bchPriceUSD ?? 0)}
+							<tr class="border-b border-slate-100 dark:border-slate-800/50">
+								<td class="px-4 py-3 font-mono text-xs">
+									{#if offer.hasCommitment}
+										NFT <span class="text-slate-500">{offer.hasCommitment.slice(0, 16)}…</span>
+									{:else if offer.hasAmount}
+										{humanizeNumericSupply(offer.hasAmount, token.decimals)}
+										{#if token.symbol}<span class="text-slate-500 ml-1">{token.symbol}</span>{/if}
+									{:else}
+										—
+									{/if}
+								</td>
+								<td class="px-4 py-3 text-right font-mono">
+									{#if wantBch >= 0.01}
+										{wantBch.toFixed(4)} BCH
+									{:else}
+										{wantSatsNum.toLocaleString()} sats
+									{/if}
+								</td>
+								<td class="px-4 py-3 text-right font-mono text-slate-700 dark:text-slate-300">
+									{wantUsd > 0 ? `$${wantUsd < 1 ? wantUsd.toFixed(4) : wantUsd.toFixed(2)}` : '—'}
+								</td>
+								<td class="px-4 py-3 font-mono text-xs text-slate-500" title="Maker public-key hash (raw bytes; cashaddr rendering deferred)">
+									{offer.makerPkhHex.slice(0, 10)}…{offer.makerPkhHex.slice(-6)}
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+			<p class="mt-2 text-xs text-slate-500 dark:text-slate-400">
+				Listings aggregated from on-chain MPSW OP_RETURNs via our own BCHN —
+				not from Tapswap's API. Close events (sale / cancellation) are not
+				tracked yet; a stale listing that's already been taken will drop off
+				once that enhancement ships.
+			</p>
+		</section>
+	{/if}
+
 	{#if data.holders.length > 0}
 		<section class="mb-8">
 			<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-4">Top holders</h2>

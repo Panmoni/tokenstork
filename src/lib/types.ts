@@ -21,12 +21,19 @@ export interface TokenApiRow {
 	genesisBlock: number;
 	updatedAt: number;
 
-	// Per-venue listing data. Populated by the `sync-cauldron` worker (and
-	// future `sync-fex`, `sync-tapswap`, ...). Values are raw from the
-	// venue — USD conversion happens at render time using the live BCH
-	// price. Null for tokens not currently listed on that venue.
+	// Per-venue listing data. Populated by the `sync-cauldron` worker for
+	// AMM price/TVL and by `sync-tail` + `tapswap-backfill` for P2P
+	// listings. Values are raw from chain / venue — USD conversion happens
+	// at render time using the live BCH price. Null (or 0 for the count)
+	// for tokens not currently listed on that venue.
 	cauldronPriceSats: number | null;
 	cauldronTvlSatoshis: number | null;
+
+	// Tapswap (P2P marketplace) — different semantic from Cauldron: these
+	// are fixed-price listings, not a pool. `tapswapListingCount` is the
+	// count of open offers where this category is the "has" side (someone
+	// is selling this token). Zero if not listed.
+	tapswapListingCount: number;
 }
 
 export interface TokensResponse {

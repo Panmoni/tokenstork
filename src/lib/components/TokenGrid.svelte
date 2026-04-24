@@ -29,6 +29,7 @@
 	);
 	const sort = $derived(page.url.searchParams.get('sort') ?? 'name');
 	const onlyCauldron = $derived(page.url.searchParams.get('cauldron') === '1');
+	const onlyTapswap = $derived(page.url.searchParams.get('tapswap') === '1');
 
 	function navigateWith(mutate: (params: URLSearchParams) => void) {
 		const params = new URLSearchParams(page.url.searchParams);
@@ -64,6 +65,10 @@
 
 	function setType(value: string) {
 		pushParam('type', value === 'all' ? null : value);
+	}
+
+	function toggleTapswap(checked: boolean) {
+		pushParam('tapswap', checked ? '1' : null);
 	}
 
 	function toggleCauldron(checked: boolean) {
@@ -119,6 +124,18 @@
 			/>
 			On Cauldron
 		</label>
+		<label
+			class="flex items-center gap-2 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-700 dark:text-slate-300 cursor-pointer select-none hover:border-emerald-500 transition-colors"
+			title="Only show tokens with open P2P listings on Tapswap"
+		>
+			<input
+				type="checkbox"
+				checked={onlyTapswap}
+				onchange={(e) => toggleTapswap((e.currentTarget as HTMLInputElement).checked)}
+				class="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+			/>
+			On Tapswap (P2P)
+		</label>
 	</div>
 
 	<!--
@@ -159,6 +176,12 @@
 						<div class="font-semibold text-slate-900 dark:text-white truncate group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
 							{token.name || '—'}
 							{#if token.symbol}<span class="ml-2 text-xs text-slate-500 font-mono">{token.symbol}</span>{/if}
+							{#if token.cauldronPriceSats != null}
+								<span class="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300" title="Listed on Cauldron (AMM)">C</span>
+							{/if}
+							{#if token.tapswapListingCount > 0}
+								<span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" title="{token.tapswapListingCount} open listing{token.tapswapListingCount === 1 ? '' : 's'} on Tapswap (P2P)">T</span>
+							{/if}
 						</div>
 						{#if token.description}
 							<div class="text-xs text-slate-500 dark:text-slate-400 truncate">{token.description.slice(0, 80)}</div>

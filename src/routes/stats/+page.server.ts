@@ -61,11 +61,22 @@ export const load: PageServerLoad = async ({ parent }) => {
 				   JOIN token_state s ON s.category = t.category
 				  WHERE s.is_fully_burned = true
 				    AND ${NOT_MODERATED_CLAUSE}`
+			),
+			// Distinct categories currently for sale on Tapswap (P2P).
+			// Venues are now a visible axis in the stats — a separate card
+			// lets visitors eyeball "how many tokens are actually tradeable."
+			query<WindowCount>(
+				`SELECT COUNT(DISTINCT o.has_category)::bigint AS total
+				   FROM tapswap_offers o
+				   JOIN tokens t ON t.category = o.has_category
+				  WHERE o.status = 'open'
+				    AND o.has_category IS NOT NULL
+				    AND ${NOT_MODERATED_CLAUSE}`
 			)
 		])
 	]);
 
-	const [typesRes, d7Res, d30Res, burnedRes] = pageResults;
+	const [typesRes, d7Res, d30Res, burnedRes, tapswapCatsRes] = pageResults;
 
 	const pickNumber = (r: PromiseSettledResult<{ rows: WindowCount[] }>): number =>
 		r.status === 'fulfilled' ? Number(r.value.rows[0]?.total ?? 0) : 0;
@@ -77,7 +88,7 @@ export const load: PageServerLoad = async ({ parent }) => {
 
 	const enrichmentReady = burnedRes.status === 'fulfilled';
 
-	for (const r of [typesRes, d7Res, d30Res, burnedRes]) {
+	for (const r of [typesRes, d7Res, d30Res, burnedRes, tapswapCatsRes]) {
 		if (r.status === 'rejected') console.error('[stats] metric query failed:', r.reason);
 	}
 
@@ -86,6 +97,7 @@ export const load: PageServerLoad = async ({ parent }) => {
 		newIn24h: parentData.newIn24h,
 		newIn7d: pickNumber(d7Res),
 		newIn30d: pickNumber(d30Res),
-		burned: enrichmentReady ? pickNumber(burnedRes) : null
+		burned: enrichmentReady ? pickNumber(burnedRes) : null,
+		tapswapListedCategories: pickNumber(tapswapCatsRes)
 	};
 };

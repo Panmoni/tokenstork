@@ -56,6 +56,23 @@
 	</section>
 
 	<section class="mb-8">
+		<h2 class="text-xl font-semibold mb-3">Tradeable</h2>
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+			<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+				<div class="flex items-baseline justify-between">
+					<span class="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-sm font-medium">
+						Tapswap (P2P)
+					</span>
+				</div>
+				<div class="mt-2 text-3xl font-semibold">{fmt(data.tapswapListedCategories)}</div>
+				<div class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+					distinct tokens with open listings
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<section class="mb-8">
 		<h2 class="text-xl font-semibold mb-3">Burn status</h2>
 		{#if data.burned === null}
 			<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 text-sm text-slate-600 dark:text-slate-400">
