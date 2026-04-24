@@ -1,17 +1,30 @@
-//! cauldron — scan every fungible category against the Cauldron DEX
-//! indexer and refresh `token_venue_listings`. Powers the UI's
-//! "Listed on Cauldron" filter and the Price / TVL columns in the grid.
+//! cauldron — scan fungible categories against the Cauldron DEX indexer
+//! and refresh `token_venue_listings`. Powers the UI's "Listed on
+//! Cauldron" filter and the Price / TVL columns in the grid.
 //!
-//! Runs on `sync-cauldron.timer` every 4 h. Fast path: ~3.4k FT / FT+NFT
-//! rows × 1 price query each at 5 req/s = ~11 min. Slow path hits TVL
-//! *only* for tokens that are actually listed (200 on price), so the
-//! worst case with a lot of listed tokens is ~23 min per run.
+//! Two modes, selected by the `CAULDRON_MODE` env var.
+//!
+//! **full** (default): walk every FT / FT+NFT category, ~3.4k price
+//! queries. Discovers newly-listed tokens + delists tokens that have
+//! disappeared. At `CAULDRON_MAX_RPS=5` this takes ~15 min. Triggers
+//! pruning — categories not `seen` this run get their
+//! `token_venue_listings` row deleted.
+//!
+//! **fast**: only re-check the ~317 already-listed categories from
+//! `token_venue_listings`. ~60 s at the same rate limit. Does NOT
+//! prune: we only looked at the listed set, so unseen candidates
+//! outside the set aren't confirmed delistings.
+//!
+//! Typical deployment: `sync-cauldron-fast.timer` fires every 10 min
+//! (cheap refresh), `sync-cauldron.timer` fires every 4 h (discovery +
+//! prune). The two share this binary; the service unit sets the env var.
 //!
 //! Env vars:
-//! - `CAULDRON_URL`     default `https://indexer.cauldron.quest`
-//! - `CAULDRON_MAX_RPS` default 5 (public shared indexer — be polite)
-//! - `DATABASE_URL`
-//! - `RUST_LOG`
+//! - `CAULDRON_MODE` — default `full`; set to `fast` to limit the scan to already-listed categories.
+//! - `CAULDRON_URL` — default `https://indexer.cauldron.quest`.
+//! - `CAULDRON_MAX_RPS` — default 5 (public shared indexer, be polite).
+//! - `DATABASE_URL`.
+//! - `RUST_LOG`.
 
 use std::time::Instant;
 
@@ -22,10 +35,42 @@ use tracing_subscriber::EnvFilter;
 use workers::cauldron::CauldronClient;
 use workers::pg::{
     self, VenueListingWrite, bytes_to_hex, insert_price_history_point, mark_cauldron_run,
-    pick_cauldron_candidates, pool_from_env, prune_stale_venue_listings, upsert_venue_listing,
+    pick_cauldron_candidates, pick_cauldron_listed, pool_from_env, prune_stale_venue_listings,
+    upsert_venue_listing,
 };
 
 const VENUE: &str = "cauldron";
+
+/// CAULDRON_MODE env-var values. `full` is the default so an operator
+/// who forgets to set the env still gets correct (if slower) behavior.
+enum Mode {
+    Full,
+    Fast,
+}
+
+impl Mode {
+    fn from_env() -> Self {
+        // Trim first so a stray trailing space in the systemd unit or
+        // /etc/tokenstork/env doesn't silently flip us back to Full.
+        // Lowercase after trimming for case-insensitive matching.
+        match std::env::var("CAULDRON_MODE")
+            .ok()
+            .as_deref()
+            .map(|s| s.trim().to_ascii_lowercase())
+            .as_deref()
+        {
+            Some("fast") => Mode::Fast,
+            _ => Mode::Full,
+        }
+    }
+
+    fn label(&self) -> &'static str {
+        match self {
+            Mode::Full => "full",
+            Mode::Fast => "fast",
+        }
+    }
+}
 
 fn init_tracing() {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
@@ -42,14 +87,23 @@ async fn main() -> Result<()> {
     let cauldron = CauldronClient::from_env().context("building Cauldron client")?;
     let pool = pool_from_env().await.context("connecting to Postgres")?;
 
-    let candidates = pick_cauldron_candidates(&pool).await?;
+    let mode = Mode::from_env();
+    let candidates = match mode {
+        Mode::Full => pick_cauldron_candidates(&pool).await?,
+        Mode::Fast => pick_cauldron_listed(&pool).await?,
+    };
+
     if candidates.is_empty() {
-        info!("no FT / FT+NFT categories to scan; exiting");
+        info!(mode = mode.label(), "no candidates to scan; exiting");
         mark_cauldron_run(&pool).await?;
         pg::shutdown(pool).await;
         return Ok(());
     }
-    info!(n = candidates.len(), "scanning fungible categories against Cauldron");
+    info!(
+        mode = mode.label(),
+        n = candidates.len(),
+        "scanning Cauldron candidates"
+    );
 
     let started = Instant::now();
     let mut seen: Vec<Vec<u8>> = Vec::new();
@@ -131,20 +185,29 @@ async fn main() -> Result<()> {
         seen.push(category.clone());
     }
 
-    // Two guards on pruning:
+    // Three guards on pruning:
     //
-    // 1. Skip if any hard error occurred. A transient 5xx on a price
+    // 1. Skip if we're in `fast` mode. `pick_cauldron_listed` only
+    //    returned the already-listed set, so "unseen" in `fast` has a
+    //    totally different meaning from `full` — we never looked at
+    //    the 3k candidates outside the set, so we can't say they're
+    //    still unlisted. Full-mode runs are the only ones authorised
+    //    to delist.
+    //
+    // 2. Skip if any hard error occurred. A transient 5xx on a price
     //    fetch means we can't prove the token isn't listed anymore —
     //    don't delete what we didn't confirm.
     //
-    // 2. Skip if `seen` is empty. This defends against a total Cauldron
+    // 3. Skip if `seen` is empty. This defends against a total Cauldron
     //    outage that returns 404 for every category: every iteration
     //    `Ok(None) → continue`, no hard errors, but `seen` stays empty.
     //    Without this guard the subsequent DELETE would run with an
     //    empty `keep` array; `category <> ALL(ARRAY[]::bytea[])` is
     //    vacuous-truth TRUE in Postgres and would wipe every row for
     //    this venue. Loud warn so operators notice.
-    let pruned = if hard_errors > 0 {
+    let pruned = if matches!(mode, Mode::Fast) {
+        0
+    } else if hard_errors > 0 {
         warn!(
             hard_errors,
             "hard errors during run; skipping delist pruning"
@@ -169,6 +232,7 @@ async fn main() -> Result<()> {
     mark_cauldron_run(&pool).await?;
     let elapsed = started.elapsed().as_secs_f64();
     info!(
+        mode = mode.label(),
         scanned = candidates.len(),
         listed,
         hard_errors,

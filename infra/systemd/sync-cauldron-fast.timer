@@ -1,0 +1,20 @@
+[Unit]
+Description=Run tokenstork sync-cauldron (fast path) every 10 minutes
+
+[Timer]
+# Fast refresh: only re-check already-listed categories. Typical
+# runtime ~60-90s, well under the 10-min interval, so back-to-back
+# execution isn't a risk (unlike the full-scan variant which was
+# the previous source of disk contention).
+#
+# The full-scan companion (sync-cauldron.timer) continues to run
+# on a much slower cadence — 4 h by default — so newly-listed
+# tokens are still discovered and the delisted ones get pruned.
+OnBootSec=11min
+OnUnitActiveSec=10min
+Persistent=true
+RandomizedDelaySec=30s
+Unit=sync-cauldron-fast.service
+
+[Install]
+WantedBy=timers.target

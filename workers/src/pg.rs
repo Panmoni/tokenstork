@@ -597,6 +597,25 @@ pub async fn pick_cauldron_candidates(pool: &PgPool) -> Result<Vec<Vec<u8>>> {
     Ok(rows.into_iter().map(|(c,)| c).collect())
 }
 
+/// Fast-path companion to `pick_cauldron_candidates`: only the
+/// categories we already know are listed on Cauldron. Used by the
+/// 10-minute refresh pass — re-reads prices + TVL for the ~317
+/// currently-listed set, skips pruning (we didn't look at the
+/// unlisted 3k, so we can't confirm delists).
+pub async fn pick_cauldron_listed(pool: &PgPool) -> Result<Vec<Vec<u8>>> {
+    let rows: Vec<(Vec<u8>,)> = sqlx::query_as(
+        "SELECT category
+           FROM token_venue_listings
+          WHERE venue = 'cauldron'
+            AND price_sats IS NOT NULL
+          ORDER BY category ASC",
+    )
+    .fetch_all(pool)
+    .await
+    .context("pick_cauldron_listed")?;
+    Ok(rows.into_iter().map(|(c,)| c).collect())
+}
+
 pub async fn upsert_venue_listing(pool: &PgPool, w: &VenueListingWrite<'_>) -> Result<()> {
     // `tvl_satoshis` is NUMERIC(30,0) in the schema but we bind it as i64
     // on the Rust side — Cauldron's API returns values that comfortably

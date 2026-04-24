@@ -1,15 +1,20 @@
 [Unit]
-Description=Run tokenstork Cauldron listings refresh every 10 minutes
+Description=Run tokenstork Cauldron full-scan every 4 hours (discovery + prune)
 
 [Timer]
-# First run 10 min after boot (after BCMR has had a chance to settle),
-# then every 10 min. Cost: ~317 req / 10 min ≈ 0.5 req/s sustained
-# against indexer.cauldron.quest and ~45k token_price_history rows/day
-# (~13M/year before the schema's 90-day retention kicks in).
-OnBootSec=10min
-OnUnitActiveSec=10min
+# Full-scan pass: walk every FT / FT+NFT category to (a) discover
+# newly-listed tokens that weren't in the last fast-pass set and
+# (b) prune tokens that have dropped off Cauldron.
+#
+# Runtime ~15 min at CAULDRON_MAX_RPS=5 due to the ~3,350 price
+# checks. Four hours between runs gives disk + Postgres breathing
+# room alongside BlockBook IBD + sync-tail + the fast-pass timer.
+# Fresh prices for already-listed tokens are supplied by the
+# sync-cauldron-fast.timer companion (every 10 min, ~60-90s/run).
+OnBootSec=15min
+OnUnitActiveSec=4h
 Persistent=true
-RandomizedDelaySec=30s
+RandomizedDelaySec=5min
 Unit=sync-cauldron.service
 
 [Install]

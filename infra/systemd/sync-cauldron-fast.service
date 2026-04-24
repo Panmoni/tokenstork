@@ -1,0 +1,53 @@
+[Unit]
+Description=tokenstork sync-cauldron (fast) — refresh only already-listed Cauldron categories
+Documentation=https://github.com/Panmoni/tokenstork
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=oneshot
+User=tokenstork
+Group=tokenstork
+WorkingDirectory=/opt/tokenstork
+ExecStart=/opt/tokenstork/workers/target/release/cauldron
+
+# Load the shared env file FIRST, then the fast-mode override. In
+# systemd "later assignment wins" for same-named vars, so this
+# ordering guarantees CAULDRON_MODE=fast holds even if an operator
+# later adds CAULDRON_MODE=<anything> to /etc/tokenstork/env. The
+# `-` prefix on the file path lets the service start with the file
+# missing (useful in fresh deploys).
+EnvironmentFile=-/etc/tokenstork/env
+
+# Fast-path: only re-check the ~317 currently-listed categories
+# (pulled from token_venue_listings WHERE venue='cauldron' AND
+# price_sats IS NOT NULL). The binary reads this env var and skips
+# pruning — delists only happen in the full-scan companion service.
+Environment="CAULDRON_MODE=fast"
+Environment="RUST_LOG=info"
+
+# Hardening — same profile as sync-cauldron (full-scan service).
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectProc=invisible
+ProcSubset=pid
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallArchitectures=native
+UMask=0077

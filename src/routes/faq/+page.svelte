@@ -230,7 +230,7 @@
 				</p>
 				<ul class="list-disc list-inside ml-2 space-y-1">
 					<li><strong>New categories + Tapswap listings</strong> — sub-second. The tail worker subscribes to BCH node ZMQ and indexes within milliseconds of a new block.</li>
-					<li><strong>Cauldron prices + TVL</strong> — every 10 minutes.</li>
+					<li><strong>Cauldron prices + TVL</strong> — every 10 minutes for already-listed tokens (~60-90s fast refresh), plus a 4-hour full scan that discovers newly-listed tokens and prunes delisted ones.</li>
 					<li><strong>BCMR metadata</strong> (name, symbol, icon, description) — hourly.</li>
 					<li><strong>BCH/USD price</strong> — every 5 minutes.</li>
 					<li><strong>Sparklines + 1h/24h/7d % change</strong> — rebuilt from the price history each request; fills in over the 7 days following deploy.</li>
