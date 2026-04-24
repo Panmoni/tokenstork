@@ -184,6 +184,22 @@ export const load: PageServerLoad = async ({ params, fetch }) => {
 			isFullyBurned: row.is_fully_burned ?? false,
 			isVerifiedOnchain: row.verified_at !== null
 		},
+		// Full BCMR dump — surfaced in a dedicated card on the detail page
+		// so users can see every metadata field the registry publishes
+		// (links, NFT types, extensions, tags, status, splitId). Null
+		// when Paytaca has nothing for this category, which means no
+		// BCMR card renders on the page.
+		bcmr: bcmr
+			? {
+				status: bcmr.status,
+				splitId: bcmr.splitId,
+				uris: bcmr.uris,
+				tags: bcmr.tags,
+				extensions: bcmr.extensions,
+				nftTypes: bcmr.nftTypes,
+				nftsDescription: bcmr.nftsDescription
+			}
+			: null,
 		holders: holdersRes.rows.map((h) => ({
 			address: h.address,
 			balance: h.balance,

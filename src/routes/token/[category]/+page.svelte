@@ -218,6 +218,135 @@
 		</section>
 	{/if}
 
+	{#if data.bcmr}
+		{@const bcmr = data.bcmr}
+		{@const uriEntries = bcmr.uris ? Object.entries(bcmr.uris) : []}
+		{@const extEntries = bcmr.extensions ? Object.entries(bcmr.extensions) : []}
+		{@const nftEntries = bcmr.nftTypes ? Object.entries(bcmr.nftTypes) : []}
+		{@const hasAny =
+			bcmr.status ||
+			bcmr.splitId ||
+			uriEntries.length > 0 ||
+			extEntries.length > 0 ||
+			nftEntries.length > 0 ||
+			bcmr.nftsDescription ||
+			(bcmr.tags && bcmr.tags.length > 0)}
+		{#if hasAny}
+			<section class="mb-8">
+				<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-4">
+					BCMR metadata
+					<span class="ml-2 text-sm font-normal text-slate-500">from the Paytaca registry</span>
+				</h2>
+				<div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 divide-y divide-slate-200 dark:divide-slate-800">
+					{#if bcmr.status || bcmr.splitId}
+						<div class="p-5 flex flex-wrap gap-6 text-sm">
+							{#if bcmr.status}
+								<div>
+									<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Status</div>
+									<span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium">{bcmr.status}</span>
+								</div>
+							{/if}
+							{#if bcmr.splitId}
+								{@const validSplitId = /^[0-9a-f]{64}$/i.test(bcmr.splitId)}
+								<div class="min-w-0">
+									<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Split from</div>
+									{#if validSplitId}
+										<a
+											href={`/token/${bcmr.splitId.toLowerCase()}`}
+											class="font-mono text-xs text-violet-600 dark:text-violet-400 hover:underline break-all"
+										>
+											{bcmr.splitId}
+										</a>
+									{:else}
+										<!--
+											Non-hex splitId — render as inert text rather than a
+											clickable link. A compromised or buggy BCMR endpoint
+											returning e.g. "../admin" as splitId would otherwise
+											produce a bad /token/… href on the page.
+										-->
+										<span class="font-mono text-xs text-slate-500 dark:text-slate-400 break-all">
+											{bcmr.splitId}
+											<em class="not-italic text-slate-400">(invalid)</em>
+										</span>
+									{/if}
+								</div>
+							{/if}
+						</div>
+					{/if}
+
+					{#if bcmr.tags && bcmr.tags.length > 0}
+						<div class="p-5">
+							<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Tags</div>
+							<div class="flex flex-wrap gap-2">
+								{#each bcmr.tags as tag (tag)}
+									<span class="px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-xs">
+										{tag}
+									</span>
+								{/each}
+							</div>
+						</div>
+					{/if}
+
+					{#if uriEntries.length > 0}
+						<div class="p-5">
+							<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Links</div>
+							<div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+								{#each uriEntries as [key, value] (key)}
+									{@const safe = /^(https?|ipfs|mailto):/i.test(value)}
+									<div class="flex items-baseline gap-2 min-w-0">
+										<span class="text-xs font-semibold text-slate-500 dark:text-slate-400 capitalize flex-shrink-0">{key}:</span>
+										{#if safe}
+											<a
+												href={value}
+												target="_blank"
+												rel="noopener noreferrer"
+												class="text-violet-600 dark:text-violet-400 hover:underline break-all truncate"
+												title={value}
+											>
+												{value}
+											</a>
+										{:else}
+											<span class="font-mono text-xs text-slate-500 break-all" title="Unsafe scheme — not rendered as a link">{value}</span>
+										{/if}
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/if}
+
+					{#if bcmr.nftsDescription || nftEntries.length > 0}
+						<div class="p-5">
+							<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">NFTs</div>
+							{#if bcmr.nftsDescription}
+								<p class="text-sm text-slate-700 dark:text-slate-300 mb-3">{bcmr.nftsDescription}</p>
+							{/if}
+							{#if nftEntries.length > 0}
+								<details class="text-sm">
+									<summary class="cursor-pointer text-violet-600 dark:text-violet-400 hover:underline select-none">
+										{nftEntries.length} NFT type{nftEntries.length === 1 ? '' : 's'} defined — show raw
+									</summary>
+									<pre class="mt-3 p-3 rounded bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono overflow-auto max-h-96">{JSON.stringify(bcmr.nftTypes, null, 2)}</pre>
+								</details>
+							{/if}
+						</div>
+					{/if}
+
+					{#if extEntries.length > 0}
+						<div class="p-5">
+							<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Extensions</div>
+							<details class="text-sm">
+								<summary class="cursor-pointer text-violet-600 dark:text-violet-400 hover:underline select-none">
+									{extEntries.length} extension{extEntries.length === 1 ? '' : 's'} — show raw
+								</summary>
+								<pre class="mt-3 p-3 rounded bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono overflow-auto max-h-96">{JSON.stringify(bcmr.extensions, null, 2)}</pre>
+							</details>
+						</div>
+					{/if}
+				</div>
+			</section>
+		{/if}
+	{/if}
+
 	{#if data.holders.length > 0}
 		<section class="mb-8">
 			<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-4">Top holders</h2>

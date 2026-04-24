@@ -10,17 +10,54 @@ const CAULDRON_INDEXER = 'https://indexer.cauldron.quest/cauldron';
 const CATEGORY_REGEX = /^[0-9a-f]{64}$/;
 
 export interface BcmrMetadata {
+	// Core fields used by the detail-page title/header/price-format fallback.
+	// These are the hot-path values; every renderer touches them.
 	name: string | null;
 	symbol: string | null;
 	decimals: number;
 	description: string | null;
 	iconUri: string | null;
+	// Extended fields — surfaced as a structured dump under the main content
+	// on the detail page. Pulled directly from the BCMR JSON per
+	// https://cashtokens.org/docs/bcmr/chip/. Any of these can be null/empty
+	// for tokens that don't publish rich metadata.
+	status: string | null;                         // 'active' | 'inactive' | 'burned' | ...
+	splitId: string | null;                        // hex — category this was split from
+	uris: Record<string, string> | null;           // full link dictionary (icon, web, twitter, …)
+	tags: string[] | null;                         // free-form BCMR tags
+	extensions: Record<string, unknown> | null;    // arbitrary namespaced bag
+	nftTypes: Record<string, unknown> | null;      // token.nfts.types — per-NFT-commitment definitions
+	nftsDescription: string | null;                // token.nfts.description
 }
 
 function assertValidCategory(category: string): void {
 	if (!CATEGORY_REGEX.test(category)) {
 		throw new Error('external: invalid category (expected 64 lowercase hex chars)');
 	}
+}
+
+// A shallow object guard. BCMR JSON shapes can be null / string / array at
+// any of the nested keys; we want to preserve only plain objects so the UI
+// can iterate them safely.
+function pickObject(v: unknown): Record<string, unknown> | null {
+	if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+	return v as Record<string, unknown>;
+}
+
+function pickStringDict(v: unknown): Record<string, string> | null {
+	const obj = pickObject(v);
+	if (!obj) return null;
+	const out: Record<string, string> = {};
+	for (const [k, val] of Object.entries(obj)) {
+		if (typeof val === 'string' && val.trim() !== '') out[k] = val;
+	}
+	return Object.keys(out).length ? out : null;
+}
+
+function pickStringArray(v: unknown): string[] | null {
+	if (!Array.isArray(v)) return null;
+	const out = v.filter((x): x is string => typeof x === 'string' && x.trim() !== '');
+	return out.length ? out : null;
 }
 
 export async function fetchBcmr(category: string): Promise<BcmrMetadata | null> {
@@ -34,7 +71,17 @@ export async function fetchBcmr(category: string): Promise<BcmrMetadata | null> 
 			symbol: data?.token?.symbol ?? null,
 			decimals: validateDecimals(data?.token?.decimals),
 			description: data?.description ?? null,
-			iconUri: data?.uris?.icon ?? null
+			iconUri: data?.uris?.icon ?? null,
+			status: typeof data?.status === 'string' ? data.status : null,
+			splitId: typeof data?.splitId === 'string' ? data.splitId : null,
+			uris: pickStringDict(data?.uris),
+			tags: pickStringArray(data?.tags),
+			extensions: pickObject(data?.extensions),
+			nftTypes: pickObject(data?.token?.nfts?.types),
+			nftsDescription:
+				typeof data?.token?.nfts?.description === 'string'
+					? data.token.nfts.description
+					: null
 		};
 	} catch (err) {
 		console.error('[external] BCMR fetch failed:', err);
