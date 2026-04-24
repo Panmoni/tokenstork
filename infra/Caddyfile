@@ -50,5 +50,20 @@ tokenstork.com {
 		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://beamanalytics.b-cdn.net; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src 'self' https://beamanalytics.b-cdn.net; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
 	}
 
-	reverse_proxy 127.0.0.1:3000
+	# Upstream retry — smooths over the 1-3 second window during
+	# `systemctl restart tokenstork.service` on deploys. Without this,
+	# any request that lands between the SIGTERM and the new process's
+	# :3000 bind gets a 502/connection-refused. With `lb_try_duration`,
+	# Caddy keeps redialing the single upstream for up to 15 seconds at
+	# 250 ms intervals before giving up. Under normal healthy traffic
+	# this costs nothing; during a deploy it converts would-be 5xx into
+	# a brief pause.
+	#
+	# `fail_duration` + `unhealthy` are no-ops on a single-upstream
+	# setup (nothing to mark unhealthy) but the retry budget alone is
+	# what matters here.
+	reverse_proxy 127.0.0.1:3000 {
+		lb_try_duration 15s
+		lb_try_interval 250ms
+	}
 }

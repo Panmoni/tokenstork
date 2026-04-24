@@ -8,7 +8,8 @@
 #   3. cargo build --release (Rust workers)
 #   4. psql -f db/schema.sql (idempotent; ALTERs + CREATE INDEX IF NOT EXISTS)
 #   5. install/refresh infra/systemd/* into /etc/systemd/system (+ daemon-reload)
-#   6. systemctl restart tokenstork.service + sync-tail.service
+#   6. sync infra/Caddyfile to /etc/caddy/Caddyfile (+ reload caddy if changed)
+#   7. systemctl restart tokenstork.service + sync-tail.service
 #
 # Worker services that are timer-triggered one-shots (sync-bcmr,
 # sync-cauldron, sync-enrich, sync-verify) DON'T need a restart — the
@@ -47,20 +48,20 @@ run_as_tokenstork() {
 	sudo -u tokenstork bash -l -c "$1"
 }
 
-echo "==> [1/6] git pull in ${REPO_DIR}"
+echo "==> [1/7] git pull in ${REPO_DIR}"
 run_as_tokenstork "cd ${REPO_DIR} && git pull --ff-only"
 
-echo "==> [2/6] SvelteKit: npm ci + build"
+echo "==> [2/7] SvelteKit: npm ci + build"
 run_as_tokenstork "cd ${REPO_DIR} && npm ci && npm run build"
 
-echo "==> [3/6] Workers: cargo build --release"
+echo "==> [3/7] Workers: cargo build --release"
 run_as_tokenstork "cd ${REPO_DIR}/workers && cargo build --release"
 
-echo "==> [4/6] apply schema (idempotent)"
+echo "==> [4/7] apply schema (idempotent)"
 run_as_tokenstork "cd ${REPO_DIR} && psql -d tokenstork -f db/schema.sql > /tmp/schema-apply.log 2>&1 || (cat /tmp/schema-apply.log; exit 1)"
 echo "    (schema output in /tmp/schema-apply.log)"
 
-echo "==> [5/6] systemd units: install/refresh from infra/systemd/"
+echo "==> [5/7] systemd units: install/refresh from infra/systemd/"
 # Copy any *.service / *.timer from the repo into /etc/systemd/system if
 # it's missing or differs. `cmp -s` keeps the step idempotent — a no-op
 # run logs nothing. Only daemon-reload if something actually changed, so
@@ -87,7 +88,34 @@ else
 	echo "    (no unit changes)"
 fi
 
-echo "==> [6/6] restart ${APP_SERVICE}; restart always-on workers if running"
+echo "==> [6/7] Caddy: sync infra/Caddyfile to /etc/caddy/"
+# Validate BEFORE install so a bad Caddyfile doesn't get copied over
+# a good /etc/caddy/Caddyfile only for the subsequent reload to fail.
+# Previous behavior (install → reload → fail) would leave the new file
+# on disk matching the next deploy's cmp-s check, causing the reload
+# to never be retried; validate-first keeps the on-disk file in sync
+# with what Caddy is actually running.
+CADDYFILE_SRC="${REPO_DIR}/infra/Caddyfile"
+CADDYFILE_DST=/etc/caddy/Caddyfile
+if [ -f "${CADDYFILE_SRC}" ]; then
+	if ! cmp -s "${CADDYFILE_SRC}" "${CADDYFILE_DST}" 2>/dev/null; then
+		# `caddy validate` exits non-zero (set -e aborts the deploy)
+		# on any syntax or directive error — faster than waiting for
+		# systemctl reload to surface the same failure, and crucially
+		# leaves /etc/caddy/Caddyfile untouched if invalid.
+		echo "    validating ${CADDYFILE_SRC}"
+		caddy validate --config "${CADDYFILE_SRC}" --adapter caddyfile >/dev/null
+		install -m 0644 -o root -g root "${CADDYFILE_SRC}" "${CADDYFILE_DST}"
+		echo "    installed Caddyfile; reloading caddy.service"
+		systemctl reload caddy.service
+	else
+		echo "    (no Caddyfile changes)"
+	fi
+else
+	echo "    (infra/Caddyfile missing — skipping)"
+fi
+
+echo "==> [7/7] restart ${APP_SERVICE}; restart always-on workers if running"
 systemctl restart "${APP_SERVICE}"
 sleep 1
 systemctl status "${APP_SERVICE}" --no-pager --lines=0 | head -6
