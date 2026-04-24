@@ -175,7 +175,7 @@
 				onchange={(e) => toggleCauldron((e.currentTarget as HTMLInputElement).checked)}
 				class="w-4 h-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
 			/>
-			<img src="/cauldron-logo.png" alt="Cauldron" class="h-5 w-5" />
+			<img src="/cauldron-logo.png" alt="Cauldron" class="h-5 w-5 rounded-full bg-slate-900 p-0.5" />
 			<span>Cauldron</span>
 		</label>
 		<label
@@ -239,7 +239,7 @@
 							{#if token.symbol}<span class="ml-2 text-xs text-slate-500 font-mono">{stripEmoji(token.symbol)}</span>{/if}
 							<span class="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" title="Token type">{token.tokenType}</span>
 							{#if token.cauldronPriceSats != null}
-								<img src="/cauldron-logo.png" alt="Cauldron" title="Listed on Cauldron (AMM)" class="ml-1 inline-block h-4 w-4 align-text-bottom" />
+								<img src="/cauldron-logo.png" alt="Cauldron" title="Listed on Cauldron (AMM)" class="ml-1 inline-block h-4 w-4 align-text-bottom rounded-full bg-slate-900 p-0.5" />
 							{/if}
 							{#if token.tapswapListingCount > 0}
 								<img src="/tapswap-logo.png" alt="Tapswap" title="{token.tapswapListingCount} open listing{token.tapswapListingCount === 1 ? '' : 's'} on Tapswap (P2P)" class="ml-1 inline-block h-4 w-4 align-text-bottom" />

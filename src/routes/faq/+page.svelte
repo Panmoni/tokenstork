@@ -166,7 +166,7 @@
 						— token-type badge (<a href="#faq-ft-nft" class="underline hover:text-violet-600 dark:hover:text-violet-400">what these mean</a>).
 					</li>
 					<li>
-						<img src="/cauldron-logo.png" alt="" class="inline-block h-4 w-4 align-middle" aria-hidden="true" />
+						<img src="/cauldron-logo.png" alt="" class="inline-block h-4 w-4 align-middle rounded-full bg-slate-900 p-0.5" aria-hidden="true" />
 						<strong>Cauldron logo</strong> — the token has an active AMM pool on <a href="https://cauldron.quest/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Cauldron</a> with a live pool price.
 					</li>
 					<li>
