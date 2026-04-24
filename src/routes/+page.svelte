@@ -7,11 +7,13 @@
 <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 	<div class="mb-8">
 		<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent">
-			BCH CashTokens
+			CashTokens
 		</h1>
-		<p class="text-slate-600 dark:text-slate-400 mt-2">
-			Discover, track and analyze the growing ecosystem of tokens on Bitcoin Cash
-		</p>
+		{#if data.total}
+			<p class="text-slate-600 dark:text-slate-400 mt-2">
+				{data.total.toLocaleString()} tokens indexed across the Bitcoin Cash network.
+			</p>
+		{/if}
 	</div>
 
 	{#if data.error}
