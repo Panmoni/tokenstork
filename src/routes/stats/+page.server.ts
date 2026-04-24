@@ -72,11 +72,22 @@ export const load: PageServerLoad = async ({ parent }) => {
 				  WHERE o.status = 'open'
 				    AND o.has_category IS NOT NULL
 				    AND ${NOT_MODERATED_CLAUSE}`
+			),
+			// Distinct categories currently listed on Cauldron (AMM pools
+			// with a price). Companion to the Tapswap count — together
+			// they're the "two venues" story the directory filters expose.
+			query<WindowCount>(
+				`SELECT COUNT(*)::bigint AS total
+				   FROM token_venue_listings vl
+				   JOIN tokens t ON t.category = vl.category
+				  WHERE vl.venue = 'cauldron'
+				    AND vl.price_sats IS NOT NULL
+				    AND ${NOT_MODERATED_CLAUSE}`
 			)
 		])
 	]);
 
-	const [typesRes, d7Res, d30Res, burnedRes, tapswapCatsRes] = pageResults;
+	const [typesRes, d7Res, d30Res, burnedRes, tapswapCatsRes, cauldronCatsRes] = pageResults;
 
 	const pickNumber = (r: PromiseSettledResult<{ rows: WindowCount[] }>): number =>
 		r.status === 'fulfilled' ? Number(r.value.rows[0]?.total ?? 0) : 0;
@@ -88,7 +99,7 @@ export const load: PageServerLoad = async ({ parent }) => {
 
 	const enrichmentReady = burnedRes.status === 'fulfilled';
 
-	for (const r of [typesRes, d7Res, d30Res, burnedRes, tapswapCatsRes]) {
+	for (const r of [typesRes, d7Res, d30Res, burnedRes, tapswapCatsRes, cauldronCatsRes]) {
 		if (r.status === 'rejected') console.error('[stats] metric query failed:', r.reason);
 	}
 
@@ -98,6 +109,7 @@ export const load: PageServerLoad = async ({ parent }) => {
 		newIn7d: pickNumber(d7Res),
 		newIn30d: pickNumber(d30Res),
 		burned: enrichmentReady ? pickNumber(burnedRes) : null,
-		tapswapListedCategories: pickNumber(tapswapCatsRes)
+		tapswapListedCategories: pickNumber(tapswapCatsRes),
+		cauldronListedCategories: pickNumber(cauldronCatsRes)
 	};
 };

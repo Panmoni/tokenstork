@@ -60,6 +60,17 @@
 		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 			<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
 				<div class="flex items-baseline justify-between">
+					<span class="px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-sm font-medium">
+						Cauldron (AMM)
+					</span>
+				</div>
+				<div class="mt-2 text-3xl font-semibold">{fmt(data.cauldronListedCategories)}</div>
+				<div class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+					distinct tokens with an active pool price
+				</div>
+			</div>
+			<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+				<div class="flex items-baseline justify-between">
 					<span class="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-sm font-medium">
 						Tapswap (P2P)
 					</span>
