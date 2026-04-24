@@ -17,7 +17,32 @@
 			this page over time.
 		</p>
 
-		<h2 class="text-2xl font-bold text-slate-900 dark:text-white mt-8 mb-4">Token Pioneers series</h2>
+		<h2 class="text-2xl font-bold text-slate-900 dark:text-white mt-8 mb-4">Start here</h2>
+		<ul class="list-disc list-inside ml-5 text-slate-600 dark:text-slate-300 space-y-2">
+			<li>
+				<a
+					href="https://cashscript.org/docs/basics/about-bch/"
+					target="_blank"
+					rel="noopener noreferrer"
+				>
+					About Bitcoin Cash
+				</a> — a concise primer on BCH's UTXO model, covenants, and why CashTokens exist.
+			</li>
+			<li>
+				<a
+					href="https://cashtokens.org/docs/intro/"
+					target="_blank"
+					rel="noopener noreferrer"
+				>
+					Introduction to CashTokens
+				</a> — the official walkthrough of fungible and non-fungible tokens on BCH.
+			</li>
+		</ul>
+
+		<h2 class="text-2xl font-bold text-slate-900 dark:text-white mt-10 mb-4">Token Pioneers series</h2>
+		<p class="text-slate-600 dark:text-slate-300 mb-3">
+			Hands-on tutorials for minting and working with CashTokens end-to-end.
+		</p>
 		<ul class="list-disc list-inside ml-5 text-slate-600 dark:text-slate-300 space-y-2">
 			<li>
 				<a
@@ -54,6 +79,50 @@
 				>
 					Create an NFT ticket &amp; warrant canary with parsable NFTs (Tutorial 4)
 				</a>
+			</li>
+		</ul>
+
+		<h2 class="text-2xl font-bold text-slate-900 dark:text-white mt-10 mb-4">Smart contracts with CashScript</h2>
+		<p class="text-slate-600 dark:text-slate-300 mb-3">
+			CashScript is the high-level language most CashTokens projects use to write BCH smart contracts
+			and covenants.
+		</p>
+		<ul class="list-disc list-inside ml-5 text-slate-600 dark:text-slate-300 space-y-2">
+			<li>
+				<a href="https://cashscript.org/" target="_blank" rel="noopener noreferrer">
+					cashscript.org
+				</a> — project homepage, installation, and full documentation.
+			</li>
+			<li>
+				<a
+					href="https://cashscript.org/docs/guides/covenants/"
+					target="_blank"
+					rel="noopener noreferrer"
+				>
+					Covenants guide
+				</a> — how to constrain how coins can be spent, the foundation of most on-chain BCH apps.
+			</li>
+		</ul>
+
+		<h2 class="text-2xl font-bold text-slate-900 dark:text-white mt-10 mb-4">Video</h2>
+		<ul class="list-disc list-inside ml-5 text-slate-600 dark:text-slate-300 space-y-2">
+			<li>
+				<a
+					href="https://www.youtube.com/watch?v=_X70ld0MJJ0"
+					target="_blank"
+					rel="noopener noreferrer"
+				>
+					CashScript Explained
+				</a> — short overview of what CashScript is and why it matters (BCH Clips).
+			</li>
+			<li>
+				<a
+					href="https://www.youtube.com/watch?v=uzzUEQSKTh4"
+					target="_blank"
+					rel="noopener noreferrer"
+				>
+					CashScript Tutorial #1: Write your first BCH smart contract
+				</a> — step-by-step build-along by MrZwets.
 			</li>
 		</ul>
 
