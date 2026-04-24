@@ -379,6 +379,31 @@
 		{/if}
 	</section>
 
+	<section class="mb-8">
+		<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">Moderation</h2>
+		<p class="text-sm text-slate-500 dark:text-slate-400 mb-3">
+			Categories filtered out of every other counter on this page. Hidden from the directory and the
+			public API; we publish the list for transparency.
+		</p>
+		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+			<a
+				href="/moderated"
+				class="group p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-rose-400 dark:hover:border-rose-600 transition-colors no-underline"
+			>
+				<div class="flex items-center justify-between">
+					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+						Moderated tokens
+					</div>
+					<span class="text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity text-sm" aria-hidden="true">→</span>
+				</div>
+				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">{fmt(data.moderated)}</div>
+				<div class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+					see the list with reason and date
+				</div>
+			</a>
+		</div>
+	</section>
+
 	<p class="text-xs text-slate-500 dark:text-slate-400 mt-10">
 		Counts reflect what our indexer has seen since CashTokens activation at block 792,772 (May
 		2023). Metadata comes from the BCMR registry via Paytaca's public indexer, refreshed every 4

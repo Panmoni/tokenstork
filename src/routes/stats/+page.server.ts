@@ -162,6 +162,14 @@ export const load: PageServerLoad = async ({ parent }) => {
 				  FROM tokens t
 				  LEFT JOIN token_metadata m ON m.category = t.category
 				 WHERE ${NOT_MODERATED_CLAUSE}`
+			),
+
+			// Moderated count — the only counter on this page that does NOT
+			// apply NOT_MODERATED_CLAUSE; the whole point is to surface how
+			// many categories we filter. Linked from the Moderation card to
+			// /moderated for the per-token breakdown.
+			query<WindowCount>(
+				`SELECT COUNT(*)::bigint AS total FROM token_moderation`
 			)
 		])
 	]);
@@ -176,7 +184,8 @@ export const load: PageServerLoad = async ({ parent }) => {
 		genesisMonthsRes,
 		decimalsRes,
 		venueOverlapRes,
-		metadataRes
+		metadataRes,
+		moderatedRes
 	] = pageResults;
 
 	const pickNumber = (r: PromiseSettledResult<{ rows: WindowCount[] }>): number =>
@@ -254,6 +263,7 @@ export const load: PageServerLoad = async ({ parent }) => {
 		genesisByMonth,
 		decimalsBuckets,
 		venueOverlap,
-		metadata
+		metadata,
+		moderated: pickNumber(moderatedRes)
 	};
 };
