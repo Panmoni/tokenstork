@@ -84,6 +84,8 @@ export const load: PageServerLoad = async ({ url }) => {
 	const onlyCauldron = url.searchParams.get('cauldron') === '1';
 	const onlyTapswap = url.searchParams.get('tapswap') === '1';
 	const onlyNew24h = url.searchParams.get('new24h') === '1';
+	const onlyNew7d = url.searchParams.get('new7d') === '1';
+	const onlyNew30d = url.searchParams.get('new30d') === '1';
 	const offset = Math.max(Number(url.searchParams.get('offset') ?? 0) || 0, 0);
 
 	const search = (url.searchParams.get('search') ?? '').trim();
@@ -112,8 +114,19 @@ export const load: PageServerLoad = async ({ url }) => {
 		// has-side listings — someone is SELLING this token on Tapswap.
 		where.push(`vl_tapswap.category IS NOT NULL`);
 	}
+	// "New within window" filters. Three independent URL params rather
+	// than one `new=24h` value so the existing `?new24h=1` links in
+	// MetricsBar + /stats cards stay live without a migration. When more
+	// than one is set at once, the tightest window wins via interval
+	// comparison — unlikely in practice, harmless if it happens.
 	if (onlyNew24h) {
 		where.push(`t.genesis_time > now() - INTERVAL '24 hours'`);
+	}
+	if (onlyNew7d) {
+		where.push(`t.genesis_time > now() - INTERVAL '7 days'`);
+	}
+	if (onlyNew30d) {
+		where.push(`t.genesis_time > now() - INTERVAL '30 days'`);
 	}
 	if (searchLimited) {
 		// A full 64-char hex query is almost always a paste of a category ID

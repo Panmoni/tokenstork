@@ -72,63 +72,142 @@
 		</p>
 	</div>
 
+	<!--
+		"New — N" cards link into the directory with the matching
+		new24h / new7d / new30d URL filter + sort=recent, so clicking
+		"New — 7d / 119" drops you on the exact list of those tokens.
+		Hover state: slight violet highlight + tiny arrow hint.
+	-->
 	<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-		<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-			<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">New — 24h</div>
-			<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{fmt(data.newIn24h)}</div>
-		</div>
-		<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-			<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">New — 7d</div>
-			<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{fmt(data.newIn7d)}</div>
-		</div>
-		<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-			<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">New — 30d</div>
-			<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{fmt(data.newIn30d)}</div>
-		</div>
+		{#each [
+			{ label: 'New — 24h', count: data.newIn24h, href: '/?new24h=1&sort=recent' },
+			{ label: 'New — 7d',  count: data.newIn7d,  href: '/?new7d=1&sort=recent'  },
+			{ label: 'New — 30d', count: data.newIn30d, href: '/?new30d=1&sort=recent' }
+		] as card (card.label)}
+			<a
+				href={card.href}
+				class="group p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-violet-400 dark:hover:border-violet-600 transition-colors no-underline"
+			>
+				<div class="flex items-center justify-between">
+					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">{card.label}</div>
+					<span class="text-violet-500 opacity-0 group-hover:opacity-100 transition-opacity text-sm" aria-hidden="true">→</span>
+				</div>
+				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">{fmt(card.count)}</div>
+			</a>
+		{/each}
 	</div>
 
 	<section class="mb-8">
-		<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">By type</h2>
+		<div class="flex items-baseline justify-between mb-3">
+			<h2 class="text-xl font-semibold text-slate-900 dark:text-white">By type</h2>
+			<a href="/faq#faq-ft-nft" class="text-xs text-violet-600 dark:text-violet-400 hover:underline">What's FT+NFT?</a>
+		</div>
 		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-			{#each [['FT', data.byType.FT], ['NFT', data.byType.NFT], ['FT+NFT', data.byType['FT+NFT']]] as [label, count] (label)}
-				<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-					<div class="flex items-baseline justify-between">
-						<span class="px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-sm font-medium">
-							{label}
+			<!--
+				Each card links into the directory filtered by token_type.
+				Inline SVGs instead of raster logos since CashTokens doesn't
+				have canonical type icons. Lucide-style stroke icons match
+				the site's overall visual language (ThemeSwitcher + Header
+				mobile-menu use the same aesthetic).
+				- FT      → stacked coins (fungible: interchangeable units)
+				- NFT     → picture frame (non-fungible: unique item)
+				- FT+NFT  → layered squares (both semantics on one category)
+			-->
+			<a
+				href="/?type=FT&sort=tvl"
+				class="group p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-violet-400 dark:hover:border-violet-600 transition-colors no-underline"
+			>
+				<div class="flex items-center justify-between">
+					<div class="flex items-center gap-3">
+						<span class="flex items-center justify-center w-9 h-9 rounded-lg bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-300">
+							<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+								<circle cx="8" cy="8" r="6" />
+								<path d="M18.09 10.37A6 6 0 1 1 10.34 18" />
+								<path d="M7 6h1v4" />
+								<path d="m16.71 13.88.7.71-2.82 2.82" />
+							</svg>
 						</span>
-						<span class="text-xs text-slate-500 dark:text-slate-400">{pct(count as number)}%</span>
+						<span class="font-semibold text-slate-900 dark:text-white">FT</span>
 					</div>
-					<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{fmt(count as number)}</div>
+					<span class="text-xs text-slate-500 dark:text-slate-400">{pct(data.byType.FT)}%</span>
 				</div>
-			{/each}
+				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">{fmt(data.byType.FT)}</div>
+				<div class="mt-1 text-xs text-slate-500 dark:text-slate-400">fungible only</div>
+			</a>
+
+			<a
+				href="/?type=NFT&sort=tvl"
+				class="group p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-fuchsia-400 dark:hover:border-fuchsia-600 transition-colors no-underline"
+			>
+				<div class="flex items-center justify-between">
+					<div class="flex items-center gap-3">
+						<span class="flex items-center justify-center w-9 h-9 rounded-lg bg-fuchsia-100 dark:bg-fuchsia-900/30 text-fuchsia-600 dark:text-fuchsia-300">
+							<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+								<rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+								<circle cx="9" cy="9" r="2" />
+								<path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+							</svg>
+						</span>
+						<span class="font-semibold text-slate-900 dark:text-white">NFT</span>
+					</div>
+					<span class="text-xs text-slate-500 dark:text-slate-400">{pct(data.byType.NFT)}%</span>
+				</div>
+				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white group-hover:text-fuchsia-600 dark:group-hover:text-fuchsia-400 transition-colors">{fmt(data.byType.NFT)}</div>
+				<div class="mt-1 text-xs text-slate-500 dark:text-slate-400">non-fungible only</div>
+			</a>
+
+			<a
+				href="/?type=FT%2BNFT&sort=tvl"
+				class="group p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-indigo-400 dark:hover:border-indigo-600 transition-colors no-underline"
+			>
+				<div class="flex items-center justify-between">
+					<div class="flex items-center gap-3">
+						<span class="flex items-center justify-center w-9 h-9 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300">
+							<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+								<path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" />
+								<path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12" />
+								<path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17" />
+							</svg>
+						</span>
+						<span class="font-semibold text-slate-900 dark:text-white">FT+NFT</span>
+					</div>
+					<span class="text-xs text-slate-500 dark:text-slate-400">{pct(data.byType['FT+NFT'])}%</span>
+				</div>
+				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{fmt(data.byType['FT+NFT'])}</div>
+				<div class="mt-1 text-xs text-slate-500 dark:text-slate-400">hybrid (fungible + non-fungible)</div>
+			</a>
 		</div>
 	</section>
 
 	<section class="mb-8">
 		<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">Tradeable</h2>
 		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-			<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-				<div class="flex items-baseline justify-between">
-					<span class="px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-sm font-medium">
-						Cauldron (AMM)
-					</span>
+			<a
+				href="/?cauldron=1&sort=tvl"
+				class="group p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-violet-400 dark:hover:border-violet-600 transition-colors no-underline"
+			>
+				<div class="flex items-center gap-3">
+					<img src="/cauldron-logo.png" alt="" class="w-7 h-7 rounded" aria-hidden="true" />
+					<span class="font-semibold text-slate-900 dark:text-white">Cauldron <span class="text-xs text-slate-500 dark:text-slate-400 font-normal">(AMM)</span></span>
 				</div>
-				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{fmt(data.cauldronListedCategories)}</div>
+				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">{fmt(data.cauldronListedCategories)}</div>
 				<div class="mt-1 text-xs text-slate-500 dark:text-slate-400">
 					distinct tokens with an active pool price
 				</div>
-			</div>
-			<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-				<div class="flex items-baseline justify-between">
-					<span class="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-sm font-medium">
-						Tapswap (P2P)
-					</span>
+			</a>
+			<a
+				href="/?tapswap=1&sort=recent"
+				class="group p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-emerald-400 dark:hover:border-emerald-600 transition-colors no-underline"
+			>
+				<div class="flex items-center gap-3">
+					<img src="/tapswap-logo.png" alt="" class="w-7 h-7 rounded" aria-hidden="true" />
+					<span class="font-semibold text-slate-900 dark:text-white">Tapswap <span class="text-xs text-slate-500 dark:text-slate-400 font-normal">(P2P)</span></span>
 				</div>
-				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{fmt(data.tapswapListedCategories)}</div>
+				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{fmt(data.tapswapListedCategories)}</div>
 				<div class="mt-1 text-xs text-slate-500 dark:text-slate-400">
 					distinct tokens with open listings
 				</div>
-			</div>
+			</a>
 		</div>
 	</section>
 
