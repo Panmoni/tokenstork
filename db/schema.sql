@@ -156,27 +156,80 @@ CREATE INDEX IF NOT EXISTS token_reports_status_idx   ON token_reports (status, 
 CREATE INDEX IF NOT EXISTS token_reports_category_idx ON token_reports (category);
 
 -- ============================================================================
+-- Tapswap ("MPSW") P2P listings. Populated by `sync-tapswap-backfill` (cold
+-- walk blocks 794,520 → tip, oneshot) and `sync-tail` (incremental, piggybacks
+-- on the existing tokens walker).
+--
+-- Each row is one on-chain listing. The listing UTXO is always outputs[0]
+-- of the listing tx, so (id = listing_txid) uniquely identifies it.
+--
+-- Day-one ships with status always 'open' — spend detection (taken / cancelled
+-- transitions) is a follow-up commit. Stale "open" rows don't harm queries
+-- since partial indexes only cover the open set.
+--
+-- Protocol reference: mainnet-pat/tapswap-subsquid; verified end-to-end
+-- against block 796,000 tx 83628e1a…edc2545f on 2026-04-24.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS tapswap_offers (
+  id                BYTEA       PRIMARY KEY,                           -- listing tx txid (32 bytes)
+  -- "has" side — what the maker is offering (from outputs[0].tokenData):
+  has_category      BYTEA,                                              -- null = pure-sats listing
+  has_amount        NUMERIC(78,0),                                      -- FT amount; null for NFT or sats-only
+  has_commitment    BYTEA,                                              -- NFT commitment
+  has_capability    TEXT CHECK (has_capability IN ('none','mutable','minting')),
+  has_sats          BIGINT      NOT NULL,                               -- outputs[0].value_satoshis (usually 1000 dust)
+  -- "want" side — what the maker wants in return (from OP_RETURN chunks 4-7):
+  want_category     BYTEA,
+  want_amount       NUMERIC(78,0),
+  want_commitment   BYTEA,
+  want_capability   TEXT CHECK (want_capability IN ('none','mutable','minting')),
+  want_sats         BIGINT      NOT NULL,
+  -- Metadata:
+  fee_sats          BIGINT      NOT NULL,                               -- OP_RETURN chunk[9]; observed = 3% of want_sats
+  maker_pkh         BYTEA       NOT NULL,                               -- raw 20-byte PKH from chunk[8]; UI renders as cashaddr at display time
+  listed_block      INTEGER     NOT NULL,
+  listed_at         TIMESTAMPTZ NOT NULL,                               -- block timestamp
+  -- Lifecycle (day-one: always 'open'; follow-up commit adds transitions):
+  status            TEXT        NOT NULL DEFAULT 'open'
+                                CHECK (status IN ('open','taken','cancelled')),
+  taker_pkh         BYTEA,
+  closed_tx         BYTEA,
+  closed_at         TIMESTAMPTZ
+);
+
+-- Partial indexes — the hot query path is "open listings for a given FT category".
+CREATE INDEX IF NOT EXISTS tapswap_offers_has_category_open_idx
+  ON tapswap_offers (has_category)
+  WHERE status = 'open' AND has_category IS NOT NULL;
+CREATE INDEX IF NOT EXISTS tapswap_offers_status_idx
+  ON tapswap_offers (status, listed_at DESC);
+
+-- ============================================================================
 -- Single-row sync bookkeeping. Replaces the old __sync_info hack that stuffed
 -- sync state into a fake tokens row.
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS sync_state (
-  id                    SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
-  backfill_complete     BOOLEAN     NOT NULL DEFAULT false,
-  backfill_through      INTEGER,                                       -- highest block the backfill worker has covered
-  tail_last_block       INTEGER,                                       -- highest block the tail worker has scanned
-  last_tail_run_at      TIMESTAMPTZ,                                   -- every tail poll tick updates this (even when no new blocks)
-  last_enrich_run_at    TIMESTAMPTZ,
-  last_verify_run_at    TIMESTAMPTZ,
-  last_bcmr_run_at      TIMESTAMPTZ,                                   -- last Phase 4b BCMR-hydration pass
-  last_cauldron_run_at  TIMESTAMPTZ,                                   -- last Phase 4d Cauldron-listings pass
-  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+  id                              SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  backfill_complete               BOOLEAN     NOT NULL DEFAULT false,
+  backfill_through                INTEGER,                              -- highest block the backfill worker has covered
+  tail_last_block                 INTEGER,                              -- highest block the tail worker has scanned
+  last_tail_run_at                TIMESTAMPTZ,                          -- every tail poll tick updates this (even when no new blocks)
+  last_enrich_run_at              TIMESTAMPTZ,
+  last_verify_run_at              TIMESTAMPTZ,
+  last_bcmr_run_at                TIMESTAMPTZ,                          -- last Phase 4b BCMR-hydration pass
+  last_cauldron_run_at            TIMESTAMPTZ,                          -- last Phase 4d Cauldron-listings pass
+  last_tapswap_backfill_through   INTEGER,                              -- highest block the Tapswap backfill binary has covered
+  last_tapswap_run_at             TIMESTAMPTZ,                          -- last Tapswap backfill / tail upsert
+  updated_at                      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- Additive columns for deployments that were brought up before these landed.
 -- Idempotent — safe to re-run.
-ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_bcmr_run_at     TIMESTAMPTZ;
-ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_tail_run_at     TIMESTAMPTZ;
-ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_cauldron_run_at TIMESTAMPTZ;
+ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_bcmr_run_at               TIMESTAMPTZ;
+ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_tail_run_at               TIMESTAMPTZ;
+ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_cauldron_run_at           TIMESTAMPTZ;
+ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_tapswap_backfill_through  INTEGER;
+ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_tapswap_run_at            TIMESTAMPTZ;
 
 -- Ensure the singleton row exists on first deploy.
 INSERT INTO sync_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
