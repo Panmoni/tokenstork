@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getIPFSUrl, humanizeNumericSupply, formatMarketCap } from '$lib/format';
+	import { getIPFSUrl, humanizeNumericSupply, formatMarketCap, stripEmoji } from '$lib/format';
 	import {
 		REPORT_REASONS,
 		REPORT_REASON_LABELS,
@@ -64,9 +64,9 @@
 </script>
 
 <svelte:head>
-	<title>{token.name ?? token.id.slice(0, 10)} — Token Stork</title>
+	<title>{stripEmoji(token.name) || token.id.slice(0, 10)} — Token Stork</title>
 	{#if token.description}
-		<meta name="description" content={token.description.slice(0, 160)} />
+		<meta name="description" content={stripEmoji(token.description).slice(0, 160)} />
 	{/if}
 </svelte:head>
 
@@ -79,8 +79,8 @@
 		{/if}
 		<div class="flex-1 min-w-0">
 			<h1 class="text-3xl font-bold text-slate-900 dark:text-white truncate">
-				{token.name ?? '—'}
-				{#if token.symbol}<span class="ml-3 text-lg text-slate-500 font-mono font-normal">{token.symbol}</span>{/if}
+				{stripEmoji(token.name) || '—'}
+				{#if token.symbol}<span class="ml-3 text-lg text-slate-500 font-mono font-normal">{stripEmoji(token.symbol)}</span>{/if}
 			</h1>
 			<div class="mt-2 flex items-center gap-3">
 				<span class="px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-xs font-medium">
@@ -101,7 +101,7 @@
 	</div>
 
 	{#if token.description}
-		<p class="text-slate-600 dark:text-slate-300 mb-8">{token.description}</p>
+		<p class="text-slate-600 dark:text-slate-300 mb-8">{stripEmoji(token.description)}</p>
 	{/if}
 
 	<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
@@ -186,7 +186,7 @@
 										NFT <span class="text-slate-500">{offer.hasCommitment.slice(0, 16)}…</span>
 									{:else if offer.hasAmount}
 										{humanizeNumericSupply(offer.hasAmount, token.decimals)}
-										{#if token.symbol}<span class="text-slate-500 ml-1">{token.symbol}</span>{/if}
+										{#if token.symbol}<span class="text-slate-500 ml-1">{stripEmoji(token.symbol)}</span>{/if}
 									{:else}
 										—
 									{/if}

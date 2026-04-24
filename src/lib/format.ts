@@ -1,5 +1,21 @@
 // Presentation helpers — shared between server loaders and Svelte components.
 
+/**
+ * Strip emoji, emoji variation selectors, and ZWJ glue from a user-supplied
+ * string. Token issuers routinely embed emoji in names/symbols and the
+ * result is visual noise in a dense grid. Covers Extended_Pictographic
+ * (Unicode 15+ emoji), U+FE0F variation selector, U+200D ZWJ, and U+20E3
+ * keycap enclosing mark; collapses any resulting double-spaces.
+ */
+export function stripEmoji(s: string | null | undefined): string {
+	if (!s) return '';
+	return s
+		.replace(/\p{Extended_Pictographic}/gu, '')
+		.replace(/[️‍⃣]/g, '')
+		.replace(/\s+/g, ' ')
+		.trim();
+}
+
 // Image-format extensions we refuse to render because they carry animation
 // frames. Checked case-insensitively against the URL path portion (before
 // `?` / `#`) so query strings don't hide a `.gif`. A future
