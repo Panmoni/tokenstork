@@ -698,9 +698,10 @@ pub async fn mark_cauldron_run(pool: &PgPool) -> Result<()> {
 // parser_version < $X` to automate this.
 // ---------------------------------------------------------------------------
 
-/// Row insert for a single open Tapswap offer. Decimal-string fields mirror
-/// the convention established by `current_supply` / `balance` elsewhere in
-/// this module — sqlx implicit-casts `TEXT -> NUMERIC`.
+/// Row insert for a single open Tapswap offer. Decimal-string fields are
+/// bound as TEXT and cast to NUMERIC in SQL via `$n::numeric` — Postgres
+/// will not implicitly cast text→numeric over the prepared-statement
+/// protocol.
 pub struct OfferWrite {
     /// Listing tx txid (raw 32 bytes).
     pub id: [u8; 32],
@@ -733,11 +734,11 @@ pub async fn upsert_tapswap_offer(pool: &PgPool, o: &OfferWrite) -> Result<()> {
              want_category, want_amount, want_commitment, want_capability, want_sats,
              fee_sats, maker_pkh, listed_block, listed_at, status)
         VALUES
-            ($1, $2, $3, $4, $5, $6,
-             $7, $8, $9, $10, $11,
+            ($1, $2, $3::numeric, $4, $5, $6,
+             $7, $8::numeric, $9, $10, $11,
              $12, $13, $14, $15, 'open')
         ON CONFLICT (id) DO NOTHING
-        "#,
+"#,
     )
     .bind(o.id.as_slice())
     .bind(o.has_category.as_ref().map(|c| c.as_slice()))
@@ -776,11 +777,11 @@ pub async fn upsert_tapswap_offers_batch(pool: &PgPool, batch: &[OfferWrite]) ->
                  want_category, want_amount, want_commitment, want_capability, want_sats,
                  fee_sats, maker_pkh, listed_block, listed_at, status)
             VALUES
-                ($1, $2, $3, $4, $5, $6,
-                 $7, $8, $9, $10, $11,
+                ($1, $2, $3::numeric, $4, $5, $6,
+                 $7, $8::numeric, $9, $10, $11,
                  $12, $13, $14, $15, 'open')
             ON CONFLICT (id) DO NOTHING
-            "#,
+"#,
         )
         .bind(o.id.as_slice())
         .bind(o.has_category.as_ref().map(|c| c.as_slice()))
