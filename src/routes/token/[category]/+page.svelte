@@ -335,7 +335,7 @@
 					<span class="ml-2 text-sm font-normal text-slate-500">{data.tapswapOffers.length}</span>
 				</h2>
 				<a
-					href={`https://tapswap.cash/?category=${token.id}`}
+					href={`https://tapswap.cash/trade/${token.id}`}
 					target="_blank"
 					rel="noopener noreferrer"
 					class="text-sm text-violet-600 hover:underline"
