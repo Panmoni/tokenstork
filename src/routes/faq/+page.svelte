@@ -285,6 +285,28 @@
 			</div>
 		</details>
 
+		<details id="faq-emoji" class="group p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 scroll-mt-20">
+			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
+				<span>Why don't I see emojis in token names?</span>
+				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
+			</summary>
+			<div class="mt-3 text-slate-600 dark:text-slate-300 space-y-2">
+				<p>
+					We strip emoji from token names, symbols, and descriptions at display time. In a dense
+					directory full of rows, emoji turn into visual noise — they compete with the real name,
+					bloat mobile line-heights, and make it hard to tell a serious project from a lookalike
+					that copied the same glyph. Removing them keeps the grid scannable.
+				</p>
+				<p>
+					The on-chain data isn't touched. BCMR metadata is stored exactly as the issuer published
+					it; the emoji filter runs only in the browser-facing render path. If you need the raw
+					string, the
+					<code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-xs">/api/tokens</code>
+					endpoint returns it unmodified.
+				</p>
+			</div>
+		</details>
+
 		<details class="group p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
 				<span>How do I add a token? How do I report one?</span>
