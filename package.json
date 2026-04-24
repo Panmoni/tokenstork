@@ -1,6 +1,6 @@
 {
-  "name": "tokenstorkapp",
-  "version": "0.0.2 (beta)",
+  "name": "tokenstork",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "scripts": {
