@@ -9,6 +9,7 @@
 		{ name: 'Tokens', href: '/' },
 		{ name: 'Stats', href: '/stats' },
 		{ name: 'Learn', href: '/learn' },
+		{ name: 'FAQ', href: '/faq' },
 		{ name: 'Roadmap', href: '/roadmap' },
 		{ name: 'About', href: '/about' }
 	];
