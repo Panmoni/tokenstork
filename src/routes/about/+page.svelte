@@ -83,6 +83,50 @@
 		</section>
 
 		<section class="p-6 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 md:col-span-2">
+			<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-3">Acknowledgments</h2>
+			<p class="text-slate-600 dark:text-slate-300 mb-4">
+				TokenStork is made possible through the open-source projects and APIs below. Thank you
+				for your collaboration!
+			</p>
+			<ul class="list-disc list-inside ml-2 text-slate-600 dark:text-slate-300 space-y-1.5">
+				<li>
+					<a href="https://www.paytaca.com/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Paytaca</a>
+					— public BCMR metadata API powering every token's name, symbol, icon, and description
+				</li>
+				<li>
+					<a href="https://cauldron.quest/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Cauldron</a>
+					— AMM protocol + public price/TVL indexer feeding our directory and per-token pages
+				</li>
+				<li>
+					<a href="https://tapswap.cash/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Tapswap</a>
+					+
+					<a href="https://x.com/mainnet_pat" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">mainnet_pat</a>
+					— MPSW P2P marketplace protocol, reverse-engineered from the reference indexer so we
+					detect listings entirely from our own BCHN
+				</li>
+				<li>
+					<a href="https://github.com/mainnet-pat/blockbook" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">BlockBook (cashtokens fork)</a>
+					by
+					<a href="https://x.com/mainnet_pat" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">mainnet_pat</a>
+					— per-category holder, UTXO, and NFT indexer, built on
+					<a href="https://github.com/trezor/blockbook" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Trezor's BlockBook</a>
+				</li>
+				<li>
+					<a href="https://www.coingecko.com/en" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">CoinGecko</a>
+					— live BCH/USD price feed
+				</li>
+				<li>
+					<a href="https://bchn.org/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Bitcoin Cash Node (BCHN)</a>
+					— the archival full node underpinning every on-chain read
+				</li>
+				<li>
+					<a href="https://bchworks.com/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">BCHWorks</a>
+					— Bitcoin Cash educational content
+				</li>
+			</ul>
+		</section>
+
+		<section class="p-6 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 md:col-span-2">
 			<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-3">Contact</h2>
 			<p class="text-slate-600 dark:text-slate-300">
 				Please email
