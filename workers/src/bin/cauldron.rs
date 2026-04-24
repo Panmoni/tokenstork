@@ -21,8 +21,8 @@ use tracing_subscriber::EnvFilter;
 
 use workers::cauldron::CauldronClient;
 use workers::pg::{
-    self, VenueListingWrite, bytes_to_hex, mark_cauldron_run, pick_cauldron_candidates,
-    pool_from_env, prune_stale_venue_listings, upsert_venue_listing,
+    self, VenueListingWrite, bytes_to_hex, insert_price_history_point, mark_cauldron_run,
+    pick_cauldron_candidates, pool_from_env, prune_stale_venue_listings, upsert_venue_listing,
 };
 
 const VENUE: &str = "cauldron";
@@ -110,6 +110,21 @@ async fn main() -> Result<()> {
                 "Cauldron upsert failed"
             );
             continue;
+        }
+
+        // Append one point to the history time series. Soft-fail: a
+        // history write error doesn't invalidate the current-snapshot
+        // upsert we just made, so don't block pruning or advance
+        // hard_errors. Sparklines just lose one data point for this run.
+        if let Err(e) =
+            insert_price_history_point(&pool, VENUE, category, price, tvl).await
+        {
+            soft_errors += 1;
+            warn!(
+                category = %category_hex,
+                error = %e,
+                "Cauldron price-history append failed"
+            );
         }
 
         listed += 1;

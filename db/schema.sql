@@ -108,13 +108,80 @@ CREATE TABLE IF NOT EXISTS token_venue_listings (
   venue           TEXT        NOT NULL,                                -- 'cauldron', 'fex', 'tapswap', ...
   category        BYTEA       NOT NULL REFERENCES tokens(category) ON DELETE CASCADE,
   price_sats      DOUBLE PRECISION,                                    -- raw per-smallest-unit price from venue
-  tvl_satoshis    BIGINT,                                              -- raw locked BCH side (in satoshis) from venue
+  tvl_satoshis    NUMERIC(30,0),                                       -- raw locked BCH side (in satoshis); NUMERIC for forward-safety (see token_price_history comment)
   first_listed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (venue, category)
 );
 
 CREATE INDEX IF NOT EXISTS token_venue_listings_category_idx ON token_venue_listings (category);
+
+-- ============================================================================
+-- Per-venue price/TVL history. Append-only; one row per category per
+-- sync-cauldron run. Drives the directory grid's 1h/24h/7d % change
+-- columns and the 7-day sparklines. `token_venue_listings` holds the
+-- current snapshot (single row per venue/category); this table keeps
+-- the time series.
+--
+-- Retention: at current cadence (~317 listed × 6 runs/day) this is
+-- ~57k rows/month → ~700k rows/year, which Postgres happily keeps in
+-- RAM and serves from the (category, venue, ts DESC) index without
+-- sweat. No pruning today.
+--
+-- Revisit when any of these hit:
+-- (1) we add a second venue writing more than a few hundred rows/hour,
+-- (2) the table exceeds ~10M rows (~15 years at current rates),
+-- (3) the LATERAL subqueries in /+page.server.ts start showing in
+--     the slow-query log.
+-- Simple fix when the time comes: `DELETE FROM token_price_history
+-- WHERE ts < now() - INTERVAL '90 days'` on a weekly systemd timer.
+-- 90 days is 10× the longest window the UI queries (7d), so dropping
+-- anything older is safe.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS token_price_history (
+  category     BYTEA            NOT NULL REFERENCES tokens(category) ON DELETE CASCADE,
+  venue        TEXT             NOT NULL,                              -- 'cauldron' today
+  ts           TIMESTAMPTZ      NOT NULL DEFAULT now(),
+  price_sats   DOUBLE PRECISION NOT NULL,
+  -- NUMERIC(30,0) rather than BIGINT for belt-and-braces. BIGINT max is
+  -- ~9.2e18 sats ≈ 92 billion BCH, and BCH consensus caps total supply
+  -- at 21M — we have 4 orders of magnitude of physical headroom. But:
+  -- (a) NUMERIC is practically the same storage cost for small values,
+  -- (b) if a Cauldron indexer bug ever reports a garbage 10^20 value we
+  -- store it faithfully instead of corrupting the row with a silent
+  -- wraparound, and (c) the matching migration lives in the same file
+  -- below so an operator-mistaken-rollback can't revert half.
+  tvl_satoshis NUMERIC(30,0),
+  PRIMARY KEY (category, venue, ts)
+);
+
+-- Hot path: last-7d points for a single category (sparkline + window lookups).
+CREATE INDEX IF NOT EXISTS token_price_history_category_venue_ts_desc_idx
+  ON token_price_history (category, venue, ts DESC);
+
+-- Widen pre-existing deployments where the columns were defined as BIGINT
+-- (before 2026-04-24). Both ALTERs are no-ops on fresh databases (types
+-- already match). On carson the rewrite is seconds-scoped given the table
+-- sizes.
+ALTER TABLE token_venue_listings
+  ALTER COLUMN tvl_satoshis TYPE NUMERIC(30,0);
+ALTER TABLE token_price_history
+  ALTER COLUMN tvl_satoshis TYPE NUMERIC(30,0);
+
+-- Seed a single initial data point per currently-listed category from
+-- `token_venue_listings`, but only once. Without this the sparklines are
+-- empty until the sync-cauldron timer has fired enough times — boring for
+-- the first few days post-deploy. Idempotent: the NOT EXISTS guard means
+-- re-running `npm run db:init` never double-seeds.
+INSERT INTO token_price_history (category, venue, ts, price_sats, tvl_satoshis)
+SELECT vl.category, vl.venue, vl.updated_at, vl.price_sats, vl.tvl_satoshis
+  FROM token_venue_listings vl
+ WHERE vl.price_sats IS NOT NULL
+   AND NOT EXISTS (
+     SELECT 1 FROM token_price_history h
+      WHERE h.category = vl.category AND h.venue = vl.venue
+   )
+ON CONFLICT DO NOTHING;
 
 -- ============================================================================
 -- Moderation blocklist. Operator-maintained. Categories here are filtered

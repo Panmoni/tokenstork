@@ -598,11 +598,16 @@ pub async fn pick_cauldron_candidates(pool: &PgPool) -> Result<Vec<Vec<u8>>> {
 }
 
 pub async fn upsert_venue_listing(pool: &PgPool, w: &VenueListingWrite<'_>) -> Result<()> {
+    // `tvl_satoshis` is NUMERIC(30,0) in the schema but we bind it as i64
+    // on the Rust side — Cauldron's API returns values that comfortably
+    // fit i64, and adding a bigdecimal dep crate-wide for this one column
+    // isn't worth it. The `$4::numeric` cast tells Postgres to promote
+    // the BIGINT parameter into the column's NUMERIC type at insert time.
     sqlx::query(
         r#"
         INSERT INTO token_venue_listings
             (venue, category, price_sats, tvl_satoshis, first_listed_at, updated_at)
-        VALUES ($1, $2, $3, $4, now(), now())
+        VALUES ($1, $2, $3, $4::numeric, now(), now())
         ON CONFLICT (venue, category) DO UPDATE
             SET price_sats   = EXCLUDED.price_sats,
                 tvl_satoshis = EXCLUDED.tvl_satoshis,
@@ -620,6 +625,42 @@ pub async fn upsert_venue_listing(pool: &PgPool, w: &VenueListingWrite<'_>) -> R
             "upsert token_venue_listings for venue={} category={}",
             w.venue,
             bytes_to_hex(&w.category)
+        )
+    })?;
+    Ok(())
+}
+
+/// Append one point to `token_price_history`. Called once per successful
+/// price fetch inside the Cauldron worker. Independent of the
+/// `upsert_venue_listing` call so a schema-level history retention policy
+/// can land later without touching the live snapshot write.
+pub async fn insert_price_history_point(
+    pool: &PgPool,
+    venue: &str,
+    category: &[u8],
+    price_sats: f64,
+    tvl_satoshis: Option<i64>,
+) -> Result<()> {
+    // See upsert_venue_listing — tvl_satoshis is NUMERIC(30,0); i64 ->
+    // NUMERIC promotion happens via the explicit $4::numeric cast.
+    sqlx::query(
+        r#"
+        INSERT INTO token_price_history (category, venue, price_sats, tvl_satoshis)
+        VALUES ($1, $2, $3, $4::numeric)
+        ON CONFLICT (category, venue, ts) DO NOTHING
+        "#,
+    )
+    .bind(category)
+    .bind(venue)
+    .bind(price_sats)
+    .bind(tvl_satoshis)
+    .execute(pool)
+    .await
+    .with_context(|| {
+        format!(
+            "insert_price_history_point venue={} category={}",
+            venue,
+            bytes_to_hex(category)
         )
     })?;
     Ok(())
