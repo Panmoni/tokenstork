@@ -43,7 +43,7 @@
 			bullets: [
 				'Cauldron AMM — price, TVL, "On Cauldron" directory filter.',
 				'Tapswap P2P — listings detected on-chain via the MPSW OP_RETURN protocol (no GraphQL).',
-				'C / T badges + status dot on every directory row.'
+				'Cauldron + Tapswap venue logos on every directory row.'
 			]
 		},
 		{
@@ -162,7 +162,7 @@
 	];
 </script>
 
-<main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+<main class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 	<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent mb-4">
 		Roadmap
 	</h1>

@@ -151,16 +151,33 @@
 
 		<details class="group p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
-				<span>What do the status dots (green / amber / grey) mean?</span>
+				<span>What are the small icons next to each token's name?</span>
 				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
 			</summary>
 			<div class="mt-3 text-slate-600 dark:text-slate-300 space-y-2">
-				<p>The coloured dot next to each token name on the directory is an at-a-glance tradeability signal:</p>
-				<ul class="list-disc list-inside ml-2 space-y-1">
-					<li><span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 align-middle mr-1"></span> <strong>Green</strong> — active Cauldron AMM pool (live pool price)</li>
-					<li><span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-400 align-middle mr-1"></span> <strong>Amber</strong> — Tapswap P2P listings only, no AMM liquidity</li>
-					<li><span class="inline-block w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-slate-600 align-middle mr-1"></span> <strong>Grey</strong> — no venue presence; can't be bought/sold right now</li>
+				<p>Each token in the directory shows a few compact signals next to its name:</p>
+				<ul class="list-disc list-inside ml-2 space-y-1.5">
+					<li>
+						<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 align-middle">FT</span>
+						/
+						<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 align-middle">NFT</span>
+						/
+						<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 align-middle">FT+NFT</span>
+						— token-type badge (<a href="#faq-ft-nft" class="underline hover:text-violet-600 dark:hover:text-violet-400">what these mean</a>).
+					</li>
+					<li>
+						<img src="/cauldron-logo.png" alt="" class="inline-block h-4 w-4 align-middle" aria-hidden="true" />
+						<strong>Cauldron logo</strong> — the token has an active AMM pool on <a href="https://cauldron.quest/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Cauldron</a> with a live pool price.
+					</li>
+					<li>
+						<img src="/tapswap-logo.png" alt="" class="inline-block h-4 w-4 align-middle" aria-hidden="true" />
+						<strong>Tapswap logo</strong> — the token has one or more open P2P listings on <a href="https://tapswap.cash/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Tapswap</a>. Hover the icon for the listing count.
+					</li>
 				</ul>
+				<p>
+					A token can show one, both, or neither venue icon. No icons = not currently tradeable
+					anywhere our indexer knows about.
+				</p>
 			</div>
 		</details>
 
@@ -213,11 +230,36 @@
 				</p>
 				<ul class="list-disc list-inside ml-2 space-y-1">
 					<li><strong>New categories + Tapswap listings</strong> — sub-second. The tail worker subscribes to BCH node ZMQ and indexes within milliseconds of a new block.</li>
-					<li><strong>Cauldron prices + TVL</strong> — every 4 hours.</li>
-					<li><strong>BCMR metadata</strong> (name, symbol, icon, description) — every 4 hours.</li>
+					<li><strong>Cauldron prices + TVL</strong> — every 10 minutes.</li>
+					<li><strong>BCMR metadata</strong> (name, symbol, icon, description) — hourly.</li>
 					<li><strong>BCH/USD price</strong> — every 5 minutes.</li>
 					<li><strong>Sparklines + 1h/24h/7d % change</strong> — rebuilt from the price history each request; fills in over the 7 days following deploy.</li>
 				</ul>
+			</div>
+		</details>
+
+		<details class="group p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
+				<span>What are sparklines?</span>
+				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
+			</summary>
+			<div class="mt-3 text-slate-600 dark:text-slate-300 space-y-2">
+				<p>
+					The tiny inline chart at the right end of each directory row — it plots the token's
+					<strong>Cauldron price over the last 7 days</strong> as a single-line graph. Green
+					stroke if the 7-day trend is up, rose if down, slate if flat.
+				</p>
+				<p>
+					Each data point is one
+					<a href="https://cauldron.quest/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Cauldron</a>
+					sync snapshot. With the worker running every 10 minutes, a fully-populated sparkline
+					holds ~1,000 points; the SVG downsamples that to a readable line.
+				</p>
+				<p>
+					Tokens without a Cauldron pool (Tapswap-only or not listed) show "—" in the sparkline
+					column — no on-chain price history means nothing to chart. The same price series
+					drives the 1h / 24h / 7d % change columns too.
+				</p>
 			</div>
 		</details>
 

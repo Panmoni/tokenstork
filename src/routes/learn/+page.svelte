@@ -144,7 +144,7 @@
 			</li>
 			<li>
 				<a href="https://bchworks.com/" target="_blank" rel="noopener noreferrer">
-					BitcoinCashSite
+					BCHWorks
 				</a> — beginner-friendly BCH information + tutorials.
 			</li>
 		</ul>

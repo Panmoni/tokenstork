@@ -81,6 +81,7 @@
 					<li><a href="/" class="text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400">Tokens</a></li>
 					<li><a href="/stats" class="text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400">Stats</a></li>
 					<li><a href="/learn" class="text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400">Learn</a></li>
+					<li><a href="/faq" class="text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400">FAQ</a></li>
 					<li><a href="/roadmap" class="text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400">Roadmap</a></li>
 					<li><a href="/about" class="text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400">About</a></li>
 				</ul>

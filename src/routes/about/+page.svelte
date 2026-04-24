@@ -11,7 +11,7 @@
 		About Token Stork
 	</h1>
 
-	<div class="prose prose-slate dark:prose-invert max-w-3xl">
+	<div class="prose prose-slate dark:prose-invert max-w-none">
 		<p class="text-slate-600 dark:text-slate-300">
 			TokenStork.com is a market-cap site for
 			<a href="https://bchworks.com/" target="_blank" rel="noopener noreferrer">BCH</a>
