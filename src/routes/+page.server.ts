@@ -83,6 +83,7 @@ export const load: PageServerLoad = async ({ url }) => {
 	const typeParam = url.searchParams.get('type');
 	const onlyCauldron = url.searchParams.get('cauldron') === '1';
 	const onlyTapswap = url.searchParams.get('tapswap') === '1';
+	const onlyNew24h = url.searchParams.get('new24h') === '1';
 	const offset = Math.max(Number(url.searchParams.get('offset') ?? 0) || 0, 0);
 
 	const search = (url.searchParams.get('search') ?? '').trim();
@@ -110,6 +111,9 @@ export const load: PageServerLoad = async ({ url }) => {
 		// when the filter is active. `has_category IS NOT NULL` catches the
 		// has-side listings — someone is SELLING this token on Tapswap.
 		where.push(`vl_tapswap.category IS NOT NULL`);
+	}
+	if (onlyNew24h) {
+		where.push(`t.genesis_time > now() - INTERVAL '24 hours'`);
 	}
 	if (searchLimited) {
 		// A full 64-char hex query is almost always a paste of a category ID

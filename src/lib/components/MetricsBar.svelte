@@ -79,19 +79,18 @@
 					</TooltipContent>
 				</Tooltip>
 
-				<Tooltip>
-					<TooltipTrigger class="flex items-center gap-2 cursor-default">
-						<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-							New 24h
-						</span>
-						<span class="font-semibold text-slate-900 dark:text-white text-sm">
-							{fmt(newIn24h)}
-						</span>
-					</TooltipTrigger>
-					<TooltipContent>
-						Categories whose genesis transaction was mined in the last 24 hours. Counted by on-chain block time, not our DB row-write time.
-					</TooltipContent>
-				</Tooltip>
+				<a
+					href="/?new24h=1&sort=recent"
+					class="flex items-center gap-2 hover:opacity-80 transition-opacity"
+					title="Categories whose genesis transaction was mined in the last 24 hours. Click to view them."
+				>
+					<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+						New 24h
+					</span>
+					<span class="font-semibold text-violet-600 dark:text-violet-400 text-sm underline-offset-4 hover:underline">
+						{fmt(newIn24h)}
+					</span>
+				</a>
 
 				{#if tailLastBlock !== null}
 					<Tooltip>
@@ -146,10 +145,14 @@
 					<span class="inline-block w-12 h-4 bg-slate-200 dark:bg-slate-700 rounded animate-pulse"></span>
 				{/if}
 			</div>
-			<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-slate-800 shadow-sm">
+			<a
+				href="/?new24h=1&sort=recent"
+				class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-slate-800 shadow-sm no-underline"
+				title="Tokens minted in the last 24 hours"
+			>
 				<span class="text-xs text-slate-500 dark:text-slate-400">New 24h</span>
-				<span class="font-semibold text-sm">{fmt(newIn24h)}</span>
-			</div>
+				<span class="font-semibold text-sm text-violet-600 dark:text-violet-400">{fmt(newIn24h)}</span>
+			</a>
 			{#if tailLastBlock !== null}
 				<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-slate-800 shadow-sm">
 					<span class="text-xs text-slate-500 dark:text-slate-400">Block</span>
