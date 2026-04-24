@@ -4,6 +4,17 @@
 	let { data } = $props();
 </script>
 
+<svelte:head>
+	<!--
+		Explicit title on the home page so navigating from a sub-page
+		(e.g. /stats, /faq) back to / updates the document title.
+		Without this, <svelte:head><title> elements from sub-pages
+		persist in the DOM and the tab label gets stuck on the last
+		visited page's title.
+	-->
+	<title>Token Stork: Discover, Track and Analyze BCH Cash Tokens</title>
+</svelte:head>
+
 <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 	<div class="mb-8">
 		<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent">

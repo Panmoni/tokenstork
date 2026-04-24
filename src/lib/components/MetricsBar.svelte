@@ -47,19 +47,18 @@
 					</TooltipContent>
 				</Tooltip>
 
-				<Tooltip>
-					<TooltipTrigger class="flex items-center gap-2 cursor-default">
-						<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-							Listed
-						</span>
-						<span class="font-semibold text-slate-900 dark:text-white text-sm">
-							{fmt(listedCount)}
-						</span>
-					</TooltipTrigger>
-					<TooltipContent>
-						Subset of Tracked — tokens you can actually buy or sell right now. Has a Cauldron AMM price or an open Tapswap P2P listing.
-					</TooltipContent>
-				</Tooltip>
+				<a
+					href="/?listed=1&sort=tvl"
+					class="flex items-center gap-2 hover:opacity-80 transition-opacity"
+					title="Subset of Tracked — tokens you can buy or sell right now (Cauldron AMM price or open Tapswap P2P listing). Click to view them."
+				>
+					<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+						Listed
+					</span>
+					<span class="font-semibold text-violet-600 dark:text-violet-400 text-sm underline-offset-4 hover:underline">
+						{fmt(listedCount)}
+					</span>
+				</a>
 
 				<Tooltip>
 					<TooltipTrigger class="flex items-center gap-2 cursor-default">
@@ -133,10 +132,13 @@
 				<span class="text-xs text-slate-500 dark:text-slate-400">Tokens</span>
 				<span class="font-semibold text-violet-600 dark:text-violet-400 text-sm">{fmt(tokensTracked)}</span>
 			</div>
-			<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-slate-800 shadow-sm">
+			<a
+				href="/?listed=1&sort=tvl"
+				class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-slate-800 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+			>
 				<span class="text-xs text-slate-500 dark:text-slate-400">Listed</span>
-				<span class="font-semibold text-sm">{fmt(listedCount)}</span>
-			</div>
+				<span class="font-semibold text-violet-600 dark:text-violet-400 text-sm">{fmt(listedCount)}</span>
+			</a>
 			<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-slate-800 shadow-sm">
 				<span class="text-xs text-slate-500 dark:text-slate-400">Total TVL</span>
 				{#if tvlUSD !== null}

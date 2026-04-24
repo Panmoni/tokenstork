@@ -86,6 +86,10 @@ export const load: PageServerLoad = async ({ url }) => {
 	const onlyNew24h = url.searchParams.get('new24h') === '1';
 	const onlyNew7d = url.searchParams.get('new7d') === '1';
 	const onlyNew30d = url.searchParams.get('new30d') === '1';
+	// ?listed=1 — tokens with presence on any venue (Cauldron OR Tapswap).
+	// Powers the Listed pill in MetricsBar, which matches the same
+	// universe that `listedCount` reports in the layout load.
+	const onlyListed = url.searchParams.get('listed') === '1';
 	const offset = Math.max(Number(url.searchParams.get('offset') ?? 0) || 0, 0);
 
 	const search = (url.searchParams.get('search') ?? '').trim();
@@ -127,6 +131,13 @@ export const load: PageServerLoad = async ({ url }) => {
 	}
 	if (onlyNew30d) {
 		where.push(`t.genesis_time > now() - INTERVAL '30 days'`);
+	}
+	if (onlyListed) {
+		// On any venue: Cauldron LEFT JOIN or Tapswap LEFT JOIN hit.
+		// Both sides of this OR use IS NOT NULL against the LEFT-JOINed
+		// aggregates further down, which cost nothing extra because
+		// those joins are always part of the fromJoins block.
+		where.push(`(vl_cauldron.category IS NOT NULL OR vl_tapswap.category IS NOT NULL)`);
 	}
 	if (searchLimited) {
 		// A full 64-char hex query is almost always a paste of a category ID
