@@ -21,7 +21,7 @@
 		<ul class="list-disc list-inside ml-5 text-slate-600 dark:text-slate-300 space-y-2">
 			<li>
 				<a
-					href="https://www.bitcoincashsite.com/blog/token-pioneers-cashtokens-tutorial-1"
+					href="https://www.bchworks.com/blog/token-pioneers-cashtokens-tutorial-1"
 					target="_blank"
 					rel="noopener noreferrer"
 				>
@@ -30,7 +30,7 @@
 			</li>
 			<li>
 				<a
-					href="https://www.bitcoincashsite.com/blog/token-pioneers-cashtokens-tutorial-2"
+					href="https://www.bchworks.com/blog/token-pioneers-cashtokens-tutorial-2"
 					target="_blank"
 					rel="noopener noreferrer"
 				>
@@ -39,7 +39,7 @@
 			</li>
 			<li>
 				<a
-					href="https://www.bitcoincashsite.com/blog/token-pioneers-cashtokens-tutorial-3"
+					href="https://www.bchworks.com/blog/token-pioneers-cashtokens-tutorial-3"
 					target="_blank"
 					rel="noopener noreferrer"
 				>
@@ -48,7 +48,7 @@
 			</li>
 			<li>
 				<a
-					href="https://www.bitcoincashsite.com/blog/token-pioneers-cashtokens-tutorial-4"
+					href="https://www.bchworks.com/blog/token-pioneers-cashtokens-tutorial-4"
 					target="_blank"
 					rel="noopener noreferrer"
 				>
@@ -74,7 +74,7 @@
 				</a> — the metadata standard behind the "BCMR metadata" card on every token page.
 			</li>
 			<li>
-				<a href="https://bitcoincashsite.com/" target="_blank" rel="noopener noreferrer">
+				<a href="https://bchworks.com/" target="_blank" rel="noopener noreferrer">
 					BitcoinCashSite
 				</a> — beginner-friendly BCH information + tutorials.
 			</li>
