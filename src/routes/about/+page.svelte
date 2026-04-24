@@ -74,8 +74,10 @@
 		<section class="p-6 rounded-xl border border-violet-200 dark:border-violet-900/50 bg-violet-50/40 dark:bg-violet-950/20 md:col-span-2">
 			<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-3">Support this project</h2>
 			<p class="text-slate-600 dark:text-slate-300 mb-4">
-				At this time, this site is self-funded and running on borrowed APIs, as well lending an API to
-				others, so please consider supporting this work by donating to the following address. Thank you!
+				TokenStork is self-funded. Ongoing costs include a ~$25/month VPS bill (Netcup RS 2000 G12,
+				where the archival BCH node, Postgres, indexer workers, and web app all live), domain
+				registration, and my time. If the site is useful to you, please consider chipping in by
+				donating to the address below. Thank you!
 			</p>
 			<p class="font-mono text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded px-3 py-2 inline-block select-all break-all">
 				bitcoincash:qz3pxmwda8gd42wa8k9yfxcwhcaapeuhygjc8mc4m8

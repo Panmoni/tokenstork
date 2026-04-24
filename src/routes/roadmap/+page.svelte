@@ -166,7 +166,7 @@
 	<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent mb-4">
 		Roadmap
 	</h1>
-	<p class="text-slate-600 dark:text-slate-400 mb-10 max-w-3xl">
+	<p class="text-slate-600 dark:text-slate-400 mb-10">
 		TokenStork.com aims to be a market-cap site for BCH CashTokens and a
 		comprehensive service provider for on-chain CashTokens operations and data.
 		Working with CashTokens should be smooth and easy, and TokenStork.com aims
