@@ -25,24 +25,30 @@ RestartSec=30s
 # once under load; raising it costs nothing when shutdown is fast.
 TimeoutStopSec=900s
 
-# Memory guardrails. 16 GB box; BCHN + Postgres + SvelteKit + workers already
-# need ~5-6 GB combined. BlockBook's IBD-phase working set naturally grows
-# past 10 GB if uncapped (observed: OOM-killed at anon-rss 10,697,728 kB
+# Memory guardrails. 16 GB box; BCHN + Postgres + SvelteKit + workers need
+# ~5-6 GB combined in steady-state. BlockBook's IBD-phase working set grows
+# to ~10 GB if uncapped (observed: OOM-killed at anon-rss 10,697,728 kB
 # during a deploy that also ran `cargo build --release` concurrently).
 #
-# MemoryHigh is a soft throttle — cgroup v2 puts the process under heavy
-# reclaim pressure once exceeded, but doesn't kill it. BlockBook's RocksDB
-# block cache is the main consumer and responds well to reclaim.
+# First attempt at MemoryHigh=6G / MemoryMax=7G throttled RocksDB's block
+# cache hard enough that IBD dropped from ~650 blocks/min to ~72 blocks/min
+# (6-day ETA vs ~24h). The bottleneck was cache thrashing under cgroup
+# reclaim pressure, not CPU. So: raise caps to accommodate the observed
+# 10G working set, and rely on the install doc's "don't deploy during IBD"
+# advisory + OOMPolicy=stop for protection instead of starving the cache.
 #
-# MemoryMax is the hard kill line. Set above MemoryHigh so the throttle
-# gets a chance to work first. 7 GB leaves ~9 GB for everything else on
-# the box, which is comfortable given the steady-state budget.
+# MemoryHigh is a soft throttle — cgroup v2 applies reclaim pressure once
+# exceeded, but doesn't kill. 8 GB = BlockBook's happy working set without
+# squeezing the block cache.
+#
+# MemoryMax is the hard kill line. 10 GB caps the observed pre-OOM peak
+# and still leaves ~6 GB for everything else on the box.
 #
 # OOMPolicy=stop means systemd's own OOM handler will stop() the unit
 # rather than letting RestartSec loop us into rapid crash cycles if we
 # do hit MemoryMax.
-MemoryHigh=6G
-MemoryMax=7G
+MemoryHigh=8G
+MemoryMax=10G
 OOMPolicy=stop
 
 # Hardening profile matching sync-tail / sync-cauldron / tokenstork.service.
