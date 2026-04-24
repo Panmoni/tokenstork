@@ -34,6 +34,17 @@ export interface TokenApiRow {
 	// count of open offers where this category is the "has" side (someone
 	// is selling this token). Zero if not listed.
 	tapswapListingCount: number;
+
+	// Price-change signals across three windows, computed server-side from
+	// `token_price_history`. `null` when we don't have a data point on the
+	// older side of the window yet (e.g., within 7 days of first deploy).
+	priceChange1hPct: number | null;
+	priceChange24hPct: number | null;
+	priceChange7dPct: number | null;
+
+	// Last 7 days of Cauldron price points in sats, oldest-first. Rendered
+	// as an SVG sparkline. Empty array when history is missing.
+	sparklinePoints: number[];
 }
 
 export interface TokensResponse {

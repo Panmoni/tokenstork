@@ -13,6 +13,8 @@
 			tokensTracked: number;
 			tailLastBlock: number | null;
 			newIn24h: number;
+			totalTvlSats: number;
+			listedCount: number;
 		};
 		children: Snippet;
 	}
@@ -68,6 +70,8 @@
 		tokensTracked={data.tokensTracked}
 		tailLastBlock={data.tailLastBlock}
 		newIn24h={data.newIn24h}
+		totalTvlSats={data.totalTvlSats}
+		listedCount={data.listedCount}
 	/>
 	<Header />
 	{@render children()}

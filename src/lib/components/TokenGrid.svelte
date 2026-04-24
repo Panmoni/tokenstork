@@ -9,6 +9,7 @@
 	} from '$lib/format';
 	import { bchPrice } from '$lib/stores/bchPrice';
 	import FormatCategory from './FormatCategory.svelte';
+	import Sparkline from './Sparkline.svelte';
 	import type { TokenApiRow, TokenType } from '$lib/types';
 
 	interface Props {
@@ -19,6 +20,62 @@
 	}
 
 	let { tokens, total, limit, offset }: Props = $props();
+
+	// Format a % change as "+1.23%" / "-4.56%". Rounded to 2dp; "—" for null
+	// windows (insufficient history). Color is applied by the caller via
+	// pctColor() so tests/exports can re-use the formatting alone.
+	function fmtPct(n: number | null): string {
+		if (n == null || !Number.isFinite(n)) return '—';
+		const sign = n > 0 ? '+' : '';
+		return `${sign}${n.toFixed(2)}%`;
+	}
+	function pctColor(n: number | null): string {
+		if (n == null || !Number.isFinite(n)) return 'text-slate-400 dark:text-slate-500';
+		if (n > 0) return 'text-emerald-600 dark:text-emerald-400';
+		if (n < 0) return 'text-rose-600 dark:text-rose-400';
+		return 'text-slate-500 dark:text-slate-400';
+	}
+
+	// Market cap = cauldron price (sats per smallest unit) × circulating
+	// supply (raw smallest units) × bchUSD / 1e8. The `decimals` factor
+	// cancels out because price is per-smallest-unit and supply is in
+	// smallest units. `currentSupply` is a NUMERIC(78,0) string; Number()
+	// is safe up to ~2^53 which comfortably covers realistic market caps.
+	function marketCapUSD(
+		priceSats: number | null,
+		supplyRaw: string | null,
+		_decimals: number,
+		bchUSD: number | null
+	): number | null {
+		if (priceSats == null || supplyRaw == null || !bchUSD) return null;
+		const supply = Number(supplyRaw);
+		if (!Number.isFinite(supply) || supply <= 0) return null;
+		return (priceSats * supply * bchUSD) / 1e8;
+	}
+
+	function compactUSD(n: number | null): string {
+		if (n == null || !Number.isFinite(n) || n <= 0) return '—';
+		if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(2)}B`;
+		if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
+		if (n >= 1_000) return `$${(n / 1_000).toFixed(2)}k`;
+		if (n >= 1) return `$${n.toFixed(2)}`;
+		return `$${n.toFixed(4)}`;
+	}
+
+	// Status dot: green = listed on Cauldron (live market data); amber =
+	// only on Tapswap (P2P presence but no AMM liquidity); grey = neither.
+	// Kept simple on purpose — this is an at-a-glance signal, not a
+	// nuanced health grade.
+	function statusDotClass(token: TokenApiRow): string {
+		if (token.cauldronPriceSats != null) return 'bg-emerald-500 dark:bg-emerald-400';
+		if (token.tapswapListingCount > 0) return 'bg-amber-400 dark:bg-amber-300';
+		return 'bg-slate-300 dark:bg-slate-600';
+	}
+	function statusDotTitle(token: TokenApiRow): string {
+		if (token.cauldronPriceSats != null) return 'Active on Cauldron (AMM)';
+		if (token.tapswapListingCount > 0) return 'P2P listings on Tapswap only';
+		return 'No venue presence';
+	}
 
 	// Local input value, bound to the search box; URL is the source of truth.
 	let searchInput = $state(page.url.searchParams.get('search') ?? '');
@@ -139,34 +196,45 @@
 	</div>
 
 	<!--
-		Desktop 12-col grid. Columns rebalance to fit Price + TVL:
-		Token(3) Type(1) Price(2) TVL(2) Supply(1) Holders(1) NFTs(1) Category(1).
-		NFTs + Holders + live-supply stats still show at col-span-1 since they're
-		compact integers and the detail page is always one click away for depth.
+		Desktop grid. Explicit grid-template-columns so the % columns stay
+		narrow and the sparkline has real pixels to paint in. Layout:
+		  Token(3fr) Price(1.2fr) 1h(0.8fr) 24h(0.8fr) 7d(0.8fr)
+		  MCap(1.2fr) TVL(1.2fr) Supply(1fr) Spark(1.2fr)
+		Type (FT/NFT) + Cauldron/Tapswap venue badges collapse into the
+		Token cell alongside name+symbol; holder count, NFT count, and
+		truncated category stay on the token detail page.
 	-->
 	<div class="hidden md:block overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
-		<div class="grid grid-cols-12 gap-2 px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-			<button type="button" class="col-span-3 text-left cursor-pointer hover:text-violet-600 dark:hover:text-violet-400" onclick={() => setSort('name')}>
+		<div
+			class="grid grid-cols-[3fr_1.2fr_0.8fr_0.8fr_0.8fr_1.2fr_1.2fr_1fr_1.2fr] gap-2 px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider items-center"
+		>
+			<button type="button" class="text-left cursor-pointer hover:text-violet-600 dark:hover:text-violet-400" onclick={() => setSort('name')}>
 				Token {sort === 'name' ? '↕' : ''}
 			</button>
-			<div class="col-span-1">Type</div>
-			<div class="col-span-2 text-right">Price</div>
-			<button type="button" class="col-span-2 text-right cursor-pointer hover:text-violet-600 dark:hover:text-violet-400" onclick={() => setSort('tvl')}>
+			<div class="text-right">Price</div>
+			<div class="text-right" title="Price change vs. the nearest history point ≥1h old. Cauldron syncs every 4h, so this often reflects the ~4h mark.">1h</div>
+			<div class="text-right" title="Price change vs. the nearest history point ≥24h old">24h</div>
+			<div class="text-right" title="Price change vs. the nearest history point ≥7d old">7d</div>
+			<div class="text-right" title="Price × circulating supply">MCap</div>
+			<button type="button" class="text-right cursor-pointer hover:text-violet-600 dark:hover:text-violet-400" onclick={() => setSort('tvl')}>
 				TVL {sort === 'tvl' ? '↓' : ''}
 			</button>
-			<button type="button" class="col-span-1 text-right cursor-pointer hover:text-violet-600 dark:hover:text-violet-400" onclick={() => setSort('supply')}>
+			<button type="button" class="text-right cursor-pointer hover:text-violet-600 dark:hover:text-violet-400" onclick={() => setSort('supply')}>
 				Supply {sort === 'supply' ? '↓' : ''}
 			</button>
-			<button type="button" class="col-span-1 text-right cursor-pointer hover:text-violet-600 dark:hover:text-violet-400" onclick={() => setSort('holders')}>
-				Holders {sort === 'holders' ? '↓' : ''}
-			</button>
-			<div class="col-span-1 text-right">NFTs</div>
-			<div class="col-span-1 text-right">Category</div>
+			<div class="text-right" title="Price over the last 7 days">Last 7d</div>
 		</div>
 
 		{#each tokens as token (token.id)}
-			<div class="grid grid-cols-12 gap-2 px-4 py-4 items-center border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-				<a href={`/token/${token.id}`} class="col-span-3 flex items-center gap-3 min-w-0 no-underline group">
+			<div
+				class="grid grid-cols-[3fr_1.2fr_0.8fr_0.8fr_0.8fr_1.2fr_1.2fr_1fr_1.2fr] gap-2 px-4 py-4 items-center border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors"
+			>
+				<a href={`/token/${token.id}`} class="flex items-center gap-3 min-w-0 no-underline group">
+					<span
+						class={`w-2 h-2 rounded-full flex-shrink-0 ${statusDotClass(token)}`}
+						title={statusDotTitle(token)}
+						aria-hidden="true"
+					></span>
 					{#if token.icon}
 						<img src={getIPFSUrl(token.icon)} alt="" class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800" loading="lazy" />
 					{:else}
@@ -176,8 +244,9 @@
 						<div class="font-semibold text-slate-900 dark:text-white truncate group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
 							{token.name || '—'}
 							{#if token.symbol}<span class="ml-2 text-xs text-slate-500 font-mono">{token.symbol}</span>{/if}
+							<span class="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" title="Token type">{token.tokenType}</span>
 							{#if token.cauldronPriceSats != null}
-								<span class="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300" title="Listed on Cauldron (AMM)">C</span>
+								<span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300" title="Listed on Cauldron (AMM)">C</span>
 							{/if}
 							{#if token.tapswapListingCount > 0}
 								<span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" title="{token.tapswapListingCount} open listing{token.tapswapListingCount === 1 ? '' : 's'} on Tapswap (P2P)">T</span>
@@ -188,28 +257,29 @@
 						{/if}
 					</div>
 				</a>
-				<div class="col-span-1 text-xs">
-					<span class="px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 font-medium">
-						{token.tokenType}
-					</span>
-				</div>
-				<div class="col-span-2 text-right font-mono text-sm text-slate-700 dark:text-slate-300">
+				<div class="text-right font-mono text-sm text-slate-700 dark:text-slate-300">
 					{formatVenuePriceUSD(token.cauldronPriceSats, token.decimals, $bchPrice.bchPrice)}
 				</div>
-				<div class="col-span-2 text-right font-mono text-sm text-slate-700 dark:text-slate-300">
+				<div class={`text-right font-mono text-xs ${pctColor(token.priceChange1hPct)}`}>
+					{fmtPct(token.priceChange1hPct)}
+				</div>
+				<div class={`text-right font-mono text-xs ${pctColor(token.priceChange24hPct)}`}>
+					{fmtPct(token.priceChange24hPct)}
+				</div>
+				<div class={`text-right font-mono text-xs ${pctColor(token.priceChange7dPct)}`}>
+					{fmtPct(token.priceChange7dPct)}
+				</div>
+				<div class="text-right font-mono text-sm text-slate-700 dark:text-slate-300">
+					{compactUSD(marketCapUSD(token.cauldronPriceSats, token.currentSupply, token.decimals, $bchPrice.bchPrice))}
+				</div>
+				<div class="text-right font-mono text-sm text-slate-700 dark:text-slate-300">
 					{formatVenueTvlUSD(token.cauldronTvlSatoshis, $bchPrice.bchPrice)}
 				</div>
-				<div class="col-span-1 text-right font-mono text-xs text-slate-700 dark:text-slate-300">
+				<div class="text-right font-mono text-xs text-slate-700 dark:text-slate-300">
 					{humanizeNumericSupply(token.currentSupply, token.decimals)}
 				</div>
-				<div class="col-span-1 text-right text-xs text-slate-700 dark:text-slate-300">
-					{token.holderCount ?? '-'}
-				</div>
-				<div class="col-span-1 text-right text-xs text-slate-700 dark:text-slate-300">
-					{token.liveNftCount ?? '-'}
-				</div>
-				<div class="col-span-1 text-right">
-					<FormatCategory category={token.id} />
+				<div class="text-right">
+					<Sparkline points={token.sparklinePoints} />
 				</div>
 			</div>
 		{/each}

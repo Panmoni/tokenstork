@@ -27,6 +27,13 @@ interface DbRow {
 	cauldron_price_sats: number | null;
 	cauldron_tvl_satoshis: string | null;
 	tapswap_listing_count: string | null;
+	// History-derived: nearest-older price-point per window. Nullable when
+	// history hasn't accumulated far enough back (early-days-of-deploy case).
+	price_sats_1h_ago: number | null;
+	price_sats_24h_ago: number | null;
+	price_sats_7d_ago: number | null;
+	// Last-7d points as a Postgres double-precision array, oldest first.
+	sparkline_points: number[] | null;
 }
 
 // Bucket names by "quality" so the directory opens with recognisable
@@ -62,11 +69,17 @@ const VALID_SORTS: Record<string, string> = {
 	oldest: 't.genesis_block ASC, t.first_seen_at ASC'
 };
 
+// Default sort: TVL desc. The directory used to open name-sorted, which
+// surfaced every empty / emoji token first and pushed the actually-traded
+// ones deep. TVL-default matches aggregator convention (CoinGecko, etc.)
+// and makes the site useful on first paint.
+const DEFAULT_SORT = 'tvl';
+
 const PAGE_SIZE = 100;
 
 export const load: PageServerLoad = async ({ url }) => {
-	const sortKey = url.searchParams.get('sort') ?? 'name';
-	const sort = VALID_SORTS[sortKey] ?? VALID_SORTS.name;
+	const sortKey = url.searchParams.get('sort') ?? DEFAULT_SORT;
+	const sort = VALID_SORTS[sortKey] ?? VALID_SORTS[DEFAULT_SORT];
 	const typeParam = url.searchParams.get('type');
 	const onlyCauldron = url.searchParams.get('cauldron') === '1';
 	const onlyTapswap = url.searchParams.get('tapswap') === '1';
@@ -140,6 +153,15 @@ export const load: PageServerLoad = async ({ url }) => {
 	// Both are LEFT JOINs: rows missing from a venue table still appear in
 	// the directory. When a "onlyX" filter is active, the WHERE clause
 	// promotes the LEFT JOIN to an effective INNER via `IS NOT NULL`.
+	// Price-history lookups use LEFT JOIN LATERAL rather than correlated
+	// subqueries in the SELECT list so Postgres plans them once per row
+	// against the (category, venue, ts DESC) index — one index seek per
+	// lookup, no sort. Each lateral returns at most one row.
+	//
+	// The sparkline subquery array-aggs last-7d points oldest-first. For
+	// an unlisted token this is an empty array (LEFT JOIN + array_agg
+	// returns NULL, mapped to [] at the TS boundary). Postgres streams
+	// the 42-ish doubles directly; no meaningful cost at this scale.
 	const fromJoins = `
 		FROM tokens t
 		LEFT JOIN token_metadata m ON m.category = t.category
@@ -162,6 +184,30 @@ export const load: PageServerLoad = async ({ url }) => {
 			   )
 			 GROUP BY has_category
 		) vl_tapswap ON vl_tapswap.category = t.category
+		LEFT JOIN LATERAL (
+			SELECT price_sats FROM token_price_history
+			 WHERE category = t.category AND venue = 'cauldron'
+			   AND ts <= now() - INTERVAL '1 hour'
+			 ORDER BY ts DESC LIMIT 1
+		) ph_1h ON true
+		LEFT JOIN LATERAL (
+			SELECT price_sats FROM token_price_history
+			 WHERE category = t.category AND venue = 'cauldron'
+			   AND ts <= now() - INTERVAL '24 hours'
+			 ORDER BY ts DESC LIMIT 1
+		) ph_24h ON true
+		LEFT JOIN LATERAL (
+			SELECT price_sats FROM token_price_history
+			 WHERE category = t.category AND venue = 'cauldron'
+			   AND ts <= now() - INTERVAL '7 days'
+			 ORDER BY ts DESC LIMIT 1
+		) ph_7d ON true
+		LEFT JOIN LATERAL (
+			SELECT array_agg(price_sats ORDER BY ts) AS points
+			  FROM token_price_history
+			 WHERE category = t.category AND venue = 'cauldron'
+			   AND ts > now() - INTERVAL '7 days'
+		) ph_spark ON true
 	`;
 
 	try {
@@ -192,7 +238,11 @@ export const load: PageServerLoad = async ({ url }) => {
 				s.verified_at,
 				vl_cauldron.price_sats    AS cauldron_price_sats,
 				vl_cauldron.tvl_satoshis::text AS cauldron_tvl_satoshis,
-				vl_tapswap.listing_count::text AS tapswap_listing_count
+				vl_tapswap.listing_count::text AS tapswap_listing_count,
+				ph_1h.price_sats   AS price_sats_1h_ago,
+				ph_24h.price_sats  AS price_sats_24h_ago,
+				ph_7d.price_sats   AS price_sats_7d_ago,
+				ph_spark.points    AS sparkline_points
 			   ${fromJoins}
 			   ${whereClause}
 			   ORDER BY ${sort}
@@ -217,6 +267,23 @@ export const load: PageServerLoad = async ({ url }) => {
 				const parsed = Number(row.cauldron_tvl_satoshis);
 				if (Number.isFinite(parsed)) tvl = parsed;
 			}
+
+			// Compute % change server-side rather than shipping two prices
+			// per window. A window is null-safe: if either end is missing
+			// the % is null and the UI renders a placeholder. Skip divide-
+			// by-zero when the older price was zero (happens if a venue
+			// briefly reported 0; shouldn't recur but defensive).
+			const pct = (oldP: number | null): number | null => {
+				const now = row.cauldron_price_sats;
+				if (now == null || oldP == null || oldP === 0) return null;
+				return ((now - oldP) / oldP) * 100;
+			};
+			const priceChange1hPct = pct(row.price_sats_1h_ago);
+			const priceChange24hPct = pct(row.price_sats_24h_ago);
+			const priceChange7dPct = pct(row.price_sats_7d_ago);
+			const sparklinePoints = Array.isArray(row.sparkline_points)
+				? row.sparkline_points.filter((n) => Number.isFinite(n))
+				: [];
 			return {
 				id: hexFromBytes(row.category)!,
 				name: row.name,
@@ -239,7 +306,11 @@ export const load: PageServerLoad = async ({ url }) => {
 				cauldronTvlSatoshis: tvl,
 				tapswapListingCount: row.tapswap_listing_count
 					? Number(row.tapswap_listing_count)
-					: 0
+					: 0,
+				priceChange1hPct,
+				priceChange24hPct,
+				priceChange7dPct,
+				sparklinePoints
 			};
 		});
 

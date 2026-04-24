@@ -5,11 +5,27 @@
 		tokensTracked: number;
 		tailLastBlock: number | null;
 		newIn24h: number;
+		totalTvlSats: number;
+		listedCount: number;
 	}
 
-	let { tokensTracked, tailLastBlock, newIn24h }: Props = $props();
+	let { tokensTracked, tailLastBlock, newIn24h, totalTvlSats, listedCount }: Props = $props();
 
 	const fmt = (n: number) => n.toLocaleString('en-US');
+
+	// Compact USD for the Total TVL card — "$1.13M", "$742k", "$0".
+	function compactUSD(n: number): string {
+		if (!Number.isFinite(n) || n <= 0) return '—';
+		if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
+		if (n >= 1_000) return `$${(n / 1_000).toFixed(2)}k`;
+		return `$${n.toFixed(0)}`;
+	}
+
+	const tvlUSD = $derived.by(() => {
+		const p = $bchPrice.bchPrice;
+		if (!p) return null;
+		return (totalTvlSats / 1e8) * p;
+	});
 </script>
 
 <div class="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 border-b border-slate-200 dark:border-slate-700">
@@ -23,6 +39,26 @@
 					<span class="px-3 py-1 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 font-semibold text-sm">
 						{fmt(tokensTracked)}
 					</span>
+				</div>
+				<div class="flex items-center gap-2" title="Distinct tokens with an open listing on Cauldron or Tapswap">
+					<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+						Listed
+					</span>
+					<span class="font-semibold text-slate-900 dark:text-white text-sm">
+						{fmt(listedCount)}
+					</span>
+				</div>
+				<div class="flex items-center gap-2" title="Sum of Cauldron TVL across all listed tokens">
+					<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+						Total TVL
+					</span>
+					{#if tvlUSD !== null}
+						<span class="font-semibold text-slate-900 dark:text-white text-sm font-mono">
+							{compactUSD(tvlUSD)}
+						</span>
+					{:else}
+						<span class="inline-block w-14 h-4 bg-slate-200 dark:bg-slate-700 rounded animate-pulse"></span>
+					{/if}
 				</div>
 				<div class="flex items-center gap-2" title="CashTokens first seen in the last 24 hours">
 					<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -67,6 +103,18 @@
 			<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-slate-800 shadow-sm">
 				<span class="text-xs text-slate-500 dark:text-slate-400">Tokens</span>
 				<span class="font-semibold text-violet-600 dark:text-violet-400 text-sm">{fmt(tokensTracked)}</span>
+			</div>
+			<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-slate-800 shadow-sm">
+				<span class="text-xs text-slate-500 dark:text-slate-400">Listed</span>
+				<span class="font-semibold text-sm">{fmt(listedCount)}</span>
+			</div>
+			<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-slate-800 shadow-sm">
+				<span class="text-xs text-slate-500 dark:text-slate-400">Total TVL</span>
+				{#if tvlUSD !== null}
+					<span class="font-mono font-semibold text-sm">{compactUSD(tvlUSD)}</span>
+				{:else}
+					<span class="inline-block w-12 h-4 bg-slate-200 dark:bg-slate-700 rounded animate-pulse"></span>
+				{/if}
 			</div>
 			<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-slate-800 shadow-sm">
 				<span class="text-xs text-slate-500 dark:text-slate-400">New 24h</span>
