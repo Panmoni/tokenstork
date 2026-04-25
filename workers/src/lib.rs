@@ -8,6 +8,7 @@
 pub mod bchn;
 pub mod bcmr;
 pub mod blockbook;
+pub mod blocks;
 pub mod cauldron;
 pub mod env;
 pub mod fex;

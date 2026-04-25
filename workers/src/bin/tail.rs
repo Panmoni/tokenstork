@@ -33,10 +33,11 @@ use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
 use workers::bchn::{BchnClient, Block, HashBlockSubscriber, zmq_url_from_env};
+use workers::blocks::{ACTIVATION_HEIGHT, summarize_block};
 use workers::pg::{
-    self, FoundCategory, OfferWrite, TokenType, load_sync_state, mark_tail_run,
-    mark_tapswap_run, pool_from_env, save_tail_last_block, upsert_tapswap_offers_batch,
-    upsert_tokens,
+    self, BlockWrite, FoundCategory, OfferWrite, TokenType, load_sync_state,
+    mark_blocks_run, mark_tail_run, mark_tapswap_run, pool_from_env, save_tail_last_block,
+    upsert_block, upsert_tapswap_offers_batch, upsert_tokens,
 };
 use workers::tapswap::try_decode_tx;
 use workers::tapswap_walker::process_block_spends;
@@ -59,16 +60,22 @@ struct BlockStats {
     tokens_touched: usize,
     tapswap_written: usize,
     tapswap_closed: usize,
+    /// 1 if the per-block economics row was written, 0 if Pass 4 soft-failed.
+    /// (Per-block economics is observability data; a transient DB error
+    /// shouldn't pin the tail's checkpoint.)
+    blocks_written: usize,
 }
 
-/// Walk one block's transactions three times:
+/// Walk one block's transactions four times:
 ///  1. Collect distinct token categories (existing behaviour) → `tokens`.
 ///  2. Detect MPSW Tapswap listings → `tapswap_offers`.
 ///  3. Detect Tapswap closes (taken / cancelled) → updates the same table.
+///  4. Summarize per-block economics (tx count, coinbase, fees, size,
+///     subsidy) → `blocks`.
 ///
 /// Order matters: pass 2 must precede pass 3 so a listing minted and
 /// closed in the same block (rare but legal) gets inserted before the
-/// close-walker tries to update it.
+/// close-walker tries to update it. Pass 4 is independent and runs last.
 ///
 /// One block fetch per tail tick; the extra walkers are cheap because
 /// we're already iterating every output for the token walker.
@@ -162,10 +169,62 @@ async fn process_block(pool: &pg::PgPool, block: &Block) -> Result<BlockStats> {
     // `WHERE status='open'` guard makes the retry idempotent.
     let tapswap_closed = process_block_spends(pool, block).await?;
 
+    // --- Pass 4: per-block economics row ---
+    //
+    // Written ONLY for blocks ≥ CashTokens activation (792,772) — pre-
+    // activation history is out of /blocks scope. Errors are soft-failed
+    // (warn + continue) because:
+    //   1. The schema is upsert-on-conflict (height PK), so a re-run
+    //      after a transient DB hiccup overwrites cleanly.
+    //   2. /blocks is a dashboard, not a correctness path — a 1-row gap
+    //      is visible in the UI but doesn't break anything else.
+    //   3. The blocks-backfill binary independently fills any gaps a
+    //      future operator-triggered run picks up.
+    // The previous Tapswap upsert already committed Pass 1-3 results, so
+    // returning Err here would re-run the upsert (idempotent) on the next
+    // tick — visible as duplicate-write log noise but not data loss.
+    // Soft-failing avoids that noise.
+    let blocks_written = if height < ACTIVATION_HEIGHT {
+        0
+    } else {
+        match summarize_block(block) {
+            Ok(summary) => {
+                let write = BlockWrite {
+                    height: summary.height,
+                    hash: summary.hash.to_vec(),
+                    time_unix: summary.time,
+                    tx_count: summary.tx_count,
+                    total_output_sats: summary.total_output_sats,
+                    coinbase_sats: summary.coinbase_sats,
+                    fees_sats: summary.fees_sats,
+                    subsidy_sats: summary.subsidy_sats,
+                    size_bytes: summary.size_bytes,
+                };
+                match upsert_block(pool, &write).await {
+                    Ok(()) => {
+                        if let Err(e) = mark_blocks_run(pool).await {
+                            warn!(error = %e, "mark_blocks_run failed; observability only");
+                        }
+                        1
+                    }
+                    Err(e) => {
+                        warn!(height, error = %e, "blocks upsert failed; soft-skipping");
+                        0
+                    }
+                }
+            }
+            Err(e) => {
+                warn!(height, error = %e, "block summary failed; soft-skipping");
+                0
+            }
+        }
+    };
+
     Ok(BlockStats {
         tokens_touched,
         tapswap_written,
         tapswap_closed,
+        blocks_written,
     })
 }
 
@@ -198,10 +257,15 @@ async fn catch_up(pool: &pg::PgPool, bchn: &BchnClient, from: i32, to: i32) -> R
                 touched = stats.tokens_touched,
                 tapswap_written = stats.tapswap_written,
                 tapswap_closed = stats.tapswap_closed,
+                blocks_written = stats.blocks_written,
                 "block processed"
             );
         } else {
-            info!(height = h, "block processed (no tokens, no listings, no closes)");
+            info!(
+                height = h,
+                blocks_written = stats.blocks_written,
+                "block processed (no tokens, no listings, no closes)"
+            );
         }
     }
     Ok(())

@@ -1,0 +1,48 @@
+[Unit]
+Description=tokenstork sync-blocks-backfill — one-shot per-block economics backfill (CashTokens activation 792,772 → tip)
+Documentation=https://github.com/Panmoni/tokenstork
+After=network.target postgresql.service bchn.service
+Wants=postgresql.service bchn.service
+
+[Service]
+Type=oneshot
+User=tokenstork
+Group=tokenstork
+WorkingDirectory=/opt/tokenstork
+ExecStart=/opt/tokenstork/workers/target/release/blocks-backfill
+
+Environment="RUST_LOG=info"
+EnvironmentFile=-/etc/tokenstork/env
+
+# No .timer companion — operator runs once post-deploy, sync-tail's pass-4
+# walker handles the steady-state from that point onward. Resumable via
+# sync_state.last_blocks_backfill_through if the run is interrupted, so a
+# re-invocation picks up where the prior run left off. Idempotent: the
+# blocks schema is upsert-on-conflict (height PK), so a re-run on a
+# partially-populated DB overwrites stale rows with fresh values.
+
+# Hardening — same profile as sync-tapswap-spend-backfill.service.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectProc=invisible
+ProcSubset=pid
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallArchitectures=native
+UMask=0077

@@ -272,6 +272,43 @@ CREATE INDEX IF NOT EXISTS tapswap_offers_status_idx
   ON tapswap_offers (status, listed_at DESC);
 
 -- ============================================================================
+-- Per-block economics. One row per block from CashToken activation (792,772)
+-- forward, populated by `sync-tail`'s fourth walker pass + the one-shot
+-- `blocks-backfill` binary that hydrates the historical range. Backs the
+-- `/blocks` page (per-block table + headline sparklines).
+--
+-- Field derivations (all from the verbose `getblock 2` response we already
+-- fetch for the tokens / Tapswap walkers — no extra RPC calls):
+--   - tx_count           = block.tx.len()
+--   - coinbase_sats      = sum of vouts of block.tx[0]   (subsidy + fees)
+--   - total_output_sats  = sum of vouts across all txs MINUS coinbase_sats
+--                          (the "economic value transferred" lens)
+--   - subsidy_sats       = 50 * 1e8 >> (height / 210_000)  (BCH halving)
+--   - fees_sats          = coinbase_sats - subsidy_sats
+--                          (avoids needing input values)
+--   - size_bytes         = block.size
+--
+-- NUMERIC(30,0) on total_output_sats because a busy block can sum to >
+-- i64 across thousands of large outputs. coinbase_sats / subsidy_sats /
+-- fees_sats fit BIGINT comfortably (single coinbase output, ≤ 21 M BCH).
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS blocks (
+  height            INTEGER     PRIMARY KEY,
+  hash              BYTEA       NOT NULL,
+  time              TIMESTAMPTZ NOT NULL,
+  tx_count          INTEGER     NOT NULL,
+  total_output_sats NUMERIC(30,0) NOT NULL,
+  coinbase_sats     BIGINT      NOT NULL,
+  fees_sats         BIGINT      NOT NULL,
+  subsidy_sats      BIGINT      NOT NULL,
+  size_bytes        INTEGER     NOT NULL
+);
+
+-- Window queries on /blocks ("last 7d / 30d / all-time") sort by time DESC
+-- and slice. A b-tree on time supports both bounds + ordering in one seek.
+CREATE INDEX IF NOT EXISTS blocks_time_idx ON blocks (time DESC);
+
+-- ============================================================================
 -- Single-row sync bookkeeping. Replaces the old __sync_info hack that stuffed
 -- sync state into a fake tokens row.
 -- ============================================================================
@@ -301,6 +338,8 @@ ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_tapswap_run_at            T
 ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_fex_run_at                TIMESTAMPTZ;
 ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_cauldron_stats_run_at     TIMESTAMPTZ;
 ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_tapswap_spend_backfill_through INTEGER;
+ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_blocks_backfill_through       INTEGER;
+ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_blocks_run_at                 TIMESTAMPTZ;
 
 -- Ensure the singleton row exists on first deploy.
 INSERT INTO sync_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING;

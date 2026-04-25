@@ -337,6 +337,12 @@ pub struct Block {
     pub height: u64,
     pub time: i64,
     pub tx: Vec<Tx>,
+    /// Serialized block size in bytes. BCHN includes this in the verbose-2
+    /// response. Default 0 keeps the parser resilient if some hypothetical
+    /// non-BCHN backend ever omits it; the blocks walker treats 0 as
+    /// "size unknown" and surfaces it in /blocks accordingly.
+    #[serde(default)]
+    pub size: i64,
 }
 
 #[derive(Debug, Deserialize)]

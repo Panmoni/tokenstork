@@ -1220,6 +1220,168 @@ pub async fn mark_cauldron_stats_run(pool: &PgPool) -> Result<()> {
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Blocks (per-block economics dashboard).
+//
+// One row per block ≥ CashTokens activation (792,772). Populated by both
+// the live `sync-tail` Pass 4 walker and the one-shot `blocks-backfill`
+// binary; both reuse `blocks::summarize_block` for the field derivation.
+//
+// `total_output_sats` binds to NUMERIC(30,0) via a string-formatted
+// argument because a busy block can sum to > i64. Everything else is
+// signed-integer-safe.
+// ---------------------------------------------------------------------------
+
+/// One block's row, keyed by height. `hash` is the raw 32-byte big-endian
+/// hash, `time` the block's Unix-epoch seconds (converted to TIMESTAMPTZ
+/// at the binding boundary), `total_output_sats` a decimal string for
+/// NUMERIC(30,0).
+#[derive(Debug, Clone)]
+pub struct BlockWrite {
+    pub height: i32,
+    pub hash: Vec<u8>,
+    pub time_unix: i64,
+    pub tx_count: i32,
+    /// Decimal string — bound to NUMERIC(30,0) via `::numeric` cast.
+    pub total_output_sats: String,
+    pub coinbase_sats: i64,
+    pub fees_sats: i64,
+    pub subsidy_sats: i64,
+    pub size_bytes: i32,
+}
+
+/// Upsert one block. ON CONFLICT (height) DO UPDATE — re-inserts after a
+/// reorg overwrite the prior row's hash/time/etc. with the fresh values.
+/// Realistically a tail re-run on the same height should produce identical
+/// values; the UPDATE is defensive.
+pub async fn upsert_block(pool: &PgPool, b: &BlockWrite) -> Result<()> {
+    let time_dt = epoch_to_datetime(b.time_unix)?;
+    sqlx::query(
+        r#"
+        INSERT INTO blocks
+            (height, hash, time, tx_count, total_output_sats,
+             coinbase_sats, fees_sats, subsidy_sats, size_bytes)
+        VALUES
+            ($1, $2, $3, $4, $5::numeric, $6, $7, $8, $9)
+        ON CONFLICT (height) DO UPDATE
+           SET hash              = EXCLUDED.hash,
+               time              = EXCLUDED.time,
+               tx_count          = EXCLUDED.tx_count,
+               total_output_sats = EXCLUDED.total_output_sats,
+               coinbase_sats     = EXCLUDED.coinbase_sats,
+               fees_sats         = EXCLUDED.fees_sats,
+               subsidy_sats      = EXCLUDED.subsidy_sats,
+               size_bytes        = EXCLUDED.size_bytes
+"#,
+    )
+    .bind(b.height)
+    .bind(b.hash.as_slice())
+    .bind(time_dt)
+    .bind(b.tx_count)
+    .bind(&b.total_output_sats)
+    .bind(b.coinbase_sats)
+    .bind(b.fees_sats)
+    .bind(b.subsidy_sats)
+    .bind(b.size_bytes)
+    .execute(pool)
+    .await
+    .with_context(|| format!("upsert_block height {}", b.height))?;
+    Ok(())
+}
+
+/// Batch upsert wrapped in a single transaction. Used by the backfill to
+/// flush several thousand blocks per checkpoint without paying per-row
+/// commit overhead.
+pub async fn upsert_blocks_batch(pool: &PgPool, batch: &[BlockWrite]) -> Result<usize> {
+    if batch.is_empty() {
+        return Ok(0);
+    }
+    let mut tx = pool.begin().await.context("begin blocks batch tx")?;
+    for b in batch {
+        let time_dt = epoch_to_datetime(b.time_unix)?;
+        sqlx::query(
+            r#"
+            INSERT INTO blocks
+                (height, hash, time, tx_count, total_output_sats,
+                 coinbase_sats, fees_sats, subsidy_sats, size_bytes)
+            VALUES
+                ($1, $2, $3, $4, $5::numeric, $6, $7, $8, $9)
+            ON CONFLICT (height) DO UPDATE
+               SET hash              = EXCLUDED.hash,
+                   time              = EXCLUDED.time,
+                   tx_count          = EXCLUDED.tx_count,
+                   total_output_sats = EXCLUDED.total_output_sats,
+                   coinbase_sats     = EXCLUDED.coinbase_sats,
+                   fees_sats         = EXCLUDED.fees_sats,
+                   subsidy_sats      = EXCLUDED.subsidy_sats,
+                   size_bytes        = EXCLUDED.size_bytes
+"#,
+        )
+        .bind(b.height)
+        .bind(b.hash.as_slice())
+        .bind(time_dt)
+        .bind(b.tx_count)
+        .bind(&b.total_output_sats)
+        .bind(b.coinbase_sats)
+        .bind(b.fees_sats)
+        .bind(b.subsidy_sats)
+        .bind(b.size_bytes)
+        .execute(&mut *tx)
+        .await
+        .with_context(|| format!("upsert_blocks_batch height {}", b.height))?;
+    }
+    tx.commit().await.context("commit blocks batch tx")?;
+    Ok(batch.len())
+}
+
+/// Read the blocks-backfill checkpoint. None means the one-shot has never
+/// run; the binary's caller substitutes the activation floor.
+pub async fn load_blocks_backfill_through(pool: &PgPool) -> Result<Option<i32>> {
+    let row: (Option<i32>,) = sqlx::query_as(
+        "SELECT last_blocks_backfill_through FROM sync_state WHERE id = 1",
+    )
+    .fetch_one(pool)
+    .await
+    .context("load_blocks_backfill_through")?;
+    Ok(row.0)
+}
+
+/// Advance the blocks-backfill checkpoint. Called every CHECKPOINT_EVERY
+/// blocks so a mid-run crash resumes from where we left off.
+pub async fn save_blocks_backfill_through(pool: &PgPool, height: i32) -> Result<()> {
+    sqlx::query(
+        "UPDATE sync_state
+            SET last_blocks_backfill_through = $1,
+                updated_at = now()
+          WHERE id = 1",
+    )
+    .bind(height)
+    .execute(pool)
+    .await
+    .context("save_blocks_backfill_through")?;
+    Ok(())
+}
+
+/// Touch `last_blocks_run_at` — observability only, lets a future
+/// staleness watchdog notice if the blocks walker stops without crashing.
+pub async fn mark_blocks_run(pool: &PgPool) -> Result<()> {
+    sqlx::query(
+        "UPDATE sync_state
+            SET last_blocks_run_at = now(), updated_at = now()
+          WHERE id = 1",
+    )
+    .execute(pool)
+    .await
+    .context("mark_blocks_run")?;
+    Ok(())
+}
+
+fn epoch_to_datetime(unix_secs: i64) -> Result<DateTime<Utc>> {
+    Utc.timestamp_opt(unix_secs, 0)
+        .single()
+        .ok_or_else(|| anyhow!("invalid block timestamp {unix_secs}"))
+}
+
 /// Ensure the pool is closed before a binary exits — keeps Postgres from
 /// logging warnings about abruptly terminated sessions.
 pub async fn shutdown(pool: PgPool) {
