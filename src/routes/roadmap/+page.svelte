@@ -133,11 +133,21 @@
 			]
 		},
 		{
+			title: 'Wallet login (WalletConnect v2)',
+			status: 'planned',
+			bullets: [
+				'Sign in by signing a server-issued challenge in your BCH wallet — no email, no password, no OAuth.',
+				'WalletConnect v2 over the wc2-bch-bcr namespace (Cashonize, Paytaca, Zapit, EC plugin) as the primary UX; paste-cashaddr-and-signature fallback for users without a WC-aware wallet.',
+				'libauth ECDSA recovery server-side. HttpOnly + Secure + SameSite=Strict 30-day session cookie. Single-use 5-min challenges to block replay.',
+				'Schema, verifier, API endpoints, hooks middleware, /login page, and header indicator all built. Awaiting heavy-duty review + a WalletConnect Cloud project ID before the public ship.'
+			]
+		},
+		{
 			title: 'Wallet-tied watchlist',
 			status: 'planned',
 			bullets: [
 				'Star button on token cards + a /watchlist route, scoped to the visitor\'s BCH wallet address — not localStorage.',
-				'Blocked on wallet login, which lands first so the watchlist has a stable identity to attach to from day one.',
+				'Lands right after wallet login so there\'s a stable identity to attach to from day one.',
 				'No anonymous mode — single source of truth tied to the wallet, no anon-to-migrated handoff to keep correct.'
 			]
 		},
