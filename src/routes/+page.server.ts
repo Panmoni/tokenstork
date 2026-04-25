@@ -153,6 +153,11 @@ export const load: PageServerLoad = async ({ url }) => {
 			  OR vl_fex.category IS NOT NULL)`
 		);
 	}
+	// When a free-form search is active, prepend a similarity-DESC fragment
+	// to the ORDER BY so best fuzzy matches surface first. The user's
+	// selected sort breaks ties within each similarity tier. Stays empty
+	// for hex-paste queries (single-row result) and no-search queries.
+	let searchOrderPrefix = '';
 	if (searchLimited) {
 		// A full 64-char hex query is almost always a paste of a category ID
 		// the user wants the exact page for — short-circuit to a direct BYTEA
@@ -162,16 +167,25 @@ export const load: PageServerLoad = async ({ url }) => {
 			values.push(Buffer.from(searchLimited.toLowerCase(), 'hex'));
 			where.push(`t.category = $${values.length}`);
 		} else {
-			// Free-form query: case-insensitive substring across every
-			// user-visible text field — name, symbol, description — plus
-			// substring on the hex category (so a user can paste a partial
-			// hex like "d29eb" and match).
-			//
-			// ILIKE with a leading `%` doesn't use a plain btree index on
-			// `name`, but at 10-20k rows on a single node this is a handful
-			// of ms. The `token_metadata_name_trgm` trigram index can
-			// accelerate name matches if we need to move to pg_trgm's
-			// similarity() operator later (tracked — not today).
+			// Free-form query. Three bind values:
+			//   $q      — raw query for trigram similarity (m.name % $q +
+			//             ORDER BY similarity()). Uses the GIN
+			//             `token_metadata_name_trgm` index. Default 0.3
+			//             threshold means "grm" → "GRIM" (sim 0.375),
+			//             "suhi" → "sushi" (sim 0.44), but a much-typo'd
+			//             "stbl" → "stable" doesn't (sim 0.17, below
+			//             threshold) — acceptable.
+			//   pat     — %-wrapped pattern for ILIKE on symbol +
+			//             description (no trigram indexes on those, but at
+			//             10-20k rows the seq scan is sub-10ms).
+			//   patLower — lowercased pattern for hex-substring match on
+			//             category (so a partial hex paste like "d29eb"
+			//             still matches).
+			// OR'd together: typo-tolerant on name, exact-substring on the
+			// other fields. The trigram match also catches name typos that
+			// ILIKE would miss.
+			values.push(searchLimited);
+			const qIdx = values.length;
 			values.push(`%${searchLimited}%`);
 			const pat = `$${values.length}`;
 			values.push(`%${searchLimited.toLowerCase()}%`);
@@ -180,8 +194,10 @@ export const load: PageServerLoad = async ({ url }) => {
 				`(m.name ILIKE ${pat}
 				  OR m.symbol ILIKE ${pat}
 				  OR m.description ILIKE ${pat}
-				  OR encode(t.category, 'hex') LIKE ${patLower})`
+				  OR encode(t.category, 'hex') LIKE ${patLower}
+				  OR m.name % $${qIdx})`
 			);
+			searchOrderPrefix = `similarity(m.name, $${qIdx}) DESC NULLS LAST, `;
 		}
 	}
 	const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
@@ -294,7 +310,7 @@ export const load: PageServerLoad = async ({ url }) => {
 				ph_spark.points    AS sparkline_points
 			   ${fromJoins}
 			   ${whereClause}
-			   ORDER BY ${sort}
+			   ORDER BY ${searchOrderPrefix}${sort}
 			   LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
 			[...values, PAGE_SIZE, offset]
 		);
