@@ -1,0 +1,44 @@
+[Unit]
+Description=tokenstork sync-fex — scan BCHN for Fex.cash AMM pool states
+Documentation=https://github.com/Panmoni/tokenstork
+After=network.target postgresql.service bchn.service
+Wants=postgresql.service bchn.service
+
+[Service]
+Type=oneshot
+User=tokenstork
+Group=tokenstork
+WorkingDirectory=/opt/tokenstork
+ExecStart=/opt/tokenstork/workers/target/release/fex
+
+Environment="RUST_LOG=info"
+# `-` prefix: start even if /etc/tokenstork/env is missing. The binary will
+# then exit with an anyhow chain naming the first missing env var — operator
+# sees the failure in journalctl. Timer unit retries on the next tick.
+EnvironmentFile=-/etc/tokenstork/env
+
+# Hardening — same profile as sync-cauldron / sync-bcmr / sync-enrich / sync-tail.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectProc=invisible
+ProcSubset=pid
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallArchitectures=native
+UMask=0077

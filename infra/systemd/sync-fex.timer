@@ -1,0 +1,21 @@
+[Unit]
+Description=Run tokenstork Fex AMM scan every 4 hours
+
+[Timer]
+# Fex ecosystem is tiny (~10 pools at 2026-04-24). The scan walks BCHN's
+# UTXO set once via scantxoutset (minutes on a mature chain) — so the
+# cost is dominated by the scan itself, not pool count. Same 4h cadence
+# as sync-cauldron is plenty; freshness-critical consumers should use the
+# detail-page view, not treat /stats numbers as real-time.
+#
+# OnBootSec=17min offsets start from the sync-cauldron.timer's 15min so
+# the two don't slam scantxoutset at the same minute — BCHN serializes
+# scantxoutset calls and we'd just queue each behind the other.
+OnBootSec=17min
+OnUnitActiveSec=4h
+Persistent=true
+RandomizedDelaySec=5min
+Unit=sync-fex.service
+
+[Install]
+WantedBy=timers.target

@@ -287,6 +287,7 @@ CREATE TABLE IF NOT EXISTS sync_state (
   last_cauldron_run_at            TIMESTAMPTZ,                          -- last Phase 4d Cauldron-listings pass
   last_tapswap_backfill_through   INTEGER,                              -- highest block the Tapswap backfill binary has covered
   last_tapswap_run_at             TIMESTAMPTZ,                          -- last Tapswap backfill / tail upsert
+  last_fex_run_at                 TIMESTAMPTZ,                          -- last Phase 4e Fex AMM scan
   updated_at                      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -297,6 +298,7 @@ ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_tail_run_at               T
 ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_cauldron_run_at           TIMESTAMPTZ;
 ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_tapswap_backfill_through  INTEGER;
 ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_tapswap_run_at            TIMESTAMPTZ;
+ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_fex_run_at                TIMESTAMPTZ;
 
 -- Ensure the singleton row exists on first deploy.
 INSERT INTO sync_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING;

@@ -10,5 +10,6 @@ pub mod bcmr;
 pub mod blockbook;
 pub mod cauldron;
 pub mod env;
+pub mod fex;
 pub mod pg;
 pub mod tapswap;

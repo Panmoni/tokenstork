@@ -242,6 +242,27 @@ impl BchnClient {
         )
         .await
     }
+
+    /// `scantxoutset start [{desc: "raw(<locking_hex>)"}]` — enumerate every
+    /// unspent output whose locking bytecode matches `locking_hex` exactly.
+    /// Used by `sync-fex` to pull every Fex AssetCovenant UTXO in one shot:
+    /// the covenant is parameter-free, so every pool shares the same
+    /// 25-byte P2SH lock and we can grab the whole ecosystem via a single
+    /// BCHN scan.
+    ///
+    /// Same cost profile as `scan_txoutset_by_category` — one full UTXO-set
+    /// walk, minutes-to-complete on a mature chain. Don't call in a loop.
+    pub async fn scan_txoutset_by_raw_script(
+        &self,
+        locking_hex: &str,
+    ) -> Result<ScanTxOutSet> {
+        let descriptors = serde_json::json!([{ "desc": format!("raw({})", locking_hex) }]);
+        self.rpc(
+            "scantxoutset",
+            Value::Array(vec![Value::String("start".into()), descriptors]),
+        )
+        .await
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -438,6 +459,12 @@ pub struct ScanUnspent {
     pub height: u64,
     #[serde(rename = "tokenData")]
     pub token_data: Option<TokenData>,
+    /// Output value in BCH (BCHN emits as a float). Convert to sats via
+    /// `(amount * 1e8).round() as i64` at the call site. Default 0.0 if
+    /// absent; the `tok(...)` verifier path didn't need it, but the `raw(...)`
+    /// Fex scan path reads this to get the pool's BCH reserve.
+    #[serde(default)]
+    pub amount: f64,
 }
 
 #[cfg(test)]

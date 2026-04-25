@@ -913,6 +913,20 @@ pub async fn mark_tapswap_run(pool: &PgPool) -> Result<()> {
     Ok(())
 }
 
+/// Touch `last_fex_run_at` — observability only, lets the staleness
+/// watchdog notice if the Fex scanner stops without crashing.
+pub async fn mark_fex_run(pool: &PgPool) -> Result<()> {
+    sqlx::query(
+        "UPDATE sync_state
+            SET last_fex_run_at = now(), updated_at = now()
+          WHERE id = 1",
+    )
+    .execute(pool)
+    .await
+    .context("mark_fex_run")?;
+    Ok(())
+}
+
 /// Ensure the pool is closed before a binary exits — keeps Postgres from
 /// logging warnings about abruptly terminated sessions.
 pub async fn shutdown(pool: PgPool) {
