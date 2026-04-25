@@ -65,12 +65,19 @@ pub const TAPSWAP_PLATFORM_PKH: [u8; 20] = [
 ];
 
 /// Push-20 op + platform PKH (21 bytes total). Appears inside any
-/// legitimate spending input's unlocking bytecode. Used by the future
+/// legitimate spending input's unlocking bytecode. Used by the
 /// spend-detection walker to recognize close events.
 pub const TAPSWAP_SPEND_MARKER: [u8; 21] = [
     0x14, 0xe4, 0xda, 0x17, 0xdd, 0xbe, 0x40, 0x53, 0x3c, 0x2a, 0x86, 0x38, 0xfd, 0xed, 0xf2, 0xc0,
     0x99, 0x7d, 0x46, 0xe9, 0x53,
 ];
+
+/// Minimum length (in raw bytes) of a Tapswap-close unlocking bytecode.
+/// Any legitimate close has the contract redemption script + the
+/// signature + ancillary push data, totalling ≥ 210 bytes. A shorter
+/// input that happens to contain the marker (e.g. a different protocol
+/// using the same platform PKH bytes by coincidence) is rejected.
+pub const MIN_SPEND_UNLOCKING_BYTECODE_LEN: usize = 210;
 
 /// Platform fee must be at least 100,000 sats — an anti-spam floor baked
 /// into the protocol. Listings below this are rejected upstream.
@@ -474,6 +481,167 @@ pub fn try_decode_tx(
     }))
 }
 
+// ---------------------------------------------------------------------------
+// Spend / close detection
+// ---------------------------------------------------------------------------
+
+/// Final lifecycle state of a Tapswap offer once it's spent. The wire
+/// values match the schema's CHECK constraint
+/// (`status IN ('open','taken','cancelled')`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum CloseStatus {
+    /// A taker spent the contract UTXO and walked off with the listed asset.
+    Taken,
+    /// The maker spent the contract UTXO themselves to retract the listing.
+    Cancelled,
+}
+
+impl CloseStatus {
+    /// String form for the `status` column. Matches the CHECK constraint.
+    pub fn as_db_str(self) -> &'static str {
+        match self {
+            CloseStatus::Taken => "taken",
+            CloseStatus::Cancelled => "cancelled",
+        }
+    }
+}
+
+/// Result of classifying a Tapswap-close transaction.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DecodedClose {
+    pub status: CloseStatus,
+    /// Filled when status is `Taken` and the spending tx's outputs[0] is
+    /// a recognizable P2PKH (i.e. we know who the taker is).
+    /// `None` when status is `Cancelled` or when we couldn't recover a
+    /// PKH from outputs[0] (non-P2PKH locking script — unusual but
+    /// permitted; we still record the close).
+    pub taker_pkh: Option<[u8; 20]>,
+}
+
+/// Cheap candidate filter for an input that may be closing a Tapswap
+/// listing. Two-part check:
+///   1. Length ≥ 210 bytes — any legit close has a substantial redeem
+///      script + signature payload.
+///   2. Contains the 21-byte spend marker — push-20 + the platform PKH.
+///
+/// Both checks are required: short inputs can't be Tapswap closes; long
+/// inputs without the marker aren't either. Caller still validates
+/// against the open-listings DB (the input's `txid` must match a row
+/// with `status='open'`).
+pub fn is_mpsw_spend_candidate(unlocking_bytecode: &[u8]) -> bool {
+    if unlocking_bytecode.len() < MIN_SPEND_UNLOCKING_BYTECODE_LEN {
+        return false;
+    }
+    contains_subslice(unlocking_bytecode, &TAPSWAP_SPEND_MARKER)
+}
+
+/// Length of a standard P2PKH locking script: `OP_DUP OP_HASH160
+/// <push-20> <pkh> OP_EQUALVERIFY OP_CHECKSIG`.
+const P2PKH_SCRIPT_LEN: usize = 25;
+
+/// CashTokens prefix marker. Per CHIP-2022-02-CashTokens, a token-bearing
+/// UTXO's locking bytecode starts with this byte, followed by category +
+/// token-data + the **standard locking script as a suffix**.
+const PREFIX_TOKEN: u8 = 0xef;
+
+/// Returns `Some(pkh)` if `locking_bytecode` is recognizably a P2PKH
+/// script paying `pkh`. Two shapes are accepted:
+///
+/// 1. **Standard P2PKH** (no token): exactly 25 bytes, hex
+///    `76a914<20-byte PKH>88ac`.
+///
+/// 2. **CashToken-prefixed P2PKH**: bytecode starts with `0xef`
+///    (PREFIX_TOKEN) and ends with the same 25-byte P2PKH suffix.
+///    The intermediate bytes carry the token category + variable-length
+///    commitment + FT amount, which we don't need to fully decode —
+///    the standard locking script is by spec always the *suffix* of
+///    the encoded locking bytecode.
+///
+/// Why this matters: every Tapswap close transaction's `vout[0]` is the
+/// listed asset being delivered to the new owner. For FT or NFT
+/// listings (the common case) that's a CashToken-bearing UTXO whose
+/// locking bytecode is the prefixed shape. Without case 2, every
+/// non-pure-BCH close fell through to a non-P2PKH fallback and was
+/// misclassified as Taken with `taker_pkh: None` — hiding cancellations
+/// entirely.
+///
+/// Returns `None` for any other shape (P2SH, OP_RETURN, segwit-style,
+/// malformed bytes). The CashToken case carries a tiny false-positive
+/// risk (~2^-40) that a random tail coincidentally ends with the magic
+/// 25-byte sequence; acceptable for a directory index.
+pub fn extract_p2pkh_pkh(locking_bytecode: &[u8]) -> Option<[u8; 20]> {
+    let len = locking_bytecode.len();
+
+    // Reject anything that isn't either standard P2PKH (exact length)
+    // or CashToken-prefixed (starts with 0xef, has room for the prefix
+    // + the 25-byte suffix). Other-length non-token bytecodes (P2SH at
+    // 23 bytes, OP_RETURN of varying length, etc.) bail here.
+    let is_raw_p2pkh = len == P2PKH_SCRIPT_LEN;
+    let is_cashtoken_prefixed = len > P2PKH_SCRIPT_LEN && locking_bytecode[0] == PREFIX_TOKEN;
+    if !is_raw_p2pkh && !is_cashtoken_prefixed {
+        return None;
+    }
+
+    // The P2PKH script is always the suffix of the bytecode — true for
+    // both raw P2PKH (suffix == whole bytecode) and CashToken-prefixed
+    // (suffix follows the variable-length token data).
+    let suffix = &locking_bytecode[len - P2PKH_SCRIPT_LEN..];
+    if suffix[0] != 0x76      // OP_DUP
+        || suffix[1] != 0xa9  // OP_HASH160
+        || suffix[2] != 0x14  // push-20
+        || suffix[23] != 0x88 // OP_EQUALVERIFY
+        || suffix[24] != 0xac
+    // OP_CHECKSIG
+    {
+        return None;
+    }
+    let mut pkh = [0u8; 20];
+    pkh.copy_from_slice(&suffix[3..23]);
+    Some(pkh)
+}
+
+/// Classify a spending transaction as Taken vs Cancelled given the
+/// listing's stored maker_pkh. Rule:
+///   - outputs[0] pays the maker → maker is recovering their asset → Cancelled.
+///   - outputs[0] pays anyone else (or anything-not-P2PKH) → Taken; the
+///     spending tx's outputs[0] PKH (if recoverable) is the taker.
+///
+/// Why outputs[0]: by Tapswap protocol convention, outputs[0] of a
+/// close transaction carries the listed asset to its new owner. The
+/// taker case has additional outputs paying the maker the want_sats +
+/// the platform fee, but those don't drive classification here.
+pub fn classify_close(
+    spending_tx_output0_locking_bytecode: &[u8],
+    listing_maker_pkh: &[u8; 20],
+) -> DecodedClose {
+    let recipient_pkh = extract_p2pkh_pkh(spending_tx_output0_locking_bytecode);
+    match recipient_pkh {
+        Some(pkh) if pkh == *listing_maker_pkh => DecodedClose {
+            status: CloseStatus::Cancelled,
+            taker_pkh: None,
+        },
+        Some(pkh) => DecodedClose {
+            status: CloseStatus::Taken,
+            taker_pkh: Some(pkh),
+        },
+        None => DecodedClose {
+            status: CloseStatus::Taken,
+            taker_pkh: None,
+        },
+    }
+}
+
+/// Naive substring search on byte slices. Used by `is_mpsw_spend_candidate`
+/// to test for the 21-byte marker inside an unlocking bytecode of typically
+/// 200-400 bytes — `O(n*m)` is fine at these sizes; pulling in a smarter
+/// algorithm (Boyer-Moore, KMP) would be premature optimization.
+fn contains_subslice(haystack: &[u8], needle: &[u8]) -> bool {
+    if needle.is_empty() || haystack.len() < needle.len() {
+        return needle.is_empty();
+    }
+    haystack.windows(needle.len()).any(|w| w == needle)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -674,5 +842,220 @@ mod tests {
         assert_eq!(offer.want_amount, Some(BigInt::from(100)));
         assert_eq!(offer.maker_pkh, fake_maker);
         assert_eq!(offer.fee_sats, 3_000_000);
+    }
+
+    // -----------------------------------------------------------------------
+    // Spend / close detection
+    // -----------------------------------------------------------------------
+
+    /// Build an unlocking bytecode of `len` bytes with the spend marker
+    /// embedded at a specific offset. Padded with arbitrary filler so
+    /// the candidate-length check still passes.
+    fn unlock_with_marker(len: usize, marker_offset: usize) -> Vec<u8> {
+        assert!(marker_offset + TAPSWAP_SPEND_MARKER.len() <= len);
+        let mut bytes = vec![0xab; len];
+        bytes[marker_offset..marker_offset + TAPSWAP_SPEND_MARKER.len()]
+            .copy_from_slice(&TAPSWAP_SPEND_MARKER);
+        bytes
+    }
+
+    #[test]
+    fn spend_candidate_requires_minimum_length() {
+        // Right at the floor — a 210-byte input containing the marker
+        // is a candidate.
+        let at_floor = unlock_with_marker(MIN_SPEND_UNLOCKING_BYTECODE_LEN, 50);
+        assert!(is_mpsw_spend_candidate(&at_floor));
+
+        // One byte under the floor is rejected even if the marker is present.
+        let under_floor = unlock_with_marker(MIN_SPEND_UNLOCKING_BYTECODE_LEN - 1, 50);
+        assert!(!is_mpsw_spend_candidate(&under_floor));
+    }
+
+    #[test]
+    fn spend_candidate_requires_marker() {
+        // 300-byte input full of zero bytes — no marker — rejected.
+        let no_marker = vec![0x00; 300];
+        assert!(!is_mpsw_spend_candidate(&no_marker));
+    }
+
+    #[test]
+    fn spend_candidate_finds_marker_anywhere() {
+        // Marker placed at a few different offsets — all should match.
+        let len = 300;
+        for offset in [0, 50, 150, len - TAPSWAP_SPEND_MARKER.len()] {
+            let bytes = unlock_with_marker(len, offset);
+            assert!(
+                is_mpsw_spend_candidate(&bytes),
+                "marker at offset {offset} should match"
+            );
+        }
+    }
+
+    #[test]
+    fn extract_p2pkh_pkh_recognizes_standard_p2pkh() {
+        // 76a914<20-byte PKH>88ac
+        let pkh: [u8; 20] = [0x33; 20];
+        let mut bytes = vec![0x76, 0xa9, 0x14];
+        bytes.extend_from_slice(&pkh);
+        bytes.push(0x88);
+        bytes.push(0xac);
+        assert_eq!(bytes.len(), 25);
+        assert_eq!(extract_p2pkh_pkh(&bytes), Some(pkh));
+    }
+
+    #[test]
+    fn extract_p2pkh_pkh_rejects_p2sh() {
+        // a914<20>87 — P2SH, not P2PKH.
+        let hash: [u8; 20] = [0x44; 20];
+        let mut bytes = vec![0xa9, 0x14];
+        bytes.extend_from_slice(&hash);
+        bytes.push(0x87);
+        // P2SH is 23 bytes — wrong length anyway, returns None.
+        assert_eq!(bytes.len(), 23);
+        assert!(extract_p2pkh_pkh(&bytes).is_none());
+    }
+
+    #[test]
+    fn extract_p2pkh_pkh_rejects_op_return() {
+        // 6a<...> — OP_RETURN locking bytecode is not a P2PKH.
+        let bytes = vec![0x6a, 0x04, 0xde, 0xad, 0xbe, 0xef];
+        assert!(extract_p2pkh_pkh(&bytes).is_none());
+    }
+
+    #[test]
+    fn extract_p2pkh_pkh_rejects_wrong_length() {
+        // 24-byte buffer (one short of P2PKH) → None.
+        let short = vec![0x76, 0xa9, 0x14, 0x33, 0x88, 0xac];
+        assert!(extract_p2pkh_pkh(&short).is_none());
+
+        // 26-byte buffer (one over, no 0xef token prefix marker) → None.
+        let long = vec![0x00; 26];
+        assert!(extract_p2pkh_pkh(&long).is_none());
+    }
+
+    #[test]
+    fn extract_p2pkh_pkh_recognizes_cashtoken_prefixed_p2pkh() {
+        // Build a CashToken-prefixed P2PKH paying a known PKH:
+        //   0xef                                  (PREFIX_TOKEN)
+        //   <32 bytes category>
+        //   0x10                                  (bitfield: HAS_AMOUNT only)
+        //   <single-byte VM amount>
+        //   76 a9 14 <20-byte PKH> 88 ac          (standard P2PKH suffix)
+        let pkh: [u8; 20] = [0x88; 20];
+        let mut bytes = vec![PREFIX_TOKEN];
+        bytes.extend_from_slice(&[0x55; 32]); // category
+        bytes.push(0x10); // bitfield
+        bytes.push(0x01); // VM amount = 1
+        // P2PKH suffix:
+        bytes.push(0x76);
+        bytes.push(0xa9);
+        bytes.push(0x14);
+        bytes.extend_from_slice(&pkh);
+        bytes.push(0x88);
+        bytes.push(0xac);
+        assert!(bytes.len() > P2PKH_SCRIPT_LEN);
+        assert_eq!(extract_p2pkh_pkh(&bytes), Some(pkh));
+    }
+
+    #[test]
+    fn extract_p2pkh_pkh_rejects_cashtoken_prefix_with_non_p2pkh_suffix() {
+        // CashToken-prefixed bytecode whose suffix isn't a standard
+        // P2PKH (e.g., trailing P2SH-style 23 bytes pads to 25 but
+        // doesn't pattern-match) — must reject, not silently accept.
+        let mut bytes = vec![PREFIX_TOKEN];
+        bytes.extend_from_slice(&[0x55; 32]); // category
+        bytes.push(0x10); // bitfield
+        bytes.push(0x01); // amount
+        // 25 trailing bytes that DON'T match 76a914...88ac (random):
+        bytes.extend_from_slice(&[0xa9; 25]);
+        assert!(extract_p2pkh_pkh(&bytes).is_none());
+    }
+
+    #[test]
+    fn classify_close_cancelled_with_cashtoken_prefixed_output() {
+        // The realistic case for Tapswap cancellation: the maker reclaims
+        // a CashToken-bearing UTXO. vout[0] is a CashToken-prefixed P2PKH
+        // paying the maker. Pre-fix this would have classified Taken with
+        // None taker — hiding the cancellation.
+        let maker: [u8; 20] = [0x55; 20];
+        let mut bytes = vec![PREFIX_TOKEN];
+        bytes.extend_from_slice(&[0x77; 32]);
+        bytes.push(0x10);
+        bytes.push(0x01);
+        bytes.push(0x76);
+        bytes.push(0xa9);
+        bytes.push(0x14);
+        bytes.extend_from_slice(&maker);
+        bytes.push(0x88);
+        bytes.push(0xac);
+
+        let result = classify_close(&bytes, &maker);
+        assert_eq!(result.status, CloseStatus::Cancelled);
+        assert_eq!(result.taker_pkh, None);
+    }
+
+    #[test]
+    fn classify_close_taken_with_cashtoken_prefixed_output() {
+        // Realistic takeoff case: taker receives the CashToken-bearing
+        // UTXO. vout[0] is a CashToken-prefixed P2PKH paying the taker.
+        let maker: [u8; 20] = [0x55; 20];
+        let taker: [u8; 20] = [0x99; 20];
+        let mut bytes = vec![PREFIX_TOKEN];
+        bytes.extend_from_slice(&[0x77; 32]);
+        bytes.push(0x10);
+        bytes.push(0x01);
+        bytes.push(0x76);
+        bytes.push(0xa9);
+        bytes.push(0x14);
+        bytes.extend_from_slice(&taker);
+        bytes.push(0x88);
+        bytes.push(0xac);
+
+        let result = classify_close(&bytes, &maker);
+        assert_eq!(result.status, CloseStatus::Taken);
+        assert_eq!(result.taker_pkh, Some(taker));
+    }
+
+    #[test]
+    fn classify_close_cancelled_when_pkh_matches() {
+        let maker: [u8; 20] = [0x55; 20];
+        // outputs[0] = P2PKH paying the maker.
+        let mut p2pkh = vec![0x76, 0xa9, 0x14];
+        p2pkh.extend_from_slice(&maker);
+        p2pkh.extend_from_slice(&[0x88, 0xac]);
+        let result = classify_close(&p2pkh, &maker);
+        assert_eq!(result.status, CloseStatus::Cancelled);
+        assert_eq!(result.taker_pkh, None, "no taker on a cancellation");
+    }
+
+    #[test]
+    fn classify_close_taken_when_pkh_differs() {
+        let maker: [u8; 20] = [0x55; 20];
+        let taker: [u8; 20] = [0x77; 20];
+        let mut p2pkh = vec![0x76, 0xa9, 0x14];
+        p2pkh.extend_from_slice(&taker);
+        p2pkh.extend_from_slice(&[0x88, 0xac]);
+        let result = classify_close(&p2pkh, &maker);
+        assert_eq!(result.status, CloseStatus::Taken);
+        assert_eq!(result.taker_pkh, Some(taker));
+    }
+
+    #[test]
+    fn classify_close_taken_when_output_not_p2pkh() {
+        // outputs[0] is OP_RETURN — taker PKH unrecoverable, but still
+        // a Taken because the maker isn't getting it back.
+        let maker: [u8; 20] = [0x55; 20];
+        let op_return = vec![0x6a, 0x04, 0xde, 0xad, 0xbe, 0xef];
+        let result = classify_close(&op_return, &maker);
+        assert_eq!(result.status, CloseStatus::Taken);
+        assert_eq!(result.taker_pkh, None);
+    }
+
+    #[test]
+    fn close_status_db_strings_match_check_constraint() {
+        // The schema's CHECK constraint allows 'taken' / 'cancelled' /
+        // 'open'. Our db_str() must match those exactly or upserts fail.
+        assert_eq!(CloseStatus::Taken.as_db_str(), "taken");
+        assert_eq!(CloseStatus::Cancelled.as_db_str(), "cancelled");
     }
 }

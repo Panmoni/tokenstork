@@ -913,6 +913,123 @@ pub async fn mark_tapswap_run(pool: &PgPool) -> Result<()> {
     Ok(())
 }
 
+/// One row per open Tapswap offer that a candidate spending tx in the
+/// current block could be closing. Returned by
+/// `find_open_tapswap_offers_by_id` so the walker can classify each
+/// close (matching the listing's stored maker_pkh against outputs[0]
+/// of the spending tx).
+pub struct OpenOfferLookup {
+    pub id: [u8; 32],
+    pub maker_pkh: [u8; 20],
+}
+
+/// Bulk lookup of open offers by listing-txid (the `id` column).
+/// Filters to `status = 'open'` so closed offers don't get re-closed
+/// on a re-org or a duplicate detection. Returns at most `ids.len()`
+/// rows; absent rows mean either the listing isn't ours (a different
+/// tx was being spent) or it's already closed.
+pub async fn find_open_tapswap_offers_by_id(
+    pool: &PgPool,
+    ids: &[[u8; 32]],
+) -> Result<Vec<OpenOfferLookup>> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    // sqlx wants a slice of slices for ANY(); convert to Vec<&[u8]> via
+    // a temporary Vec<Vec<u8>> so the bound borrow is well-defined.
+    let owned: Vec<Vec<u8>> = ids.iter().map(|a| a.to_vec()).collect();
+    let rows: Vec<(Vec<u8>, Vec<u8>)> = sqlx::query_as(
+        "SELECT id, maker_pkh
+           FROM tapswap_offers
+          WHERE status = 'open'
+            AND id = ANY($1)",
+    )
+    .bind(&owned)
+    .fetch_all(pool)
+    .await
+    .context("find_open_tapswap_offers_by_id")?;
+
+    rows.into_iter()
+        .map(|(id_bytes, pkh_bytes)| {
+            let id: [u8; 32] = id_bytes
+                .as_slice()
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("tapswap_offers.id was not 32 bytes"))?;
+            let maker_pkh: [u8; 20] = pkh_bytes
+                .as_slice()
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("tapswap_offers.maker_pkh was not 20 bytes"))?;
+            Ok(OpenOfferLookup { id, maker_pkh })
+        })
+        .collect()
+}
+
+/// One row per close detected in the current block, ready to apply to
+/// `tapswap_offers`. The walker builds a Vec of these and the writer
+/// applies them in a single transaction.
+pub struct OfferCloseWrite {
+    pub id: [u8; 32],
+    /// "taken" or "cancelled" (matches the schema CHECK constraint).
+    pub status: &'static str,
+    /// `Some(pkh)` when status is "taken" and we recovered outputs[0]
+    /// PKH from the spending tx. `None` for cancelled or unrecoverable.
+    pub taker_pkh: Option<[u8; 20]>,
+    pub closed_tx: [u8; 32],
+    pub closed_at: DateTime<Utc>,
+}
+
+/// Apply a batch of Tapswap closes. Each row becomes a guarded UPDATE
+/// (`WHERE id = $1 AND status = 'open'`) so a duplicate close from a
+/// re-processed block silently no-ops instead of re-stamping an already-
+/// closed offer.
+///
+/// Auto-commit per row, NOT a wrapping transaction: a malformed row
+/// shouldn't roll back already-applied close events. The lifecycle
+/// transitions are independent — there's no cross-row invariant to
+/// preserve. On per-row error, the early-return surfaces the failure
+/// to the caller (which propagates up to the tail's checkpoint logic
+/// so the block isn't marked done; the next tick re-processes and
+/// retries the failed row, finding earlier rows already-closed and
+/// no-op'ing them via the WHERE guard).
+pub async fn apply_tapswap_closes(
+    pool: &PgPool,
+    batch: &[OfferCloseWrite],
+) -> Result<usize> {
+    if batch.is_empty() {
+        return Ok(0);
+    }
+    let mut affected: usize = 0;
+    for c in batch {
+        let res = sqlx::query(
+            r#"
+            UPDATE tapswap_offers
+               SET status     = $2,
+                   taker_pkh  = $3,
+                   closed_tx  = $4,
+                   closed_at  = $5
+             WHERE id = $1
+               AND status = 'open'
+            "#,
+        )
+        .bind(c.id.as_slice())
+        .bind(c.status)
+        .bind(c.taker_pkh.as_ref().map(|p| p.as_slice()))
+        .bind(c.closed_tx.as_slice())
+        .bind(c.closed_at)
+        .execute(pool)
+        .await
+        .with_context(|| {
+            format!(
+                "apply_tapswap_closes id={} status={}",
+                bytes_to_hex(&c.id),
+                c.status
+            )
+        })?;
+        affected += res.rows_affected() as usize;
+    }
+    Ok(affected)
+}
+
 /// Touch `last_fex_run_at` — observability only, lets the staleness
 /// watchdog notice if the Fex scanner stops without crashing.
 pub async fn mark_fex_run(pool: &PgPool) -> Result<()> {
