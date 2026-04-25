@@ -160,23 +160,25 @@ export function normalizeCashaddr(input: string): string | null {
  *    - message: the exact text the user signed (typically built via
  *      buildChallengeMessage; passed back unchanged from the challenge
  *      record).
- *    - signatureBase64: 65-byte compact signature, base64-encoded. Format:
+ *    - signature: 65-byte compact signature, encoded as either base64
+ *      (the wc2-bch-bcr spec's canonical form) or hex (130 chars,
+ *      optionally `0x`-prefixed) — some BCH wallets in the wild
+ *      return hex even though the spec says base64, so we accept
+ *      either rather than rejecting non-conformant wallets.
+ *      Byte layout (post-decode):
  *        byte 0     : recovery flag (27..30 uncompressed, 31..34 compressed)
  *        bytes 1-32 : r
- *        bytes 33-64: s
- *      Every major BCH wallet emits exactly this format. */
+ *        bytes 33-64: s */
 export function verifySignedMessage(
 	message: string,
-	signatureBase64: string
+	signature: string
 ): { ok: true; cashaddr: string } | { ok: false; error: string } {
-	let sigBytes: Uint8Array;
-	try {
-		sigBytes = base64Decode(signatureBase64.trim());
-	} catch {
-		return { ok: false, error: 'signature is not valid base64' };
-	}
-	if (sigBytes.length !== 65) {
-		return { ok: false, error: `signature must be 65 bytes, got ${sigBytes.length}` };
+	const sigBytes = decodeSignatureBytes(signature.trim());
+	if (sigBytes === null) {
+		return {
+			ok: false,
+			error: `signature is not a 65-byte hex or base64 value (got ${signature.trim().length} chars)`
+		};
 	}
 
 	const recoveryFlag = sigBytes[0];
@@ -255,13 +257,35 @@ function encodeVarint(n: number): Uint8Array {
 }
 
 // ----------------------------------------------------------------------------
-// Base64 helpers (no dependency on Buffer for portability with the SvelteKit
-// edge stack, though we're on Node today)
+// Encoding helpers
 // ----------------------------------------------------------------------------
 
-function base64Decode(s: string): Uint8Array {
-	const buf = Buffer.from(s, 'base64');
-	return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+/** Decode a wallet signature in either base64 (the wc2-bch-bcr spec's
+ *  canonical encoding) or hex (what several BCH wallets actually emit
+ *  in the wild). Returns the raw 65-byte signature, or null if the
+ *  input doesn't decode to exactly 65 bytes either way.
+ *
+ *  Hex is tried FIRST when the input shape suggests it (130 chars of
+ *  [0-9a-fA-F], optionally `0x`-prefixed). A real base64 signature
+ *  contains uppercase letters and `+`/`/`/`=` which won't pass the hex
+ *  regex, so the hex pathway never false-matches a base64 input. */
+function decodeSignatureBytes(s: string): Uint8Array | null {
+	const stripped = s.replace(/^0x/i, '');
+	if (stripped.length === 130 && /^[0-9a-fA-F]+$/.test(stripped)) {
+		const buf = Buffer.from(stripped, 'hex');
+		if (buf.length === 65) {
+			return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+		}
+	}
+	try {
+		const buf = Buffer.from(s, 'base64');
+		if (buf.length === 65) {
+			return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+		}
+	} catch {
+		// fall through to null
+	}
+	return null;
 }
 
 function base64UrlEncode(bytes: Uint8Array): string {
