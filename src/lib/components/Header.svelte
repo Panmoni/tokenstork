@@ -10,10 +10,7 @@
 		{ name: 'Tokens', href: '/' },
 		{ name: 'Arbitrage', href: '/arbitrage' },
 		{ name: 'Stats', href: '/stats' },
-		{ name: 'Learn', href: '/learn' },
-		{ name: 'FAQ', href: '/faq' },
-		{ name: 'Roadmap', href: '/roadmap' },
-		{ name: 'About', href: '/about' }
+		{ name: 'Learn', href: '/learn' }
 	];
 
 	let mobileMenuOpen = $state(false);
