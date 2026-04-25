@@ -38,16 +38,14 @@ tokenstork.com {
 		X-Frame-Options "DENY"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
-		# 'unsafe-inline' on script-src is required for SvelteKit hydration:
-		# SSR emits a small inline <script> tag per response carrying the
-		# page's hydration payload (routing state, load-function data). Without
-		# it, the browser silently blocks the script, hydration never runs,
-		# onMount never fires, and every interactive handler (search box,
-		# filters, theme switcher) is dead. XSS risk is contained because we
-		# never render user-supplied strings via {@html}; Svelte auto-escapes
-		# everything. Proper long-term fix is `kit.csp` with hash mode —
-		# tracked separately.
-		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://beamanalytics.b-cdn.net; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src 'self' https://beamanalytics.b-cdn.net; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
+		# Content-Security-Policy lives in svelte.config.js (kit.csp,
+		# mode: 'hash'). SvelteKit emits a `<meta http-equiv>` tag with
+		# SHA-256 hashes of its own inline hydration script in every SSR
+		# response. Setting a CSP header here too would intersect with
+		# the meta CSP at the browser, and the header (lacking the build-
+		# time hashes) would block every legitimate inline script. So we
+		# deliberately don't ship one from Caddy. Static assets (PNGs,
+		# fonts) don't need CSP protection.
 	}
 
 	# Upstream retry — smooths over the 1-3 second window during
