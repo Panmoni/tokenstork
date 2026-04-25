@@ -7,7 +7,7 @@
 </svelte:head>
 
 <script lang="ts">
-	// Roadmap items. `status` drives the icon + color. Last updated 2026-04-24
+	// Roadmap items. `status` drives the icon + color. Last updated 2026-04-25
 	// — if anything drifts by more than a quarter, come back and groom. The
 	// original roadmap had a version-number scheme (0.0.3, 0.0.4, …) that
 	// turned out to be ambitious vaporware; we now group by theme + status.
@@ -43,7 +43,29 @@
 			bullets: [
 				'Cauldron AMM — price, TVL, "On Cauldron" directory filter.',
 				'Tapswap P2P — listings detected on-chain via the MPSW OP_RETURN protocol (no GraphQL).',
-				'Cauldron + Tapswap venue logos on every directory row.'
+				'Fex.cash AMM — pool state read directly from BCHN UTXOs against the AssetCovenant P2SH; "On Fex" filter, side-by-side spread% comparison on every detail page, third Tradeable card on /stats.',
+				'Three venue logos on every directory row.'
+			]
+		},
+		{
+			title: 'Cross-venue arbitrage scanner',
+			status: 'done',
+			bullets: [
+				'/arbitrage page — every token on both Cauldron and Fex, ranked by raw spread % with Buy / Sell action buttons that open the cheaper and more-expensive venue.',
+				'Net column subtracts the round-trip 0.9% taker-fee floor so the visible figure is post-fee.',
+				'View toggles for ≥ 1% (default), ≥ 5%, and show-all.',
+				'Tapswap arb (P2P-vs-AMM) tracked as a follow-up — different per-unit pricing semantics need their own pass.'
+			]
+		},
+		{
+			title: 'Ecosystem dashboard at /stats',
+			status: 'done',
+			bullets: [
+				'Cards for new categories in 24h / 7d / 30d, all linkable to the matching directory filter.',
+				'By-type counters with FT / NFT / FT+NFT split.',
+				'Tradeable counters per venue (Cauldron / Tapswap / Fex), each linking to the filtered directory.',
+				'Three-venue overlap Venn — cauldron-only / fex-only / tapswap-only / pair intersections / all-three (the arb universe).',
+				'Genesis-by-month growth chart, decimals histogram, BCMR metadata completeness, and live Cauldron AMM aggregates from indexer.cauldron.quest.'
 			]
 		},
 		{
@@ -77,7 +99,7 @@
 				'Unlocks live holder counts, NFT instance lists, and the "fully burned" counter on /stats.',
 				'Closes an old max-supply edge case on high-activity addresses.',
 				'Weekly canary comparing our index against BlockBook to catch drift.',
-				'Initial sync currently running.'
+				'Currently mid-IBD on the production VPS — memory caps + dbcache tuned, ETA ~2 days from start.'
 			]
 		},
 		{
@@ -108,29 +130,21 @@
 			]
 		},
 		{
-			title: 'Fex.cash — third venue',
-			status: 'planned',
-			bullets: [
-				'On-chain UTXO walker for the Fex AMM pools; no public indexer needed.',
-				'Adds an "On Fex" directory filter + venue badge.',
-				'Small ecosystem today (~10 pools) but feeds the arbitrage scanner real content.'
-			]
-		},
-		{
-			title: 'Cross-venue arbitrage + richer /stats',
-			status: 'planned',
-			bullets: [
-				'New /arbitrage page surfacing Cauldron ↔ Tapswap price gaps (after fees + slippage).',
-				'Expanded /stats ecosystem dashboard: top gainers/losers, growth curve, venue overlap, metadata completeness, active-minting count.'
-			]
-		},
-		{
 			title: 'Richer token detail page',
 			status: 'planned',
 			bullets: [
 				'Long-horizon price + volume charts with 24h / 7d / 30d / 90d / 1y / all ranges.',
 				'Holder distribution + concentration metrics (top-10, Gini, Herfindahl) — needs BlockBook.',
-				'Tapswap spend-lifecycle detection so stale offers drop off.'
+				'Tapswap spend-lifecycle detection so stale offers drop off (currently the open-listings count grows monotonically).'
+			]
+		},
+		{
+			title: 'Arbitrage + stats follow-ups',
+			status: 'planned',
+			bullets: [
+				'Tapswap as a third arbitrage column (P2P ask vs Cauldron / Fex pool price) — needs FT-vs-NFT pricing logic.',
+				'Top gainers / losers and TVL movers on /stats — pending more accumulated price history.',
+				'Cached daily snapshot of the live Cauldron aggregates so /stats stops paying the network round-trip on every hit.'
 			]
 		},
 		{
@@ -278,7 +292,7 @@
 	</section>
 
 	<p class="text-xs text-slate-500 dark:text-slate-400 mt-10">
-		Roadmap last refreshed 2026-04-24. If you'd like to see something on here
+		Roadmap last refreshed 2026-04-25. If you'd like to see something on here
 		that isn't yet — email <a href="mailto:hello@panmoni.com" class="text-violet-600 dark:text-violet-400 hover:underline">hello@panmoni.com</a>
 		or
 		<a
