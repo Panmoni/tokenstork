@@ -391,3 +391,55 @@ CREATE TABLE IF NOT EXISTS cauldron_global_stats (
 );
 
 INSERT INTO cauldron_global_stats (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================================
+-- Authentication: BCH wallet login.
+--
+-- The whole flow is wallet-signature-based — no email, no password, no OAuth.
+-- A user proves they control a cashaddr by signing a server-issued challenge
+-- in their wallet using the standard "Bitcoin Signed Message" format that
+-- Electron Cash, Cashonize, Paytaca and every other major BCH wallet
+-- supports. The server recovers the pubkey from the signature, derives a
+-- cashaddr from it, and confirms it matches the claimed address.
+--
+-- Three tables:
+--
+--   users             — one row per logged-in cashaddr (PK).
+--   auth_challenges   — short-lived nonces; each is single-use and expires
+--                       in 5 min. Prevents signature replay.
+--   sessions          — opaque random session tokens issued post-verify;
+--                       30 day TTL; the session ID is the cookie value.
+--
+-- Cleanup: expired challenges + sessions are pruned by a periodic VACUUM-
+-- adjacent worker (TODO post-ship); for now their indexes filter them out
+-- of every hot-path query.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS users (
+  cashaddr        TEXT        PRIMARY KEY,                       -- canonical "bitcoincash:q..." form
+  first_seen_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS auth_challenges (
+  nonce           TEXT        PRIMARY KEY,                       -- 256-bit random, base64url
+  cashaddr        TEXT        NOT NULL,                          -- the address the user committed to using
+  message         TEXT        NOT NULL,                          -- exact canonical text the user must sign
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at      TIMESTAMPTZ NOT NULL,                          -- created_at + 5 min by default
+  consumed_at     TIMESTAMPTZ                                    -- set when /api/auth/verify accepts the signature
+);
+
+CREATE INDEX IF NOT EXISTS auth_challenges_expires_idx ON auth_challenges (expires_at);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id              TEXT        PRIMARY KEY,                       -- 256-bit random, base64url; the cookie value
+  cashaddr        TEXT        NOT NULL REFERENCES users(cashaddr) ON DELETE CASCADE,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at      TIMESTAMPTZ NOT NULL,                          -- 30 days from issue by default
+  last_used_at    TIMESTAMPTZ NOT NULL DEFAULT now(),             -- touched on every authenticated request
+  user_agent      TEXT,
+  ip              TEXT                                           -- record-only; consider hashing later for privacy
+);
+
+CREATE INDEX IF NOT EXISTS sessions_cashaddr_idx ON sessions (cashaddr);
+CREATE INDEX IF NOT EXISTS sessions_expires_idx ON sessions (expires_at);

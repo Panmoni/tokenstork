@@ -22,7 +22,7 @@ import { query } from '$lib/server/db';
 import { NOT_MODERATED_CLAUSE } from '$lib/moderation';
 import type { LayoutServerLoad } from './$types';
 
-export const load: LayoutServerLoad = async () => {
+export const load: LayoutServerLoad = async ({ locals }) => {
 	// Every tokens-reading query excludes moderation-hidden categories via
 	// NOT_MODERATED_CLAUSE ($lib/moderation) — single source of truth so
 	// schema evolution is one-line governance. The `sync_state` query is
@@ -136,5 +136,12 @@ export const load: LayoutServerLoad = async () => {
 		if (r.status === 'rejected') console.error('[+layout.server] metric query failed:', r.reason);
 	}
 
-	return { tokensTracked, tailLastBlock, newIn24h, totalTvlSats, listedCount };
+	return {
+		tokensTracked,
+		tailLastBlock,
+		newIn24h,
+		totalTvlSats,
+		listedCount,
+		user: locals.user ?? null
+	};
 };

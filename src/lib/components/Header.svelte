@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import ThemeSwitcher from './ThemeSwitcher.svelte';
 
@@ -13,6 +13,30 @@
 		{ name: 'Stats', href: '/stats' },
 		{ name: 'Learn', href: '/learn' }
 	];
+
+	// Logged-in cashaddr (or null) comes through the layout server load
+	// via hooks.server.ts. Truncated for the header pill — full cashaddr
+	// is in the title attribute for hover.
+	const user = $derived(page.data?.user as { cashaddr: string } | null | undefined);
+	const truncatedCashaddr = $derived.by(() => {
+		if (!user?.cashaddr) return null;
+		const a = user.cashaddr;
+		// "bitcoincash:qr…ddy" — keep the prefix-stripped suffix readable.
+		const stripped = a.startsWith('bitcoincash:') ? a.slice('bitcoincash:'.length) : a;
+		if (stripped.length <= 12) return stripped;
+		return `${stripped.slice(0, 6)}…${stripped.slice(-4)}`;
+	});
+
+	async function logout() {
+		try {
+			await fetch('/api/auth/logout', { method: 'POST' });
+		} catch {
+			// Even if the server call failed, the cookie is single-use and
+			// expires; we can fail gracefully on the client.
+		}
+		await invalidateAll();
+		await goto('/');
+	}
 
 	let mobileMenuOpen = $state(false);
 
@@ -69,6 +93,31 @@
 			</div>
 
 			<div class="hidden md:flex md:items-center md:gap-3">
+				{#if user && truncatedCashaddr}
+					<div class="flex items-center gap-2">
+						<span
+							class="px-2 py-1 rounded-md bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs font-mono"
+							title={user.cashaddr}
+						>
+							{truncatedCashaddr}
+						</span>
+						<button
+							type="button"
+							onclick={logout}
+							class="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+							title="Sign out"
+						>
+							Sign out
+						</button>
+					</div>
+				{:else}
+					<a
+						href={`/login${pathname !== '/' ? `?return=${encodeURIComponent(pathname)}` : ''}`}
+						class="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+					>
+						Sign in
+					</a>
+				{/if}
 				{#if showSearch}
 					<!--
 						Hidden until `lg` (1024px+) because at md (768-1023px)
@@ -142,6 +191,34 @@
 						{item.name}
 					</a>
 				{/each}
+				<div class="border-t border-slate-200 dark:border-slate-800 mt-2 pt-2">
+					{#if user && truncatedCashaddr}
+						<div class="px-4 py-2 text-xs text-slate-500 dark:text-slate-400">
+							Signed in as
+							<span class="font-mono text-emerald-700 dark:text-emerald-300" title={user.cashaddr}>
+								{truncatedCashaddr}
+							</span>
+						</div>
+						<button
+							type="button"
+							onclick={() => {
+								mobileMenuOpen = false;
+								logout();
+							}}
+							class="w-full text-left block px-4 py-3 rounded-lg text-base font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+						>
+							Sign out
+						</button>
+					{:else}
+						<a
+							href={`/login${pathname !== '/' ? `?return=${encodeURIComponent(pathname)}` : ''}`}
+							onclick={() => (mobileMenuOpen = false)}
+							class="block px-4 py-3 rounded-lg text-base font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+						>
+							Sign in
+						</a>
+					{/if}
+				</div>
 			</div>
 		</div>
 	</nav>

@@ -52,7 +52,28 @@ const config = {
 				'style-src': ['self', 'unsafe-inline'],
 				'img-src': ['self', 'https:', 'data:'],
 				'font-src': ['self', 'data:'],
-				'connect-src': ['self', 'https://beamanalytics.b-cdn.net'],
+				// connect-src needs to allow:
+				//   - 'self' for the auth endpoints + tokens API
+				//   - beam analytics CDN (existing)
+				//   - WalletConnect relay (wss://) + verify/registry API
+				//     (https://*.walletconnect.{com,org}). Without these the
+				//     /login Connect Wallet button hangs at session-init —
+				//     the SDK can't reach the relay.
+				'connect-src': [
+					'self',
+					'https://beamanalytics.b-cdn.net',
+					'wss://relay.walletconnect.com',
+					'wss://relay.walletconnect.org',
+					'https://*.walletconnect.com',
+					'https://*.walletconnect.org'
+				],
+				// frame-src allows the WalletConnect verification iframe.
+				// Distinct from frame-ancestors (which controls who can
+				// embed US, set to 'none' below).
+				'frame-src': [
+					'https://verify.walletconnect.com',
+					'https://verify.walletconnect.org'
+				],
 				'frame-ancestors': ['none'],
 				'base-uri': ['self'],
 				'form-action': ['self'],
