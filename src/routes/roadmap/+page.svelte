@@ -8,9 +8,10 @@
 
 <script lang="ts">
 	// Roadmap items. `status` drives the icon + color. Last updated 2026-04-25
-	// — if anything drifts by more than a quarter, come back and groom. The
-	// original roadmap had a version-number scheme (0.0.3, 0.0.4, …) that
-	// turned out to be ambitious vaporware; we now group by theme + status.
+	// (post-/blocks ship) — if anything drifts by more than a quarter, come
+	// back and groom. The original roadmap had a version-number scheme
+	// (0.0.3, 0.0.4, …) that turned out to be ambitious vaporware; we now
+	// group by theme + status.
 	interface Item {
 		title: string;
 		status: 'done' | 'planned' | 'later';
@@ -42,7 +43,7 @@
 			status: 'done',
 			bullets: [
 				'Cauldron AMM — price, TVL, "On Cauldron" directory filter.',
-				'Tapswap P2P — listings detected on-chain via the MPSW OP_RETURN protocol (no GraphQL).',
+				'Tapswap P2P — listings detected on-chain via the MPSW OP_RETURN protocol (no GraphQL). Full lifecycle: open → taken / cancelled detected by spend-walker on every block; pre-deploy listings backfilled retroactively.',
 				'Fex.cash AMM — pool state read directly from BCHN UTXOs against the AssetCovenant P2SH; "On Fex" filter, side-by-side spread% comparison on every detail page, third Tradeable card on /stats.',
 				'Three venue logos on every directory row.'
 			]
@@ -51,10 +52,20 @@
 			title: 'Cross-venue arbitrage scanner',
 			status: 'done',
 			bullets: [
-				'/arbitrage page — every token on both Cauldron and Fex, ranked by raw spread % with Buy / Sell action buttons that open the cheaper and more-expensive venue.',
-				'Net column subtracts the round-trip 0.9% taker-fee floor so the visible figure is post-fee.',
-				'View toggles for ≥ 1% (default), ≥ 5%, and show-all.',
-				'Tapswap arb (P2P-vs-AMM) tracked as a follow-up — different per-unit pricing semantics need their own pass.'
+				'/arbitrage page — every token listed on at least 2 of 3 venues (Cauldron AMM / Fex AMM / Tapswap P2P), ranked by raw spread % with Buy / Sell action buttons that open the cheaper and more-expensive venue.',
+				'Per-row dynamic fee model: buy-leg + sell-leg fees specific to whichever venues this row\'s cheapest-vs-most-expensive pair is using (Cauldron 0.3% / Fex 0.6% / Tapswap 0% buy + 3% sell). Net column reflects the actual pair\'s fee, not a global floor.',
+				'Tapswap price derived as the lowest want_sats / has_amount across open FT-only listings; NFT pricing semantics differ and are tracked as a follow-up.',
+				'View toggles for ≥ 1% (default), ≥ 5%, and show-all.'
+			]
+		},
+		{
+			title: 'Per-block chain economics (/blocks)',
+			status: 'done',
+			bullets: [
+				'/blocks page — every block since CashTokens activation (792,772) with transaction count, miner take (coinbase output), implied fees (coinbase − subsidy at the height-derived halving schedule), total economic value transferred, and block size.',
+				'Headline strip with 7d / 30d / all-time aggregates plus sparklines for transaction count, fees, and economic value.',
+				'Block hashes link out to salemkode.com for full per-tx detail; pagination at 50 rows per page, newest first.',
+				'Live tail walker (Pass 4) and the one-shot blocks-backfill binary share a pure-Rust block summarizer + BCH halving-schedule subsidy table — single source of truth.'
 			]
 		},
 		{
@@ -99,7 +110,7 @@
 				'Unlocks live holder counts, NFT instance lists, and the "fully burned" counter on /stats.',
 				'Closes an old max-supply edge case on high-activity addresses.',
 				'Weekly canary comparing our index against BlockBook to catch drift.',
-				'Currently mid-IBD on the production VPS — memory caps + dbcache tuned, ETA ~2 days from start.'
+				'Currently mid-IBD on the production VPS — memory pressure caps the throughput at ~50 blocks/min in the early-CashTokens range; ETA ~1 week from now to reach tip given the remaining ~565k blocks.'
 			]
 		},
 		{
@@ -122,11 +133,12 @@
 			]
 		},
 		{
-			title: 'Anonymous watchlist',
+			title: 'Wallet-tied watchlist',
 			status: 'planned',
 			bullets: [
-				'Star button on token cards + a /watchlist route, backed by localStorage.',
-				'Foundation for a cross-device portfolio once wallet login ships.'
+				'Star button on token cards + a /watchlist route, scoped to the visitor\'s BCH wallet address — not localStorage.',
+				'Blocked on wallet login, which lands first so the watchlist has a stable identity to attach to from day one.',
+				'No anonymous mode — single source of truth tied to the wallet, no anon-to-migrated handoff to keep correct.'
 			]
 		},
 		{
@@ -134,17 +146,15 @@
 			status: 'planned',
 			bullets: [
 				'Long-horizon price + volume charts with 24h / 7d / 30d / 90d / 1y / all ranges.',
-				'Holder distribution + concentration metrics (top-10, Gini, Herfindahl) — needs BlockBook.',
-				'Tapswap spend-lifecycle detection so stale offers drop off (currently the open-listings count grows monotonically).'
+				'Holder distribution + concentration metrics (top-10, Gini, Herfindahl) — needs BlockBook.'
 			]
 		},
 		{
-			title: 'Arbitrage + stats follow-ups',
+			title: 'Stats follow-ups',
 			status: 'planned',
 			bullets: [
-				'Tapswap as a third arbitrage column (P2P ask vs Cauldron / Fex pool price) — needs FT-vs-NFT pricing logic.',
 				'Top gainers / losers and TVL movers on /stats — pending more accumulated price history.',
-				'Cached daily snapshot of the live Cauldron aggregates so /stats stops paying the network round-trip on every hit.'
+				'NFT-aware Tapswap arbitrage — current /arbitrage table is FT-only on the Tapswap side; NFT listings need their own per-commitment treatment because "lowest ask" doesn\'t aggregate cleanly across unique items.'
 			]
 		},
 		{
