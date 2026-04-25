@@ -927,6 +927,151 @@ pub async fn mark_fex_run(pool: &PgPool) -> Result<()> {
     Ok(())
 }
 
+/// Snapshot of Cauldron's global aggregates. Sats-only — USD figures are
+/// derived at render time from the live BCH price so the slower-moving
+/// stats cadence (30 min) isn't pinned to whatever USD/BCH was at the
+/// moment of fetch.
+pub struct CauldronGlobalStatsWrite {
+    pub tvl_sats: i64,
+    pub volume_24h_sats: i64,
+    pub volume_7d_sats: i64,
+    pub volume_30d_sats: i64,
+    pub pools_active: i32,
+    pub pools_ended: i32,
+    pub pools_interactions: i64,
+    /// Pre-serialized JSON array of `{ "month": "YYYY-MM", "count": N }`.
+    /// We serialize at the call site to avoid pulling a JSON dep into pg.rs's
+    /// surface; sqlx accepts a JSON string for a `JSONB` column directly via
+    /// the `::jsonb` cast in the upsert statement.
+    pub unique_addresses_by_month_json: String,
+}
+
+/// Read-side counterpart of `CauldronGlobalStatsWrite`. Used by the
+/// stats worker to preserve good prior values on a partial-failure run
+/// (one endpoint times out → use the prior value for that field rather
+/// than overwriting with zero).
+pub struct CauldronGlobalStatsRead {
+    pub tvl_sats: i64,
+    pub volume_24h_sats: i64,
+    pub volume_7d_sats: i64,
+    pub volume_30d_sats: i64,
+    pub pools_active: i32,
+    pub pools_ended: i32,
+    pub pools_interactions: i64,
+    pub unique_addresses_by_month_json: String,
+}
+
+/// Internal tuple shape for the cauldron_global_stats SELECT — kept
+/// behind a private type alias so clippy stops flagging the row-tuple
+/// as too-complex inline. The order MUST match the SELECT column order.
+type CauldronStatsRowTuple = (
+    i64,    // tvl_sats
+    i64,    // volume_24h_sats
+    i64,    // volume_7d_sats
+    i64,    // volume_30d_sats
+    i32,    // pools_active
+    i32,    // pools_ended
+    i64,    // pools_interactions
+    String, // unique_addresses_by_month::text
+);
+
+/// Read the current cauldron_global_stats row. Returns `None` if the
+/// table is empty (fresh deploy before the first worker run); the seed
+/// in schema.sql guarantees a row exists in the steady state, so a
+/// `None` should be operationally rare.
+pub async fn fetch_cauldron_global_stats(
+    pool: &PgPool,
+) -> Result<Option<CauldronGlobalStatsRead>> {
+    // sqlx-with-query_as needs FromRow which requires Decode; rather than
+    // derive that on a public type, hand-extract via a tuple type and
+    // map. The unique_addresses column is JSONB which we read as a JSON
+    // string via Postgres' ::text cast — symmetric with how we write it.
+    let row: Option<CauldronStatsRowTuple> = sqlx::query_as(
+        r#"
+        SELECT tvl_sats,
+               volume_24h_sats,
+               volume_7d_sats,
+               volume_30d_sats,
+               pools_active,
+               pools_ended,
+               pools_interactions,
+               unique_addresses_by_month::text
+          FROM cauldron_global_stats
+         WHERE id = 1
+        "#,
+    )
+    .fetch_optional(pool)
+    .await
+    .context("fetch_cauldron_global_stats")?;
+    Ok(row.map(|(t, v24, v7, v30, pa, pe, pi, j)| CauldronGlobalStatsRead {
+        tvl_sats: t,
+        volume_24h_sats: v24,
+        volume_7d_sats: v7,
+        volume_30d_sats: v30,
+        pools_active: pa,
+        pools_ended: pe,
+        pools_interactions: pi,
+        unique_addresses_by_month_json: j,
+    }))
+}
+
+/// Upsert the cauldron_global_stats singleton row. The schema seeds id=1
+/// on first deploy so this ON CONFLICT path is the steady-state writer.
+pub async fn upsert_cauldron_global_stats(
+    pool: &PgPool,
+    s: &CauldronGlobalStatsWrite,
+) -> Result<()> {
+    sqlx::query(
+        r#"
+        INSERT INTO cauldron_global_stats
+            (id, tvl_sats, volume_24h_sats, volume_7d_sats, volume_30d_sats,
+             pools_active, pools_ended, pools_interactions,
+             unique_addresses_by_month, fetched_at, updated_at)
+        VALUES
+            (1, $1, $2, $3, $4, $5, $6, $7, $8::jsonb, now(), now())
+        ON CONFLICT (id) DO UPDATE SET
+            tvl_sats                  = EXCLUDED.tvl_sats,
+            volume_24h_sats           = EXCLUDED.volume_24h_sats,
+            volume_7d_sats            = EXCLUDED.volume_7d_sats,
+            volume_30d_sats           = EXCLUDED.volume_30d_sats,
+            pools_active              = EXCLUDED.pools_active,
+            pools_ended               = EXCLUDED.pools_ended,
+            pools_interactions        = EXCLUDED.pools_interactions,
+            unique_addresses_by_month = EXCLUDED.unique_addresses_by_month,
+            fetched_at                = now(),
+            updated_at                = now()
+        "#,
+    )
+    .bind(s.tvl_sats)
+    .bind(s.volume_24h_sats)
+    .bind(s.volume_7d_sats)
+    .bind(s.volume_30d_sats)
+    .bind(s.pools_active)
+    .bind(s.pools_ended)
+    .bind(s.pools_interactions)
+    .bind(&s.unique_addresses_by_month_json)
+    .execute(pool)
+    .await
+    .context("upsert_cauldron_global_stats")?;
+    Ok(())
+}
+
+/// Touch `last_cauldron_stats_run_at` — observability for the staleness
+/// watchdog. Fired even on partial-failure runs (i.e. when at least one
+/// of the 6 sub-fetches succeeded) so the timestamp reflects the worker's
+/// actual liveness, not just the all-success path.
+pub async fn mark_cauldron_stats_run(pool: &PgPool) -> Result<()> {
+    sqlx::query(
+        "UPDATE sync_state
+            SET last_cauldron_stats_run_at = now(), updated_at = now()
+          WHERE id = 1",
+    )
+    .execute(pool)
+    .await
+    .context("mark_cauldron_stats_run")?;
+    Ok(())
+}
+
 /// Ensure the pool is closed before a binary exits — keeps Postgres from
 /// logging warnings about abruptly terminated sessions.
 pub async fn shutdown(pool: PgPool) {

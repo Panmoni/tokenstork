@@ -113,6 +113,49 @@ impl CauldronClient {
 		Ok(resp.and_then(|r| r.satoshis))
 	}
 
+	// -----------------------------------------------------------------------
+	// Global / ecosystem-wide endpoints. Pulled by `sync-cauldron-stats`
+	// every 30 min and cached in `cauldron_global_stats` so /stats SSR
+	// doesn't pay a network round-trip per page hit.
+	// -----------------------------------------------------------------------
+
+	/// `GET /cauldron/valuelocked` — total satoshis locked on the BCH side
+	/// across every Cauldron pool. Same `* 2` doubled-sides convention at
+	/// render time.
+	pub async fn get_global_tvl_satoshis(&self) -> Result<Option<i64>> {
+		let resp: Option<TvlResponse> = self.get_json("/cauldron/valuelocked").await?;
+		Ok(resp.and_then(|r| r.satoshis))
+	}
+
+	/// `GET /cauldron/volume?start=<unix>&end=<unix>` — total swap volume
+	/// in sats across the window. Used for 24h / 7d / 30d trailing windows.
+	pub async fn get_volume_window_sats(&self, start: u64, end: u64) -> Result<Option<i64>> {
+		let path = format!("/cauldron/volume?start={}&end={}", start, end);
+		let resp: Option<VolumeResponse> = self.get_json(&path).await?;
+		Ok(resp.and_then(|r| r.total_volume_sats))
+	}
+
+	/// `GET /cauldron/contract/count` — pool counters: active, ended,
+	/// total interactions.
+	pub async fn get_contract_count(&self) -> Result<Option<ContractCount>> {
+		self.get_json("/cauldron/contract/count").await
+	}
+
+	/// `GET /cauldron/user/unique_addresses` — array of `[month, count]`
+	/// tuples. Endpoint scans the full chain so it's noticeably slower
+	/// than the others; we tolerate that on a 30 min cadence.
+	///
+	/// Count is `i64` for safety even though realistic counts (thousands
+	/// per month) fit i32 easily — protects against a future API change
+	/// that returns a combined-since-genesis variant which could exceed
+	/// i32::MAX (2.1B), which would otherwise hard-fail deserialization.
+	pub async fn get_unique_addresses_by_month(&self) -> Result<Vec<(String, i64)>> {
+		let resp: Option<Vec<(String, i64)>> = self
+			.get_json("/cauldron/user/unique_addresses")
+			.await?;
+		Ok(resp.unwrap_or_default())
+	}
+
 	/// Shared GET helper: 3× retry on 5xx / 429 / network, 404 → `Ok(None)`.
 	async fn get_json<T: for<'de> Deserialize<'de>>(&self, path: &str) -> Result<Option<T>> {
 		let url = format!("{}{}", self.base_url, path);
@@ -186,6 +229,22 @@ struct PriceResponse {
 struct TvlResponse {
 	#[serde(default)]
 	satoshis: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct VolumeResponse {
+	#[serde(default)]
+	total_volume_sats: Option<i64>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct ContractCount {
+	#[serde(default)]
+	pub active: i32,
+	#[serde(default)]
+	pub ended: i32,
+	#[serde(default)]
+	pub interactions: i64,
 }
 
 #[cfg(test)]

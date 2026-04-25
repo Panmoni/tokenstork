@@ -299,6 +299,32 @@ ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_cauldron_run_at           T
 ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_tapswap_backfill_through  INTEGER;
 ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_tapswap_run_at            TIMESTAMPTZ;
 ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_fex_run_at                TIMESTAMPTZ;
+ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_cauldron_stats_run_at     TIMESTAMPTZ;
 
 -- Ensure the singleton row exists on first deploy.
 INSERT INTO sync_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================================
+-- Cached aggregates from indexer.cauldron.quest's global endpoints. Populated
+-- by `sync-cauldron-stats` on a 30 min cadence. Decoupled from /stats SSR so
+-- a public-page hit doesn't pay a network round-trip to a third-party indexer.
+--
+-- Singleton row (id = 1) holds the latest snapshot. USD values are NOT stored
+-- — derived at render time from bch_price × stored sats so a faster-moving
+-- BCH price doesn't get pinned to the slower cadence.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS cauldron_global_stats (
+  id                         SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  tvl_sats                   BIGINT      NOT NULL DEFAULT 0,
+  volume_24h_sats            BIGINT      NOT NULL DEFAULT 0,
+  volume_7d_sats             BIGINT      NOT NULL DEFAULT 0,
+  volume_30d_sats            BIGINT      NOT NULL DEFAULT 0,
+  pools_active               INTEGER     NOT NULL DEFAULT 0,
+  pools_ended                INTEGER     NOT NULL DEFAULT 0,
+  pools_interactions         BIGINT      NOT NULL DEFAULT 0,
+  unique_addresses_by_month  JSONB       NOT NULL DEFAULT '[]'::jsonb,
+  fetched_at                 TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at                 TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+INSERT INTO cauldron_global_stats (id) VALUES (1) ON CONFLICT (id) DO NOTHING;

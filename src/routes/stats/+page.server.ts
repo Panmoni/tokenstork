@@ -1,15 +1,21 @@
 // /stats — ecosystem-level metrics for the BCH CashTokens directory.
-// Most counters are derived from the tables the directory already
-// renders from. The Cauldron AMM section is the one external block —
-// it pulls live aggregates from indexer.cauldron.quest, gated behind
-// allSettled so an upstream stall never blocks the page.
+// Every counter on this page reads from Postgres only — there are no
+// external HTTP calls in this load function. Cauldron's global aggregates
+// (TVL, 24h/7d/30d volume, pool counts, unique-addresses-by-month) are
+// pulled by the `sync-cauldron-stats` worker every 30 min and persisted
+// to `cauldron_global_stats`; we read the singleton row here.
+//
+// USD figures are derived at this layer from `bch_price × stored_sats`
+// so the slower 30 min stats cadence isn't pinned to whatever USD/BCH
+// happened to be at fetch time — refreshing /stats picks up the latest
+// price even when the underlying sats haven't moved.
 //
 // `newIn24h` is sourced from the parent layout load so /stats doesn't
 // re-run the same 24h count twice in one pageview.
 
 import { query } from '$lib/server/db';
 import { NOT_MODERATED_CLAUSE } from '$lib/moderation';
-import { fetchCauldronGlobalStats, type CauldronGlobalStats } from '$lib/server/external';
+import type { CauldronGlobalStats } from '$lib/server/external';
 import type { PageServerLoad } from './$types';
 
 interface TypeCount {
@@ -49,6 +55,20 @@ interface MetadataCompleteness {
 	total: string;
 }
 
+interface CauldronStatsRow {
+	tvl_sats: string;
+	volume_24h_sats: string;
+	volume_7d_sats: string;
+	volume_30d_sats: string;
+	pools_active: number;
+	pools_ended: number;
+	pools_interactions: string;
+	// node-pg deserializes JSONB into the JS shape directly. Empty default
+	// in the schema is `[]`, so this is always an array even on a fresh
+	// install before sync-cauldron-stats has run once.
+	unique_addresses_by_month: Array<{ month: string; count: number }>;
+}
+
 async function fetchBchPrice(fetch: typeof globalThis.fetch): Promise<number> {
 	try {
 		const res = await fetch('/api/bchPrice', { signal: AbortSignal.timeout(4000) });
@@ -74,8 +94,7 @@ const EMPTY_CAULDRON_STATS: CauldronGlobalStats = {
 
 export const load: PageServerLoad = async ({ parent, fetch }) => {
 	const bchPriceP = fetchBchPrice(fetch);
-	const cauldronStatsP = bchPriceP.then((p) => fetchCauldronGlobalStats(p));
-	const [parentData, pageResults, cauldronStatsResult] = await Promise.all([
+	const [parentData, pageResults, bchPriceUSD] = await Promise.all([
 		parent(),
 		Promise.allSettled([
 			query<TypeCount>(
@@ -226,16 +245,31 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 			// /moderated for the per-token breakdown.
 			query<WindowCount>(
 				`SELECT COUNT(*)::bigint AS total FROM token_moderation`
+			),
+			// Cached Cauldron global aggregates. Singleton row, populated
+			// every 30 min by sync-cauldron-stats. ::text on the BIGINT
+			// columns to preserve precision; node-pg returns BIGINT as a
+			// string anyway but the cast makes the contract explicit.
+			query<CauldronStatsRow>(
+				`SELECT tvl_sats::text,
+				        volume_24h_sats::text,
+				        volume_7d_sats::text,
+				        volume_30d_sats::text,
+				        pools_active,
+				        pools_ended,
+				        pools_interactions::text,
+				        unique_addresses_by_month
+				   FROM cauldron_global_stats
+				  WHERE id = 1`
 			)
 		]),
-		cauldronStatsP.catch((err) => {
-			console.error('[stats] cauldron global stats failed:', err);
-			return EMPTY_CAULDRON_STATS;
-		})
+		bchPriceP
 	]);
 
-	const cauldronStats = cauldronStatsResult;
-
+	// Destructure all 13 allSettled results by name. Magic-number indexing
+	// (pageResults[12]) silently breaks if anyone reorders the Promise
+	// array literal above; named destructuring keeps the binding tied to
+	// the source query order at the source.
 	const [
 		typesRes,
 		d7Res,
@@ -248,8 +282,58 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		decimalsRes,
 		venueOverlapRes,
 		metadataRes,
-		moderatedRes
-	] = pageResults;
+		moderatedRes,
+		cauldronStatsRes
+	] = pageResults as [
+		PromiseSettledResult<{ rows: TypeCount[] }>,
+		PromiseSettledResult<{ rows: WindowCount[] }>,
+		PromiseSettledResult<{ rows: WindowCount[] }>,
+		PromiseSettledResult<{ rows: WindowCount[] }>,
+		PromiseSettledResult<{ rows: WindowCount[] }>,
+		PromiseSettledResult<{ rows: WindowCount[] }>,
+		PromiseSettledResult<{ rows: WindowCount[] }>,
+		PromiseSettledResult<{ rows: GenesisMonth[] }>,
+		PromiseSettledResult<{ rows: DecimalsBucket[] }>,
+		PromiseSettledResult<{ rows: VenueOverlap[] }>,
+		PromiseSettledResult<{ rows: MetadataCompleteness[] }>,
+		PromiseSettledResult<{ rows: WindowCount[] }>,
+		PromiseSettledResult<{ rows: CauldronStatsRow[] }>
+	];
+
+	// Cauldron stats — read the cached row, compute USD at render time
+	// from the live BCH price. If the row hasn't been populated yet (fresh
+	// deploy, sync-cauldron-stats hasn't fired), fall through to the empty
+	// shape so the page still renders zeros instead of throwing.
+	const usd = (sats: number, double = false): number =>
+		bchPriceUSD > 0 ? (sats / 1e8) * bchPriceUSD * (double ? 2 : 1) : 0;
+	const cauldronStats: CauldronGlobalStats =
+		cauldronStatsRes.status === 'fulfilled' && cauldronStatsRes.value.rows[0]
+			? (() => {
+					const r = cauldronStatsRes.value.rows[0];
+					const tvlSats = Number(r.tvl_sats) || 0;
+					const v24 = Number(r.volume_24h_sats) || 0;
+					const v7 = Number(r.volume_7d_sats) || 0;
+					const v30 = Number(r.volume_30d_sats) || 0;
+					return {
+						tvlSats,
+						tvlUSD: usd(tvlSats, true),
+						volume24hSats: v24,
+						volume24hUSD: usd(v24),
+						volume7dSats: v7,
+						volume7dUSD: usd(v7),
+						volume30dSats: v30,
+						volume30dUSD: usd(v30),
+						pools: {
+							active: r.pools_active ?? 0,
+							ended: r.pools_ended ?? 0,
+							interactions: Number(r.pools_interactions) || 0
+						},
+						uniqueAddressesByMonth: Array.isArray(r.unique_addresses_by_month)
+							? r.unique_addresses_by_month
+							: []
+					};
+				})()
+			: EMPTY_CAULDRON_STATS;
 
 	const pickNumber = (r: PromiseSettledResult<{ rows: WindowCount[] }>): number =>
 		r.status === 'fulfilled' ? Number(r.value.rows[0]?.total ?? 0) : 0;

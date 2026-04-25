@@ -1,0 +1,20 @@
+[Unit]
+Description=Run tokenstork sync-cauldron-stats every 30 min
+
+[Timer]
+# 30 min cadence — Cauldron's global aggregates (TVL, 24h/7d/30d volume,
+# pool counts, unique-addresses-by-month) move slowly enough that fresher
+# than that is wasted requests against the public indexer.
+#
+# OnBootSec=8min slots between sync-bcmr (5min) and sync-cauldron-fast
+# (11min) so each timer's first tick is staggered. RandomizedDelaySec=2min
+# provides extra jitter so coincidental same-minute fires across timers
+# spread out.
+OnBootSec=8min
+OnUnitActiveSec=30min
+Persistent=true
+RandomizedDelaySec=2min
+Unit=sync-cauldron-stats.service
+
+[Install]
+WantedBy=timers.target
