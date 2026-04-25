@@ -1,20 +1,20 @@
 # TokenStork
 
-**The authoritative, self-hosted directory and explorer for every BCH CashToken ever minted.**
+**An authoritative, self-hosted directory and explorer for every BCH CashToken ever minted.**
 
 Live at <https://tokenstork.com>.
 
-TokenStork indexes every fungible (FT) and non-fungible (NFT) CashToken category created since activation at block **792,772** (May 2023) and keeps the list continuously up to date as new tokens are minted and existing ones are (partially or fully) burned. For each category it serves supply, holders, NFT instances, BCMR metadata, and market data.
+TokenStork indexes every fungible (FT) and non-fungible (NFT) CashToken category created since activation at block **792,772** (May 2023) and keeps the list continuously up to date as new tokens are minted and existing ones are (partially or fully) burned. For each category it serves supply, holders, NFT instances, BCMR metadata, and market data across the AMMs (Cauldron + Fex) and the P2P marketplace (Tapswap).
 
-The entire pipeline runs on a single VPS. There is no dependency on Chaingraph, third-party BlockBook, or any other external blockchain indexer — TokenStork runs its own archival BCHN, its own BlockBook instance, and its own Postgres.
+The entire pipeline runs on a single VPS. There is no dependency on Chaingraph, third-party BlockBook, or any other external blockchain indexer — TokenStork runs its own archival BCHN, its own BlockBook instance, and its own Postgres. The BCH ecosystem already has several token explorers; this is one open-source take, hosted directly by the team that publishes it.
 
 ---
 
 ## Status
 
-**v0.0.2 beta.** The SvelteKit app, schema, and HTTP API are live in production. The sync workers currently exist as TypeScript prototypes in [scripts/](scripts/) and are being ported to a Rust `workers/` crate. Until that port lands, the TS prototypes are functional and drive backfill/tail during bring-up.
+**v0.1.1**, in production. SvelteKit app, Postgres schema, HTTP API, and all eight Rust sync workers are live and feeding the directory. The BlockBook-dependent enrichment pass (per-category holders, live UTXO counts, fully-burned detection) is gated on completing BlockBook IBD and not yet wired in.
 
-See [docs/cashtoken-index-plan.md](docs/cashtoken-index-plan.md) for the full rollout plan and progress log.
+See [docs/cashtoken-index-plan.md](docs/cashtoken-index-plan.md) (gitignored — local copy) for the full rollout plan and progress log.
 
 ---
 
@@ -24,56 +24,76 @@ Everything runs on one Netcup RS 2000 G12 VPS (8 EPYC cores, 16 GB ECC, 512 GB N
 
 | Component | Role | Listens on |
 |---|---|---|
-| Archival **BCHN** (`prune=0`, `txindex=1`) | Source of truth on-chain. Feeds BlockBook; wakes the tail worker via ZMQ. | `127.0.0.1:8332` (RPC) + `127.0.0.1:28332` (ZMQ) |
-| **BlockBook** (mainnet-pat fork, `cashtokens` branch) | Category-indexed rich-data API: holders, NFTs per category, transfers, BCMR. | `127.0.0.1:9130` |
+| Archival **BCHN** v29 (`prune=0`, `txindex=1`) | Source of truth on-chain. Feeds BlockBook; wakes the tail worker via ZMQ; serves `scantxoutset` to the venue scanners. | `127.0.0.1:8332` (RPC) + `127.0.0.1:28332` (ZMQ) |
+| **BlockBook** (mainnet-pat fork, `cashtokens` branch) | Category-indexed rich-data API: holders, NFTs per category, transfers, BCMR. | `127.0.0.1:9131` |
 | **Postgres 17** | Cached directory and UI backend state. | `127.0.0.1:5432` (Unix socket, peer auth) |
-| **SvelteKit app** (Node adapter) | UI + JSON API, SSR. | `127.0.0.1:3000` behind Caddy |
-| **Sync workers** (backfill / tail / enrich / verify) | Populate Postgres from BCHN + BlockBook. | systemd services |
+| **SvelteKit app** (Node adapter, Svelte 5 runes) | UI + JSON API, SSR. | `127.0.0.1:3000` behind Caddy |
+| **Sync workers** (Rust crate) | Populate Postgres from BCHN + BlockBook + venue scans. | systemd services + timers |
 | **Caddy** | TLS termination, HSTS/CSP/XFO, reverse proxy. | `0.0.0.0:443` |
 
 **External data sources** are confined to two narrow surfaces:
 
-- **BCMR metadata** (names, symbols, icons) from [Paytaca's BCMR indexer](https://github.com/paytaca/bcmr-indexer) and published BCMR JSON feeds. Polled and cached in `token_metadata`.
-- **Cauldron price / TVL** from `indexer.cauldron.quest`, fetched live on per-token SSR render only.
+- **BCMR metadata** (names, symbols, icons) from [Paytaca's BCMR indexer](https://github.com/paytaca/bcmr-indexer) and published BCMR JSON feeds, polled every 4 h and cached in `token_metadata`.
+- **Cauldron price / TVL** from [`indexer.cauldron.quest`](https://indexer.cauldron.quest), polled every 4 h (full discovery) + every 10 min (fast price refresh) and cached in `token_venue_listings`.
+
+**Tapswap** (P2P fixed-price listings via the MPSW OP_RETURN protocol) and **Fex.cash** (UniswapV2-style AMM via the AssetCovenant P2SH) are detected on-chain from our own BCHN — no external API.
 
 ---
 
 ## Repository layout
 
 ```
-db/schema.sql              Idempotent Postgres schema (6 tables).
+db/schema.sql              Idempotent Postgres schema. CREATE TABLE IF NOT EXISTS only.
 src/                       SvelteKit app (Svelte 5 + Node adapter).
   routes/
     +page.server.ts        Directory front page (server-side DB read).
-    token/[category]/      Per-category detail page with live Cauldron data.
-    api/tokens/            Directory + per-category holders/nfts JSON.
+    token/[category]/      Per-category detail page with holders + venues + BCMR.
+    moderated/             Public list of categories filtered out of the directory.
+    stats/                 Ecosystem dashboard (counts, growth, venue overlap).
+    learn/ faq/ roadmap/ about/ tos/   Static pages.
+    api/tokens/            Directory + per-category holders/nfts/report endpoints.
     api/bchPrice/          BCH spot price proxy (CryptoCompare).
-    api/fearAndGreed/      F&G index proxy.
   lib/
+    components/            Svelte 5 components (TokenGrid, MetricsBar, Sparkline, …).
     server/db.ts           pg pool + hex ↔ BYTEA helpers.
     server/external.ts     BCMR + Cauldron clients (timed, hex-validated).
-    server/fetch.ts        timedFetch helper (strict timeouts on every call).
-scripts/                   TS sync workers (backfill, tail, enrich, verify).
-lib/                       Shared TS clients (bchn.ts, blockbook.ts, pg.ts).
+    venues.ts              Single source of truth for the {cauldron, tapswap, fex} venues.
+    moderation.ts          NOT_MODERATED_CLAUSE shared across every read path.
+    types.ts               TokenApiRow + venue listing shapes.
+workers/                   Rust crate. cargo build --release produces 8 binaries.
+  src/{bchn,bcmr,blockbook,cauldron,fex,pg,tapswap}.rs   Library modules.
+  src/bin/{backfill,bcmr,cauldron,enrich,fex,tail,tapswap-backfill,verify}.rs   Binaries.
 infra/
-  Caddyfile                Reverse proxy + CSP/HSTS.
-  systemd/tokenstork.service
-docs/cashtoken-index-plan.md   Canonical rollout plan and progress log.
+  Caddyfile                Reverse proxy + CSP/HSTS/XFO.
+  redeploy.sh              One-shot deploy: git pull → npm + cargo build → schema → systemd.
+  systemd/                 Service + timer units for tokenstork.service + every worker.
+  blockbook-resetinconsistentstate.patch   Local patch for mainnet-pat/blockbook recovery.
 public/.well-known/bitcoin-cash-metadata-registry.json   Self-hosted BCMR.
+scripts/                   Legacy TypeScript sync prototypes — superseded by workers/.
 ```
 
 ---
 
 ## Data model
 
-Six tables, one idempotent file: [db/schema.sql](db/schema.sql).
+Schema is idempotent and lives in [db/schema.sql](db/schema.sql). Every `CREATE TABLE` is `IF NOT EXISTS`, every column add is `ADD COLUMN IF NOT EXISTS` — re-running `npm run db:init` on a deployed instance is safe.
+
+Core tables:
 
 - **`tokens`** — canonical category record keyed by `category BYTEA` (32-byte raw).
-- **`token_metadata`** — BCMR-derived name/symbol/decimals/description/icon, with a `pg_trgm` GIN index on `name` for cheap ILIKE search.
+- **`token_metadata`** — BCMR-derived name / symbol / decimals / description / icon, with a `pg_trgm` GIN index on `name` for cheap ILIKE search.
 - **`token_state`** — current supply (`NUMERIC(78,0)`), live UTXO count, NFT count, holder count, minting flag, burn flag.
 - **`token_holders`** — `(category, address)` with balance and NFT count.
 - **`nft_instances`** — `(category, commitment)` with capability and owner.
-- **`sync_state`** — singleton row tracking backfill / tail / enrich / verify progress.
+- **`sync_state`** — singleton row tracking backfill / tail / enrich / verify / bcmr / cauldron / tapswap / fex run timestamps.
+
+Venue + market tables:
+
+- **`token_venue_listings`** — keyed by `(venue, category)`; `price_sats DOUBLE PRECISION`, `tvl_satoshis NUMERIC(30,0)`. **Unit convention**: `tvl_satoshis` is single-side BCH-reserve sats for AMM venues; the UI applies `× 2` at render to reflect both halves of a constant-product pool. One unambiguous unit across `cauldron` + `fex`.
+- **`token_price_history`** — `(category, venue, ts, price_sats, tvl_satoshis)`. One row per successful Cauldron / Fex fetch. Drives the directory's 1h / 24h / 7d % change columns + the 7-day sparkline column.
+- **`tapswap_offers`** — one row per on-chain MPSW listing. `has_*` columns describe what the maker offers, `want_*` columns describe what they want. `status IN ('open','taken','cancelled')`; day-one ships open offers only.
+- **`token_moderation`** — keyed by `category`; `reason` (public) + `moderator_note` (operator-private) + `hidden_at`. Categories present in this table 410 from `/token/[hex]` and are filtered from every read path via `NOT_MODERATED_CLAUSE` in `src/lib/moderation.ts`.
+- **`token_reports`** — incoming user reports against problematic tokens. Triaged by hand into `token_moderation` decisions.
 
 Two design decisions worth calling out:
 
@@ -90,23 +110,23 @@ npm run db:init    # psql "$DATABASE_URL" -f db/schema.sql
 
 ## HTTP API
 
-All endpoints return JSON. Response shapes are stable and byte-compatible with the pre-migration Next.js app.
+All endpoints return JSON. Response shapes are stable.
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /api/tokens` | Directory listing (paginated, searchable by name). |
+| `GET /api/tokens` | Directory listing (paginated, search across name + symbol + description + category, venue filters). |
 | `GET /api/tokens/[category]/holders` | Holders for a category, ordered by balance. |
 | `GET /api/tokens/[category]/nfts` | NFT instances in a category. |
+| `POST /api/tokens/[category]/report` | Submit a user report for moderation review. Rate-limited; webhook-alerts the operator. |
 | `GET /api/bchPrice` | BCH spot price (CryptoCompare, cached). |
-| `GET /api/fearAndGreed` | Crypto Fear & Greed index. |
 
-The same page routes (`/`, `/token/[category]`) render server-side from Postgres on every request — no client-side hydration of the data.
+Page routes (`/`, `/token/[category]`, `/stats`, `/moderated`, `/learn`, `/faq`, `/roadmap`, `/about`, `/tos`) all render server-side from Postgres on every request — no client-side hydration of the data. The BCH price + theme switcher are the only client-state pieces.
 
 ---
 
 ## Local development
 
-Prerequisites: Node 22, Postgres 17, a reachable BCH node (for the backfill prototypes only — the UI runs fine against an empty schema).
+Prerequisites: Node 22, Postgres 17, Rust 1.75+ (only if you want to run the workers locally).
 
 ```
 git clone https://github.com/Panmoni/tokenstork.git
@@ -120,16 +140,24 @@ npm run db:init
 npm run dev           # http://localhost:5173
 ```
 
-**Environment variables** (all optional except `DATABASE_URL`):
+The app runs fine against an empty schema — every loader handles the no-data case. To populate, you'll need a reachable BCH node + the workers crate built:
+
+```
+cd workers && cargo build --release
+# Binaries land in workers/target/release/{backfill,bcmr,cauldron,fex,tail,tapswap-backfill,verify}
+```
+
+**Environment variables** (only `DATABASE_URL` is required by the app):
 
 | Var | Required | Purpose |
 |---|---|---|
 | `DATABASE_URL` | yes | Postgres connection string. Unix-socket form works: `postgres:///tokenstork`. |
 | `CRYPTO_COMPARE_KEY` | no | Unlocks `/api/bchPrice`; returns `null` when absent. |
-| `FEAR_AND_GREED_API_KEY` | no | Unlocks `/api/fearAndGreed`. |
 | `PUBLIC_BEAM_ANALYTICS_TOKEN` | no | Client-side Beam Analytics tag. |
-| `BCHN_RPC_URL`, `BCHN_ZMQ_URL` | worker-only | Needed by `scripts/` but not by the app. |
-| `BLOCKBOOK_URL` | worker-only | Needed by the enrich worker. |
+| `BCHN_RPC_URL`, `BCHN_RPC_AUTH`, `BCHN_ZMQ_URL` | worker-only | Needed by `workers/`; not by the app. |
+| `BLOCKBOOK_URL` | worker-only | Needed by the enrich + verify workers. |
+| `CAULDRON_URL`, `CAULDRON_MAX_RPS`, `CAULDRON_MODE` | worker-only | Cauldron client knobs; `CAULDRON_MODE=fast` selects the 10-min listed-set refresh path. |
+| `TOKENSTORK_REPORT_WEBHOOK` | optional | Operator webhook hit on each `/api/tokens/[category]/report` POST. |
 
 **Useful scripts:**
 
@@ -138,13 +166,10 @@ npm run dev           # Vite dev server
 npm run build         # production build (output in build/)
 npm run start         # node build  — what systemd runs
 npm run check         # svelte-check + tsc
-npm run typecheck     # workers tsconfig
-
-npm run sync:backfill # one-shot: walk BCHN 792,772 → tip, populate tokens
-npm run sync:tail     # long-running: follow ZMQ hashblock
-npm run sync:enrich   # periodic: pull holders/NFTs/BCMR via BlockBook
-npm run sync:verify   # periodic: reconcile state against live chain
+npm run db:init       # apply db/schema.sql idempotently
 ```
+
+The legacy `npm run sync:*` commands run the [scripts/](scripts/) TypeScript prototypes; they predate the Rust port and are kept only as a fallback path.
 
 ---
 
@@ -153,27 +178,31 @@ npm run sync:verify   # periodic: reconcile state against live chain
 All of the moving parts are checked in:
 
 - [infra/Caddyfile](infra/Caddyfile) — reverse proxy, caching rules, full CSP/HSTS/XFO header chain. Assumes Cloudflare proxy in front with SSL/TLS **Full (strict)** and a Cloudflare Origin Certificate on disk at `/etc/caddy/tls/`. Comments at the top explain how to swap in Let's Encrypt for a non-CF deploy.
-- [infra/systemd/tokenstork.service](infra/systemd/tokenstork.service) — hardened unit file (`ProtectSystem=strict`, `CapabilityBoundingSet=`, filtered syscalls, `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`).
+- [infra/systemd/](infra/systemd/) — hardened unit files for `tokenstork.service`, `blockbook-bcash.service`, `sync-tail.service` (always-on with `Type=notify` + `WatchdogSec=120s`), `sync-bcmr.{service,timer}`, `sync-cauldron{,-fast}.{service,timer}`, `sync-fex.{service,timer}`, `sync-enrich.{service,timer}`, `sync-verify.{service,timer}`, `sync-tapswap-backfill.service`. Same hardening profile across the board: `ProtectSystem=strict`, `CapabilityBoundingSet=`, filtered syscalls, `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`.
+- [infra/redeploy.sh](infra/redeploy.sh) — one-shot deploy script: `git pull`, `npm ci && npm run build`, `cargo build --release`, schema apply, systemd unit refresh + `daemon-reload`, Caddyfile validate + sync, restart `tokenstork.service` + always-on workers.
 - Secrets load from `/etc/tokenstork/env` (chmod 600, owner `tokenstork`).
 
-The step-by-step VPS runbook — BCHN install, Postgres tuning, UFW, fail2ban, Caddy + Cloudflare Origin Cert, systemd, smoke tests — lives in [docs/cashtoken-index-plan.md](docs/cashtoken-index-plan.md) under Phase 2a.
+The step-by-step VPS runbook — BCHN install, Postgres tuning, UFW, fail2ban, Caddy + Cloudflare Origin Cert, systemd, smoke tests — lives in [docs/cashtoken-index-plan.md](docs/cashtoken-index-plan.md) under Phase 2a. The BlockBook install runbook (including the `-resetinconsistentstate` recovery patch and the memory-cap rationale) is at [docs/blockbook-install.md](docs/blockbook-install.md).
 
 ---
 
 ## Indexing pipeline
 
-The sync side is four cooperating workers. Each is idempotent and crash-safe.
+Eight cooperating workers, all in the Rust [workers/](workers/) crate. Each is idempotent and crash-safe.
 
 | Worker | Trigger | Job |
 |---|---|---|
-| **backfill** | one-shot (~90 min after BCHN IBD) | Walk blocks 792,772 → tip via BCHN RPC. Insert every new CashToken category into `tokens`. |
-| **tail** | long-running, ZMQ-driven | Subscribe to `hashblock`; on each new block, scan for new categories and upsert. Sub-second latency from block arrival to DB row. |
-| **enrich** | cron, every 6h | For each known category, pull holders / NFTs / BCMR via BlockBook. Refresh `token_state`, `token_holders`, `nft_instances`, `token_metadata`. |
-| **verify** | cron, weekly | Reconcile `token_state` against `scantxoutset` + BlockBook; flag drift, set `is_fully_burned`, update `verified_at`. |
+| **backfill** | one-shot (~25 min after BCHN IBD) | Walk blocks 792,772 → tip via BCHN RPC. Insert every new CashToken category into `tokens`. |
+| **tail** | always-on, ZMQ-driven | Subscribe to `hashblock`; on each new block, run two walkers — token discovery + Tapswap MPSW detection — and upsert. Sub-second latency from block arrival to DB row. `Type=notify` + `WatchdogSec=120s` for liveness. |
+| **bcmr** | every 4h | Pull names / symbols / decimals / icons from Paytaca's BCMR indexer. Refresh `token_metadata`. |
+| **cauldron** (full mode) | every 4h | Walk every FT category, fetch price + TVL from `indexer.cauldron.quest`, upsert `token_venue_listings`, prune stale rows, append a `token_price_history` point per success. |
+| **cauldron** (fast mode) | every 10 min | Refresh price + TVL only for already-listed categories. Skips pruning — the listed-set view can't confirm delistings of unlisted categories. |
+| **fex** | every 4h | One `scantxoutset raw(<asset_covenant_p2sh>)` against BCHN; decode each Fex pool UTXO; upsert with `venue='fex'`; prune; append history. |
+| **tapswap-backfill** | one-shot | Cold-walk blocks 794,520 → tip looking for MPSW OP_RETURN listings. Resumable via `sync_state.last_tapswap_backfill_through`; each block range checkpointed. |
+| **enrich** | every 6h *(blocked on BlockBook IBD completion)* | For each known category, pull holders / NFTs via BlockBook. Refresh `token_state.holder_count`, `live_utxo_count`, `live_nft_count`, `is_fully_burned`, plus `token_holders` and `nft_instances`. |
+| **verify** | weekly *(blocked on BlockBook IBD completion)* | Sample reconciliation between BCHN and BlockBook. Flags drift. |
 
-Current Postgres-resident state is tracked in the `sync_state` singleton row.
-
-The TS prototypes in [scripts/](scripts/) are the reference implementation and are what currently runs. The Rust `workers/` port is in progress; the shape of the jobs does not change, only the runtime.
+Current Postgres-resident state is tracked in the `sync_state` singleton row — every worker writes a `last_<phase>_run_at` timestamp at the end of each run, so a staleness watchdog can spot a silently-stuck worker independently of block cadence.
 
 ---
 
@@ -189,21 +218,26 @@ The file lives in the repo at [public/.well-known/bitcoin-cash-metadata-registry
 
 ## Contributing
 
-Issues and PRs welcome at <https://github.com/Panmoni/tokenstork>. The near-term roadmap lives in [TODO](TODO); the architectural plan and progress log live in [docs/cashtoken-index-plan.md](docs/cashtoken-index-plan.md).
+Issues and PRs welcome at <https://github.com/Panmoni/tokenstork>. The architectural plan and progress log live in [docs/cashtoken-index-plan.md](docs/cashtoken-index-plan.md) (gitignored locally — ask if you need a current snapshot). Public-roadmap framing of the same lives at [/roadmap](https://tokenstork.com/roadmap).
 
 Before opening a PR, please run:
 
 ```
-npm run check
-npm run build
+npm run check                          # svelte-check + tsc
+npm run build                          # adapter-node output
+cd workers && cargo test --release --lib && cargo clippy --all-targets --release
 ```
+
+If your change touches a worker, the heavy-duty 3-pass review skill in `.claude/skills/heavy-duty-review/` is a good way to self-review the diff before opening a PR — it catches financial-correctness issues, race conditions, and TVL-unit-style cross-file invariants that are easy to miss.
 
 ---
 
 ## Credits
 
+- [@mainnet_pat](https://github.com/mainnet-pat) — the `cashtokens` BlockBook fork that every CashToken-aware explorer depends on, and the Tapswap MPSW protocol whose on-chain reference implementation we reverse-engineered against.
 - [Paytaca](https://github.com/paytaca/bcmr-indexer) — BCMR indexer API, the source of authoritative CashToken metadata.
-- [@mainnet_pat](https://github.com/mainnet-pat) — the `cashtokens` BlockBook fork that every CashToken-aware explorer depends on.
+- [Cauldron](https://cauldron.quest) — the public AMM indexer that drives our price + TVL columns.
+- [Fex.cash](https://docs.fex.cash/) — open-source UniswapV2-style AMM with parameter-free covenants that let us index the full ecosystem in a single `scantxoutset` call.
 - [@mr-zwets](https://github.com/mr-zwets) — early encouragement and technical guidance.
 
 Original release announcement: <https://twitter.com/BitcoinCashSite/status/1687565837169819648>
