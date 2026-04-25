@@ -39,6 +39,20 @@
 		return n.toLocaleString('en-US');
 	};
 
+	// Fee ratio = miner fees as a percentage of total economic value
+	// transferred. Always small (BCH chain has near-zero fees relative to
+	// throughput) so we widen the precision when it's sub-1%.
+	const fmtFeeRatio = (feesSats: string, economicSats: string): string => {
+		const f = Number(feesSats);
+		const e = Number(economicSats);
+		if (!Number.isFinite(f) || !Number.isFinite(e) || e <= 0) return '—';
+		const pct = (f / e) * 100;
+		if (pct === 0) return '0%';
+		if (pct < 0.001) return '< 0.001%';
+		if (pct < 1) return `${pct.toFixed(4)}%`;
+		return `${pct.toFixed(2)}%`;
+	};
+
 	const fmtBytes = (b: number | null): string => {
 		if (b === null || !Number.isFinite(b)) return '—';
 		if (b >= 1_000_000) return `${(b / 1_000_000).toFixed(2)} MB`;
@@ -59,10 +73,10 @@
 		return new Date(iso).toISOString().slice(0, 10);
 	};
 
-	// External-explorer link. Use Blockchair as a stable, well-known BCH
-	// explorer; users following a row's hash get full tx-level detail
-	// without us having to reproduce it in-app.
-	const explorerUrl = (hashHex: string) => `https://blockchair.com/bitcoin-cash/block/${hashHex}`;
+	// External-explorer link. salemkode.com is the BCH-native explorer;
+	// users following a row's hash get full tx-level detail without us
+	// having to reproduce it in-app.
+	const explorerUrl = (hashHex: string) => `https://explorer.salemkode.com/block/${hashHex}`;
 
 	// ---- sparklines from day buckets ---------------------------------------
 	// `data.dayBuckets` is oldest-first daily aggregates over the last 30
@@ -185,7 +199,7 @@
 			<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
 				Last 30 days
 			</div>
-			<div class="grid grid-cols-3 gap-3 text-sm">
+			<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-sm">
 				<div>
 					<div class="text-xs text-slate-500">Blocks</div>
 					<div class="font-mono">{fmtCount(data.summary30d.blockCount)}</div>
@@ -198,13 +212,21 @@
 					<div class="text-xs text-slate-500">Fees</div>
 					<div class="font-mono">{fmtBch(data.summary30d.totalFeesSats)}</div>
 				</div>
+				<div>
+					<div class="text-xs text-slate-500" title="Sum of outputs across non-coinbase txs">Value</div>
+					<div class="font-mono">{fmtBch(data.summary30d.totalEconomicSats)}</div>
+				</div>
+				<div>
+					<div class="text-xs text-slate-500" title="Miner fees as a percentage of total economic value transferred">Fee / Value</div>
+					<div class="font-mono">{fmtFeeRatio(data.summary30d.totalFeesSats, data.summary30d.totalEconomicSats)}</div>
+				</div>
 			</div>
 		</div>
 		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
 			<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
 				All time (since CashTokens activation)
 			</div>
-			<div class="grid grid-cols-3 gap-3 text-sm">
+			<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-sm">
 				<div>
 					<div class="text-xs text-slate-500">Blocks</div>
 					<div class="font-mono">{fmtCount(data.summaryAll.blockCount)}</div>
@@ -216,6 +238,14 @@
 				<div>
 					<div class="text-xs text-slate-500">Fees</div>
 					<div class="font-mono">{fmtBch(data.summaryAll.totalFeesSats)}</div>
+				</div>
+				<div>
+					<div class="text-xs text-slate-500" title="Sum of outputs across non-coinbase txs">Value</div>
+					<div class="font-mono">{fmtBch(data.summaryAll.totalEconomicSats)}</div>
+				</div>
+				<div>
+					<div class="text-xs text-slate-500" title="Miner fees as a percentage of total economic value transferred">Fee / Value</div>
+					<div class="font-mono">{fmtFeeRatio(data.summaryAll.totalFeesSats, data.summaryAll.totalEconomicSats)}</div>
 				</div>
 			</div>
 		</div>
@@ -375,10 +405,10 @@
 				without needing to fetch every prev-output to compute net flows.
 			</li>
 			<li>
-				Block hashes link out to the
-				<a class="text-violet-600 dark:text-violet-400 hover:underline" href="https://blockchair.com/bitcoin-cash" target="_blank" rel="noopener noreferrer">Blockchair</a>
-				BCH explorer for full transaction-level detail. tokenstork.com indexes the per-block
-				summary; the explorer has the per-tx breakdown.
+				Block hashes link out to
+				<a class="text-violet-600 dark:text-violet-400 hover:underline" href="https://explorer.salemkode.com/" target="_blank" rel="noopener noreferrer">salemkode.com</a>
+				for full transaction-level detail. tokenstork.com indexes the per-block summary; the
+				explorer has the per-tx breakdown.
 			</li>
 			<li>
 				Coverage starts at block <strong>792,772</strong> (CashTokens activation, May 2023).
