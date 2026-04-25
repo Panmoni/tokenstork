@@ -1,9 +1,12 @@
 <script lang="ts">
 	import { getIPFSUrl, stripEmoji, formatMarketCap } from '$lib/format';
 
+	type VenueId = 'cauldron' | 'fex' | 'tapswap';
+
 	let { data } = $props();
 
-	const fmtUsd = (usd: number): string => {
+	const fmtUsd = (usd: number, present: boolean): string => {
+		if (!present) return '—';
 		if (usd <= 0) return '—';
 		if (usd >= 1) return `$${usd.toFixed(2)}`;
 		return `$${usd.toFixed(6)}`;
@@ -12,33 +15,44 @@
 	const fmtTvl = (usd: number): string =>
 		usd > 0 ? formatMarketCap(usd.toString()) : '—';
 
-	// Spread badge color: emerald above the fee floor (profitable on
-	// paper), amber close to the floor, slate below (informational only).
+	// Spread badge tier is now per-row: emerald above this row's specific
+	// venue-pair fee, amber close, slate below. Different venue pairs yield
+	// different fee floors (Tapswap-buy → Cauldron-sell is the cheapest at
+	// 0.3%; Fex-buy → Tapswap-sell is the priciest at 3.6%).
 	const spreadColor = (rawPct: number, fee: number): string => {
 		if (rawPct >= fee + 1) return 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300';
 		if (rawPct >= fee) return 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300';
 		return 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300';
 	};
 
-	// "Buy on X, sell on Y" copy. Cauldron uses category-suffixed swap
-	// URLs (verified — same shape as the detail-page card uses). Fex's
-	// frontend doesn't publish a category-deep-link convention as far as
-	// I can find, so we send users to fex.cash's homepage and they can
-	// paste the category there. TODO: when fex-cash/fex documents a
-	// `/swap?...` or similar deep-link, switch to it here so the action
-	// button lands directly on the right pool.
-	const cauldronURL = (id: string) => `https://app.cauldron.quest/swap/${id}`;
-	// Signature takes id for symmetry with cauldronURL; unused today
-	// because there's no verified deep-link pattern. Drop the prefix
-	// underscore + use it once Fex publishes a /swap?cat=... route.
-	const fexURL = (_id: string) => `https://fex.cash/`;
+	const venueLabel: Record<VenueId, string> = {
+		cauldron: 'Cauldron',
+		fex: 'Fex',
+		tapswap: 'Tapswap'
+	};
+
+	// Buy / sell deep-links per venue. Cauldron's swap UI accepts a
+	// category suffix (verified). Fex.cash doesn't publish a category-
+	// deep-link convention — drop users on the homepage. Tapswap's frontend
+	// uses /trade/<category-hex>; verified against active listings on the
+	// site.
+	const venueURL = (venue: VenueId, id: string): string => {
+		switch (venue) {
+			case 'cauldron':
+				return `https://app.cauldron.quest/swap/${id}`;
+			case 'fex':
+				return 'https://fex.cash/';
+			case 'tapswap':
+				return `https://tapswap.cash/trade/${id}`;
+		}
+	};
 </script>
 
 <svelte:head>
 	<title>Cross-venue arbitrage — Token Stork</title>
 	<meta
 		name="description"
-		content="BCH CashTokens listed on multiple AMMs, ranked by price spread between Cauldron and Fex.cash. Informational only — slippage, mempool risk, and execution cost not modelled."
+		content="BCH CashTokens listed on multiple venues (Cauldron, Fex, Tapswap), ranked by raw price spread. Informational only — slippage, mempool risk, and execution cost not modelled."
 	/>
 </svelte:head>
 
@@ -48,11 +62,10 @@
 			Arbitrage
 		</h1>
 		<p class="text-slate-600 dark:text-slate-400 mt-2 max-w-3xl">
-			Tokens listed on both Cauldron and Fex with a meaningful price gap. The "net" column
-			already deducts the round-trip taker fee floor of {data.feeFloorPct}% (Cauldron 0.3% +
-			Fex 0.6%). Slippage, transaction-mining cost, and the chance the gap closes before you
-			act are NOT modelled — every number here is the upper bound on what's available in
-			theory, not what you'll capture in practice.
+			Tokens listed on at least two of three venues — Cauldron AMM, Fex AMM, and Tapswap P2P —
+			with a meaningful price gap between them. The "net" column deducts a per-row fee specific
+			to the cheapest-vs-most-expensive venue pair (see notes). Slippage, mining cost, and the
+			chance the gap closes before you act are NOT modelled.
 		</p>
 	</div>
 
@@ -63,9 +76,9 @@
 	-->
 	<div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
 		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-			<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Tokens on both AMMs</div>
+			<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Tokens on ≥ 2 venues</div>
 			<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{data.totalRows}</div>
-			<div class="mt-1 text-xs text-slate-500 dark:text-slate-400">Cauldron ∩ Fex (only)</div>
+			<div class="mt-1 text-xs text-slate-500 dark:text-slate-400">Cauldron / Fex / Tapswap</div>
 		</div>
 		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
 			<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Filter</div>
@@ -116,7 +129,7 @@
 				No tokens currently meet the {data.minSpreadPct}% spread filter.
 			</p>
 			<p class="text-sm text-slate-500 dark:text-slate-500 mt-2">
-				{data.totalRows} tokens are on both AMMs. Try the
+				{data.totalRows} tokens are listed on at least two venues. Try the
 				<a href="/arbitrage?showAll=1" class="text-violet-600 hover:underline">show-all view</a>
 				to inspect them.
 			</p>
@@ -124,17 +137,17 @@
 	{:else}
 		<!-- Desktop table -->
 		<div class="hidden md:block overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
-			<div class="grid grid-cols-[3fr_1fr_1fr_0.8fr_0.9fr_1.4fr] gap-2 px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider items-center">
+			<div class="grid grid-cols-[2.4fr_0.9fr_0.9fr_0.9fr_0.7fr_0.8fr_1.4fr] gap-2 px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider items-center">
 				<div>Token</div>
 				<div class="text-right">Cauldron</div>
 				<div class="text-right">Fex</div>
+				<div class="text-right">Tapswap</div>
 				<div class="text-right" title="Absolute price gap, ignoring fees and slippage">Spread</div>
-				<div class="text-right" title="Spread minus the {data.feeFloorPct}% round-trip taker fee floor">Net</div>
+				<div class="text-right" title="Spread minus the venue-pair-specific round-trip taker fee">Net</div>
 				<div class="text-right">Action</div>
 			</div>
 			{#each data.rows as r (r.id)}
-				{@const cauldronCheaper = r.cheaperVenue === 'cauldron'}
-				<div class="grid grid-cols-[3fr_1fr_1fr_0.8fr_0.9fr_1.4fr] gap-2 px-4 py-3 border-b border-slate-100 dark:border-slate-800 last:border-b-0 items-center hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition-colors">
+				<div class="grid grid-cols-[2.4fr_0.9fr_0.9fr_0.9fr_0.7fr_0.8fr_1.4fr] gap-2 px-4 py-3 border-b border-slate-100 dark:border-slate-800 last:border-b-0 items-center hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition-colors">
 					<a href={`/token/${r.id}`} class="flex items-center gap-3 min-w-0 no-underline group">
 						{#if r.icon}
 							<img src={getIPFSUrl(r.icon)} alt="" class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 shrink-0" loading="lazy" />
@@ -146,21 +159,29 @@
 								{stripEmoji(r.name) || '—'}
 								{#if r.symbol}<span class="ml-2 text-xs text-slate-500 font-mono">{stripEmoji(r.symbol)}</span>{/if}
 							</div>
-							<div class="text-xs text-slate-500 dark:text-slate-400">
-								Cauldron TVL {fmtTvl(r.cauldronTvlUSD)} · Fex TVL {fmtTvl(r.fexTvlUSD)}
+							<div class="text-xs text-slate-500 dark:text-slate-400 truncate">
+								{#if r.cauldronPresent}Cauldron TVL {fmtTvl(r.cauldronTvlUSD)}{/if}
+								{#if r.cauldronPresent && r.fexPresent} · {/if}
+								{#if r.fexPresent}Fex TVL {fmtTvl(r.fexTvlUSD)}{/if}
+								{#if (r.cauldronPresent || r.fexPresent) && r.tapswapPresent} · {/if}
+								{#if r.tapswapPresent}Tapswap {r.tapswapFtListingCount} {r.tapswapFtListingCount === 1 ? 'listing' : 'listings'}{/if}
 							</div>
 						</div>
 					</a>
-					<div class="text-right font-mono text-sm {cauldronCheaper ? 'text-emerald-700 dark:text-emerald-400 font-semibold' : 'text-slate-700 dark:text-slate-300'}">
-						{fmtUsd(r.cauldronPriceUSD)}
+					<div class="text-right font-mono text-sm {r.cheapestVenue === 'cauldron' ? 'text-emerald-700 dark:text-emerald-400 font-semibold' : r.mostExpensiveVenue === 'cauldron' ? 'text-rose-700 dark:text-rose-400' : 'text-slate-700 dark:text-slate-300'}">
+						{fmtUsd(r.cauldronPriceUSD, r.cauldronPresent)}
 					</div>
-					<div class="text-right font-mono text-sm {!cauldronCheaper ? 'text-emerald-700 dark:text-emerald-400 font-semibold' : 'text-slate-700 dark:text-slate-300'}">
-						{fmtUsd(r.fexPriceUSD)}
+					<div class="text-right font-mono text-sm {r.cheapestVenue === 'fex' ? 'text-emerald-700 dark:text-emerald-400 font-semibold' : r.mostExpensiveVenue === 'fex' ? 'text-rose-700 dark:text-rose-400' : 'text-slate-700 dark:text-slate-300'}">
+						{fmtUsd(r.fexPriceUSD, r.fexPresent)}
+					</div>
+					<div class="text-right font-mono text-sm {r.cheapestVenue === 'tapswap' ? 'text-emerald-700 dark:text-emerald-400 font-semibold' : r.mostExpensiveVenue === 'tapswap' ? 'text-rose-700 dark:text-rose-400' : 'text-slate-700 dark:text-slate-300'}">
+						{fmtUsd(r.tapswapPriceUSD, r.tapswapPresent)}
 					</div>
 					<div class="text-right">
 						<span
-							class="px-2 py-0.5 rounded text-xs font-mono {spreadColor(r.rawSpreadPct, data.feeFloorPct)}"
+							class="px-2 py-0.5 rounded text-xs font-mono {spreadColor(r.rawSpreadPct, r.totalFeePct)}"
 							aria-label="Spread {r.rawSpreadPct.toFixed(2)} percent"
+							title="Buy {venueLabel[r.cheapestVenue]}, sell {venueLabel[r.mostExpensiveVenue]} — fee {r.totalFeePct.toFixed(1)}%"
 						>
 							{r.rawSpreadPct.toFixed(2)}%
 						</span>
@@ -170,22 +191,22 @@
 					</div>
 					<div class="flex flex-col gap-1 items-end text-xs">
 						<a
-							href={cauldronCheaper ? cauldronURL(r.id) : fexURL(r.id)}
+							href={venueURL(r.cheapestVenue, r.id)}
 							target="_blank"
 							rel="noopener noreferrer"
 							class="px-2 py-1 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-colors no-underline whitespace-nowrap"
 							title="Buy on the cheaper venue"
 						>
-							Buy {cauldronCheaper ? 'Cauldron' : 'Fex'} →
+							Buy {venueLabel[r.cheapestVenue]} →
 						</a>
 						<a
-							href={cauldronCheaper ? fexURL(r.id) : cauldronURL(r.id)}
+							href={venueURL(r.mostExpensiveVenue, r.id)}
 							target="_blank"
 							rel="noopener noreferrer"
 							class="px-2 py-1 rounded bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 hover:bg-rose-200 dark:hover:bg-rose-900/50 transition-colors no-underline whitespace-nowrap"
 							title="Sell on the more-expensive venue"
 						>
-							Sell {cauldronCheaper ? 'Fex' : 'Cauldron'} →
+							Sell {venueLabel[r.mostExpensiveVenue]} →
 						</a>
 					</div>
 				</div>
@@ -195,7 +216,6 @@
 		<!-- Mobile: stacked cards. The desktop grid would crush at <md. -->
 		<div class="md:hidden space-y-3">
 			{#each data.rows as r (r.id)}
-				{@const cauldronCheaper = r.cheaperVenue === 'cauldron'}
 				<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
 					<a href={`/token/${r.id}`} class="flex items-center gap-3 mb-3 no-underline">
 						{#if r.icon}
@@ -210,44 +230,48 @@
 							{#if r.symbol}<div class="text-xs text-slate-500 font-mono">{stripEmoji(r.symbol)}</div>{/if}
 						</div>
 						<span
-							class="px-2 py-0.5 rounded text-xs font-mono {spreadColor(r.rawSpreadPct, data.feeFloorPct)}"
+							class="px-2 py-0.5 rounded text-xs font-mono {spreadColor(r.rawSpreadPct, r.totalFeePct)}"
 							aria-label="Spread {r.rawSpreadPct.toFixed(2)} percent"
 						>
 							{r.rawSpreadPct.toFixed(2)}%
 						</span>
 					</a>
-					<div class="grid grid-cols-2 gap-2 mb-3 text-sm">
-						<div class="p-2 rounded bg-slate-50 dark:bg-slate-800/50 {cauldronCheaper ? 'ring-1 ring-emerald-400 dark:ring-emerald-700' : ''}">
+					<div class="grid grid-cols-3 gap-2 mb-3 text-sm">
+						<div class="p-2 rounded bg-slate-50 dark:bg-slate-800/50 {r.cheapestVenue === 'cauldron' ? 'ring-1 ring-emerald-400 dark:ring-emerald-700' : r.mostExpensiveVenue === 'cauldron' ? 'ring-1 ring-rose-400 dark:ring-rose-700' : ''}">
 							<div class="text-xs text-slate-500 mb-1">Cauldron</div>
-							<div class="font-mono">{fmtUsd(r.cauldronPriceUSD)}</div>
+							<div class="font-mono text-xs">{fmtUsd(r.cauldronPriceUSD, r.cauldronPresent)}</div>
 						</div>
-						<div class="p-2 rounded bg-slate-50 dark:bg-slate-800/50 {!cauldronCheaper ? 'ring-1 ring-emerald-400 dark:ring-emerald-700' : ''}">
+						<div class="p-2 rounded bg-slate-50 dark:bg-slate-800/50 {r.cheapestVenue === 'fex' ? 'ring-1 ring-emerald-400 dark:ring-emerald-700' : r.mostExpensiveVenue === 'fex' ? 'ring-1 ring-rose-400 dark:ring-rose-700' : ''}">
 							<div class="text-xs text-slate-500 mb-1">Fex</div>
-							<div class="font-mono">{fmtUsd(r.fexPriceUSD)}</div>
+							<div class="font-mono text-xs">{fmtUsd(r.fexPriceUSD, r.fexPresent)}</div>
+						</div>
+						<div class="p-2 rounded bg-slate-50 dark:bg-slate-800/50 {r.cheapestVenue === 'tapswap' ? 'ring-1 ring-emerald-400 dark:ring-emerald-700' : r.mostExpensiveVenue === 'tapswap' ? 'ring-1 ring-rose-400 dark:ring-rose-700' : ''}">
+							<div class="text-xs text-slate-500 mb-1">Tapswap</div>
+							<div class="font-mono text-xs">{fmtUsd(r.tapswapPriceUSD, r.tapswapPresent)}</div>
 						</div>
 					</div>
 					<div class="flex gap-2 text-xs">
 						<a
-							href={cauldronCheaper ? cauldronURL(r.id) : fexURL(r.id)}
+							href={venueURL(r.cheapestVenue, r.id)}
 							target="_blank"
 							rel="noopener noreferrer"
 							title="Buy on the cheaper venue"
 							class="flex-1 text-center px-3 py-2 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 no-underline"
 						>
-							Buy {cauldronCheaper ? 'Cauldron' : 'Fex'}
+							Buy {venueLabel[r.cheapestVenue]}
 						</a>
 						<a
-							href={cauldronCheaper ? fexURL(r.id) : cauldronURL(r.id)}
+							href={venueURL(r.mostExpensiveVenue, r.id)}
 							target="_blank"
 							rel="noopener noreferrer"
 							title="Sell on the more-expensive venue"
 							class="flex-1 text-center px-3 py-2 rounded bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 no-underline"
 						>
-							Sell {cauldronCheaper ? 'Fex' : 'Cauldron'}
+							Sell {venueLabel[r.mostExpensiveVenue]}
 						</a>
 					</div>
 					<div class="mt-2 text-xs text-slate-500 text-center">
-						Net after fees: <span class="font-mono {r.netSpreadPct > 0 ? 'text-emerald-600 dark:text-emerald-400' : ''}">{r.netSpreadPct >= 0 ? '+' : ''}{r.netSpreadPct.toFixed(2)}%</span>
+						Net after {r.totalFeePct.toFixed(1)}% fees: <span class="font-mono {r.netSpreadPct > 0 ? 'text-emerald-600 dark:text-emerald-400' : ''}">{r.netSpreadPct >= 0 ? '+' : ''}{r.netSpreadPct.toFixed(2)}%</span>
 					</div>
 				</div>
 			{/each}
@@ -257,10 +281,14 @@
 	<section class="mt-10 p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30">
 		<h2 class="text-base font-semibold text-slate-900 dark:text-white mb-2">Notes</h2>
 		<ul class="text-sm text-slate-600 dark:text-slate-400 space-y-1.5 list-disc list-inside">
-			<li>Prices are pulled from <code class="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono">token_venue_listings</code> and refresh every 4 h (full discovery) + every 10 min (Cauldron fast-pass) + every 4 h (Fex). The numbers above can be up to 4 h stale even when the spread is real.</li>
-			<li>The <strong>Net</strong> column subtracts a flat 0.9% round-trip taker fee. Real fees vary by trade size and venue surge pricing — assume the figure is optimistic.</li>
-			<li>Slippage on thin pools eats the spread before you do. Always sanity-check against the live AMM UI before committing funds.</li>
-			<li>Tapswap (P2P) is not in v1 — its per-unit ask is derived (<code class="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono">want_sats / has_amount</code>) and FT-vs-NFT pricing has different semantics. Adding it as a third venue column is a tracked follow-up.</li>
+			<li>
+				Cauldron / Fex prices come from <code class="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono">token_venue_listings</code>; Tapswap price is the lowest <code class="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono">want_sats / has_amount</code> across open FT-only listings (NFTs are excluded — different price semantics). Refresh cadence: Cauldron 4 h discovery + 10 min fast-pass; Fex 4 h; Tapswap is event-driven, near real-time.
+			</li>
+			<li>
+				<strong>Per-venue taker fees</strong> — buy leg (when you fill): Cauldron {data.buyFeePct.cauldron}% / Fex {data.buyFeePct.fex}% / Tapswap {data.buyFeePct.tapswap}% (the 3% Tapswap platform fee is paid by the maker out of <code class="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono">want_sats</code>, not the taker). Sell leg (when you create the listing): Cauldron {data.sellFeePct.cauldron}% / Fex {data.sellFeePct.fex}% / Tapswap {data.sellFeePct.tapswap}%. The Net column subtracts whichever pair this row's cheapest-vs-most-expensive venues actually use.
+			</li>
+			<li>Slippage on thin pools (or absorbing all listings on Tapswap) eats the spread before you do. Always sanity-check against the live venue UI before committing funds.</li>
+			<li>Tapswap NFT listings are tracked but not surfaced here — each NFT is unique by commitment and "lowest ask" doesn't aggregate cleanly across them. Day-1 is FT-only; NFT-specific arbitrage is a tracked follow-up.</li>
 			<li>tokenstork.com displays public market data; nothing here is investment advice or an offer.</li>
 		</ul>
 	</section>
