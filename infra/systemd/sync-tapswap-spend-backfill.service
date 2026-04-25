@@ -1,0 +1,47 @@
+[Unit]
+Description=tokenstork sync-tapswap-spend-backfill — one-shot historical close walker (open → taken/cancelled for pre-2026-04-25 listings)
+Documentation=https://github.com/Panmoni/tokenstork
+After=network.target postgresql.service bchn.service
+Wants=postgresql.service bchn.service
+
+[Service]
+Type=oneshot
+User=tokenstork
+Group=tokenstork
+WorkingDirectory=/opt/tokenstork
+ExecStart=/opt/tokenstork/workers/target/release/tapswap-spend-backfill
+
+Environment="RUST_LOG=info"
+EnvironmentFile=-/etc/tokenstork/env
+
+# No .timer companion — operator runs once post-deploy, sync-tail's
+# pass-3 spend walker handles the steady-state from that point onward.
+# Resumable via sync_state.last_tapswap_spend_backfill_through if the
+# run is interrupted, so a re-invocation picks up where the prior run
+# left off.
+
+# Hardening — same profile as sync-tapswap-backfill.service.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectProc=invisible
+ProcSubset=pid
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallArchitectures=native
+UMask=0077

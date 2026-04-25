@@ -300,6 +300,7 @@ ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_tapswap_backfill_through  I
 ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_tapswap_run_at            TIMESTAMPTZ;
 ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_fex_run_at                TIMESTAMPTZ;
 ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_cauldron_stats_run_at     TIMESTAMPTZ;
+ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_tapswap_spend_backfill_through INTEGER;
 
 -- Ensure the singleton row exists on first deploy.
 INSERT INTO sync_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING;

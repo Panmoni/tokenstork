@@ -13,3 +13,4 @@ pub mod env;
 pub mod fex;
 pub mod pg;
 pub mod tapswap;
+pub mod tapswap_walker;

@@ -27,7 +27,6 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
-use chrono::TimeZone;
 use sd_notify::NotifyState;
 use tokio::signal;
 use tracing::{error, info, warn};
@@ -36,13 +35,11 @@ use tracing_subscriber::EnvFilter;
 use workers::bchn::{BchnClient, Block, HashBlockSubscriber, zmq_url_from_env};
 use workers::pg::{
     self, FoundCategory, OfferWrite, TokenType, load_sync_state, mark_tail_run,
-    apply_tapswap_closes, find_open_tapswap_offers_by_id, mark_tapswap_run, pool_from_env,
-    save_tail_last_block, upsert_tapswap_offers_batch, OfferCloseWrite,
+    mark_tapswap_run, pool_from_env, save_tail_last_block, upsert_tapswap_offers_batch,
     upsert_tokens,
 };
-use workers::tapswap::{
-    classify_close, is_mpsw_spend_candidate, try_decode_tx, CloseStatus,
-};
+use workers::tapswap::try_decode_tx;
+use workers::tapswap_walker::process_block_spends;
 
 const POLL_FALLBACK: Duration = Duration::from_secs(30);
 const ZMQ_BACKOFF_INITIAL: Duration = Duration::from_secs(5);
@@ -158,148 +155,12 @@ async fn process_block(pool: &pg::PgPool, block: &Block) -> Result<BlockStats> {
 
     // --- Pass 3: Tapswap closes (taken / cancelled) ---
     //
-    // Two-step: collect spend candidates from the block (cheap byte-level
-    // filter on each tx's input[0]), then bulk-look-up the matching open
-    // listings from the DB. Most blocks have zero candidates; the early
-    // return keeps the path zero-cost in the common case.
-    //
-    // We keep an in-flight `Vec<(spending_tx, listing_id)>` rather than
-    // building OfferCloseWrites up front because the classify_close()
-    // call needs the listing's stored maker_pkh, which we haven't fetched
-    // yet. Two passes — one to collect, one to classify-and-stage — avoid
-    // ordering dependencies.
-    struct CloseCandidate<'a> {
-        listing_id: [u8; 32],
-        spending_tx: &'a workers::bchn::Tx,
-    }
-    let mut candidates: Vec<CloseCandidate> = Vec::new();
-    for tx in &block.tx {
-        let Some(input0) = tx.vin.first() else {
-            continue;
-        };
-        // Coinbase has no txid / vout; can't spend a Tapswap listing.
-        let (Some(prev_txid_hex), Some(prev_vout)) = (input0.txid.as_ref(), input0.vout) else {
-            continue;
-        };
-        // Tapswap listings always live at outputs[0] of the listing tx,
-        // so a close MUST spend vout=0 of some prior tx. Skip anything
-        // else without paying for hex decode + marker check.
-        if prev_vout != 0 {
-            continue;
-        }
-        // Fast script-side filter: length floor + spend marker presence.
-        let Some(script_sig) = input0.script_sig.as_ref() else {
-            continue;
-        };
-        let Ok(unlocking_bytes) = hex::decode(&script_sig.hex) else {
-            continue;
-        };
-        if !is_mpsw_spend_candidate(&unlocking_bytes) {
-            continue;
-        }
-        // Decode the spent listing's txid (which is the tapswap_offers.id
-        // we're trying to match).
-        let Ok(prev_txid_bytes) = hex::decode(prev_txid_hex) else {
-            continue;
-        };
-        let Ok(listing_id) = <[u8; 32]>::try_from(prev_txid_bytes.as_slice()) else {
-            continue;
-        };
-        candidates.push(CloseCandidate {
-            listing_id,
-            spending_tx: tx,
-        });
-    }
-
-    let tapswap_closed = if candidates.is_empty() {
-        0
-    } else {
-        // Bulk DB lookup — only the candidates whose listing is still
-        // open + ours.
-        let candidate_ids: Vec<[u8; 32]> = candidates.iter().map(|c| c.listing_id).collect();
-        let open_offers = find_open_tapswap_offers_by_id(pool, &candidate_ids)
-            .await
-            .with_context(|| format!("lookup open tapswap offers at height {height}"))?;
-        let by_id: std::collections::HashMap<[u8; 32], [u8; 20]> = open_offers
-            .into_iter()
-            .map(|r| (r.id, r.maker_pkh))
-            .collect();
-
-        let block_time_ts = chrono::Utc
-            .timestamp_opt(time, 0)
-            .single()
-            .ok_or_else(|| anyhow::anyhow!("invalid block.time {} at height {}", time, height))?;
-
-        let mut close_batch: Vec<OfferCloseWrite> = Vec::new();
-        for c in candidates {
-            let Some(maker_pkh) = by_id.get(&c.listing_id) else {
-                // Spend candidate but not an open listing of ours — could
-                // be an unrelated tx that happens to embed the platform
-                // PKH bytes, or a re-process of an already-closed listing.
-                // Skip silently.
-                continue;
-            };
-            // outputs[0]'s locking bytecode tells us who's getting the
-            // listed asset. classify_close() handles non-P2PKH outputs
-            // (rare) by classifying as Taken with no taker_pkh.
-            let Some(out0) = c.spending_tx.vout.first() else {
-                warn!(
-                    spending_tx = %c.spending_tx.txid,
-                    listing_id = %hex::encode(c.listing_id),
-                    "spend candidate has no outputs[0]; skipping"
-                );
-                continue;
-            };
-            // Malformed script_pub_key hex from BCHN should never happen
-            // with a healthy node, so log loudly + skip instead of
-            // silently classifying with empty bytes (which would degrade
-            // to Taken / no-taker — masking the BCHN-side issue).
-            let out0_bytes = match hex::decode(&out0.script_pub_key.hex) {
-                Ok(b) => b,
-                Err(e) => {
-                    warn!(
-                        spending_tx = %c.spending_tx.txid,
-                        listing_id = %hex::encode(c.listing_id),
-                        error = %e,
-                        "spending tx vout[0] hex decode failed; skipping close classification"
-                    );
-                    continue;
-                }
-            };
-            let decoded = classify_close(&out0_bytes, maker_pkh);
-
-            // Decode the spending tx's txid for the closed_tx column.
-            let Ok(closed_tx_bytes) = hex::decode(&c.spending_tx.txid) else {
-                warn!(
-                    spending_tx = %c.spending_tx.txid,
-                    "spending tx txid hex invalid; skipping"
-                );
-                continue;
-            };
-            let Ok(closed_tx) = <[u8; 32]>::try_from(closed_tx_bytes.as_slice()) else {
-                continue;
-            };
-
-            close_batch.push(OfferCloseWrite {
-                id: c.listing_id,
-                status: decoded.status.as_db_str(),
-                taker_pkh: match decoded.status {
-                    CloseStatus::Taken => decoded.taker_pkh,
-                    CloseStatus::Cancelled => None,
-                },
-                closed_tx,
-                closed_at: block_time_ts,
-            });
-        }
-
-        if close_batch.is_empty() {
-            0
-        } else {
-            apply_tapswap_closes(pool, &close_batch)
-                .await
-                .with_context(|| format!("apply tapswap closes at height {height}"))?
-        }
-    };
+    // The walker logic lives in `workers::tapswap_walker` because it's
+    // shared with the one-shot `tapswap-spend-backfill` binary. Errors
+    // are propagated so the tail's checkpoint doesn't advance on a DB
+    // failure — the next tick re-processes this block and the per-row
+    // `WHERE status='open'` guard makes the retry idempotent.
+    let tapswap_closed = process_block_spends(pool, block).await?;
 
     Ok(BlockStats {
         tokens_touched,

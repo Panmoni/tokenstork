@@ -899,6 +899,37 @@ pub async fn save_tapswap_backfill_through(pool: &PgPool, height: i32) -> Result
     Ok(())
 }
 
+/// Load the spend-detection backfill checkpoint. `None` means the
+/// one-shot has never run on this DB (fresh deploy, or pre-2026-04-25
+/// install that predated the spend-detection feature).
+pub async fn load_tapswap_spend_backfill_through(pool: &PgPool) -> Result<Option<i32>> {
+    let row: (Option<i32>,) = sqlx::query_as(
+        "SELECT last_tapswap_spend_backfill_through FROM sync_state WHERE id = 1",
+    )
+    .fetch_one(pool)
+    .await
+    .context("load_tapswap_spend_backfill_through")?;
+    Ok(row.0)
+}
+
+/// Advance the spend-detection backfill checkpoint. Called every
+/// CHECKPOINT_EVERY blocks by the spend-backfill binary so a mid-run
+/// crash resumes from where we left off rather than re-walking the
+/// entire range.
+pub async fn save_tapswap_spend_backfill_through(pool: &PgPool, height: i32) -> Result<()> {
+    sqlx::query(
+        "UPDATE sync_state
+            SET last_tapswap_spend_backfill_through = $1,
+                updated_at = now()
+          WHERE id = 1",
+    )
+    .bind(height)
+    .execute(pool)
+    .await
+    .context("save_tapswap_spend_backfill_through")?;
+    Ok(())
+}
+
 /// Touch `last_tapswap_run_at` — observability only, lets the Phase 7
 /// staleness watchdog notice if the Tapswap walker stops without crashing.
 pub async fn mark_tapswap_run(pool: &PgPool) -> Result<()> {
