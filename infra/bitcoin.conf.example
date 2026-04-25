@@ -1,0 +1,88 @@
+# BCHN configuration for tokenstork.com on a 16 GB single-VPS deployment.
+#
+# Drop this in /var/lib/bchn/.bitcoin/bitcoin.conf with mode 0600 owned by
+# the bchn:bchn service user (or whatever your install runbook uses), and
+# fill in real values for `rpcuser` / `rpcpassword`. Secrets are NOT in
+# this file — generate them with `openssl rand -hex 32` at install time
+# and write them to the live config only.
+#
+# This config is tuned for the constrained-memory case where BCHN shares
+# a box with BlockBook + Postgres + the SvelteKit app. The BlockBook IBD
+# is what dictates most of the values below — once BlockBook reaches tip
+# and its bulk-sync working set drops to the steady-state size, you can
+# raise dbcache / maxconnections / maxmempool back toward defaults if
+# desired.
+#
+# Reference values (defaults shown for comparison):
+
+# ---------------------------------------------------------------------------
+# Required for tokenstork's pipeline.
+# ---------------------------------------------------------------------------
+
+# Archival (no pruning) + transaction index — both are mandatory for
+# BlockBook to work, and `txindex` is what lets the verify worker resolve
+# arbitrary historical txids without walking blocks.
+prune=0
+txindex=1
+
+# Local RPC server + P2P listener for peer discovery.
+server=1
+listen=1
+
+# ---------------------------------------------------------------------------
+# Memory caps. Tuned for the IBD-coexistence case described in the plan.
+# ---------------------------------------------------------------------------
+
+# UTXO cache. Default is 450 MB; this cuts it to 1 GB (still a 2.2x bump
+# over default but well under the original 2000 MB) so the box can fit
+# BlockBook's 9 GB working set + Postgres + the rest into the 16 GB
+# physical RAM without swapping. After BlockBook IBD completes the cache
+# isn't load-bearing for our use case (we read full blocks via getblock,
+# not arbitrary chainstate UTXO lookups), so leave at 1000 unless a
+# specific RPC pattern justifies more.
+dbcache=1000
+
+# Mempool max (default 300 MB). 100 MB is enough to track the live
+# unconfirmed-tx set for our purposes (we don't trade or front-run); cuts
+# ~200 MB of resident memory during periods of mempool spam.
+maxmempool=100
+
+# Signature cache (default 32 MB). Pure mempool/relay optimization. We
+# don't validate millions of unconfirmed signatures; trim aggressively.
+maxsigcachesize=4
+
+# ---------------------------------------------------------------------------
+# Network / peer policy.
+# ---------------------------------------------------------------------------
+
+# Default is 125 (with `listen=1` it's effectively limited by the OS-side
+# fd budget). 8 keeps us as a polite participant in the network without
+# letting peer-related buffers grow into a meaningful memory footprint.
+# Raise to ~32 once IBD is done if the peer count is worth more.
+maxconnections=8
+
+# Outbound bandwidth cap, in KB. 200000 = ~195 GiB/day, comfortably under
+# Netcup's 3 TB / 24h interface throttle. Without this BCHN will happily
+# upload historical blocks to any new peer that asks — that's the real
+# bandwidth risk once IBD completes, not the inbound side.
+maxuploadtarget=200000
+
+# ---------------------------------------------------------------------------
+# Local-only RPC. Caddy doesn't proxy this to the public internet.
+# ---------------------------------------------------------------------------
+
+# Generated at install time:
+#   sudo grep -E '^rpcuser|^rpcpassword' /var/lib/bchn/.bitcoin/bitcoin.conf
+# is what the tokenstork env file copies into BCHN_RPC_AUTH.
+rpcuser=tokenstork
+rpcpassword=REPLACE_AT_INSTALL_TIME
+
+rpcbind=127.0.0.1
+rpcallowip=127.0.0.1
+
+# ---------------------------------------------------------------------------
+# ZMQ feeds — drives the sync-tail worker's hashblock subscription.
+# ---------------------------------------------------------------------------
+
+zmqpubhashblock=tcp://127.0.0.1:28332
+zmqpubhashtx=tcp://127.0.0.1:28332
