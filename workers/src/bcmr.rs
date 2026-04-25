@@ -201,14 +201,35 @@ impl BcmrToken {
             None => (None, None),
         };
         let icon_uri = self.uris.and_then(|u| u.icon);
+        // Normalize "" / "   " upstream values to None so the DB sees a
+        // clean Option<String>: present-and-meaningful or NULL. Without
+        // this, every read path has to defend against empty strings via
+        // NULLIF(BTRIM(name), '') etc. — those defenses stay in place
+        // (idempotent), but new code can rely on Option semantics.
         BcmrFlat {
-            name: self.name,
-            symbol,
+            name: nonempty(self.name),
+            symbol: nonempty(symbol),
             decimals: validate_decimals(decimals_raw, category_hex),
-            description: self.description,
-            icon_uri,
+            description: nonempty(self.description),
+            icon_uri: nonempty(icon_uri),
         }
     }
+}
+
+/// Trim whitespace and collapse empty results to None. `Some("")`,
+/// `Some("   ")`, `Some("\t\n")` all become `None`. Anything with at
+/// least one non-whitespace character is preserved as `Some(trimmed)`.
+fn nonempty(s: Option<String>) -> Option<String> {
+    s.and_then(|v| {
+        let t = v.trim();
+        if t.is_empty() {
+            None
+        } else if t.len() == v.len() {
+            Some(v)
+        } else {
+            Some(t.to_string())
+        }
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -272,6 +293,39 @@ mod tests {
         assert_eq!(f.decimals, 2);
         assert_eq!(f.description.as_deref(), Some("A test token"));
         assert_eq!(f.icon_uri.as_deref(), Some("ipfs://abc/logo.png"));
+    }
+
+    #[test]
+    fn flatten_normalizes_empty_strings_to_none() {
+        // Upstream sometimes emits "" / "   " for fields that were left
+        // blank rather than omitted. We collapse those to None so the
+        // DB sees a clean Option<String> and the directory's ranking +
+        // grouping logic doesn't have to defend against blank-but-present
+        // names everywhere.
+        let raw = json!({
+            "name": "",
+            "description": "   ",
+            "token": { "symbol": "\t\n", "decimals": 0 },
+            "uris": { "icon": "" }
+        });
+        let t: BcmrToken = serde_json::from_value(raw).unwrap();
+        let f = t.into_flat(DUMMY_CAT);
+        assert_eq!(f.name, None);
+        assert_eq!(f.symbol, None);
+        assert_eq!(f.description, None);
+        assert_eq!(f.icon_uri, None);
+    }
+
+    #[test]
+    fn flatten_trims_padded_strings_but_preserves_meaningful_content() {
+        let raw = json!({
+            "name": "  Padded Name  ",
+            "token": { "symbol": "TST", "decimals": 0 }
+        });
+        let t: BcmrToken = serde_json::from_value(raw).unwrap();
+        let f = t.into_flat(DUMMY_CAT);
+        assert_eq!(f.name.as_deref(), Some("Padded Name"));
+        assert_eq!(f.symbol.as_deref(), Some("TST"));
     }
 
     #[test]
