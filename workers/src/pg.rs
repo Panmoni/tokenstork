@@ -572,11 +572,20 @@ pub async fn mark_bcmr_run(pool: &PgPool) -> Result<()> {
 
 /// One row-worth of data for an upsert into `token_venue_listings`.
 /// Values are raw-from-the-venue; USD conversion happens at render time.
+///
+/// `tvl_satoshis` and `price_sats` describe the canonical (deepest) pool
+/// for the category. `pools_count` and `pools_total_tvl_sats` describe
+/// the full pool population for the same category at the same venue —
+/// see schema for the full motivation. Both nullable: NULL means
+/// "data not available" (e.g., the Cauldron worker leaves `pools_count`
+/// NULL because no per-category pool-count endpoint exists upstream).
 pub struct VenueListingWrite<'a> {
     pub venue: &'a str,
     pub category: Vec<u8>,
     pub price_sats: Option<f64>,
     pub tvl_satoshis: Option<i64>,
+    pub pools_count: Option<i32>,
+    pub pools_total_tvl_sats: Option<i64>,
 }
 
 /// Categories the Cauldron worker should check — only fungible tokens
@@ -625,18 +634,24 @@ pub async fn upsert_venue_listing(pool: &PgPool, w: &VenueListingWrite<'_>) -> R
     sqlx::query(
         r#"
         INSERT INTO token_venue_listings
-            (venue, category, price_sats, tvl_satoshis, first_listed_at, updated_at)
-        VALUES ($1, $2, $3, $4::numeric, now(), now())
+            (venue, category, price_sats, tvl_satoshis,
+             pools_count, pools_total_tvl_sats,
+             first_listed_at, updated_at)
+        VALUES ($1, $2, $3, $4::numeric, $5, $6::numeric, now(), now())
         ON CONFLICT (venue, category) DO UPDATE
-            SET price_sats   = EXCLUDED.price_sats,
-                tvl_satoshis = EXCLUDED.tvl_satoshis,
-                updated_at   = now()
+            SET price_sats           = EXCLUDED.price_sats,
+                tvl_satoshis         = EXCLUDED.tvl_satoshis,
+                pools_count          = EXCLUDED.pools_count,
+                pools_total_tvl_sats = EXCLUDED.pools_total_tvl_sats,
+                updated_at           = now()
         "#,
     )
     .bind(w.venue)
     .bind(&w.category)
     .bind(w.price_sats)
     .bind(w.tvl_satoshis)
+    .bind(w.pools_count)
+    .bind(w.pools_total_tvl_sats)
     .execute(pool)
     .await
     .with_context(|| {

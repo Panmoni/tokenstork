@@ -337,6 +337,41 @@
 			</div>
 		</details>
 
+		<details id="faq-tvl" class="group p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 scroll-mt-20">
+			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
+				<span>How is the headline Total TVL computed?</span>
+				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
+			</summary>
+			<div class="mt-3 text-slate-600 dark:text-slate-300 space-y-2">
+				<p>
+					The <strong>Total TVL</strong> pill in the header sums BCH-side reserve across
+					every pool on every AMM venue we index — Cauldron plus Fex.cash. The number is
+					quoted in USD using the live BCH spot price.
+				</p>
+				<p>
+					The Cauldron portion comes from
+					<code class="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono">indexer.cauldron.quest</code>'s
+					canonical ecosystem TVL — the same number the
+					<a href="/stats" class="text-violet-600 dark:text-violet-400 hover:underline">/stats</a> page
+					shows on its "Cauldron AMM" card. We cache it for 30 minutes via our
+					<code class="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono">sync-cauldron-stats</code>
+					worker so the homepage doesn't pay a network round-trip on every render.
+				</p>
+				<p>
+					The Fex portion is summed locally: our Fex worker enumerates every pool on the BCH
+					chain via a <code class="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono">scantxoutset</code> against the AssetCovenant P2SH and stores both the
+					per-category canonical pool (for directory price + spread display) and the
+					sum across all pools per category (for the headline TVL).
+				</p>
+				<p>
+					Tapswap is deliberately excluded — its open offers are P2P intent, not pooled
+					liquidity, so summing them as TVL would double-count or mislead. We use the
+					conservative single-side convention everywhere (BCH-side reserve only, not the
+					doubled both-sides figure that the wider DeFi industry typically reports).
+				</p>
+			</div>
+		</details>
+
 		<details class="group p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
 				<span>How do I add a token? How do I report one?</span>

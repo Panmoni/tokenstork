@@ -105,16 +105,39 @@ CREATE INDEX IF NOT EXISTS nft_instances_owner_idx ON nft_instances (owner_addre
 -- rows don't go stale just because BCH moved $1.
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS token_venue_listings (
-  venue           TEXT        NOT NULL,                                -- 'cauldron', 'fex', 'tapswap', ...
-  category        BYTEA       NOT NULL REFERENCES tokens(category) ON DELETE CASCADE,
-  price_sats      DOUBLE PRECISION,                                    -- raw per-smallest-unit price from venue
-  tvl_satoshis    NUMERIC(30,0),                                       -- raw locked BCH side (in satoshis); NUMERIC for forward-safety (see token_price_history comment)
-  first_listed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  venue                TEXT        NOT NULL,                                -- 'cauldron', 'fex', 'tapswap', ...
+  category             BYTEA       NOT NULL REFERENCES tokens(category) ON DELETE CASCADE,
+  price_sats           DOUBLE PRECISION,                                    -- raw per-smallest-unit price from the canonical (deepest) pool
+  tvl_satoshis         NUMERIC(30,0),                                       -- canonical pool's BCH-side reserve in sats; NUMERIC for forward-safety
+  -- ----------------------------------------------------------------------
+  -- Multi-pool aggregates per (venue, category). The row's price_sats /
+  -- tvl_satoshis reflect ONE canonical pool (highest-BCH-reserve), keeping
+  -- every directory / arbitrage / detail-page consumer single-row-per-token.
+  -- The two columns below summarize the FULL pool population for the same
+  -- category — used by the MetricsBar TVL pill so its number matches the
+  -- ecosystem-wide /stats card and Cauldron's own indexer total.
+  --
+  -- Both nullable: NULL means "we don't know". The Fex worker fills both
+  -- exactly (it enumerates every pool via scantxoutset). The Cauldron
+  -- worker fills pools_total_tvl_sats = tvl_satoshis when the upstream
+  -- /cauldron/valuelocked/<cat> endpoint is per-category-aggregated, and
+  -- leaves pools_count NULL because no per-category pool-count endpoint
+  -- exists today. See docs/cashtoken-index-plan.md "Future: option 3"
+  -- entry for the per-pool-row roadmap that would make pools_count
+  -- exact for Cauldron too.
+  -- ----------------------------------------------------------------------
+  pools_count          INTEGER,
+  pools_total_tvl_sats NUMERIC(30,0),
+  first_listed_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (venue, category)
 );
 
 CREATE INDEX IF NOT EXISTS token_venue_listings_category_idx ON token_venue_listings (category);
+
+-- Idempotent additions for already-deployed databases.
+ALTER TABLE token_venue_listings ADD COLUMN IF NOT EXISTS pools_count          INTEGER;
+ALTER TABLE token_venue_listings ADD COLUMN IF NOT EXISTS pools_total_tvl_sats NUMERIC(30,0);
 
 -- ============================================================================
 -- Per-venue price/TVL history. Append-only; one row per category per

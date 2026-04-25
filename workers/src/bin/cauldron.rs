@@ -150,11 +150,22 @@ async fn main() -> Result<()> {
             }
         };
 
+        // `pools_total_tvl_sats` mirrors `tvl_satoshis` here. The
+        // upstream `/cauldron/valuelocked/<cat>` endpoint returns the
+        // BCH-side reserve for the category — we treat it as the
+        // canonical figure both for the directory's per-token TVL and
+        // for the headline aggregate. `pools_count` is unknown at this
+        // layer (no per-category pool-count endpoint exists upstream)
+        // so it stays NULL. The full per-pool refactor that would make
+        // both columns exact for Cauldron is sketched as "Future:
+        // option 3" in docs/cashtoken-index-plan.md.
         let w = VenueListingWrite {
             venue: VENUE,
             category: category.clone(),
             price_sats: Some(price),
             tvl_satoshis: tvl,
+            pools_count: None,
+            pools_total_tvl_sats: tvl,
         };
         if let Err(e) = upsert_venue_listing(&pool, &w).await {
             hard_errors += 1;

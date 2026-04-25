@@ -114,8 +114,14 @@ async fn main() -> Result<()> {
     // If Fex publishes a canonical-pool registry (or the docs add a
     // first-pool-only rule), revisit this. Ties on BCH-sats resolve to
     // whichever pool the BCHN scan returned first.
+    // Group ALL pools per category. The canonical (highest-BCH-reserve)
+    // pool drives `price_sats` + `tvl_satoshis` so every existing single-
+    // row-per-(category,venue) consumer keeps working. Alongside that we
+    // count + sum the full population so MetricsBar's TVL pill can SUM
+    // the all-pools number across venues, matching /stats's ecosystem
+    // view rather than the canonical-pool-only view.
     use std::collections::HashMap;
-    let mut best_per_category: HashMap<[u8; 32], workers::fex::FexPool> = HashMap::new();
+    let mut pools_per_category: HashMap<[u8; 32], Vec<workers::fex::FexPool>> = HashMap::new();
     for u in &scan.unspents {
         let Some(pool_state) = try_decode_asset_utxo(u) else {
             decode_errors += 1;
@@ -126,35 +132,50 @@ async fn main() -> Result<()> {
             );
             continue;
         };
-        best_per_category
+        pools_per_category
             .entry(pool_state.category)
-            .and_modify(|existing| {
-                if pool_state.bch_sats > existing.bch_sats {
-                    *existing = pool_state.clone();
-                }
-            })
-            .or_insert(pool_state);
+            .or_default()
+            .push(pool_state);
     }
 
-    for pool_state in best_per_category.values() {
-        let category_hex = hex::encode(pool_state.category);
-        let Some(price) = price_sats(pool_state) else {
-            // Shouldn't happen: try_decode_asset_utxo rejects zero-token-
-            // reserve pools already. Defensive only.
+    for pools in pools_per_category.values() {
+        // Canonical = highest BCH reserve. Ties resolve to whichever
+        // pool the BCHN scan returned first, which is stable within
+        // a single scan.
+        let canonical = pools
+            .iter()
+            .max_by_key(|p| p.bch_sats)
+            .expect("group has at least one pool");
+        let category_hex = hex::encode(canonical.category);
+        let Some(price) = price_sats(canonical) else {
             warn!(
                 category = %category_hex,
                 "pool decoded but price computation failed; skipping"
             );
             continue;
         };
-        let tvl = tvl_sats(pool_state);
+        let tvl = tvl_sats(canonical);
 
-        let category_vec = pool_state.category.to_vec();
+        // Per-category pool-population aggregates. `pools_total_tvl_sats`
+        // sums the BCH-side reserve across every pool for the category;
+        // `pools_count` is the integer count. i64 saturating-sum protects
+        // against pathological accumulation, though realistically the BCH
+        // 21M-cap means total Fex TVL across all pools is many orders of
+        // magnitude under i64::MAX.
+        let pools_total: i64 = pools
+            .iter()
+            .map(tvl_sats)
+            .fold(0i64, |acc, x| acc.saturating_add(x));
+        let pool_count: i32 = pools.len().min(i32::MAX as usize) as i32;
+
+        let category_vec = canonical.category.to_vec();
         let w = VenueListingWrite {
             venue: VENUE,
             category: category_vec.clone(),
             price_sats: Some(price),
             tvl_satoshis: Some(tvl),
+            pools_count: Some(pool_count),
+            pools_total_tvl_sats: Some(pools_total),
         };
         if let Err(e) = upsert_venue_listing(&pool, &w).await {
             hard_errors += 1;
@@ -227,8 +248,9 @@ async fn main() -> Result<()> {
     // Hint the operator about any seen categories — useful for a quick
     // "did the top pool still show up?" sanity check on first deploy.
     if listed > 0 {
-        let top = best_per_category
+        let top = pools_per_category
             .values()
+            .filter_map(|pools| pools.iter().max_by_key(|p| p.bch_sats))
             .max_by_key(|p| p.bch_sats)
             .map(|p| (bytes_to_hex(&p.category), p.bch_sats));
         if let Some((cat_hex, sats)) = top {

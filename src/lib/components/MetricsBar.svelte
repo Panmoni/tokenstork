@@ -74,7 +74,7 @@
 						{/if}
 					</TooltipTrigger>
 					<TooltipContent>
-						BCH-side reserve across Cauldron and Fex AMM pools, priced in USD. Conservative — counts only the BCH side, not the token side (industry convention doubles this). Tapswap excluded: P2P offers aren't pooled liquidity.
+						BCH-side reserve across every Cauldron + Fex pool, priced in USD. Cauldron portion is the canonical aggregate from indexer.cauldron.quest (refreshed every 30 min); Fex portion is summed across every pool we scan on-chain. Single-side (conservative; industry convention doubles this). Tapswap excluded — P2P intent, not pooled liquidity.
 					</TooltipContent>
 				</Tooltip>
 
@@ -97,12 +97,15 @@
 							<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
 								Block
 							</span>
-							<span class="font-mono text-sm text-slate-700 dark:text-slate-300">
+							<a
+								href="/blocks"
+								class="font-mono text-sm text-violet-600 dark:text-violet-400 underline-offset-4 hover:underline"
+							>
 								{fmt(tailLastBlock)}
-							</span>
+							</a>
 						</TooltipTrigger>
 						<TooltipContent>
-							Latest BCH block our tail worker has scanned for new CashToken categories and Tapswap listings. Typically sub-second behind tip via ZMQ.
+							Latest BCH block our tail worker has scanned for new CashToken categories and Tapswap listings. Typically sub-second behind tip via ZMQ. Click to open the per-block economics dashboard.
 						</TooltipContent>
 					</Tooltip>
 				{/if}
@@ -156,10 +159,14 @@
 				<span class="font-semibold text-sm text-violet-600 dark:text-violet-400">{fmt(newIn24h)}</span>
 			</a>
 			{#if tailLastBlock !== null}
-				<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-slate-800 shadow-sm">
+				<a
+					href="/blocks"
+					class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-slate-800 shadow-sm no-underline hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+					title="Per-block economics dashboard"
+				>
 					<span class="text-xs text-slate-500 dark:text-slate-400">Block</span>
-					<span class="font-mono text-sm">{fmt(tailLastBlock)}</span>
-				</div>
+					<span class="font-mono text-sm text-violet-600 dark:text-violet-400">{fmt(tailLastBlock)}</span>
+				</a>
 			{/if}
 			<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-slate-800 shadow-sm">
 				<span class="text-xs text-slate-500 dark:text-slate-400">BCH</span>
