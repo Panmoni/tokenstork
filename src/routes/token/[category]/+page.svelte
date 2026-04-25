@@ -315,7 +315,17 @@
 		{/if}
 		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800">
 			<div class="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Genesis block</div>
-			<div class="text-xl font-mono">{token.genesisBlock.toLocaleString()}</div>
+			<div class="text-xl font-mono">
+				<a
+					href={`https://explorer.salemkode.com/block/${token.genesisBlock}`}
+					target="_blank"
+					rel="noopener noreferrer"
+					title="View block on SalemKode Explorer"
+					class="hover:text-violet-600"
+				>
+					{token.genesisBlock.toLocaleString()}
+				</a>
+			</div>
 		</div>
 		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800">
 			<div class="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Live UTXOs</div>
