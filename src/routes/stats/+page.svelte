@@ -274,8 +274,9 @@
 			</a>
 		</div>
 		<p class="text-sm text-slate-500 dark:text-slate-400 mb-3">
-			Live aggregates from <span class="font-mono">indexer.cauldron.quest</span>. TVL counts both
-			sides of each pool; volumes are sampled at page render.
+			Live aggregates from <span class="font-mono">indexer.cauldron.quest</span>. TVL is the
+			BCH-side reserve only — conservative (industry convention doubles this to count the token
+			side too). Volumes are sampled at page render.
 		</p>
 		<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
 			<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
@@ -284,7 +285,7 @@
 					{fmtUsd(data.cauldronStats.tvlUSD)}
 				</div>
 				<div class="mt-1 text-xs font-mono text-slate-500 dark:text-slate-400">
-					{fmtBch(data.cauldronStats.tvlSats * 2)} BCH
+					{fmtBch(data.cauldronStats.tvlSats)} BCH
 				</div>
 			</div>
 			<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">

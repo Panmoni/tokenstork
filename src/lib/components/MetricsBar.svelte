@@ -74,7 +74,7 @@
 						{/if}
 					</TooltipTrigger>
 					<TooltipContent>
-						Sum of BCH locked in Cauldron AMM pools across every listed token, priced in USD at the current BCH rate. P2P offers on Tapswap aren't counted — those aren't pooled liquidity.
+						BCH-side reserve across Cauldron and Fex AMM pools, priced in USD. Conservative — counts only the BCH side, not the token side (industry convention doubles this). Tapswap excluded: P2P offers aren't pooled liquidity.
 					</TooltipContent>
 				</Tooltip>
 

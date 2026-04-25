@@ -10,6 +10,13 @@
 // happened to be at fetch time — refreshing /stats picks up the latest
 // price even when the underlying sats haven't moved.
 //
+// TVL is reported single-side (BCH reserve only), matching the header
+// in MetricsBar. Standard AMM convention doubles this (the token side
+// has equal value at the pool's pricing invariant), but we deliberately
+// publish the conservative number — only the BCH actually at risk —
+// and say so in the card subtitle. Volumes are NOT doubled either way:
+// swap volume is a single-asset flow, not a deposited pair.
+//
 // `newIn24h` is sourced from the parent layout load so /stats doesn't
 // re-run the same 24h count twice in one pageview.
 
@@ -304,8 +311,8 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 	// from the live BCH price. If the row hasn't been populated yet (fresh
 	// deploy, sync-cauldron-stats hasn't fired), fall through to the empty
 	// shape so the page still renders zeros instead of throwing.
-	const usd = (sats: number, double = false): number =>
-		bchPriceUSD > 0 ? (sats / 1e8) * bchPriceUSD * (double ? 2 : 1) : 0;
+	const usd = (sats: number): number =>
+		bchPriceUSD > 0 ? (sats / 1e8) * bchPriceUSD : 0;
 	const cauldronStats: CauldronGlobalStats =
 		cauldronStatsRes.status === 'fulfilled' && cauldronStatsRes.value.rows[0]
 			? (() => {
@@ -316,7 +323,7 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 					const v30 = Number(r.volume_30d_sats) || 0;
 					return {
 						tvlSats,
-						tvlUSD: usd(tvlSats, true),
+						tvlUSD: usd(tvlSats),
 						volume24hSats: v24,
 						volume24hUSD: usd(v24),
 						volume7dSats: v7,

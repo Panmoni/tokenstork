@@ -5,7 +5,7 @@
 //   - tokensTracked    total rows in `tokens`
 //   - tailLastBlock    highest block our tail worker has scanned
 //   - newIn24h         categories first seen in the last 24h
-//   - totalTvlSats     sum of Cauldron TVL across all listed categories
+//   - totalTvlSats     sum of BCH-side reserve across Cauldron + Fex AMM pools
 //   - listedCount      distinct categories with any venue presence
 //
 // If any single query fails we log + fall back to a sensible default so the
@@ -41,15 +41,24 @@ export const load: LayoutServerLoad = async () => {
 				    AND ${NOT_MODERATED_CLAUSE}`
 			),
 			query<{ total: string | null }>(
-				// Sum of Cauldron TVL across all listed + non-moderated
-				// categories. `SUM(bigint)` in Postgres is already NUMERIC
-				// (not bigint) — no silent wrap on overflow. Text-cast at
-				// the boundary so node-pg doesn't coerce to Number before
-				// we parse it on the client side.
+				// Sum of BCH-side reserve in sats across every AMM pool
+				// (Cauldron + Fex), excluding moderated categories. Both
+				// venues' `tvl_satoshis` columns store the BCH-side
+				// satoshis only — see workers/src/cauldron.rs:107 and
+				// workers/src/fex.rs:163. Single-side by design: a
+				// "conservative" TVL that reflects only the BCH actually
+				// at risk in the pool, not the doubled both-sides
+				// industry convention. Tapswap is P2P intent, not pooled
+				// liquidity — deliberately excluded.
+				//
+				// `SUM(bigint)` in Postgres is already NUMERIC (not
+				// bigint) — no silent wrap on overflow. Text-cast at the
+				// boundary so node-pg doesn't coerce to Number before we
+				// parse it on the client side.
 				`SELECT COALESCE(SUM(vl.tvl_satoshis), 0)::text AS total
 				   FROM token_venue_listings vl
 				   JOIN tokens t ON t.category = vl.category
-				  WHERE vl.venue = 'cauldron'
+				  WHERE vl.venue IN ('cauldron', 'fex')
 				    AND vl.tvl_satoshis IS NOT NULL
 				    AND ${NOT_MODERATED_CLAUSE}`
 			),
