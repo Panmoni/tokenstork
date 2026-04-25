@@ -47,18 +47,22 @@
 					</TooltipContent>
 				</Tooltip>
 
-				<a
-					href="/?listed=1&sort=tvl"
-					class="flex items-center gap-2 hover:opacity-80 transition-opacity"
-					title="Subset of Tracked — tokens you can buy or sell right now (Cauldron AMM price or open Tapswap P2P listing). Click to view them."
-				>
-					<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-						Listed
-					</span>
-					<span class="font-semibold text-violet-600 dark:text-violet-400 text-sm underline-offset-4 hover:underline">
-						{fmt(listedCount)}
-					</span>
-				</a>
+				<Tooltip>
+					<TooltipTrigger class="flex items-center gap-2 cursor-default">
+						<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+							Listed
+						</span>
+						<a
+							href="/?listed=1&sort=tvl"
+							class="font-semibold text-violet-600 dark:text-violet-400 text-sm underline-offset-4 hover:underline"
+						>
+							{fmt(listedCount)}
+						</a>
+					</TooltipTrigger>
+					<TooltipContent>
+						Subset of Tracked — tokens you can buy or sell right now via at least one venue: an active Cauldron or Fex AMM price, or an open Tapswap P2P listing. Click the number to filter the directory to just these.
+					</TooltipContent>
+				</Tooltip>
 
 				<Tooltip>
 					<TooltipTrigger class="flex items-center gap-2 cursor-default">
@@ -138,6 +142,7 @@
 			<a
 				href="/?listed=1&sort=tvl"
 				class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-slate-800 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+				title="Tokens with an active Cauldron / Fex AMM price or an open Tapswap P2P listing"
 			>
 				<span class="text-xs text-slate-500 dark:text-slate-400">Listed</span>
 				<span class="font-semibold text-violet-600 dark:text-violet-400 text-sm">{fmt(listedCount)}</span>
