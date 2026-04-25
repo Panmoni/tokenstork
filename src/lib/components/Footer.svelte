@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Separator } from '$lib/components/ui/separator';
+	import { version } from '$app/environment';
 
 	const socials = [
 		{
@@ -127,7 +128,7 @@
 					title="Panmoni is a Web3 product studio"
 					class="gradient-link tracking-wider font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#00abda] to-[#1476ff]"
 				>Panmoni</a>
-				project. · v0.0.2 (beta) · Prices in USD
+				project. · v{version} (beta) · Prices in USD
 			</p>
 		</div>
 
