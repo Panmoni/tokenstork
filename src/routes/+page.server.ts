@@ -28,6 +28,8 @@ interface DbRow {
 	cauldron_price_sats: number | null;
 	cauldron_tvl_satoshis: string | null;
 	tapswap_listing_count: string | null;
+	fex_price_sats: number | null;
+	fex_tvl_satoshis: string | null;
 	// History-derived: nearest-older price-point per window. Nullable when
 	// history hasn't accumulated far enough back (early-days-of-deploy case).
 	price_sats_1h_ago: number | null;
@@ -84,6 +86,7 @@ export const load: PageServerLoad = async ({ url }) => {
 	const typeParam = url.searchParams.get('type');
 	const onlyCauldron = url.searchParams.get('cauldron') === '1';
 	const onlyTapswap = url.searchParams.get('tapswap') === '1';
+	const onlyFex = url.searchParams.get('fex') === '1';
 	const onlyNew24h = url.searchParams.get('new24h') === '1';
 	const onlyNew7d = url.searchParams.get('new7d') === '1';
 	const onlyNew30d = url.searchParams.get('new30d') === '1';
@@ -119,6 +122,12 @@ export const load: PageServerLoad = async ({ url }) => {
 		// has-side listings — someone is SELLING this token on Tapswap.
 		where.push(`vl_tapswap.category IS NOT NULL`);
 	}
+	if (onlyFex) {
+		// Same pattern as cauldron: vl_fex is a LEFT JOIN on
+		// token_venue_listings filtered by venue='fex'; the filter flips
+		// it into an effective INNER by requiring IS NOT NULL.
+		where.push(`vl_fex.category IS NOT NULL`);
+	}
 	// "New within window" filters. Three independent URL params rather
 	// than one `new=24h` value so the existing `?new24h=1` links in
 	// MetricsBar + /stats cards stay live without a migration. When more
@@ -134,11 +143,15 @@ export const load: PageServerLoad = async ({ url }) => {
 		where.push(`t.genesis_time > now() - INTERVAL '30 days'`);
 	}
 	if (onlyListed) {
-		// On any venue: Cauldron LEFT JOIN or Tapswap LEFT JOIN hit.
-		// Both sides of this OR use IS NOT NULL against the LEFT-JOINed
-		// aggregates further down, which cost nothing extra because
-		// those joins are always part of the fromJoins block.
-		where.push(`(vl_cauldron.category IS NOT NULL OR vl_tapswap.category IS NOT NULL)`);
+		// On any venue: Cauldron OR Tapswap OR Fex LEFT JOIN hit. All
+		// three use IS NOT NULL against the LEFT-JOINed sources further
+		// down, which cost nothing extra because those joins are always
+		// part of the fromJoins block regardless of the filter.
+		where.push(
+			`(vl_cauldron.category IS NOT NULL
+			  OR vl_tapswap.category IS NOT NULL
+			  OR vl_fex.category IS NOT NULL)`
+		);
 	}
 	if (searchLimited) {
 		// A full 64-char hex query is almost always a paste of a category ID
@@ -197,6 +210,8 @@ export const load: PageServerLoad = async ({ url }) => {
 		LEFT JOIN token_state    s ON s.category = t.category
 		LEFT JOIN token_venue_listings vl_cauldron
 			ON vl_cauldron.category = t.category AND vl_cauldron.venue = 'cauldron'
+		LEFT JOIN token_venue_listings vl_fex
+			ON vl_fex.category = t.category AND vl_fex.venue = 'fex'
 		LEFT JOIN (
 			-- Defense-in-depth: exclude moderated categories inside the
 			-- subquery too. The outer WHERE already filters them out via
@@ -271,6 +286,8 @@ export const load: PageServerLoad = async ({ url }) => {
 				vl_cauldron.price_sats    AS cauldron_price_sats,
 				vl_cauldron.tvl_satoshis::text AS cauldron_tvl_satoshis,
 				vl_tapswap.listing_count::text AS tapswap_listing_count,
+				vl_fex.price_sats         AS fex_price_sats,
+				vl_fex.tvl_satoshis::text AS fex_tvl_satoshis,
 				ph_1h.price_sats   AS price_sats_1h_ago,
 				ph_24h.price_sats  AS price_sats_24h_ago,
 				ph_7d.price_sats   AS price_sats_7d_ago,
@@ -298,6 +315,11 @@ export const load: PageServerLoad = async ({ url }) => {
 			if (row.cauldron_tvl_satoshis != null) {
 				const parsed = Number(row.cauldron_tvl_satoshis);
 				if (Number.isFinite(parsed)) tvl = parsed;
+			}
+			let fexTvl: number | null = null;
+			if (row.fex_tvl_satoshis != null) {
+				const parsed = Number(row.fex_tvl_satoshis);
+				if (Number.isFinite(parsed)) fexTvl = parsed;
 			}
 
 			// Compute % change server-side rather than shipping two prices
@@ -339,6 +361,8 @@ export const load: PageServerLoad = async ({ url }) => {
 				tapswapListingCount: row.tapswap_listing_count
 					? Number(row.tapswap_listing_count)
 					: 0,
+				fexPriceSats: row.fex_price_sats,
+				fexTvlSatoshis: fexTvl,
 				priceChange1hPct,
 				priceChange24hPct,
 				priceChange7dPct,

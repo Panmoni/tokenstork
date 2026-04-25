@@ -33,7 +33,11 @@ interface DecimalsBucket {
 interface VenueOverlap {
 	cauldron_only: string;
 	tapswap_only: string;
-	both: string;
+	fex_only: string;
+	cauldron_and_tapswap: string;
+	cauldron_and_fex: string;
+	tapswap_and_fex: string;
+	all_three: string;
 }
 
 interface MetadataCompleteness {
@@ -89,6 +93,17 @@ export const load: PageServerLoad = async ({ parent }) => {
 				    AND vl.price_sats IS NOT NULL
 				    AND ${NOT_MODERATED_CLAUSE}`
 			),
+			// Fex-listed categories — counts active Fex AMM pools populated
+			// by `sync-fex`. Small today (~10) but part of the tradeable
+			// triplet alongside Cauldron + Tapswap.
+			query<WindowCount>(
+				`SELECT COUNT(*)::bigint AS total
+				   FROM token_venue_listings vl
+				   JOIN tokens t ON t.category = vl.category
+				  WHERE vl.venue = 'fex'
+				    AND vl.price_sats IS NOT NULL
+				    AND ${NOT_MODERATED_CLAUSE}`
+			),
 
 			// Genesis-by-month — monthly token-mint count since activation.
 			// Bucketed by the on-chain block timestamp so a backfill doesn't
@@ -120,32 +135,47 @@ export const load: PageServerLoad = async ({ parent }) => {
 				  ORDER BY 1 ASC`
 			),
 
-			// Venue overlap — how many tokens are on Cauldron (AMM) only,
-			// Tapswap (P2P) only, or both. The "both" set is the natural
-			// universe for cross-venue arbitrage (tracked as priority #15
-			// in the plan).
+			// Venue overlap — three-venue Venn diagram. Counts how many
+			// tokens are on each venue exclusively, on each pair only, or
+			// on all three. The pair / triple intersections are the
+			// natural universe for cross-venue arbitrage (priority #15 in
+			// the plan).
+			//
+			// Implementation: build presence flags per category in a
+			// single CTE, then bucket. EXCEPT/INTERSECT chains would be
+			// uglier and harder to extend if we add a fourth venue.
 			query<VenueOverlap>(
-				`WITH
-				  c AS (
-				    SELECT DISTINCT vl.category
-				      FROM token_venue_listings vl
-				      JOIN tokens t ON t.category = vl.category
-				     WHERE vl.venue = 'cauldron'
-				       AND vl.price_sats IS NOT NULL
-				       AND ${NOT_MODERATED_CLAUSE}
-				  ),
-				  tap AS (
-				    SELECT DISTINCT o.has_category AS category
-				      FROM tapswap_offers o
-				      JOIN tokens t ON t.category = o.has_category
-				     WHERE o.status = 'open'
-				       AND o.has_category IS NOT NULL
-				       AND ${NOT_MODERATED_CLAUSE}
-				  )
+				`WITH presence AS (
+				  SELECT t.category,
+				         EXISTS (
+				           SELECT 1 FROM token_venue_listings vl
+				            WHERE vl.category = t.category
+				              AND vl.venue = 'cauldron'
+				              AND vl.price_sats IS NOT NULL
+				         ) AS on_cauldron,
+				         EXISTS (
+				           SELECT 1 FROM token_venue_listings vl
+				            WHERE vl.category = t.category
+				              AND vl.venue = 'fex'
+				              AND vl.price_sats IS NOT NULL
+				         ) AS on_fex,
+				         EXISTS (
+				           SELECT 1 FROM tapswap_offers o
+				            WHERE o.has_category = t.category
+				              AND o.status = 'open'
+				         ) AS on_tapswap
+				    FROM tokens t
+				   WHERE ${NOT_MODERATED_CLAUSE}
+				)
 				SELECT
-				  (SELECT COUNT(*) FROM c WHERE category NOT IN (SELECT category FROM tap))::bigint::text  AS cauldron_only,
-				  (SELECT COUNT(*) FROM tap WHERE category NOT IN (SELECT category FROM c))::bigint::text  AS tapswap_only,
-				  (SELECT COUNT(*) FROM c INNER JOIN tap USING (category))::bigint::text                    AS both`
+				  COUNT(*) FILTER (WHERE  on_cauldron AND NOT on_tapswap AND NOT on_fex)::bigint::text AS cauldron_only,
+				  COUNT(*) FILTER (WHERE  on_tapswap  AND NOT on_cauldron AND NOT on_fex)::bigint::text AS tapswap_only,
+				  COUNT(*) FILTER (WHERE  on_fex      AND NOT on_cauldron AND NOT on_tapswap)::bigint::text AS fex_only,
+				  COUNT(*) FILTER (WHERE  on_cauldron AND on_tapswap  AND NOT on_fex)::bigint::text     AS cauldron_and_tapswap,
+				  COUNT(*) FILTER (WHERE  on_cauldron AND on_fex      AND NOT on_tapswap)::bigint::text AS cauldron_and_fex,
+				  COUNT(*) FILTER (WHERE  on_tapswap  AND on_fex      AND NOT on_cauldron)::bigint::text AS tapswap_and_fex,
+				  COUNT(*) FILTER (WHERE  on_cauldron AND on_tapswap  AND on_fex)::bigint::text         AS all_three
+				  FROM presence`
 			),
 
 			// BCMR metadata completeness — what fraction of tokens have
@@ -181,6 +211,7 @@ export const load: PageServerLoad = async ({ parent }) => {
 		burnedRes,
 		tapswapCatsRes,
 		cauldronCatsRes,
+		fexCatsRes,
 		genesisMonthsRes,
 		decimalsRes,
 		venueOverlapRes,
@@ -233,9 +264,21 @@ export const load: PageServerLoad = async ({ parent }) => {
 			? {
 					cauldronOnly: Number(venueOverlapRes.value.rows[0].cauldron_only),
 					tapswapOnly: Number(venueOverlapRes.value.rows[0].tapswap_only),
-					both: Number(venueOverlapRes.value.rows[0].both)
+					fexOnly: Number(venueOverlapRes.value.rows[0].fex_only),
+					cauldronAndTapswap: Number(venueOverlapRes.value.rows[0].cauldron_and_tapswap),
+					cauldronAndFex: Number(venueOverlapRes.value.rows[0].cauldron_and_fex),
+					tapswapAndFex: Number(venueOverlapRes.value.rows[0].tapswap_and_fex),
+					allThree: Number(venueOverlapRes.value.rows[0].all_three)
 				}
-			: { cauldronOnly: 0, tapswapOnly: 0, both: 0 };
+			: {
+					cauldronOnly: 0,
+					tapswapOnly: 0,
+					fexOnly: 0,
+					cauldronAndTapswap: 0,
+					cauldronAndFex: 0,
+					tapswapAndFex: 0,
+					allThree: 0
+				};
 
 	const metadata =
 		metadataRes.status === 'fulfilled' && metadataRes.value.rows[0]
@@ -260,6 +303,7 @@ export const load: PageServerLoad = async ({ parent }) => {
 		burned: enrichmentReady ? pickNumber(burnedRes) : null,
 		tapswapListedCategories: pickNumber(tapswapCatsRes),
 		cauldronListedCategories: pickNumber(cauldronCatsRes),
+		fexListedCategories: pickNumber(fexCatsRes),
 		genesisByMonth,
 		decimalsBuckets,
 		venueOverlap,

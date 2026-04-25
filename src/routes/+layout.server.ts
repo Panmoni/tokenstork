@@ -54,13 +54,24 @@ export const load: LayoutServerLoad = async () => {
 				    AND ${NOT_MODERATED_CLAUSE}`
 			),
 			query<{ total: string }>(
-				// Distinct categories with any venue presence — Cauldron price
-				// OR an open Tapswap offer. UNION dedupes.
+				// Distinct categories with any venue presence — Cauldron OR Fex
+				// (AMM) OR an open Tapswap offer (P2P). UNION dedupes.
+				// Must stay in lockstep with the directory's `?listed=1`
+				// filter in src/routes/+page.server.ts: the MetricsBar pill's
+				// number is read against the same universe the filter
+				// reveals when the user clicks through.
 				`SELECT COUNT(*)::bigint AS total FROM (
 				    SELECT t.category
 				      FROM tokens t
 				      JOIN token_venue_listings vl
 				        ON vl.category = t.category AND vl.venue = 'cauldron'
+				     WHERE vl.price_sats IS NOT NULL
+				       AND ${NOT_MODERATED_CLAUSE}
+				    UNION
+				    SELECT t.category
+				      FROM tokens t
+				      JOIN token_venue_listings vl
+				        ON vl.category = t.category AND vl.venue = 'fex'
 				     WHERE vl.price_sats IS NOT NULL
 				       AND ${NOT_MODERATED_CLAUSE}
 				    UNION

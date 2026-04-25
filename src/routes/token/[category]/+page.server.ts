@@ -38,6 +38,11 @@ interface HolderRow {
 	nft_count: number;
 }
 
+interface FexRow {
+	price_sats: number | null;
+	tvl_satoshis: string | null;
+}
+
 interface TapswapOfferRow {
 	id: Buffer;
 	has_amount: string | null;
@@ -116,7 +121,7 @@ export const load: PageServerLoad = async ({ params, fetch }) => {
 
 	const row = tokenRes.rows[0];
 
-	const [holdersRes, bchPriceUSD, bcmr, tapswapRes, mcapTvlThresholdSats] = await Promise.all([
+	const [holdersRes, bchPriceUSD, bcmr, tapswapRes, fexRes, mcapTvlThresholdSats] = await Promise.all([
 		query<HolderRow>(
 			`SELECT address, balance::text AS balance, nft_count
 			   FROM token_holders
@@ -161,11 +166,49 @@ export const load: PageServerLoad = async ({ params, fetch }) => {
 			  LIMIT 20`,
 			[categoryBytes]
 		),
+		// Fex pool state — read from the snapshot populated by the
+		// `sync-fex` worker (4h cadence), not a live BCHN scan. An SSR
+		// path hitting scantxoutset would be slow + contend with the
+		// worker; the snapshot is the right freshness tier for a directory.
+		// Row absent = token isn't listed on Fex. The 410 guard above
+		// already ensures moderated categories don't reach here; no extra
+		// moderation clause needed.
+		query<FexRow>(
+			`SELECT price_sats, tvl_satoshis::text AS tvl_satoshis
+			   FROM token_venue_listings
+			  WHERE category = $1 AND venue = 'fex'
+			  LIMIT 1`,
+			[categoryBytes]
+		),
 		computeMcapTvlThresholdSats()
 	]);
 
 	const decimals = row.decimals ?? bcmr?.decimals ?? 0;
 	const cauldron = await fetchCauldron(category, decimals, bchPriceUSD);
+
+	// Fex price/TVL — same conventions Cauldron uses, kept in lockstep so
+	// `token_venue_listings.tvl_satoshis` has one unambiguous unit (single-
+	// side BCH reserve) regardless of venue.
+	//
+	// priceUSD: raw price (sats per smallest token unit) × 10^decimals → sats
+	// per whole token, then sats→BCH→USD. Same formula as
+	// fetchCauldron in $lib/server/external.ts.
+	//
+	// tvlUSD: stored value is single-side sats; double at the render layer
+	// to reflect the full pool value (both halves of a constant-product AMM
+	// are equal by invariant). Mirrors fetchCauldron.tvlUSD's `* 2`.
+	let fexPriceUSD = 0;
+	let fexTvlUSD = 0;
+	const fexRaw = fexRes.rows[0];
+	if (fexRaw?.price_sats && fexRaw.price_sats > 0) {
+		fexPriceUSD = (fexRaw.price_sats * Math.pow(10, decimals) / 1e8) * bchPriceUSD;
+	}
+	if (fexRaw?.tvl_satoshis) {
+		const tvlSats = Number(fexRaw.tvl_satoshis);
+		if (Number.isFinite(tvlSats)) {
+			fexTvlUSD = (tvlSats / 1e8) * bchPriceUSD * 2;
+		}
+	}
 
 	return {
 		token: {
@@ -224,6 +267,8 @@ export const load: PageServerLoad = async ({ params, fetch }) => {
 		})),
 		priceUSD: cauldron.priceUSD,
 		tvlUSD: cauldron.tvlUSD,
+		fexPriceUSD,
+		fexTvlUSD,
 		bchPriceUSD,
 		// Low-liquidity gate for the Market cap card (issue #8). Convert the
 		// satoshi threshold into USD with the same 2x factor fetchCauldron

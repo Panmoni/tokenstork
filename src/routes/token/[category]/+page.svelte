@@ -327,6 +327,72 @@
 		</div>
 	</div>
 
+	{#if data.priceUSD > 0 || data.fexPriceUSD > 0}
+		<!--
+			Venue comparison. Renders only when at least one AMM has data;
+			always shows both columns (Cauldron + Fex) when either fires so
+			the visual is symmetrical and the user can spot the absent venue
+			at a glance. Spread % shown on the cheaper side — the arb-
+			visibility surface the plan calls out.
+		-->
+		{@const cauldronPx = data.priceUSD}
+		{@const fexPx = data.fexPriceUSD}
+		{@const bothPresent = cauldronPx > 0 && fexPx > 0}
+		{@const spreadPct =
+			bothPresent && Math.min(cauldronPx, fexPx) > 0
+				? ((Math.max(cauldronPx, fexPx) - Math.min(cauldronPx, fexPx)) /
+						Math.min(cauldronPx, fexPx)) *
+					100
+				: null}
+		<section class="mb-8">
+			<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-3">AMM venues</h2>
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+				<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 {cauldronPx > 0 ? '' : 'opacity-60'}">
+					<div class="flex items-center justify-between mb-2">
+						<div class="flex items-center gap-2">
+							<img src="/cauldron-logo.png" alt="" class="h-5 w-5 rounded-full bg-slate-900 p-0.5" />
+							<span class="font-semibold">Cauldron</span>
+						</div>
+						{#if bothPresent && spreadPct != null && cauldronPx < fexPx}
+							<span class="text-xs px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300" title="Cheaper side — Cauldron's price is {spreadPct.toFixed(2)}% below Fex">−{spreadPct.toFixed(2)}%</span>
+						{/if}
+					</div>
+					<div class="grid grid-cols-2 gap-2 text-sm">
+						<div>
+							<div class="text-xs text-slate-500 mb-1">Price</div>
+							<div class="font-mono">{cauldronPx > 0 ? (cauldronPx >= 1 ? `$${cauldronPx.toFixed(2)}` : `$${cauldronPx.toFixed(6)}`) : '—'}</div>
+						</div>
+						<div>
+							<div class="text-xs text-slate-500 mb-1">TVL</div>
+							<div class="font-mono">{data.tvlUSD > 0 ? formatMarketCap(data.tvlUSD.toString()) : '—'}</div>
+						</div>
+					</div>
+				</div>
+				<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 {fexPx > 0 ? '' : 'opacity-60'}">
+					<div class="flex items-center justify-between mb-2">
+						<div class="flex items-center gap-2">
+							<img src="/fex-logo.png" alt="" class="h-5 w-5 rounded-full" />
+							<span class="font-semibold">Fex.cash</span>
+						</div>
+						{#if bothPresent && spreadPct != null && fexPx < cauldronPx}
+							<span class="text-xs px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300" title="Cheaper side — Fex's price is {spreadPct.toFixed(2)}% below Cauldron">−{spreadPct.toFixed(2)}%</span>
+						{/if}
+					</div>
+					<div class="grid grid-cols-2 gap-2 text-sm">
+						<div>
+							<div class="text-xs text-slate-500 mb-1">Price</div>
+							<div class="font-mono">{fexPx > 0 ? (fexPx >= 1 ? `$${fexPx.toFixed(2)}` : `$${fexPx.toFixed(6)}`) : '—'}</div>
+						</div>
+						<div>
+							<div class="text-xs text-slate-500 mb-1">TVL</div>
+							<div class="font-mono">{data.fexTvlUSD > 0 ? formatMarketCap(data.fexTvlUSD.toString()) : '—'}</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</section>
+	{/if}
+
 	{#if data.tapswapOffers.length > 0}
 		<section class="mb-8">
 			<div class="flex items-baseline justify-between mb-4">

@@ -181,7 +181,7 @@
 
 	<section class="mb-8">
 		<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">Tradeable</h2>
-		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 			<a
 				href="/?cauldron=1&sort=tvl"
 				class="group p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-violet-400 dark:hover:border-violet-600 transition-colors no-underline"
@@ -206,6 +206,19 @@
 				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{fmt(data.tapswapListedCategories)}</div>
 				<div class="mt-1 text-xs text-slate-500 dark:text-slate-400">
 					distinct tokens with open listings
+				</div>
+			</a>
+			<a
+				href="/?fex=1&sort=tvl"
+				class="group p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-sky-400 dark:hover:border-sky-600 transition-colors no-underline"
+			>
+				<div class="flex items-center gap-3">
+					<img src="/fex-logo.png" alt="" class="w-7 h-7 rounded-full" aria-hidden="true" />
+					<span class="font-semibold text-slate-900 dark:text-white">Fex <span class="text-xs text-slate-500 dark:text-slate-400 font-normal">(AMM)</span></span>
+				</div>
+				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white group-hover:text-sky-600 dark:group-hover:text-sky-400 transition-colors">{fmt(data.fexListedCategories)}</div>
+				<div class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+					distinct tokens with an active pool price
 				</div>
 			</a>
 		</div>
@@ -267,36 +280,52 @@
 	<section class="mb-8">
 		<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">Venue overlap</h2>
 		<p class="text-sm text-slate-500 dark:text-slate-400 mb-3">
-			How tokens are split across our two trading venues. The "on both" set is the natural target
-			for cross-venue arbitrage — same token, two different prices.
+			How the indexed tokens distribute across our three trading venues. The pair / triple
+			intersections are the natural targets for cross-venue arbitrage — same token, different
+			prices on each.
 		</p>
-		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+		<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
 			<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-				<div class="flex items-baseline justify-between">
-					<span class="px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-sm font-medium">
-						Cauldron only
-					</span>
-				</div>
+				<span class="px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-sm font-medium">
+					Cauldron only
+				</span>
 				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{fmt(data.venueOverlap.cauldronOnly)}</div>
-				<div class="mt-1 text-xs text-slate-500 dark:text-slate-400">AMM-only, no P2P listings</div>
+			</div>
+			<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+				<span class="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-sm font-medium">
+					Tapswap only
+				</span>
+				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{fmt(data.venueOverlap.tapswapOnly)}</div>
+			</div>
+			<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+				<span class="px-2 py-0.5 rounded bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 text-sm font-medium">
+					Fex only
+				</span>
+				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{fmt(data.venueOverlap.fexOnly)}</div>
 			</div>
 			<div class="p-5 rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/40 dark:bg-amber-950/20">
-				<div class="flex items-baseline justify-between">
-					<span class="px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-sm font-medium">
-						On both
-					</span>
-				</div>
-				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{fmt(data.venueOverlap.both)}</div>
-				<div class="mt-1 text-xs text-slate-500 dark:text-slate-400">arbitrage candidates</div>
+				<span class="px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-sm font-medium">
+					Cauldron + Fex
+				</span>
+				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white" title="AMM-vs-AMM arbitrage candidates">{fmt(data.venueOverlap.cauldronAndFex)}</div>
 			</div>
 			<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-				<div class="flex items-baseline justify-between">
-					<span class="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-sm font-medium">
-						Tapswap only
-					</span>
-				</div>
-				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{fmt(data.venueOverlap.tapswapOnly)}</div>
-				<div class="mt-1 text-xs text-slate-500 dark:text-slate-400">P2P-only, no AMM pool</div>
+				<span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-sm font-medium">
+					Cauldron + Tapswap
+				</span>
+				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{fmt(data.venueOverlap.cauldronAndTapswap)}</div>
+			</div>
+			<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+				<span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-sm font-medium">
+					Tapswap + Fex
+				</span>
+				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{fmt(data.venueOverlap.tapswapAndFex)}</div>
+			</div>
+			<div class="p-5 rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/40 dark:bg-amber-950/20 col-span-2 md:col-span-1">
+				<span class="px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-sm font-medium">
+					All three
+				</span>
+				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white" title="Best arbitrage surface — three-way price comparison">{fmt(data.venueOverlap.allThree)}</div>
 			</div>
 		</div>
 	</section>

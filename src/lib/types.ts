@@ -35,6 +35,12 @@ export interface TokenApiRow {
 	// is selling this token). Zero if not listed.
 	tapswapListingCount: number;
 
+	// Fex.cash AMM — same shape as Cauldron (price + TVL). Null for tokens
+	// without a Fex pool. Populated by the `sync-fex` worker from on-chain
+	// AssetCovenant UTXOs (no external API; we scan BCHN directly).
+	fexPriceSats: number | null;
+	fexTvlSatoshis: number | null;
+
 	// Price-change signals across three windows, computed server-side from
 	// `token_price_history`. `null` when we don't have a data point on the
 	// older side of the window yet (e.g., within 7 days of first deploy).

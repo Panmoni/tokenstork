@@ -83,6 +83,7 @@
 	const sort = $derived(page.url.searchParams.get('sort') ?? 'name');
 	const onlyCauldron = $derived(page.url.searchParams.get('cauldron') === '1');
 	const onlyTapswap = $derived(page.url.searchParams.get('tapswap') === '1');
+	const onlyFex = $derived(page.url.searchParams.get('fex') === '1');
 
 	function navigateWith(mutate: (params: URLSearchParams) => void) {
 		const params = new URLSearchParams(page.url.searchParams);
@@ -126,6 +127,10 @@
 
 	function toggleCauldron(checked: boolean) {
 		pushParam('cauldron', checked ? '1' : null);
+	}
+
+	function toggleFex(checked: boolean) {
+		pushParam('fex', checked ? '1' : null);
 	}
 
 	function setPage(newOffset: number) {
@@ -191,6 +196,19 @@
 			<img src="/tapswap-logo.png" alt="Tapswap" class="h-5 w-5" />
 			<span>Tapswap</span>
 		</label>
+		<label
+			class="flex items-center gap-2 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-700 dark:text-slate-300 cursor-pointer select-none hover:border-sky-500 transition-colors"
+			title="Only show tokens currently listed on Fex.cash (AMM)"
+		>
+			<input
+				type="checkbox"
+				checked={onlyFex}
+				onchange={(e) => toggleFex((e.currentTarget as HTMLInputElement).checked)}
+				class="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+			/>
+			<img src="/fex-logo.png" alt="Fex" class="h-5 w-5 rounded-full" />
+			<span>Fex</span>
+		</label>
 	</div>
 
 	<!--
@@ -243,6 +261,9 @@
 							{/if}
 							{#if token.tapswapListingCount > 0}
 								<img src="/tapswap-logo.png" alt="Tapswap" title="{token.tapswapListingCount} open listing{token.tapswapListingCount === 1 ? '' : 's'} on Tapswap (P2P)" class="ml-1 inline-block h-4 w-4 align-text-bottom" />
+							{/if}
+							{#if token.fexPriceSats != null}
+								<img src="/fex-logo.png" alt="Fex" title="Listed on Fex.cash (AMM)" class="ml-1 inline-block h-4 w-4 align-text-bottom rounded-full" />
 							{/if}
 						</div>
 						{#if token.description}
