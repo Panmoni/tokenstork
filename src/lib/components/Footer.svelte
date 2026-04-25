@@ -50,7 +50,7 @@
 
 <footer class="mt-12 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800">
 	<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-		<div class="grid gap-8 md:grid-cols-4">
+		<div class="grid gap-8 md:grid-cols-5">
 			<div class="md:col-span-2">
 				<div class="flex items-center gap-2 text-slate-900 dark:text-white font-bold text-lg">
 					<img src="/TokenStorkRegistry-icon.png" alt="" class="h-8 w-8" />
@@ -82,6 +82,14 @@
 					<li><a href="/" class="text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400">Tokens</a></li>
 					<li><a href="/arbitrage" class="text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400">Arbitrage</a></li>
 					<li><a href="/stats" class="text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400">Stats</a></li>
+				</ul>
+			</div>
+
+			<div>
+				<h3 class="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-wider">
+					Resources
+				</h3>
+				<ul class="mt-4 space-y-2 text-sm">
 					<li><a href="/learn" class="text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400">Learn</a></li>
 					<li><a href="/faq" class="text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400">FAQ</a></li>
 					<li><a href="/roadmap" class="text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400">Roadmap</a></li>
