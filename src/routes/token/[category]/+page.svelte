@@ -363,9 +363,21 @@
 							<img src="/cauldron-logo.png" alt="" class="h-5 w-5 rounded-full bg-slate-900 p-0.5" />
 							<span class="font-semibold">Cauldron</span>
 						</div>
-						{#if bothPresent && spreadPct != null && cauldronPx < fexPx}
-							<span class="text-xs px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300" title="Cheaper side — Cauldron's price is {spreadPct.toFixed(2)}% below Fex">−{spreadPct.toFixed(2)}%</span>
-						{/if}
+						<div class="flex items-center gap-2">
+							{#if bothPresent && spreadPct != null && cauldronPx < fexPx}
+								<span class="text-xs px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300" title="Cheaper side — Cauldron's price is {spreadPct.toFixed(2)}% below Fex">−{spreadPct.toFixed(2)}%</span>
+							{/if}
+							{#if cauldronPx > 0}
+								<a
+									href={`https://app.cauldron.quest/swap/${token.id}`}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="text-xs text-violet-600 hover:underline"
+								>
+									View on Cauldron →
+								</a>
+							{/if}
+						</div>
 					</div>
 					<div class="grid grid-cols-2 gap-2 text-sm">
 						<div>
