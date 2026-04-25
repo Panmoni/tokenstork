@@ -142,3 +142,125 @@ function validateDecimals(decimals: unknown): number {
 	if (!Number.isFinite(n) || n < 0 || n > 8) return 0;
 	return Math.floor(n);
 }
+
+export interface CauldronGlobalStats {
+	tvlSats: number;            // total satoshis locked across all pools
+	tvlUSD: number;             // tvlSats * 2 / 1e8 * bchPriceUSD (double-sided pools)
+	volume24hSats: number;
+	volume24hUSD: number;
+	volume7dSats: number;
+	volume7dUSD: number;
+	volume30dSats: number;
+	volume30dUSD: number;
+	pools: { active: number; ended: number; interactions: number };
+	uniqueAddressesByMonth: Array<{ month: string; count: number }>;
+}
+
+async function fetchVolumeWindow(start: number, end: number): Promise<number> {
+	try {
+		const res = await timedFetch(
+			`${CAULDRON_INDEXER}/volume?start=${start}&end=${end}`,
+			{ timeoutMs: 5000 }
+		);
+		if (!res.ok) return 0;
+		const data = await res.json();
+		const v = Number(data?.total_volume_sats);
+		return Number.isFinite(v) ? v : 0;
+	} catch (err) {
+		console.error('[external] Cauldron volume fetch failed:', err);
+		return 0;
+	}
+}
+
+export async function fetchCauldronGlobalStats(
+	bchPriceUSD: number
+): Promise<CauldronGlobalStats> {
+	const now = Math.floor(Date.now() / 1000);
+	const empty: CauldronGlobalStats = {
+		tvlSats: 0,
+		tvlUSD: 0,
+		volume24hSats: 0,
+		volume24hUSD: 0,
+		volume7dSats: 0,
+		volume7dUSD: 0,
+		volume30dSats: 0,
+		volume30dUSD: 0,
+		pools: { active: 0, ended: 0, interactions: 0 },
+		uniqueAddressesByMonth: []
+	};
+
+	const [tvlRes, vol24Res, vol7Res, vol30Res, countRes, uniqueRes] = await Promise.allSettled([
+		timedFetch(`${CAULDRON_INDEXER}/valuelocked`, { timeoutMs: 5000 }),
+		fetchVolumeWindow(now - 86_400, now),
+		fetchVolumeWindow(now - 7 * 86_400, now),
+		fetchVolumeWindow(now - 30 * 86_400, now),
+		timedFetch(`${CAULDRON_INDEXER}/contract/count`, { timeoutMs: 5000 }),
+		// /user/unique_addresses scans the full chain and is noticeably slower
+		// than the others — give it a longer leash before falling back to [].
+		timedFetch(`${CAULDRON_INDEXER}/user/unique_addresses`, { timeoutMs: 12_000 })
+	]);
+
+	const out: CauldronGlobalStats = { ...empty };
+	const usd = (sats: number, double = false) =>
+		bchPriceUSD > 0 ? satoshisToBCH(sats) * bchPriceUSD * (double ? 2 : 1) : 0;
+
+	if (tvlRes.status === 'fulfilled' && tvlRes.value.ok) {
+		try {
+			const data = await tvlRes.value.json();
+			const sats = Number(data?.satoshis);
+			if (Number.isFinite(sats)) {
+				out.tvlSats = sats;
+				out.tvlUSD = usd(sats, true);
+			}
+		} catch (err) {
+			console.error('[external] Cauldron TVL parse failed:', err);
+		}
+	}
+
+	if (vol24Res.status === 'fulfilled') {
+		out.volume24hSats = vol24Res.value;
+		out.volume24hUSD = usd(vol24Res.value);
+	}
+	if (vol7Res.status === 'fulfilled') {
+		out.volume7dSats = vol7Res.value;
+		out.volume7dUSD = usd(vol7Res.value);
+	}
+	if (vol30Res.status === 'fulfilled') {
+		out.volume30dSats = vol30Res.value;
+		out.volume30dUSD = usd(vol30Res.value);
+	}
+
+	if (countRes.status === 'fulfilled' && countRes.value.ok) {
+		try {
+			const data = await countRes.value.json();
+			out.pools = {
+				active: Number(data?.active) || 0,
+				ended: Number(data?.ended) || 0,
+				interactions: Number(data?.interactions) || 0
+			};
+		} catch (err) {
+			console.error('[external] Cauldron contract/count parse failed:', err);
+		}
+	}
+
+	if (uniqueRes.status === 'fulfilled' && uniqueRes.value.ok) {
+		try {
+			const data = await uniqueRes.value.json();
+			// Endpoint returns an array of [month, count] tuples (e.g. ["2024-01", 400]).
+			if (Array.isArray(data)) {
+				out.uniqueAddressesByMonth = data
+					.map((row: unknown) => {
+						if (Array.isArray(row) && typeof row[0] === 'string') {
+							return { month: row[0], count: Number(row[1]) || 0 };
+						}
+						return null;
+					})
+					.filter((r): r is { month: string; count: number } => r !== null);
+			}
+		} catch (err) {
+			console.error('[external] Cauldron unique_addresses parse failed:', err);
+		}
+	}
+
+	return out;
+}

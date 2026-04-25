@@ -2,6 +2,14 @@
 	let { data } = $props();
 
 	const fmt = (n: number) => n.toLocaleString('en-US');
+	const fmtBch = (sats: number) =>
+		sats > 0 ? (sats / 1e8).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '0';
+	const fmtUsd = (usd: number) =>
+		usd >= 1_000_000
+			? `$${(usd / 1_000_000).toLocaleString('en-US', { maximumFractionDigits: 2 })}M`
+			: usd >= 1_000
+				? `$${(usd / 1_000).toLocaleString('en-US', { maximumFractionDigits: 1 })}k`
+				: `$${usd.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
 
 	const byTypeTotal = $derived(data.byType.FT + data.byType.NFT + data.byType['FT+NFT']);
 	const pct = (n: number) => (byTypeTotal === 0 ? 0 : Math.round((n / byTypeTotal) * 1000) / 10);
@@ -47,6 +55,35 @@
 
 	// Decimals-histogram geometry. Simpler — 6 fixed buckets.
 	const decMax = $derived(Math.max(...data.decimalsBuckets.map((b) => b.count), 1));
+
+	// Cauldron unique-addresses chart — cumulative running total per month
+	// from indexer.cauldron.quest. Reuses the same chart geometry as the
+	// genesis-by-month chart for visual consistency.
+	const uniqueBars = $derived.by(() => {
+		const rows = data.cauldronStats.uniqueAddressesByMonth;
+		if (!rows.length)
+			return [] as Array<{ x: number; y: number; w: number; h: number; label: string; count: number }>;
+		const maxCount = Math.max(...rows.map((r) => r.count), 1);
+		const innerW = chartW - chartPadLeft - chartPadRight;
+		const innerH = chartH - chartPadBottom - chartPadTop;
+		const barW = innerW / rows.length;
+		return rows.map((r, i) => {
+			const h = (r.count / maxCount) * innerH;
+			return {
+				x: chartPadLeft + i * barW,
+				y: chartPadTop + (innerH - h),
+				w: Math.max(barW - 2, 1),
+				h,
+				label: r.month,
+				count: r.count
+			};
+		});
+	});
+	const uniqueMax = $derived(
+		data.cauldronStats.uniqueAddressesByMonth.length
+			? Math.max(...data.cauldronStats.uniqueAddressesByMonth.map((r) => r.count), 1)
+			: 0
+	);
 
 	// Metadata-completeness percentages (0-100). Null-safe against an
 	// edge case where metadata.total is 0 on a fresh database.
@@ -222,6 +259,150 @@
 				</div>
 			</a>
 		</div>
+	</section>
+
+	<section class="mb-8">
+		<div class="flex items-baseline justify-between mb-3">
+			<h2 class="text-xl font-semibold text-slate-900 dark:text-white">Cauldron AMM</h2>
+			<a
+				href="https://app.cauldron.quest/stats"
+				target="_blank"
+				rel="noopener noreferrer"
+				class="text-xs text-violet-600 dark:text-violet-400 hover:underline"
+			>
+				View on Cauldron →
+			</a>
+		</div>
+		<p class="text-sm text-slate-500 dark:text-slate-400 mb-3">
+			Live aggregates from <span class="font-mono">indexer.cauldron.quest</span>. TVL counts both
+			sides of each pool; volumes are sampled at page render.
+		</p>
+		<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+			<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+				<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">TVL</div>
+				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
+					{fmtUsd(data.cauldronStats.tvlUSD)}
+				</div>
+				<div class="mt-1 text-xs font-mono text-slate-500 dark:text-slate-400">
+					{fmtBch(data.cauldronStats.tvlSats * 2)} BCH
+				</div>
+			</div>
+			<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+				<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+					Volume — 24h
+				</div>
+				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
+					{fmtUsd(data.cauldronStats.volume24hUSD)}
+				</div>
+				<div class="mt-1 text-xs font-mono text-slate-500 dark:text-slate-400">
+					{fmtBch(data.cauldronStats.volume24hSats)} BCH
+				</div>
+			</div>
+			<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+				<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+					Volume — 7d
+				</div>
+				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
+					{fmtUsd(data.cauldronStats.volume7dUSD)}
+				</div>
+				<div class="mt-1 text-xs font-mono text-slate-500 dark:text-slate-400">
+					{fmtBch(data.cauldronStats.volume7dSats)} BCH
+				</div>
+			</div>
+			<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+				<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+					Volume — 30d
+				</div>
+				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
+					{fmtUsd(data.cauldronStats.volume30dUSD)}
+				</div>
+				<div class="mt-1 text-xs font-mono text-slate-500 dark:text-slate-400">
+					{fmtBch(data.cauldronStats.volume30dSats)} BCH
+				</div>
+			</div>
+		</div>
+		<div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+			<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+				<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+					Active pools
+				</div>
+				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
+					{fmt(data.cauldronStats.pools.active)}
+				</div>
+			</div>
+			<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+				<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+					Ended pools
+				</div>
+				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
+					{fmt(data.cauldronStats.pools.ended)}
+				</div>
+				<div class="mt-1 text-xs text-slate-500 dark:text-slate-400">lifetime, swept or closed</div>
+			</div>
+			<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+				<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+					Lifetime swap interactions
+				</div>
+				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
+					{fmt(data.cauldronStats.pools.interactions)}
+				</div>
+			</div>
+		</div>
+		{#if uniqueBars.length > 0}
+			<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-x-auto">
+				<div class="flex items-baseline justify-between mb-2">
+					<h3 class="text-sm font-semibold text-slate-700 dark:text-slate-300">
+						Cumulative unique addresses by month
+					</h3>
+					<span class="text-xs text-slate-500 dark:text-slate-400 font-mono">
+						{fmt(data.cauldronStats.uniqueAddressesByMonth[data.cauldronStats.uniqueAddressesByMonth.length - 1].count)}
+						total
+					</span>
+				</div>
+				<svg
+					viewBox={`0 0 ${chartW} ${chartH}`}
+					class="w-full h-auto"
+					role="img"
+					aria-label="Cumulative unique Cauldron addresses by month"
+				>
+					<g class="text-[10px] fill-slate-400 dark:fill-slate-500" font-family="ui-monospace,monospace">
+						<text x={chartPadLeft - 6} y={chartPadTop + 4} text-anchor="end">{fmt(uniqueMax)}</text>
+						<text x={chartPadLeft - 6} y={chartPadTop + (chartH - chartPadTop - chartPadBottom) / 2 + 4} text-anchor="end">{fmt(Math.round(uniqueMax / 2))}</text>
+						<text x={chartPadLeft - 6} y={chartH - chartPadBottom + 4} text-anchor="end">0</text>
+					</g>
+					<line
+						x1={chartPadLeft}
+						x2={chartW - chartPadRight}
+						y1={chartH - chartPadBottom}
+						y2={chartH - chartPadBottom}
+						class="stroke-slate-200 dark:stroke-slate-700"
+						stroke-width="1"
+					/>
+					{#each uniqueBars as bar, i (bar.label)}
+						<rect
+							x={bar.x}
+							y={bar.y}
+							width={bar.w}
+							height={bar.h}
+							class="fill-violet-500 dark:fill-violet-400"
+						>
+							<title>{bar.label}: {fmt(bar.count)} cumulative addresses</title>
+						</rect>
+						{#if i === 0 || i === uniqueBars.length - 1 || i % Math.max(1, Math.ceil(uniqueBars.length / chartMaxLabels)) === 0}
+							<text
+								x={bar.x + bar.w / 2}
+								y={chartH - chartPadBottom + 14}
+								text-anchor="middle"
+								class="text-[10px] fill-slate-500 dark:fill-slate-400"
+								font-family="ui-monospace,monospace"
+							>
+								{bar.label}
+							</text>
+						{/if}
+					{/each}
+				</svg>
+			</div>
+		{/if}
 	</section>
 
 	<section class="mb-8">

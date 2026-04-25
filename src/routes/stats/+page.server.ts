@@ -1,14 +1,15 @@
 // /stats — ecosystem-level metrics for the BCH CashTokens directory.
-// Everything here is derived from the tables the directory already
-// renders from; no external calls. All counters exclude moderation-
-// hidden categories via NOT_MODERATED_CLAUSE so /stats matches what
-// visitors see on / .
+// Most counters are derived from the tables the directory already
+// renders from. The Cauldron AMM section is the one external block —
+// it pulls live aggregates from indexer.cauldron.quest, gated behind
+// allSettled so an upstream stall never blocks the page.
 //
 // `newIn24h` is sourced from the parent layout load so /stats doesn't
 // re-run the same 24h count twice in one pageview.
 
 import { query } from '$lib/server/db';
 import { NOT_MODERATED_CLAUSE } from '$lib/moderation';
+import { fetchCauldronGlobalStats, type CauldronGlobalStats } from '$lib/server/external';
 import type { PageServerLoad } from './$types';
 
 interface TypeCount {
@@ -48,8 +49,33 @@ interface MetadataCompleteness {
 	total: string;
 }
 
-export const load: PageServerLoad = async ({ parent }) => {
-	const [parentData, pageResults] = await Promise.all([
+async function fetchBchPrice(fetch: typeof globalThis.fetch): Promise<number> {
+	try {
+		const res = await fetch('/api/bchPrice', { signal: AbortSignal.timeout(4000) });
+		const data = await res.json();
+		return typeof data?.USD === 'number' ? data.USD : 0;
+	} catch {
+		return 0;
+	}
+}
+
+const EMPTY_CAULDRON_STATS: CauldronGlobalStats = {
+	tvlSats: 0,
+	tvlUSD: 0,
+	volume24hSats: 0,
+	volume24hUSD: 0,
+	volume7dSats: 0,
+	volume7dUSD: 0,
+	volume30dSats: 0,
+	volume30dUSD: 0,
+	pools: { active: 0, ended: 0, interactions: 0 },
+	uniqueAddressesByMonth: []
+};
+
+export const load: PageServerLoad = async ({ parent, fetch }) => {
+	const bchPriceP = fetchBchPrice(fetch);
+	const cauldronStatsP = bchPriceP.then((p) => fetchCauldronGlobalStats(p));
+	const [parentData, pageResults, cauldronStatsResult] = await Promise.all([
 		parent(),
 		Promise.allSettled([
 			query<TypeCount>(
@@ -201,8 +227,14 @@ export const load: PageServerLoad = async ({ parent }) => {
 			query<WindowCount>(
 				`SELECT COUNT(*)::bigint AS total FROM token_moderation`
 			)
-		])
+		]),
+		cauldronStatsP.catch((err) => {
+			console.error('[stats] cauldron global stats failed:', err);
+			return EMPTY_CAULDRON_STATS;
+		})
 	]);
+
+	const cauldronStats = cauldronStatsResult;
 
 	const [
 		typesRes,
@@ -308,6 +340,7 @@ export const load: PageServerLoad = async ({ parent }) => {
 		decimalsBuckets,
 		venueOverlap,
 		metadata,
-		moderated: pickNumber(moderatedRes)
+		moderated: pickNumber(moderatedRes),
+		cauldronStats
 	};
 };
