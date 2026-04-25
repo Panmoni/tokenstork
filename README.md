@@ -12,7 +12,7 @@ The entire pipeline runs on a single VPS. There is no dependency on Chaingraph, 
 
 ## Status
 
-**v0.1.1**, in production. SvelteKit app, Postgres schema, HTTP API, and all eight Rust sync workers are live and feeding the directory. The BlockBook-dependent enrichment pass (per-category holders, live UTXO counts, fully-burned detection) is gated on completing BlockBook IBD and not yet wired in.
+**v0.1.1**, in production. SvelteKit app, Postgres schema, HTTP API, and all ten Rust sync workers are live and feeding the directory. The BlockBook-dependent enrichment pass (per-category holders, live UTXO counts, fully-burned detection) is gated on completing BlockBook IBD and not yet wired in.
 
 See [docs/cashtoken-index-plan.md](docs/cashtoken-index-plan.md) (gitignored — local copy) for the full rollout plan and progress log.
 
@@ -60,9 +60,10 @@ src/                       SvelteKit app (Svelte 5 + Node adapter).
     venues.ts              Single source of truth for the {cauldron, tapswap, fex} venues.
     moderation.ts          NOT_MODERATED_CLAUSE shared across every read path.
     types.ts               TokenApiRow + venue listing shapes.
-workers/                   Rust crate. cargo build --release produces 8 binaries.
-  src/{bchn,bcmr,blockbook,cauldron,fex,pg,tapswap}.rs   Library modules.
-  src/bin/{backfill,bcmr,cauldron,enrich,fex,tail,tapswap-backfill,verify}.rs   Binaries.
+workers/                   Rust crate. cargo build --release produces 10 binaries.
+  src/{bchn,bcmr,blockbook,cauldron,fex,pg,tapswap,tapswap_walker}.rs   Library modules.
+  src/bin/{backfill,bcmr,cauldron,cauldron-stats,enrich,fex,tail,
+           tapswap-backfill,tapswap-spend-backfill,verify}.rs   Binaries.
 infra/
   Caddyfile                Reverse proxy + CSP/HSTS/XFO.
   redeploy.sh              One-shot deploy: git pull → npm + cargo build → schema → systemd.
@@ -188,21 +189,46 @@ The step-by-step VPS runbook — BCHN install, Postgres tuning, UFW, fail2ban, C
 
 ## Indexing pipeline
 
-Eight cooperating workers, all in the Rust [workers/](workers/) crate. Each is idempotent and crash-safe.
+Ten cooperating workers, all in the Rust [workers/](workers/) crate. Each is idempotent and crash-safe.
 
 | Worker | Trigger | Job |
 |---|---|---|
 | **backfill** | one-shot (~25 min after BCHN IBD) | Walk blocks 792,772 → tip via BCHN RPC. Insert every new CashToken category into `tokens`. |
-| **tail** | always-on, ZMQ-driven | Subscribe to `hashblock`; on each new block, run two walkers — token discovery + Tapswap MPSW detection — and upsert. Sub-second latency from block arrival to DB row. `Type=notify` + `WatchdogSec=120s` for liveness. |
-| **bcmr** | every 4h | Pull names / symbols / decimals / icons from Paytaca's BCMR indexer. Refresh `token_metadata`. |
-| **cauldron** (full mode) | every 4h | Walk every FT category, fetch price + TVL from `indexer.cauldron.quest`, upsert `token_venue_listings`, prune stale rows, append a `token_price_history` point per success. |
+| **tail** | always-on, ZMQ-driven | Subscribe to `hashblock`; on each new block, run three walkers — token discovery, Tapswap MPSW listing detection, and Tapswap close detection (open → taken/cancelled). Sub-second latency from block arrival to DB row. `Type=notify` + `WatchdogSec=120s` for liveness. |
+| **bcmr** | every 4 h | Pull names / symbols / decimals / icons from Paytaca's BCMR indexer. Refresh `token_metadata`. |
+| **cauldron** (full mode) | every 4 h | Walk every FT category, fetch price + TVL from `indexer.cauldron.quest`, upsert `token_venue_listings`, prune stale rows, append a `token_price_history` point per success. |
 | **cauldron** (fast mode) | every 10 min | Refresh price + TVL only for already-listed categories. Skips pruning — the listed-set view can't confirm delistings of unlisted categories. |
-| **fex** | every 4h | One `scantxoutset raw(<asset_covenant_p2sh>)` against BCHN; decode each Fex pool UTXO; upsert with `venue='fex'`; prune; append history. |
+| **cauldron-stats** | every 30 min | Pull ecosystem aggregates (total TVL, 24h/7d/30d swap volume, pool counts, unique-addresses-by-month) from Cauldron's global endpoints; cache in `cauldron_global_stats` for `/stats` SSR. Read-modify-write: per-endpoint failure preserves the prior value rather than overwriting with zero. |
+| **fex** | every 4 h | One `scantxoutset raw(<asset_covenant_p2sh>)` against BCHN; decode each Fex pool UTXO; upsert with `venue='fex'`; prune; append history. |
 | **tapswap-backfill** | one-shot | Cold-walk blocks 794,520 → tip looking for MPSW OP_RETURN listings. Resumable via `sync_state.last_tapswap_backfill_through`; each block range checkpointed. |
-| **enrich** | every 6h *(blocked on BlockBook IBD completion)* | For each known category, pull holders / NFTs via BlockBook. Refresh `token_state.holder_count`, `live_utxo_count`, `live_nft_count`, `is_fully_burned`, plus `token_holders` and `nft_instances`. |
+| **tapswap-spend-backfill** | one-shot | Cold-walk 794,520 → tip looking for spend events to retroactively close listings populated by the listing-backfill before the lifecycle walker shipped. Reuses `tapswap_walker::process_block_spends` — the same code the live tail walker uses, so historical and live processing are guaranteed to agree. |
+| **enrich** | every 6 h *(blocked on BlockBook IBD completion)* | For each known category, pull holders / NFTs via BlockBook. Refresh `token_state.holder_count`, `live_utxo_count`, `live_nft_count`, `is_fully_burned`, plus `token_holders` and `nft_instances`. |
 | **verify** | weekly *(blocked on BlockBook IBD completion)* | Sample reconciliation between BCHN and BlockBook. Flags drift. |
 
 Current Postgres-resident state is tracked in the `sync_state` singleton row — every worker writes a `last_<phase>_run_at` timestamp at the end of each run, so a staleness watchdog can spot a silently-stuck worker independently of block cadence.
+
+---
+
+## Data freshness
+
+How quickly each kind of data on the site reflects on-chain reality. Same information as the indexing-pipeline table above but framed by what a visitor actually sees.
+
+| What you see on the site | Source worker | Typical lag | Notes |
+|---|---|---|---|
+| **New token category appears in the directory** | `sync-tail` (ZMQ-driven) | sub-second | A `hashblock` notification from BCHN wakes the tail worker; the new row is in Postgres before the next block arrives. |
+| **Token name / symbol / icon (BCMR metadata)** | `sync-bcmr` (4 h timer) | 0-4 h | Names land on first-fire after a category is minted. Until then, the directory shows the bare hex. |
+| **Cauldron per-token price + TVL** | `sync-cauldron` (4 h full + 10 min fast) | 0-10 min for already-listed; 0-4 h for newly-listed | `fast` mode re-queries the ~317-token already-listed set every 10 min; `full` mode re-discovers every 4 h. |
+| **Cauldron ecosystem aggregates on `/stats`** (total TVL, 24h/7d/30d volume, pool counts, unique addresses by month) | `sync-cauldron-stats` (30 min timer) | 0-30 min | Cached in `cauldron_global_stats` so the SSR loader doesn't pay a network round-trip per page hit. |
+| **Fex per-pool price + TVL** | `sync-fex` (4 h timer) | 0-4 h | One `scantxoutset` per tick walks all Fex pools at once. |
+| **Tapswap new open listing appears** | `sync-tail` (ZMQ-driven, Pass 2) | sub-second | The MPSW OP_RETURN at `outputs[1]` is detected on the same block-fetch the tokens walker uses. |
+| **Tapswap listing transitions `open → taken / cancelled`** | `sync-tail` (ZMQ-driven, Pass 3) | sub-second | Detects the spending transaction's contract input + classifies by inspecting `vout[0]`'s recipient PKH. |
+| **Cross-venue spreads on `/arbitrage`** | derived from the above on every page render | matches whichever underlying source is freshest | Pure SQL CTE; no separate worker. |
+| **Sparkline + 1h / 24h / 7d % change columns** | `token_price_history` (one row per `sync-cauldron` fetch) | accumulates 6 points / day / token | Sparklines need ~7 days of history to fully populate; first hours after deploy show partial data. |
+| **Holders / NFT instances / fully-burned flag** | `sync-enrich` (6 h timer, blocked on BlockBook IBD) | 0-6 h once unblocked | Currently shows `—` placeholders; the data path is wired and waiting on BlockBook reaching tip. |
+
+**BCH spot price** (the `$X.XX` in the header) is fetched from CryptoCompare on each request, cached at the SvelteKit-app process level for ~60 seconds. Independent of the indexer pipeline.
+
+**The general rule**: anything blockchain-ZMQ-driven (token discovery, Tapswap listings + closes) is sub-second. Anything timer-driven runs at the cadence in the table above. Anything BlockBook-derived is currently a placeholder until IBD finishes.
 
 ---
 
