@@ -80,6 +80,7 @@
 				</h3>
 				<ul class="mt-4 space-y-2 text-sm">
 					<li><a href="/" class="text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400">Tokens</a></li>
+					<li><a href="/arbitrage" class="text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400">Arbitrage</a></li>
 					<li><a href="/stats" class="text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400">Stats</a></li>
 					<li><a href="/learn" class="text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400">Learn</a></li>
 					<li><a href="/faq" class="text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400">FAQ</a></li>

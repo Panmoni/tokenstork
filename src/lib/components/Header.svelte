@@ -8,6 +8,7 @@
 	// and stay in the footer — the header is for primary navigation.
 	const navigation = [
 		{ name: 'Tokens', href: '/' },
+		{ name: 'Arbitrage', href: '/arbitrage' },
 		{ name: 'Stats', href: '/stats' },
 		{ name: 'Learn', href: '/learn' },
 		{ name: 'FAQ', href: '/faq' },
@@ -52,7 +53,7 @@
 				</a>
 			</div>
 
-			<div class="hidden md:flex md:items-center md:space-x-8">
+			<div class="hidden md:flex md:items-center md:space-x-6 lg:space-x-8">
 				{#each navigation as item (item.name)}
 					{@const active = pathname === item.href}
 					<a
