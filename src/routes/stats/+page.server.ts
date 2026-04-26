@@ -268,15 +268,94 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 				        unique_addresses_by_month
 				   FROM cauldron_global_stats
 				  WHERE id = 1`
+			),
+
+			// 30-day ecosystem TVL sparkline. We bucket per day and sum the
+			// TVL across every (category, venue) snapshot recorded that day,
+			// THEN average the snapshots within a day so a 4h-cadence
+			// venue's 6 snapshots don't 6x-weight that day. Last-snapshot-
+			// per-(category,venue,day) would be more honest but expensive;
+			// the daily mean is a reasonable proxy at 30-day granularity.
+			//
+			// `cauldron` and `fex` only — Tapswap doesn't store TVL via
+			// price_history (it's P2P).
+			query<{ day: Date; tvl_sats: string }>(
+				`WITH daily_per_venue AS (
+				  SELECT date_trunc('day', ts) AS day,
+				         category,
+				         venue,
+				         AVG(tvl_satoshis) AS tvl
+				    FROM token_price_history
+				   WHERE ts > now() - INTERVAL '30 days'
+				     AND venue IN ('cauldron', 'fex')
+				     AND tvl_satoshis IS NOT NULL
+				   GROUP BY day, category, venue
+				)
+				SELECT day, COALESCE(SUM(tvl), 0)::text AS tvl_sats
+				  FROM daily_per_venue
+				 GROUP BY day
+				 ORDER BY day ASC`
+			),
+
+			// Supply-bracket distribution for FTs (and FT+NFT hybrids).
+			// Buckets by displayable supply = current_supply / 10^decimals.
+			// Pure NFTs are excluded — their "supply" is just the NFT count
+			// and lives elsewhere in this dashboard. Each bucket gets a
+			// human-readable label so the UI doesn't have to format edges.
+			query<{ bucket: string; sort_order: number; n: string }>(
+				`WITH disp AS (
+				  SELECT t.category,
+				         CASE
+				           WHEN s.current_supply IS NULL OR s.current_supply = 0 THEN -1::numeric
+				           ELSE s.current_supply
+				                / NULLIF(POWER(10, COALESCE(m.decimals, 0))::numeric, 0)
+				         END AS supply
+				    FROM tokens t
+				    JOIN token_state s    ON s.category = t.category
+				    LEFT JOIN token_metadata m ON m.category = t.category
+				   WHERE t.token_type IN ('FT', 'FT+NFT')
+				     AND ${NOT_MODERATED_CLAUSE}
+				)
+				SELECT bucket,
+				       sort_order,
+				       COUNT(*)::text AS n
+				  FROM (
+				    SELECT
+				      CASE
+				        WHEN supply < 0    THEN 'zero / unknown'
+				        WHEN supply < 1    THEN 'sub-1'
+				        WHEN supply < 100        THEN '1 to 99'
+				        WHEN supply < 10000      THEN '100 to 9.9k'
+				        WHEN supply < 1000000    THEN '10k to 999k'
+				        WHEN supply < 1000000000 THEN '1M to 999M'
+				        WHEN supply < 1000000000000    THEN '1B to 999B'
+				        WHEN supply < 1000000000000000 THEN '1T to 999T'
+				        ELSE                                '1Q+'
+				      END AS bucket,
+				      CASE
+				        WHEN supply < 0    THEN 0
+				        WHEN supply < 1    THEN 1
+				        WHEN supply < 100        THEN 2
+				        WHEN supply < 10000      THEN 3
+				        WHEN supply < 1000000    THEN 4
+				        WHEN supply < 1000000000 THEN 5
+				        WHEN supply < 1000000000000    THEN 6
+				        WHEN supply < 1000000000000000 THEN 7
+				        ELSE                                8
+				      END AS sort_order
+				    FROM disp
+				  ) bucketed
+				 GROUP BY bucket, sort_order
+				 ORDER BY sort_order`
 			)
 		]),
 		bchPriceP
 	]);
 
-	// Destructure all 13 allSettled results by name. Magic-number indexing
-	// (pageResults[12]) silently breaks if anyone reorders the Promise
-	// array literal above; named destructuring keeps the binding tied to
-	// the source query order at the source.
+	// Destructure all 15 allSettled results by name. Magic-number indexing
+	// silently breaks if anyone reorders the Promise array literal above;
+	// named destructuring keeps the binding tied to the source query
+	// order at the source.
 	const [
 		typesRes,
 		d7Res,
@@ -290,7 +369,9 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		venueOverlapRes,
 		metadataRes,
 		moderatedRes,
-		cauldronStatsRes
+		cauldronStatsRes,
+		ecosystemTvl30dRes,
+		supplyBucketsRes
 	] = pageResults as [
 		PromiseSettledResult<{ rows: TypeCount[] }>,
 		PromiseSettledResult<{ rows: WindowCount[] }>,
@@ -304,7 +385,9 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		PromiseSettledResult<{ rows: VenueOverlap[] }>,
 		PromiseSettledResult<{ rows: MetadataCompleteness[] }>,
 		PromiseSettledResult<{ rows: WindowCount[] }>,
-		PromiseSettledResult<{ rows: CauldronStatsRow[] }>
+		PromiseSettledResult<{ rows: CauldronStatsRow[] }>,
+		PromiseSettledResult<{ rows: { day: Date; tvl_sats: string }[] }>,
+		PromiseSettledResult<{ rows: { bucket: string; sort_order: number; n: string }[] }>
 	];
 
 	// Cauldron stats — read the cached row, compute USD at render time
@@ -418,6 +501,24 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		if (r.status === 'rejected') console.error('[stats] metric query failed:', r.reason);
 	}
 
+	// Daily ecosystem TVL points, oldest-first to match Sparkline.svelte.
+	const ecosystemTvl30d =
+		ecosystemTvl30dRes.status === 'fulfilled'
+			? ecosystemTvl30dRes.value.rows.map((r) => ({
+					day: r.day.toISOString().slice(0, 10),
+					tvlSats: Number(r.tvl_sats)
+				}))
+			: [];
+
+	const supplyBuckets =
+		supplyBucketsRes.status === 'fulfilled'
+			? supplyBucketsRes.value.rows.map((r) => ({
+					label: r.bucket,
+					sortOrder: r.sort_order,
+					count: Number(r.n)
+				}))
+			: [];
+
 	return {
 		byType,
 		newIn24h: parentData.newIn24h,
@@ -432,6 +533,8 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		venueOverlap,
 		metadata,
 		moderated: pickNumber(moderatedRes),
-		cauldronStats
+		cauldronStats,
+		ecosystemTvl30d,
+		supplyBuckets
 	};
 };

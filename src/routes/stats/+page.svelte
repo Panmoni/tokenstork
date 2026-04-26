@@ -545,6 +545,84 @@
 	</section>
 
 	<section class="mb-8">
+		<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">Ecosystem TVL — last 30 days</h2>
+		<p class="text-sm text-slate-500 dark:text-slate-400 mb-3">
+			Daily mean BCH-side reserve summed across every Cauldron + Fex pool we index. Lines move
+			with both pool inflows/outflows AND BCH-price-driven token-side rebalancing — this is
+			conservative single-side TVL, not the doubled industry convention. Tapswap (P2P) is
+			deliberately excluded.
+		</p>
+		<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+			{#if data.ecosystemTvl30d.length === 0}
+				<p class="text-sm text-slate-500 dark:text-slate-400">
+					No history yet — the price-history table is still accumulating points.
+				</p>
+			{:else}
+				{@const tvls = data.ecosystemTvl30d.map((p) => p.tvlSats)}
+				{@const minTvl = Math.min(...tvls)}
+				{@const maxTvl = Math.max(...tvls)}
+				{@const range = maxTvl - minTvl || 1}
+				<svg viewBox="0 0 600 120" class="w-full h-32" role="img" aria-label="30-day ecosystem TVL trend">
+					<title>30-day ecosystem TVL</title>
+					{#if data.ecosystemTvl30d.length > 1}
+						<polyline
+							class="stroke-violet-500 dark:stroke-violet-400"
+							fill="none"
+							stroke-width="1.5"
+							stroke-linejoin="round"
+							points={data.ecosystemTvl30d
+								.map((p, i) => {
+									const x = (i / (data.ecosystemTvl30d.length - 1)) * 600;
+									const y = 110 - ((p.tvlSats - minTvl) / range) * 100;
+									return `${x.toFixed(1)},${y.toFixed(1)}`;
+								})
+								.join(' ')}
+						/>
+					{/if}
+				</svg>
+				<div class="mt-2 flex justify-between text-xs text-slate-500 dark:text-slate-400 font-mono">
+					<span>{data.ecosystemTvl30d[0]?.day}</span>
+					<span>{(maxTvl / 1e8).toFixed(2)} BCH (max)</span>
+					<span>{data.ecosystemTvl30d[data.ecosystemTvl30d.length - 1]?.day}</span>
+				</div>
+			{/if}
+		</div>
+	</section>
+
+	<section class="mb-8">
+		<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">FT supply distribution</h2>
+		<p class="text-sm text-slate-500 dark:text-slate-400 mb-3">
+			How fungible (FT and FT+NFT) tokens distribute by displayable supply (current_supply ÷
+			10^decimals). Buckets are powers of ten; "zero / unknown" includes tokens we haven't
+			enriched yet.
+		</p>
+		{#if data.supplyBuckets.length === 0}
+			<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm text-slate-500 dark:text-slate-400">
+				No data yet.
+			</div>
+		{:else}
+			{@const supplyMax = Math.max(...data.supplyBuckets.map((b) => b.count), 1)}
+			<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+				<div class="grid grid-cols-3 sm:grid-cols-9 gap-3">
+					{#each data.supplyBuckets as bucket (bucket.label)}
+						<div class="flex flex-col items-center">
+							<div class="flex items-end h-20 w-full">
+								<div
+									class="w-full rounded-t bg-violet-500 dark:bg-violet-400 transition-all"
+									style:height={`${Math.max(4, (bucket.count / supplyMax) * 100)}%`}
+									title={`${bucket.count} tokens`}
+								></div>
+							</div>
+							<div class="mt-2 text-[10px] font-mono text-slate-500 dark:text-slate-400 text-center">{bucket.label}</div>
+							<div class="text-sm font-semibold text-slate-900 dark:text-white">{fmt(bucket.count)}</div>
+						</div>
+					{/each}
+				</div>
+			</div>
+		{/if}
+	</section>
+
+	<section class="mb-8">
 		<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">Decimals distribution</h2>
 		<p class="text-sm text-slate-500 dark:text-slate-400 mb-3">
 			How FT and FT+NFT tokens choose their decimals. Most cash-token communities settle on a small
