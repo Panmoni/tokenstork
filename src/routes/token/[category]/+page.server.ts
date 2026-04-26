@@ -71,13 +71,86 @@ async function fetchBchPrice(fetch: typeof globalThis.fetch): Promise<number> {
 	}
 }
 
-export const load: PageServerLoad = async ({ params, fetch }) => {
+// Range-to-bucket mapping for the price chart. Each window picks a bucket
+// width that yields ~24-100 points — dense enough to show shape, sparse
+// enough that the SVG isn't a wall of bars. Keyed by the URL `?range=`.
+//
+// Tuple shape: [PG date_trunc field OR derived bucket, interval, label].
+// The CTE uses a CASE-by-range structure server-side so we don't have to
+// concatenate SQL fragments client-trusted.
+//
+// `ts AT TIME ZONE 'UTC'` is load-bearing: without it, both `date_trunc`
+// and `EXTRACT(hour …)` honor the session's `timezone` setting (default
+// is system timezone — UTC on most server PG installs, but not
+// guaranteed). Pinning to UTC means bucket boundaries stay aligned
+// across deploys and don't silently shift if a future docker rebuild
+// picks up a different timezone default.
+const PRICE_RANGES = {
+	'24h': {
+		interval: '24 hours',
+		bucket: "date_trunc('hour', ts AT TIME ZONE 'UTC')",
+		label: '24h'
+	},
+	'7d': {
+		interval: '7 days',
+		bucket:
+			"date_trunc('hour', ts AT TIME ZONE 'UTC')" +
+			" - (EXTRACT(hour FROM ts AT TIME ZONE 'UTC')::int % 6) * INTERVAL '1 hour'",
+		label: '7d'
+	},
+	'30d': {
+		interval: '30 days',
+		bucket: "date_trunc('day', ts AT TIME ZONE 'UTC')",
+		label: '30d'
+	},
+	'90d': {
+		interval: '90 days',
+		bucket: "date_trunc('day', ts AT TIME ZONE 'UTC')",
+		label: '90d'
+	},
+	'1y': {
+		interval: '365 days',
+		bucket: "date_trunc('week', ts AT TIME ZONE 'UTC')",
+		label: '1y'
+	},
+	all: {
+		interval: null,
+		bucket: "date_trunc('week', ts AT TIME ZONE 'UTC')",
+		label: 'all'
+	}
+} as const;
+
+type PriceRange = keyof typeof PRICE_RANGES;
+const DEFAULT_RANGE: PriceRange = '7d';
+
+interface PriceBucketRow {
+	bucket: Date;
+	avg_price_sats: number | null;
+	volume_sats: string | null;
+}
+
+export interface PriceBucket {
+	ts: number;
+	priceSats: number | null;
+	volumeSats: number | null;
+}
+
+export const load: PageServerLoad = async ({ params, fetch, url }) => {
 	const category = params.category.toLowerCase();
 	if (!HEX_REGEX.test(category)) {
 		error(400, 'invalid category (expected 64 hex chars)');
 	}
 
 	const categoryBytes = bytesFromHex(category);
+
+	// Parse the active price-chart range. Strict allowlist to keep
+	// unsanitized input out of the SQL fragment. Default to 7d which is
+	// a reasonable detail-page-default (most-trafficked pages opening to
+	// a known-populated window).
+	const rangeParam = url.searchParams.get('range') as PriceRange | null;
+	const range: PriceRange =
+		rangeParam && rangeParam in PRICE_RANGES ? rangeParam : DEFAULT_RANGE;
+	const rangeSpec = PRICE_RANGES[range];
 
 	// One query instead of two: LEFT JOIN token_moderation and return an
 	// `is_moderated` boolean alongside the row. Saves a round-trip on
@@ -121,7 +194,15 @@ export const load: PageServerLoad = async ({ params, fetch }) => {
 
 	const row = tokenRes.rows[0];
 
-	const [holdersRes, bchPriceUSD, bcmr, tapswapRes, fexRes, mcapTvlThresholdSats] = await Promise.all([
+	const [
+		holdersRes,
+		bchPriceUSD,
+		bcmr,
+		tapswapRes,
+		fexRes,
+		mcapTvlThresholdSats,
+		priceHistoryRes
+	] = await Promise.all([
 		query<HolderRow>(
 			`SELECT address, balance::text AS balance, nft_count
 			   FROM token_holders
@@ -180,7 +261,39 @@ export const load: PageServerLoad = async ({ params, fetch }) => {
 			  LIMIT 1`,
 			[categoryBytes]
 		),
-		computeMcapTvlThresholdSats()
+		computeMcapTvlThresholdSats(),
+		// Bucketed price + volume series for the chart. Volume is derived
+		// from |TVL deltas| between consecutive snapshots — a lower bound
+		// on actual swap volume since within-bucket oscillation is
+		// invisible at our 4h sync cadence (10min fast-pass for already-
+		// listed tokens narrows that gap).
+		//
+		// One CTE: order rows by ts, compute LAG(tvl) for the per-row
+		// delta, then aggregate per bucket. AVG(price_sats) gives a
+		// per-bucket mean which is honest at this granularity.
+		//
+		// `?range=all` skips the WHERE-by-interval clause; otherwise we
+		// constrain to `now() - INTERVAL <window>` so PG can use the
+		// (category, venue, ts DESC) index efficiently.
+		query<PriceBucketRow>(
+			`WITH ordered AS (
+			   SELECT ts,
+			          price_sats,
+			          tvl_satoshis,
+			          tvl_satoshis - LAG(tvl_satoshis) OVER (ORDER BY ts) AS tvl_delta
+			     FROM token_price_history
+			    WHERE category = $1
+			      AND venue = 'cauldron'
+			      ${rangeSpec.interval ? `AND ts > now() - INTERVAL '${rangeSpec.interval}'` : ''}
+			 )
+			 SELECT ${rangeSpec.bucket}              AS bucket,
+			        AVG(price_sats)::double precision AS avg_price_sats,
+			        SUM(ABS(tvl_delta)) FILTER (WHERE tvl_delta IS NOT NULL)::text AS volume_sats
+			   FROM ordered
+			  GROUP BY bucket
+			  ORDER BY bucket ASC`,
+			[categoryBytes]
+		)
 	]);
 
 	const decimals = row.decimals ?? bcmr?.decimals ?? 0;
@@ -209,6 +322,13 @@ export const load: PageServerLoad = async ({ params, fetch }) => {
 			fexTvlUSD = (tvlSats / 1e8) * bchPriceUSD * 2;
 		}
 	}
+
+	// Map price-history rows into chart-friendly buckets.
+	const priceBuckets: PriceBucket[] = priceHistoryRes.rows.map((r) => ({
+		ts: Math.floor(r.bucket.getTime() / 1000),
+		priceSats: r.avg_price_sats,
+		volumeSats: r.volume_sats ? Number(r.volume_sats) : null
+	}));
 
 	return {
 		token: {
@@ -274,6 +394,14 @@ export const load: PageServerLoad = async ({ params, fetch }) => {
 		// satoshi threshold into USD with the same 2x factor fetchCauldron
 		// uses for tvlUSD (Cauldron is a double-sided AMM) so the comparison
 		// against `tvlUSD` is apples-to-apples.
-		mcapTvlThresholdUSD: (mcapTvlThresholdSats / 1e8) * bchPriceUSD * 2
+		mcapTvlThresholdUSD: (mcapTvlThresholdSats / 1e8) * bchPriceUSD * 2,
+		// Price-chart series + active range. The page renders the chart
+		// from these; range-toggle links update `?range=` in the URL,
+		// causing the loader to re-fetch with a different bucket size.
+		priceChart: {
+			range,
+			rangeLabel: rangeSpec.label,
+			buckets: priceBuckets
+		}
 	};
 };

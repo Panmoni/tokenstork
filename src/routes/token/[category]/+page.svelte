@@ -6,6 +6,7 @@
 		type ReportReason
 	} from '$lib/moderation';
 	import FormatCategory from '$lib/components/FormatCategory.svelte';
+	import PriceChart from '$lib/components/PriceChart.svelte';
 	import StarButton from '$lib/components/StarButton.svelte';
 
 	let { data } = $props();
@@ -418,6 +419,57 @@
 			</div>
 		</section>
 	{/if}
+
+	<!--
+		Price + volume chart. Data comes from `token_price_history`,
+		bucketed server-side per the active range. URL-driven range
+		toggles below the chart let the user widen/narrow without
+		page state — `?range=24h|7d|30d|90d|1y|all` is bookmarkable.
+	-->
+	<section class="mb-8" id="chart">
+		<div class="flex items-baseline justify-between mb-3 flex-wrap gap-y-2">
+			<h2 class="text-xl font-bold text-slate-900 dark:text-white">
+				Price &amp; volume
+				<span class="ml-2 text-sm font-normal text-slate-500">Cauldron · {data.priceChart.rangeLabel}</span>
+			</h2>
+			<div class="flex flex-wrap gap-1 text-xs">
+				{#each [
+					{ key: '24h', label: '24h' },
+					{ key: '7d',  label: '7d' },
+					{ key: '30d', label: '30d' },
+					{ key: '90d', label: '90d' },
+					{ key: '1y',  label: '1y' },
+					{ key: 'all', label: 'All' }
+				] as r (r.key)}
+					{@const active = data.priceChart.range === r.key}
+					<a
+						href={`?range=${r.key}#chart`}
+						class={`px-2.5 py-1 rounded-md font-medium transition-colors ${
+							active
+								? 'bg-violet-600 text-white'
+								: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+						}`}
+						aria-current={active ? 'page' : undefined}
+					>
+						{r.label}
+					</a>
+				{/each}
+			</div>
+		</div>
+		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+			<PriceChart
+				buckets={data.priceChart.buckets}
+				decimals={data.token.decimals}
+				bchPriceUSD={data.bchPriceUSD}
+				rangeLabel={data.priceChart.rangeLabel}
+			/>
+		</div>
+		<p class="mt-2 text-xs text-slate-500 dark:text-slate-400">
+			Volume is a lower-bound estimate from |TVL deltas| between consecutive snapshots —
+			within-bucket round-trip activity isn't visible at our 4 h sync cadence (10 min fast-pass
+			for already-listed tokens). Price is the per-bucket mean.
+		</p>
+	</section>
 
 	{#if data.tapswapOffers.length > 0}
 		<section class="mb-8">
