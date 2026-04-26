@@ -81,6 +81,8 @@
 				<ul class="mt-4 space-y-2 text-sm">
 					<li><a href="/" class="text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400">Tokens</a></li>
 					<li><a href="/arbitrage" class="text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400">Arbitrage</a></li>
+					<li><a href="/blocks" class="text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400">Blocks</a></li>
+					<li><a href="/mining" class="text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400">Mining</a></li>
 					<li><a href="/stats" class="text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400">Stats</a></li>
 				</ul>
 			</div>
