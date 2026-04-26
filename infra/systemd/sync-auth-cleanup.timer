@@ -1,0 +1,16 @@
+[Unit]
+Description=Run tokenstork auth-cleanup hourly
+
+[Timer]
+# First run 30 min after boot (after the auth tables have likely seen
+# enough traffic that there's something to clean up), then hourly.
+# The binary is harmless when there's nothing to delete — it just logs
+# "deleted 0 challenges, 0 sessions" and exits.
+OnBootSec=30min
+OnUnitActiveSec=1h
+Persistent=true
+RandomizedDelaySec=2min
+Unit=sync-auth-cleanup.service
+
+[Install]
+WantedBy=timers.target

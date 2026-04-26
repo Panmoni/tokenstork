@@ -1,0 +1,41 @@
+[Unit]
+Description=tokenstork sync-auth-cleanup — delete expired auth_challenges + sessions rows
+Documentation=https://github.com/Panmoni/tokenstork
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=oneshot
+User=tokenstork
+Group=tokenstork
+WorkingDirectory=/opt/tokenstork
+ExecStart=/opt/tokenstork/workers/target/release/auth-cleanup
+
+Environment="RUST_LOG=info"
+EnvironmentFile=-/etc/tokenstork/env
+
+# Hardening — same profile as sync-bcmr / sync-cauldron.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectProc=invisible
+ProcSubset=pid
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallArchitectures=native
+UMask=0077
