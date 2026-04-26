@@ -65,6 +65,13 @@ export interface BlocksSummary {
 	avgBlockSize: number | null;
 }
 
+export interface BlockTimeWindow {
+	blocks: number;
+	/** Average inter-block time in seconds. Null when fewer than 2
+	 *  blocks are in the window (no delta to average). */
+	avgSeconds: number | null;
+}
+
 const PAGE_SIZE = 50;
 const MAX_PAGE = 10000; // 500k blocks ceiling — generous; stop pathological pagers
 
@@ -77,10 +84,17 @@ export const load: PageServerLoad = async ({ url, fetch }) => {
 		: 1;
 	const offset = (page - 1) * PAGE_SIZE;
 
-	// Run all four reads in parallel — they hit the same `blocks` table
+	// Run all reads in parallel — they hit the same `blocks` table
 	// but use different index slices, so the pool can fan them out.
-	const [rowsRes, summary7dRes, summary30dRes, summaryAllRes, dayBucketsRes, bchPriceRes] =
-		await Promise.all([
+	const [
+		rowsRes,
+		summary7dRes,
+		summary30dRes,
+		summaryAllRes,
+		dayBucketsRes,
+		blockTimeRes,
+		bchPriceRes
+	] = await Promise.all([
 			query<BlockRow>(
 				`SELECT height, hash, time, tx_count, total_output_sats::text,
 				        coinbase_sats::text, fees_sats::text, subsidy_sats::text, size_bytes
@@ -135,6 +149,41 @@ export const load: PageServerLoad = async ({ url, fetch }) => {
 				  GROUP BY day
 				  ORDER BY day ASC`
 			),
+			// Average inter-block time over 24h / 7d / 30d. Computed as
+			// (max - min) / (count - 1) per window — equivalent to the
+			// arithmetic mean of consecutive deltas. Each window is a
+			// separate FILTER clause on the same scan so we get all three
+			// in one round-trip. NULLIF guards single-block-window
+			// pathologies (count=1 → divide-by-zero).
+			query<{
+				blocks_24h: string;
+				avg_secs_24h: string | null;
+				blocks_7d: string;
+				avg_secs_7d: string | null;
+				blocks_30d: string;
+				avg_secs_30d: string | null;
+			}>(
+				`SELECT
+				   COUNT(*) FILTER (WHERE time > now() - INTERVAL '24 hours')::text AS blocks_24h,
+				   (EXTRACT(epoch FROM
+				       MAX(time) FILTER (WHERE time > now() - INTERVAL '24 hours')
+				     - MIN(time) FILTER (WHERE time > now() - INTERVAL '24 hours'))
+				    / NULLIF(COUNT(*) FILTER (WHERE time > now() - INTERVAL '24 hours') - 1, 0)
+				   )::text AS avg_secs_24h,
+				   COUNT(*) FILTER (WHERE time > now() - INTERVAL '7 days')::text AS blocks_7d,
+				   (EXTRACT(epoch FROM
+				       MAX(time) FILTER (WHERE time > now() - INTERVAL '7 days')
+				     - MIN(time) FILTER (WHERE time > now() - INTERVAL '7 days'))
+				    / NULLIF(COUNT(*) FILTER (WHERE time > now() - INTERVAL '7 days') - 1, 0)
+				   )::text AS avg_secs_7d,
+				   COUNT(*) FILTER (WHERE time > now() - INTERVAL '30 days')::text AS blocks_30d,
+				   (EXTRACT(epoch FROM
+				       MAX(time) FILTER (WHERE time > now() - INTERVAL '30 days')
+				     - MIN(time) FILTER (WHERE time > now() - INTERVAL '30 days'))
+				    / NULLIF(COUNT(*) FILTER (WHERE time > now() - INTERVAL '30 days') - 1, 0)
+				   )::text AS avg_secs_30d
+				 FROM blocks`
+			),
 			fetchBchPrice(fetch)
 		]);
 
@@ -174,6 +223,26 @@ export const load: PageServerLoad = async ({ url, fetch }) => {
 		blockCount: Number(d.block_count)
 	}));
 
+	const bt = blockTimeRes.rows[0];
+	const blockTime: {
+		w24h: BlockTimeWindow;
+		w7d: BlockTimeWindow;
+		w30d: BlockTimeWindow;
+	} = {
+		w24h: {
+			blocks: Number(bt?.blocks_24h ?? 0),
+			avgSeconds: bt?.avg_secs_24h ? Number(bt.avg_secs_24h) : null
+		},
+		w7d: {
+			blocks: Number(bt?.blocks_7d ?? 0),
+			avgSeconds: bt?.avg_secs_7d ? Number(bt.avg_secs_7d) : null
+		},
+		w30d: {
+			blocks: Number(bt?.blocks_30d ?? 0),
+			avgSeconds: bt?.avg_secs_30d ? Number(bt.avg_secs_30d) : null
+		}
+	};
+
 	return {
 		rows,
 		page,
@@ -182,6 +251,7 @@ export const load: PageServerLoad = async ({ url, fetch }) => {
 		summary30d: toSummary(summary30dRes.rows[0]),
 		summaryAll: toSummary(summaryAllRes.rows[0]),
 		dayBuckets,
+		blockTime,
 		bchPriceUSD: bchPriceRes
 	};
 };

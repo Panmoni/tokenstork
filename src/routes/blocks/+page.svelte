@@ -53,6 +53,28 @@
 		return `${pct.toFixed(2)}%`;
 	};
 
+	// Average inter-block time. Format as "M:SS" if < 1h, otherwise "H:MM:SS".
+	// BCH targets 10 min/block; deviations show network speed.
+	const fmtBlockTime = (seconds: number | null): string => {
+		if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return '—';
+		const totalSec = Math.round(seconds);
+		const m = Math.floor(totalSec / 60);
+		const s = totalSec % 60;
+		if (m < 60) return `${m}m ${s.toString().padStart(2, '0')}s`;
+		const h = Math.floor(m / 60);
+		const mm = m % 60;
+		return `${h}h ${mm.toString().padStart(2, '0')}m`;
+	};
+
+	// Color the ratio against BCH's 10-minute target — emerald for faster
+	// (< 9:30), slate for on-target, amber for slower (> 11:00).
+	const blockTimeColor = (seconds: number | null): string => {
+		if (seconds == null) return 'text-slate-700 dark:text-slate-300';
+		if (seconds < 570) return 'text-emerald-600 dark:text-emerald-400'; // < 9:30
+		if (seconds > 660) return 'text-amber-600 dark:text-amber-400';     // > 11:00
+		return 'text-slate-900 dark:text-white';
+	};
+
 	const fmtBytes = (b: number | null): string => {
 		if (b === null || !Number.isFinite(b)) return '—';
 		if (b >= 1_000_000) return `${(b / 1_000_000).toFixed(2)} MB`;
@@ -186,6 +208,48 @@
 					</div>
 				</div>
 				<Sparkline points={economicSpark} width={64} height={28} />
+			</div>
+		</div>
+	</div>
+
+	<!--
+		Average inter-block time over 24h / 7d / 30d. BCH targets 10 minutes
+		per block via difficulty adjustment; deviations show network speed.
+		Color: emerald when faster than 9:30, amber when slower than 11:00,
+		default at-target.
+	-->
+	<div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
+		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+			<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+				Avg block time — 24h
+			</div>
+			<div class="mt-2 text-3xl font-semibold {blockTimeColor(data.blockTime.w24h.avgSeconds)}">
+				{fmtBlockTime(data.blockTime.w24h.avgSeconds)}
+			</div>
+			<div class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+				{fmtCount(data.blockTime.w24h.blocks)} {data.blockTime.w24h.blocks === 1 ? 'block' : 'blocks'} · target 10m 00s
+			</div>
+		</div>
+		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+			<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+				Avg block time — 7d
+			</div>
+			<div class="mt-2 text-3xl font-semibold {blockTimeColor(data.blockTime.w7d.avgSeconds)}">
+				{fmtBlockTime(data.blockTime.w7d.avgSeconds)}
+			</div>
+			<div class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+				{fmtCount(data.blockTime.w7d.blocks)} blocks
+			</div>
+		</div>
+		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+			<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+				Avg block time — 30d
+			</div>
+			<div class="mt-2 text-3xl font-semibold {blockTimeColor(data.blockTime.w30d.avgSeconds)}">
+				{fmtBlockTime(data.blockTime.w30d.avgSeconds)}
+			</div>
+			<div class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+				{fmtCount(data.blockTime.w30d.blocks)} blocks
 			</div>
 		</div>
 	</div>
