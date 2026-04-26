@@ -6,6 +6,7 @@
 		type ReportReason
 	} from '$lib/moderation';
 	import FormatCategory from '$lib/components/FormatCategory.svelte';
+	import StarButton from '$lib/components/StarButton.svelte';
 
 	let { data } = $props();
 
@@ -173,9 +174,12 @@
 			<div class="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800"></div>
 		{/if}
 		<div class="flex-1 min-w-0">
-			<h1 class="text-3xl font-bold text-slate-900 dark:text-white truncate">
-				{stripEmoji(token.name) || '—'}
-				{#if token.symbol}<span class="ml-3 text-lg text-slate-500 font-mono font-normal">{stripEmoji(token.symbol)}</span>{/if}
+			<h1 class="text-3xl font-bold text-slate-900 dark:text-white truncate flex items-center gap-2">
+				<StarButton categoryHex={token.id} size="md" />
+				<span class="truncate">
+					{stripEmoji(token.name) || '—'}
+					{#if token.symbol}<span class="ml-3 text-lg text-slate-500 font-mono font-normal">{stripEmoji(token.symbol)}</span>{/if}
+				</span>
 			</h1>
 			<div class="mt-2 flex items-center gap-3">
 				<span class="px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-xs font-medium">

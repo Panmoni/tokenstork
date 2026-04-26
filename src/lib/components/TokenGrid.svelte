@@ -11,6 +11,7 @@
 	import { bchPrice } from '$lib/stores/bchPrice';
 	import FormatCategory from './FormatCategory.svelte';
 	import Sparkline from './Sparkline.svelte';
+	import StarButton from './StarButton.svelte';
 	import type { TokenApiRow, TokenType } from '$lib/types';
 
 	interface Props {
@@ -245,7 +246,9 @@
 			<div
 				class="grid grid-cols-[4.5fr_1.2fr_0.8fr_0.8fr_0.8fr_1.2fr_1.2fr_1fr_1.2fr] gap-2 px-4 py-4 items-center border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors"
 			>
-				<a href={`/token/${token.id}`} class="flex items-center gap-3 min-w-0 no-underline group">
+				<div class="flex items-center gap-2 min-w-0">
+					<StarButton categoryHex={token.id} />
+					<a href={`/token/${token.id}`} class="flex items-center gap-3 min-w-0 no-underline group flex-1">
 					{#if token.icon}
 						<img src={getIPFSUrl(token.icon)} alt="" class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800" loading="lazy" />
 					{:else}
@@ -270,7 +273,8 @@
 							<div class="text-xs text-slate-500 dark:text-slate-400 truncate">{stripEmoji(token.description).slice(0, 80)}</div>
 						{/if}
 					</div>
-				</a>
+					</a>
+				</div>
 				<div class="text-right font-mono text-sm text-slate-700 dark:text-slate-300">
 					{formatVenuePriceUSD(token.cauldronPriceSats, token.decimals, $bchPrice.bchPrice)}
 				</div>
@@ -302,9 +306,12 @@
 	<!-- Mobile card layout — Price + TVL shown only when relevant (listed). -->
 	<div class="md:hidden grid gap-3">
 		{#each tokens as token (token.id)}
-			<div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 hover:shadow-lg hover:border-violet-200 dark:hover:border-violet-800 transition-all">
+			<div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 hover:shadow-lg hover:border-violet-200 dark:hover:border-violet-800 transition-all relative">
+				<div class="absolute top-3 right-3 z-10">
+					<StarButton categoryHex={token.id} size="md" />
+				</div>
 				<a href={`/token/${token.id}`} class="block no-underline">
-					<div class="flex items-start justify-between mb-3">
+					<div class="flex items-start justify-between mb-3 pr-8">
 						<div class="flex items-center gap-3 min-w-0">
 							{#if token.icon}
 								<img src={getIPFSUrl(token.icon)} alt="" class="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800" />

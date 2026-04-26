@@ -316,20 +316,30 @@ CREATE INDEX IF NOT EXISTS tapswap_offers_status_idx
 -- fees_sats fit BIGINT comfortably (single coinbase output, ≤ 21 M BCH).
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS blocks (
-  height            INTEGER     PRIMARY KEY,
-  hash              BYTEA       NOT NULL,
-  time              TIMESTAMPTZ NOT NULL,
-  tx_count          INTEGER     NOT NULL,
-  total_output_sats NUMERIC(30,0) NOT NULL,
-  coinbase_sats     BIGINT      NOT NULL,
-  fees_sats         BIGINT      NOT NULL,
-  subsidy_sats      BIGINT      NOT NULL,
-  size_bytes        INTEGER     NOT NULL
+  height              INTEGER     PRIMARY KEY,
+  hash                BYTEA       NOT NULL,
+  time                TIMESTAMPTZ NOT NULL,
+  tx_count            INTEGER     NOT NULL,
+  total_output_sats   NUMERIC(30,0) NOT NULL,
+  coinbase_sats       BIGINT      NOT NULL,
+  fees_sats           BIGINT      NOT NULL,
+  subsidy_sats        BIGINT      NOT NULL,
+  size_bytes          INTEGER     NOT NULL,
+  -- Raw coinbase scriptSig bytes from block.tx[0].vin[0].coinbase. Used by
+  -- /mining for miner-pool attribution via ASCII-substring matching against
+  -- well-known pool tags ("ViaBTC", "AntPool", "Foundry USA", etc.). Pre-
+  -- 4f-deploy blocks have NULL here until backfill repopulates them. The
+  -- column is forward-safe-by-default: a row without coinbase_script_sig
+  -- attributes to "Unknown".
+  coinbase_script_sig BYTEA
 );
 
 -- Window queries on /blocks ("last 7d / 30d / all-time") sort by time DESC
 -- and slice. A b-tree on time supports both bounds + ordering in one seek.
 CREATE INDEX IF NOT EXISTS blocks_time_idx ON blocks (time DESC);
+
+-- Idempotent column add for already-deployed databases. Safe to re-run.
+ALTER TABLE blocks ADD COLUMN IF NOT EXISTS coinbase_script_sig BYTEA;
 
 -- ============================================================================
 -- Single-row sync bookkeeping. Replaces the old __sync_info hack that stuffed
@@ -443,3 +453,22 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE INDEX IF NOT EXISTS sessions_cashaddr_idx ON sessions (cashaddr);
 CREATE INDEX IF NOT EXISTS sessions_expires_idx ON sessions (expires_at);
+
+-- ============================================================================
+-- Wallet-tied watchlist. Composite-keyed (cashaddr, category) so a user's
+-- list is read with a single index range scan + a token can never appear
+-- twice. Cascading deletes mean: removing a user wipes their list; a
+-- moderation-driven token deletion (rare — moderation hides via
+-- `token_moderation`, doesn't drop the `tokens` row) cleans the watchlist
+-- alongside.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS user_watchlist (
+  cashaddr   TEXT        NOT NULL REFERENCES users(cashaddr) ON DELETE CASCADE,
+  category   BYTEA       NOT NULL REFERENCES tokens(category) ON DELETE CASCADE,
+  added_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (cashaddr, category)
+);
+
+-- The `(cashaddr)` portion of the PK already serves the "all rows for
+-- this user" query — Postgres uses it as a leading-column index on its
+-- own. No explicit secondary index needed.

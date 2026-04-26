@@ -10,6 +10,7 @@
 		{ name: 'Tokens', href: '/' },
 		{ name: 'Arbitrage', href: '/arbitrage' },
 		{ name: 'Blocks', href: '/blocks' },
+		{ name: 'Mining', href: '/mining' },
 		{ name: 'Stats', href: '/stats' },
 		{ name: 'Learn', href: '/learn' }
 	];
@@ -25,6 +26,14 @@
 		const stripped = a.startsWith('bitcoincash:') ? a.slice('bitcoincash:'.length) : a;
 		if (stripped.length <= 12) return stripped;
 		return `${stripped.slice(0, 6)}…${stripped.slice(-4)}`;
+	});
+
+	// Count of tokens in the user's watchlist. Comes through the layout's
+	// watchlistCategoryHexes; surfaced in the header as a small "(N)"
+	// pill next to a Watchlist link when authenticated AND non-empty.
+	const watchlistCount = $derived.by(() => {
+		const cats = page.data?.watchlistCategoryHexes as string[] | undefined;
+		return cats?.length ?? 0;
 	});
 
 	async function logout() {
@@ -94,7 +103,19 @@
 
 			<div class="hidden md:flex md:items-center md:gap-3">
 				{#if user && truncatedCashaddr}
-					<div class="flex items-center gap-2">
+					<div class="flex items-center gap-3">
+						{#if watchlistCount > 0}
+							<a
+								href="/watchlist"
+								class="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white inline-flex items-center gap-1"
+								title="Your tracked tokens"
+							>
+								Watchlist
+								<span class="px-1.5 py-0.5 rounded text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 font-semibold">
+									{watchlistCount}
+								</span>
+							</a>
+						{/if}
 						<span
 							class="px-2 py-1 rounded-md bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs font-mono"
 							title={user.cashaddr}

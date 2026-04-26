@@ -20,9 +20,25 @@
 
 import { query } from '$lib/server/db';
 import { NOT_MODERATED_CLAUSE } from '$lib/moderation';
+import { listWatchlistCategories } from '$lib/server/watchlist';
 import type { LayoutServerLoad } from './$types';
 
 export const load: LayoutServerLoad = async ({ locals }) => {
+	// When authenticated, fetch the user's watchlist categories so the
+	// star button on every token-rendering surface knows current state
+	// without an N+1 query. One-row index range scan; cheap enough at
+	// expected watchlist sizes (<100 tokens per user typical).
+	let watchlistCategoryHexes: string[] = [];
+	if (locals.user) {
+		try {
+			const cats = await listWatchlistCategories(locals.user.cashaddr);
+			watchlistCategoryHexes = cats.map((c) => c.toString('hex'));
+		} catch (err) {
+			// Auth surface shouldn't 5xx the directory if the watchlist
+			// query hiccups — just render with an empty set.
+			console.error('[+layout.server] watchlist fetch failed:', err);
+		}
+	}
 	// Every tokens-reading query excludes moderation-hidden categories via
 	// NOT_MODERATED_CLAUSE ($lib/moderation) — single source of truth so
 	// schema evolution is one-line governance. The `sync_state` query is
@@ -142,6 +158,7 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 		newIn24h,
 		totalTvlSats,
 		listedCount,
-		user: locals.user ?? null
+		user: locals.user ?? null,
+		watchlistCategoryHexes
 	};
 };
