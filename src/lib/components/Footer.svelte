@@ -104,8 +104,8 @@
 					Legal
 				</h3>
 				<ul class="mt-4 space-y-2 text-sm">
-					<li><a href="/tos" class="text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400">Terms</a></li>
-					<li><a href="/tos#privacy" class="text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400">Privacy</a></li>
+					<li><a href="/terms" class="text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400">Terms</a></li>
+					<li><a href="/privacy" class="text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400">Privacy</a></li>
 				</ul>
 			</div>
 		</div>

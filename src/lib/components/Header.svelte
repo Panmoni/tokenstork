@@ -4,8 +4,8 @@
 	import ThemeSwitcher from './ThemeSwitcher.svelte';
 
 	// Nav entries render left-to-right on desktop and top-down in the
-	// mobile drawer. Terms/Privacy live under the /tos page as anchors
-	// and stay in the footer — the header is for primary navigation.
+	// mobile drawer. Terms and Privacy live at /terms and /privacy and
+	// stay in the footer — the header is for primary navigation.
 	const navigation = [
 		{ name: 'Tokens', href: '/' },
 		{ name: 'Arbitrage', href: '/arbitrage' },
