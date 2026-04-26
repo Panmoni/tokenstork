@@ -5,72 +5,239 @@
 	// party endpoint there, mirror the change here.
 	const lastUpdated = '26 Apr 2026';
 
+	// Each section's body is a list of structured blocks so the page reads as
+	// a scannable document rather than a wall of text. Block kinds:
+	//   p    — plain paragraph
+	//   lead — bold lead-in (label) + remaining text in the same paragraph
+	//   list — unordered list (rendered with disc bullets via prose styles)
+	//   h3   — sub-section heading inside a numbered section
+	type Block =
+		| { kind: 'p'; text: string }
+		| { kind: 'lead'; label: string; text: string }
+		| { kind: 'list'; items: string[] }
+		| { kind: 'h3'; text: string };
+
 	type Section = {
 		id: string;
 		title: string;
-		body: string;
+		body: Block[];
 	};
 
 	const sections: Section[] = [
 		{
 			id: 'introduction',
 			title: '1. Introduction',
-			body: `This Privacy Policy explains what information TokenStork.com (the "website", operated by George Donnelly d/b/a Panmoni) collects when you visit, why we collect it, who we share it with, and what choices you have. We aim to collect as little personal information as possible.`
+			body: [
+				{
+					kind: 'p',
+					text: `This Privacy Policy explains what information TokenStork.com (the "website", operated by George Donnelly d/b/a Panmoni) collects when you visit, why we collect it, who we share it with, and what choices you have.`
+				},
+				{
+					kind: 'lead',
+					label: 'Our posture:',
+					text: `we aim to collect as little personal information as possible.`
+				}
+			]
 		},
 		{
 			id: 'what-we-collect',
 			title: '2. Information We Collect',
-			body: `We do not require an account to browse the website, and we do not ask for your name, address, or other directly identifying information for general use. The website does collect or process the following limited categories of data: (a) standard request metadata that any web server records (your IP address, user agent, referrer, requested URL, and timestamp), retained for a short period for operations and abuse prevention; (b) optional account data if you choose to sign in with a wallet (a public wallet address linked to a session cookie set by us); and (c) any information you voluntarily send us, for example when you email us for support.`
+			body: [
+				{
+					kind: 'p',
+					text: `We do not require an account to browse the website, and we do not ask for your name, address, or other directly identifying information for general use. The website does collect or process the following limited categories of data:`
+				},
+				{ kind: 'h3', text: 'Request metadata' },
+				{
+					kind: 'p',
+					text: `Standard request metadata that any web server records — IP address, user agent, referrer, requested URL, and timestamp. Retained for a short period for operations and abuse prevention.`
+				},
+				{ kind: 'h3', text: 'Optional account data' },
+				{
+					kind: 'p',
+					text: `If you choose to sign in with a wallet, we store a public wallet address linked to a session cookie set by us. No password, no email.`
+				},
+				{ kind: 'h3', text: 'Voluntary correspondence' },
+				{
+					kind: 'p',
+					text: `Any information you voluntarily send us — for example, when you email us for support.`
+				}
+			]
 		},
 		{
 			id: 'how-we-use',
 			title: '3. How We Use Information',
-			body: `We use the information described above to operate, maintain, and improve the website; to keep you signed in if you log in with a wallet; to detect, investigate, and prevent abuse, fraud, and security incidents; to understand aggregate usage patterns so we can prioritise improvements; and to respond to your inquiries. We do not sell your personal information, and we do not use it for behavioural advertising.`
+			body: [
+				{ kind: 'p', text: `We use the information described above to:` },
+				{
+					kind: 'list',
+					items: [
+						`Operate, maintain, and improve the website.`,
+						`Keep you signed in if you log in with a wallet.`,
+						`Detect, investigate, and prevent abuse, fraud, and security incidents.`,
+						`Understand aggregate usage patterns so we can prioritise improvements.`,
+						`Respond to your inquiries.`
+					]
+				},
+				{
+					kind: 'lead',
+					label: 'What we do not do:',
+					text: `we do not sell your personal information, and we do not use it for behavioural advertising.`
+				}
+			]
 		},
 		{
 			id: 'cookies',
 			title: '4. Cookies and Local Storage',
-			body: `We use the minimum cookies and local-storage entries needed for the site to function: a session cookie when you sign in with a wallet, a small preference entry to remember your light/dark theme choice, and any cookies set by our hosting provider for security and load-balancing. You can clear cookies and local storage at any time through your browser; doing so will sign you out and reset your theme preference.`
+			body: [
+				{
+					kind: 'p',
+					text: `We use the minimum cookies and local-storage entries needed for the site to function:`
+				},
+				{
+					kind: 'list',
+					items: [
+						`A session cookie when you sign in with a wallet.`,
+						`A small preference entry to remember your light/dark theme choice.`,
+						`Any cookies set by our hosting provider for security and load-balancing.`
+					]
+				},
+				{
+					kind: 'p',
+					text: `You can clear cookies and local storage at any time through your browser; doing so will sign you out and reset your theme preference.`
+				}
+			]
 		},
 		{
 			id: 'third-party-services',
 			title: '5. Third-Party Services',
-			body: `We rely on a small number of third parties to deliver the website. These currently include: (a) OVH, our hosting provider, which receives standard request metadata in order to serve pages; and (b) WalletConnect, used only on the wallet-login page to broker the connection between your wallet app and the website — see WalletConnect's own policy for details. Each provider receives only the data necessary for its function. We do not share your information with third parties for their own marketing purposes.`
+			body: [
+				{
+					kind: 'p',
+					text: `We rely on a small number of third parties to deliver the website. Each provider receives only the data necessary for its function.`
+				},
+				{ kind: 'h3', text: 'Current processors' },
+				{
+					kind: 'list',
+					items: [
+						`OVH — our hosting provider, which receives standard request metadata in order to serve pages.`,
+						`WalletConnect — used only on the wallet-login page to broker the connection between your wallet app and the website. See WalletConnect's own policy for details.`
+					]
+				},
+				{
+					kind: 'p',
+					text: `We do not share your information with third parties for their own marketing purposes.`
+				}
+			]
 		},
 		{
 			id: 'on-chain-data',
 			title: '6. On-Chain Data',
-			body: `If you sign in with a wallet, your public wallet address is stored alongside your session and may be associated with on-chain activity that is, by the nature of public blockchains, visible to anyone. We do not control and cannot remove on-chain data.`
+			body: [
+				{
+					kind: 'p',
+					text: `If you sign in with a wallet, your public wallet address is stored alongside your session and may be associated with on-chain activity that is, by the nature of public blockchains, visible to anyone.`
+				},
+				{
+					kind: 'lead',
+					label: 'Important:',
+					text: `we do not control and cannot remove on-chain data.`
+				}
+			]
 		},
 		{
 			id: 'retention',
 			title: '7. Data Retention',
-			body: `We keep request logs and security-related data only as long as needed for the purposes described above and then delete or anonymise them. Aggregated analytics data has no fixed expiry because it is not tied to an identifiable individual. Account data tied to a wallet sign-in is kept for as long as the account is active and then deleted on request.`
+			body: [
+				{
+					kind: 'p',
+					text: `We keep request logs and security-related data only as long as needed for the purposes described above and then delete or anonymise them.`
+				},
+				{
+					kind: 'p',
+					text: `Aggregated analytics data has no fixed expiry because it is not tied to an identifiable individual.`
+				},
+				{
+					kind: 'p',
+					text: `Account data tied to a wallet sign-in is kept for as long as the account is active and then deleted on request.`
+				}
+			]
 		},
 		{
 			id: 'your-rights',
 			title: '8. Your Rights',
-			body: `Depending on where you live, you may have rights under laws such as the EU/UK GDPR or the California Consumer Privacy Act, including the right to access the personal information we hold about you, to request that it be corrected or deleted, to object to or restrict certain processing, and to data portability. To exercise any of these rights, contact us at hello@panmoni.com. We will respond within the timeframe required by applicable law. You also have the right to lodge a complaint with your local data-protection authority.`
+			body: [
+				{
+					kind: 'p',
+					text: `Depending on where you live, you may have rights under laws such as the EU/UK GDPR or the California Consumer Privacy Act, including:`
+				},
+				{
+					kind: 'list',
+					items: [
+						`Access — the right to see the personal information we hold about you.`,
+						`Correction or deletion — the right to have it corrected or deleted.`,
+						`Restriction or objection — the right to restrict or object to certain processing.`,
+						`Portability — the right to receive your data in a portable format.`
+					]
+				},
+				{
+					kind: 'p',
+					text: `To exercise any of these rights, contact us at hello@panmoni.com. We will respond within the timeframe required by applicable law. You also have the right to lodge a complaint with your local data-protection authority.`
+				}
+			]
 		},
 		{
 			id: 'security',
 			title: '9. Security',
-			body: `We use commercially reasonable technical and organisational measures to protect the information we hold, including HTTPS in transit, a strict Content Security Policy, restricted server access, and least-privilege credentials. No system is perfectly secure, and we cannot guarantee absolute security.`
+			body: [
+				{
+					kind: 'p',
+					text: `We use commercially reasonable technical and organisational measures to protect the information we hold:`
+				},
+				{
+					kind: 'list',
+					items: [
+						`HTTPS in transit.`,
+						`A strict Content Security Policy.`,
+						`Restricted server access.`,
+						`Least-privilege credentials.`
+					]
+				},
+				{
+					kind: 'p',
+					text: `No system is perfectly secure, and we cannot guarantee absolute security.`
+				}
+			]
 		},
 		{
 			id: 'international',
 			title: '10. International Transfers',
-			body: `The website's infrastructure may process data in countries other than the one you are accessing it from. By using the website, you understand that your information may be transferred to and processed in those countries.`
+			body: [
+				{
+					kind: 'p',
+					text: `The website's infrastructure may process data in countries other than the one you are accessing it from. By using the website, you understand that your information may be transferred to and processed in those countries.`
+				}
+			]
 		},
 		{
 			id: 'changes',
 			title: '11. Changes to This Policy',
-			body: `We may update this Privacy Policy from time to time. When we do, we will revise the "Last Updated" date at the top of this page. Material changes will, where reasonable, be highlighted on the website for a period after the change.`
+			body: [
+				{
+					kind: 'p',
+					text: `We may update this Privacy Policy from time to time. When we do, we will revise the "Last Updated" date at the top of this page. Material changes will, where reasonable, be highlighted on the website for a period after the change.`
+				}
+			]
 		},
 		{
 			id: 'contact',
 			title: '12. Contact',
-			body: `For privacy questions, requests, or complaints, email hello@panmoni.com.`
+			body: [
+				{
+					kind: 'p',
+					text: `For privacy questions, requests, or complaints, email hello@panmoni.com.`
+				}
+			]
 		}
 	];
 </script>
@@ -117,7 +284,21 @@
 		{#each sections as { id, title, body }}
 			<section id={id} class="scroll-mt-24">
 				<h2>{title}</h2>
-				<p>{body}</p>
+				{#each body as block}
+					{#if block.kind === 'p'}
+						<p>{block.text}</p>
+					{:else if block.kind === 'lead'}
+						<p><strong>{block.label}</strong> {block.text}</p>
+					{:else if block.kind === 'h3'}
+						<h3>{block.text}</h3>
+					{:else if block.kind === 'list'}
+						<ul>
+							{#each block.items as item}
+								<li>{item}</li>
+							{/each}
+						</ul>
+					{/if}
+				{/each}
 			</section>
 		{/each}
 	</div>
