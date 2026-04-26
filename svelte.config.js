@@ -43,7 +43,7 @@ const config = {
 			mode: 'hash',
 			directives: {
 				'default-src': ['self'],
-				'script-src': ['self', 'https://beamanalytics.b-cdn.net'],
+				'script-src': ['self'],
 				// Style-src keeps `unsafe-inline` because Tailwind +
 				// component styles emit inline `style=` attributes
 				// (CLS-prevention skeletons, theme switcher, etc.) that
@@ -54,14 +54,12 @@ const config = {
 				'font-src': ['self', 'data:'],
 				// connect-src needs to allow:
 				//   - 'self' for the auth endpoints + tokens API
-				//   - beam analytics CDN (existing)
 				//   - WalletConnect relay (wss://) + verify/registry API
 				//     (https://*.walletconnect.{com,org}). Without these the
 				//     /login Connect Wallet button hangs at session-init —
 				//     the SDK can't reach the relay.
 				'connect-src': [
 					'self',
-					'https://beamanalytics.b-cdn.net',
 					'wss://relay.walletconnect.com',
 					'wss://relay.walletconnect.org',
 					'https://*.walletconnect.com',

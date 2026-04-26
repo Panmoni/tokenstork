@@ -21,7 +21,7 @@ Environment="NODE_ENV=production"
 
 # Secrets load from /etc/tokenstork/env (chmod 600, owner tokenstork).
 # Required: DATABASE_URL
-# Optional: CRYPTO_COMPARE_KEY, FEAR_AND_GREED_API_KEY, PUBLIC_BEAM_ANALYTICS_TOKEN
+# Optional: CRYPTO_COMPARE_KEY, FEAR_AND_GREED_API_KEY
 EnvironmentFile=-/etc/tokenstork/env
 
 # ── Hardening ──────────────────────────────────────────────────────────

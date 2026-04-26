@@ -1,7 +1,6 @@
 <script lang="ts">
 	import '../app.css';
 	import { onMount, type Snippet } from 'svelte';
-	import { env } from '$env/dynamic/public';
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import MetricsBar from '$lib/components/MetricsBar.svelte';
@@ -56,14 +55,6 @@
 	<meta name="twitter:creator" content="@bitcoincashsite" />
 	<meta name="twitter:image" content="https://tokenstork.com/tw.png" />
 	<meta name="twitter:image:alt" content="Token Stork" />
-
-	{#if env.PUBLIC_BEAM_ANALYTICS_TOKEN}
-		<script
-			src="https://beamanalytics.b-cdn.net/beam.min.js"
-			data-token={env.PUBLIC_BEAM_ANALYTICS_TOKEN}
-			async
-		></script>
-	{/if}
 </svelte:head>
 
 <TooltipProvider>

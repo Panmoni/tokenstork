@@ -44,7 +44,6 @@ Optional environment variables (all read by the app; all safe to leave unset):
 
 - `CRYPTO_COMPARE_KEY` — unlocks `/api/bchPrice`.
 - `FEAR_AND_GREED_API_KEY` — unlocks `/api/fearAndGreed`.
-- `PUBLIC_BEAM_ANALYTICS_TOKEN` — client-side analytics tag.
 
 For worker development you will additionally need `BCHN_RPC_URL`, `BCHN_ZMQ_URL`, and `BLOCKBOOK_URL`.
 

@@ -154,7 +154,6 @@ cd workers && cargo build --release
 |---|---|---|
 | `DATABASE_URL` | yes | Postgres connection string. Unix-socket form works: `postgres:///tokenstork`. |
 | `CRYPTO_COMPARE_KEY` | no | Unlocks `/api/bchPrice`; returns `null` when absent. |
-| `PUBLIC_BEAM_ANALYTICS_TOKEN` | no | Client-side Beam Analytics tag. |
 | `BCHN_RPC_URL`, `BCHN_RPC_AUTH`, `BCHN_ZMQ_URL` | worker-only | Needed by `workers/`; not by the app. |
 | `BLOCKBOOK_URL` | worker-only | Needed by the enrich + verify workers. |
 | `CAULDRON_URL`, `CAULDRON_MAX_RPS`, `CAULDRON_MODE` | worker-only | Cauldron client knobs; `CAULDRON_MODE=fast` selects the 10-min listed-set refresh path. |
