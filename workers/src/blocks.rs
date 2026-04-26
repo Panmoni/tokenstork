@@ -74,6 +74,12 @@ pub struct BlockSummary {
     pub fees_sats: i64,
     pub subsidy_sats: i64,
     pub size_bytes: i32,
+    /// Raw bytes of the coinbase tx's scriptSig (BCHN emits this as the
+    /// `coinbase` field of vin[0] on the coinbase tx). None when the
+    /// upstream JSON omits it (defensive — every legit coinbase has
+    /// one). Stored as BYTEA so /mining can ASCII-substring-match for
+    /// well-known mining-pool tags ("ViaBTC", "AntPool", etc.).
+    pub coinbase_script_sig: Option<Vec<u8>>,
 }
 
 /// Errors `summarize_block` can return. Most are bounds-conversion failures
@@ -150,6 +156,17 @@ pub fn summarize_block(block: &Block) -> Result<BlockSummary, BlockSummaryError>
 
     let hash = decode_block_hash(&block.hash)?;
 
+    // Coinbase scriptSig — pulled from the first vin of the first tx.
+    // Every legitimate block has it. Decode hex; on failure we drop the
+    // field rather than rejecting the row (a /mining attribution miss is
+    // a much smaller harm than losing the per-block economics row).
+    let coinbase_script_sig = block
+        .tx[0]
+        .vin
+        .first()
+        .and_then(|v| v.coinbase.as_deref())
+        .and_then(|hex_str| hex::decode(hex_str).ok());
+
     Ok(BlockSummary {
         height: height_i32,
         hash,
@@ -160,6 +177,7 @@ pub fn summarize_block(block: &Block) -> Result<BlockSummary, BlockSummaryError>
         fees_sats,
         subsidy_sats,
         size_bytes: size_i32,
+        coinbase_script_sig,
     })
 }
 
@@ -171,6 +189,77 @@ fn decode_block_hash(s: &str) -> Result<[u8; 32], BlockSummaryError> {
     let mut out = [0u8; 32];
     out.copy_from_slice(&bytes);
     Ok(out)
+}
+
+// ---------------------------------------------------------------------------
+// Miner-pool attribution
+// ---------------------------------------------------------------------------
+
+/// One entry in the well-known-pool table.
+struct MinerPoolTag {
+    name: &'static str,
+    /// ASCII bytes that should appear somewhere in the coinbase scriptSig.
+    /// We do a contains-check rather than a prefix/suffix because mining
+    /// pools embed their tag mid-script around the height + extranonce.
+    needle: &'static [u8],
+}
+
+/// Well-known BCH mining pools, in priority order. First match wins, so
+/// pools with more-specific tags should appear before generic ones. The
+/// list is hand-curated from observed coinbase strings on BCH; expand as
+/// new pools land. Misses bucket as `None` ("Unknown") in the UI.
+const KNOWN_POOLS: &[MinerPoolTag] = &[
+    MinerPoolTag { name: "ViaBTC",        needle: b"/ViaBTC/" },
+    MinerPoolTag { name: "AntPool",       needle: b"/AntPool/" },
+    MinerPoolTag { name: "F2Pool",        needle: b"/F2Pool/" },
+    MinerPoolTag { name: "BTC.com",       needle: b"/BTC.COM/" },
+    MinerPoolTag { name: "Foundry USA",   needle: b"Foundry USA Pool" },
+    MinerPoolTag { name: "Mining-Dutch",  needle: b"Mining-Dutch" },
+    MinerPoolTag { name: "Binance Pool",  needle: b"binance/pool" },
+    MinerPoolTag { name: "BTC.TOP",       needle: b"BTC.TOP" },
+    MinerPoolTag { name: "Mara Pool",     needle: b"MARA Pool" },
+    MinerPoolTag { name: "Luxor",         needle: b"luxor.tech" },
+    MinerPoolTag { name: "ULTIMUSPOOL",   needle: b"ULTIMUSPOOL" },
+    MinerPoolTag { name: "SBI Crypto",    needle: b"SBICrypto.com" },
+    MinerPoolTag { name: "Solo CKPool",   needle: b"/solo.ckpool.org/" },
+    // Generic ckpool catches non-solo deployments.
+    MinerPoolTag { name: "CKPool",        needle: b"ckpool" },
+    // EMC2pool / 2miners / etc. — add as observed.
+    MinerPoolTag { name: "2Miners",       needle: b"2miners.com" },
+];
+
+/// Identify the mining pool that produced a block from its coinbase
+/// scriptSig. Returns the canonical pool name when a known tag matches,
+/// or `None` for "Unknown" (solo / private pool / unrecognized tag).
+///
+/// Matching is byte-substring, case-sensitive — pools standardize on
+/// specific casings of their own tags so case-insensitive matching
+/// would risk collisions (e.g., "viaBTC" in a non-pool context).
+pub fn identify_miner_pool(coinbase_script_sig: &[u8]) -> Option<&'static str> {
+    for pool in KNOWN_POOLS {
+        if contains_bytes(coinbase_script_sig, pool.needle) {
+            return Some(pool.name);
+        }
+    }
+    None
+}
+
+fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
+    // Standard contains-substring semantics: an empty needle matches
+    // everywhere (vacuously); a needle longer than the haystack can't
+    // match. Without this guard, `slice::windows(0)` panics outright
+    // and `haystack.windows(big_n)` would yield no windows but the
+    // earlier (buggy) early-return claimed "match" for any pool whose
+    // needle was longer than a short coinbase scriptSig — every block
+    // attributed to whichever pool came first in the table with a
+    // long-enough needle.
+    if needle.is_empty() {
+        return true;
+    }
+    if haystack.len() < needle.len() {
+        return false;
+    }
+    haystack.windows(needle.len()).any(|w| w == needle)
 }
 
 /// `(bch * 1e8).round() as i128` — exact for the positive 21 M BCH range
@@ -198,14 +287,20 @@ mod tests {
     }
 
     fn coinbase_tx(value: f64) -> Tx {
+        coinbase_tx_with_script(value, None)
+    }
+
+    fn coinbase_tx_with_script(value: f64, coinbase_hex: Option<&str>) -> Tx {
         Tx {
             txid: "00".repeat(32),
             vout: vec![vout(value)],
             // A single coinbase vin with no prev txid — matches what BCHN emits.
+            // Optional `coinbase` hex carries the miner-pool tag.
             vin: vec![Vin {
                 txid: None,
                 vout: None,
                 script_sig: None,
+                coinbase: coinbase_hex.map(String::from),
             }],
         }
     }
@@ -219,6 +314,7 @@ mod tests {
                     txid: Some("22".repeat(32)),
                     vout: Some(0),
                     script_sig: None,
+                    coinbase: None,
                 })
                 .collect(),
         }
@@ -381,6 +477,7 @@ mod tests {
                         txid: None,
                         vout: None,
                         script_sig: None,
+                        coinbase: None,
                     }],
                 },
                 normal_tx(1, vec![1.0]),
@@ -407,6 +504,68 @@ mod tests {
         assert_eq!(bch_to_sats_i128(0.0), 0);
         assert_eq!(bch_to_sats_i128(0.00000001), 1);
         assert_eq!(bch_to_sats_i128(1.0), 100_000_000);
+    }
+
+    // ---- coinbase scriptSig + miner-pool attribution ----
+
+    #[test]
+    fn summarize_extracts_coinbase_script_sig_when_present() {
+        // hex of "/ViaBTC/Mined by user1234/" surrounded by realistic
+        // height-push + extranonce bytes
+        let coinbase_hex = "03c0fd0b04362f566961425443214d696e656420627920757365723132333442fabe6d6d";
+        let block = block_at(
+            800_000,
+            300,
+            vec![
+                coinbase_tx_with_script(6.25, Some(coinbase_hex)),
+                normal_tx(1, vec![1.0]),
+            ],
+        );
+        let s = summarize_block(&block).expect("summarize ok");
+        assert!(s.coinbase_script_sig.is_some());
+        let bytes = s.coinbase_script_sig.unwrap();
+        assert_eq!(bytes, hex::decode(coinbase_hex).unwrap());
+    }
+
+    #[test]
+    fn summarize_handles_missing_coinbase_field() {
+        // BCHN should always emit `coinbase` on vin[0] but treat it as
+        // optional defensively. `coinbase_tx` (without _with_script) emits
+        // a Vin without a coinbase field.
+        let block = block_at(800_000, 200, vec![coinbase_tx(6.25)]);
+        let s = summarize_block(&block).expect("summarize ok");
+        assert_eq!(s.coinbase_script_sig, None);
+    }
+
+    #[test]
+    fn identify_miner_pool_recognizes_well_known_tags() {
+        // Real-world coinbase strings observed on BCH (ASCII portion only;
+        // the actual bytes are a hex string with mining-pool tag embedded
+        // alongside height/nonce bytes).
+        assert_eq!(identify_miner_pool(b"\x03\x12\x34\x56/ViaBTC/Mined/"), Some("ViaBTC"));
+        assert_eq!(identify_miner_pool(b"abc/AntPool/v0.5/"), Some("AntPool"));
+        assert_eq!(identify_miner_pool(b"prefixFoundry USA Pool"), Some("Foundry USA"));
+        assert_eq!(identify_miner_pool(b"Mining-Dutch.nl"), Some("Mining-Dutch"));
+        assert_eq!(identify_miner_pool(b"/solo.ckpool.org/"), Some("Solo CKPool"));
+        // CKPool catches the generic case
+        assert_eq!(identify_miner_pool(b"ckpool stuff"), Some("CKPool"));
+    }
+
+    #[test]
+    fn identify_miner_pool_returns_none_for_unknown_tags() {
+        assert_eq!(identify_miner_pool(b""), None);
+        assert_eq!(identify_miner_pool(b"\x03\x12\x34\x56"), None); // height-only, no tag
+        assert_eq!(identify_miner_pool(b"some random miner"), None);
+    }
+
+    #[test]
+    fn identify_miner_pool_is_case_sensitive() {
+        // Pool tags are intentionally case-sensitive. "viaBTC" lowercase
+        // shouldn't match because real ViaBTC blocks always emit the
+        // CamelCase form. Lowering case would risk false-positives where
+        // a non-pool string happens to contain a substring.
+        assert_eq!(identify_miner_pool(b"/viabtc/"), None);
+        assert_eq!(identify_miner_pool(b"/VIABTC/"), None);
     }
 
     #[test]

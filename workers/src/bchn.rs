@@ -364,6 +364,12 @@ pub struct Vin {
     pub vout: Option<u32>,
     #[serde(rename = "scriptSig", default)]
     pub script_sig: Option<ScriptSig>,
+    /// Present ONLY on the coinbase input (block.tx[0].vin[0]). Hex-
+    /// encoded bytes that BCHN emits as the freeform `coinbase` field
+    /// instead of `scriptSig`. Miner-pool attribution scrapes ASCII
+    /// substrings out of this for /mining.
+    #[serde(default)]
+    pub coinbase: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

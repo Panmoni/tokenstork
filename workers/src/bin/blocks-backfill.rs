@@ -117,6 +117,7 @@ async fn main() -> Result<()> {
                     fees_sats: summary.fees_sats,
                     subsidy_sats: summary.subsidy_sats,
                     size_bytes: summary.size_bytes,
+                    coinbase_script_sig: summary.coinbase_script_sig,
                 });
             }
             Err(e) => {

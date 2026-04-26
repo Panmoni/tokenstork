@@ -199,6 +199,7 @@ async fn process_block(pool: &pg::PgPool, block: &Block) -> Result<BlockStats> {
                     fees_sats: summary.fees_sats,
                     subsidy_sats: summary.subsidy_sats,
                     size_bytes: summary.size_bytes,
+                    coinbase_script_sig: summary.coinbase_script_sig,
                 };
                 match upsert_block(pool, &write).await {
                     Ok(()) => {
