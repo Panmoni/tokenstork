@@ -62,6 +62,16 @@ interface MetadataCompleteness {
 	total: string;
 }
 
+interface MoverRow {
+	category_hex: string;
+	symbol: string;
+	name: string;
+	price_old: number;
+	price_new: number;
+	tvl_old: string | null;
+	tvl_new: string | null;
+}
+
 interface CauldronStatsRow {
 	tvl_sats: string;
 	volume_24h_sats: string;
@@ -302,6 +312,55 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 			// Pure NFTs are excluded — their "supply" is just the NFT count
 			// and lives elsewhere in this dashboard. Each bucket gets a
 			// human-readable label so the UI doesn't have to format edges.
+			// 24h movers — for every Cauldron-listed category that has BOTH a
+			// price point ≥ 23h ago AND a price point within the last 23h,
+			// emit the oldest-eligible-old + newest pair so the consumer can
+			// compute % deltas. The 23h floor is a small safety margin around
+			// the 4h sync cadence so we don't lose tokens whose latest pre-
+			// 24h sample landed at, e.g., 23h 58m ago. The 7d ceiling on the
+			// "old" side caps how far back we'd reach if a category went
+			// silent for a stretch — we won't compare a 5-day-old price to
+			// today's and call it a "24h move." Cauldron only — Fex has too
+			// few categories (~10) for a useful ranking, and Tapswap's
+			// price_history isn't TVL-bearing.
+			query<MoverRow>(
+				`WITH oldest AS (
+				  SELECT DISTINCT ON (h.category)
+				         h.category,
+				         h.price_sats AS price_old,
+				         h.tvl_satoshis AS tvl_old
+				    FROM token_price_history h
+				   WHERE h.venue = 'cauldron'
+				     AND h.ts <= now() - INTERVAL '23 hours'
+				     AND h.ts >= now() - INTERVAL '7 days'
+				   ORDER BY h.category, h.ts DESC
+				),
+				newest AS (
+				  SELECT DISTINCT ON (h.category)
+				         h.category,
+				         h.price_sats AS price_new,
+				         h.tvl_satoshis AS tvl_new
+				    FROM token_price_history h
+				   WHERE h.venue = 'cauldron'
+				     AND h.ts >= now() - INTERVAL '23 hours'
+				   ORDER BY h.category, h.ts DESC
+				)
+				SELECT encode(t.category, 'hex') AS category_hex,
+				       COALESCE(NULLIF(BTRIM(m.symbol), ''), '') AS symbol,
+				       COALESCE(NULLIF(BTRIM(m.name),   ''), '') AS name,
+				       o.price_old,
+				       n.price_new,
+				       o.tvl_old::text AS tvl_old,
+				       n.tvl_new::text AS tvl_new
+				  FROM tokens t
+				  JOIN oldest o ON o.category = t.category
+				  JOIN newest n ON n.category = t.category
+				  LEFT JOIN token_metadata m ON m.category = t.category
+				 WHERE ${NOT_MODERATED_CLAUSE}
+				   AND o.price_old > 0
+				   AND n.price_new > 0`
+			),
+
 			query<{ bucket: string; sort_order: number; n: string }>(
 				`WITH disp AS (
 				  SELECT t.category,
@@ -352,7 +411,7 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		bchPriceP
 	]);
 
-	// Destructure all 15 allSettled results by name. Magic-number indexing
+	// Destructure all 16 allSettled results by name. Magic-number indexing
 	// silently breaks if anyone reorders the Promise array literal above;
 	// named destructuring keeps the binding tied to the source query
 	// order at the source.
@@ -371,6 +430,7 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		moderatedRes,
 		cauldronStatsRes,
 		ecosystemTvl30dRes,
+		movers24hRes,
 		supplyBucketsRes
 	] = pageResults as [
 		PromiseSettledResult<{ rows: TypeCount[] }>,
@@ -387,6 +447,7 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		PromiseSettledResult<{ rows: WindowCount[] }>,
 		PromiseSettledResult<{ rows: CauldronStatsRow[] }>,
 		PromiseSettledResult<{ rows: { day: Date; tvl_sats: string }[] }>,
+		PromiseSettledResult<{ rows: MoverRow[] }>,
 		PromiseSettledResult<{ rows: { bucket: string; sort_order: number; n: string }[] }>
 	];
 
@@ -519,6 +580,58 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 				}))
 			: [];
 
+	// 24h movers — compute price + TVL % deltas client-side to avoid the
+	// NUMERIC(30,0) → JSON precision dance for every row. Each mover only
+	// needs ~6 numbers; the JS Number() cast on tvl_satoshis loses
+	// precision past 2^53 sats (~92,000 BCH), well outside any pool's
+	// realistic single-side reserve. Keep tvl_old / tvl_new as strings on
+	// the wire and only Number-coerce here.
+	const moversComputed = (
+		movers24hRes.status === 'fulfilled' ? movers24hRes.value.rows : []
+	).map((r) => {
+		const priceOld = Number(r.price_old);
+		const priceNew = Number(r.price_new);
+		const tvlOld = r.tvl_old ? Number(r.tvl_old) : null;
+		const tvlNew = r.tvl_new ? Number(r.tvl_new) : null;
+		const tvlPct =
+			tvlOld !== null && tvlOld > 0 && tvlNew !== null
+				? ((tvlNew - tvlOld) / tvlOld) * 100
+				: null;
+		return {
+			categoryHex: r.category_hex,
+			symbol: r.symbol,
+			name: r.name,
+			priceOld,
+			priceNew,
+			pricePct: ((priceNew - priceOld) / priceOld) * 100,
+			tvlOld,
+			tvlNew,
+			tvlPct
+		};
+	});
+	// Sign filter on gainers / losers is load-bearing: without it, an
+	// all-down day puts negative-pct rows in the "Top gainers" emerald
+	// card (and an all-up day mirrors), and on small datasets gainers
+	// and losers fully overlap. Filter before slice so each card is
+	// faithful to its label.
+	const topGainers24h = moversComputed
+		.filter((m) => m.pricePct > 0)
+		.sort((a, b) => b.pricePct - a.pricePct)
+		.slice(0, 5);
+	const topLosers24h = moversComputed
+		.filter((m) => m.pricePct < 0)
+		.sort((a, b) => a.pricePct - b.pricePct)
+		.slice(0, 5);
+	const topTvlMovers24h = moversComputed
+		.filter((m): m is typeof m & { tvlPct: number } => m.tvlPct !== null)
+		.sort((a, b) => Math.abs(b.tvlPct) - Math.abs(a.tvlPct))
+		.slice(0, 5);
+	// `has24hHistory` lets the UI distinguish "no points yet" (sync
+	// gap, fresh deploy) from "no movement in this direction" (the
+	// sign filter above produced an empty list because every move was
+	// the other way). Same drought, two different empty-state copies.
+	const has24hHistory = moversComputed.length > 0;
+
 	return {
 		byType,
 		newIn24h: parentData.newIn24h,
@@ -535,6 +648,10 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		moderated: pickNumber(moderatedRes),
 		cauldronStats,
 		ecosystemTvl30d,
+		topGainers24h,
+		topLosers24h,
+		topTvlMovers24h,
+		has24hHistory,
 		supplyBuckets
 	};
 };
