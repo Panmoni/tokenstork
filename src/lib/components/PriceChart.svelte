@@ -151,13 +151,21 @@
 		return ticks;
 	});
 
-	// X-axis ticks: first, middle, last. Date format depends on range
-	// length — short ranges show time-of-day, long ranges show date.
+	// X-axis ticks: first, middle, last — deduplicated via Set so a
+	// 2-point chart doesn't render "middle" and "last" at the same
+	// position (which collides visually with the right-edge label).
+	// Date format depends on range length: short ranges show time-of-
+	// day, long ranges show ISO date.
 	const xTicks = $derived.by(() => {
 		if (validPoints.length === 0) return [] as Array<{ x: number; label: string }>;
-		const positions = [0, Math.floor(validPoints.length / 2), validPoints.length - 1];
+		const indexSet = new Set<number>([
+			0,
+			Math.floor(validPoints.length / 2),
+			validPoints.length - 1
+		]);
+		const indices = [...indexSet].sort((a, b) => a - b);
 		const showTime = xRange < 86400 * 3; // < 3 days
-		return positions.map((i) => {
+		return indices.map((i) => {
 			const p = validPoints[i];
 			const d = new Date(p.ts * 1000);
 			const label = showTime
@@ -171,13 +179,34 @@
 		return n.toString().padStart(2, '0');
 	}
 
+	// Decimal-first USD formatting. Picks decimal places based on
+	// magnitude so values stay human-readable across the full
+	// price-of-CashTokens range:
+	//   $1.23           ($1+, 2 decimals)
+	//   $0.1234         ($0.01-$1, 4 decimals)
+	//   $0.001234       ($0.0001-$0.01, 6 decimals)
+	//   $0.00000123     ($1e-6 - $0.0001, 8 decimals)
+	//   $1.23e-7        (below $1e-6, exponential — decimal becomes
+	//                    unreadably wide past 8 zeros)
+	// Thousand separators on $1,234. The decimal-place ladder gives 3
+	// significant digits past the leading zeros at every tier — enough
+	// for adjacent y-axis ticks to stay visually distinct on the
+	// tightest realistic price ranges.
 	function fmtUsd(usd: number): string {
 		if (!Number.isFinite(usd)) return '—';
 		if (usd === 0) return '$0';
+		const sign = usd < 0 ? '-' : '';
 		const abs = Math.abs(usd);
-		if (abs >= 1) return `$${usd.toFixed(2)}`;
-		if (abs >= 0.01) return `$${usd.toFixed(4)}`;
-		return `$${usd.toExponential(2)}`;
+		let decimals: number;
+		if (abs >= 1) decimals = 2;
+		else if (abs >= 0.01) decimals = 4;
+		else if (abs >= 0.0001) decimals = 6;
+		else if (abs >= 0.000001) decimals = 8;
+		else return `${sign}$${abs.toExponential(2)}`;
+		return `${sign}$${abs.toLocaleString('en-US', {
+			minimumFractionDigits: decimals,
+			maximumFractionDigits: decimals
+		})}`;
 	}
 
 	// Hover state: SVG mousemove finds the nearest bucket by xScale
@@ -264,11 +293,17 @@
 				stroke-width="0.5"
 			/>
 
-			<!-- Volume bars -->
+			<!-- Volume bars. Width: ideally one-per-bucket fills the full
+			     pane minus 1px gap, but capped at 40px so a sparse
+			     2-point chart doesn't draw two giant bars that cover the
+			     pane and run off the right edge. -->
 			{#each validPoints as p, i (i)}
 				{@const x = xScale(p.ts)}
 				{@const y = volumeY(p.volume)}
-				{@const barW = Math.max(2, (W - PAD_L - PAD_R) / validPoints.length - 1)}
+				{@const barW = Math.max(
+					2,
+					Math.min(40, (W - PAD_L - PAD_R) / validPoints.length - 1)
+				)}
 				<rect
 					x={x - barW / 2}
 					y={y}
