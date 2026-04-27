@@ -269,7 +269,36 @@ async fn process_one(
         return Ok(Outcome::Deduped);
     }
 
-    // 3. NSFW gate (Cloudflare CSAM is edge-side; we don't call from here).
+    // 3. Decode FIRST, before spending a Vision API call. Failure here is a
+    //    property of the bytes (corrupt / wrong format like SVG / image-bomb
+    //    over the alloc cap) — re-trying won't help. This used to happen
+    //    AFTER the Vision call, which meant SVG icons would loop through
+    //    fetch + Vision (with Vision returning "Bad image data") forever,
+    //    paying $0.0015 per retry. Now decode-failures cost zero Vision
+    //    spend.
+    let img = match decode_image(&bytes) {
+        Ok(i) => i,
+        Err(e) => {
+            warn!(uri = %uri, error = %e, "decode failed; marking unsupported (no Vision call made)");
+            upsert_icon_moderation(
+                pool,
+                &IconModerationWrite {
+                    content_hash: &hash,
+                    source_url: uri,
+                    state: "blocked",
+                    nsfw_score: None,
+                    block_reason: Some("unsupported_format"),
+                    bytes_size: bytes.len() as i32,
+                },
+            )
+            .await?;
+            link_url_to_hash(pool, uri, &hash).await?;
+            return Ok(Outcome::BlockedUnsupported);
+        }
+    };
+
+    // 4. NSFW gate (Cloudflare CSAM is edge-side; we don't call from here).
+    //    Vision wants the original raw bytes, not the decoded image.
     let scores = match safe_search(http, api_key, &bytes).await {
         Ok(s) => s,
         Err(e) => {
@@ -314,36 +343,13 @@ async fn process_one(
             Ok(Outcome::Review)
         }
         NsfwOutcome::Clear => {
-            // 4a. Decode. Failure here is a property of the bytes (corrupt /
-            //     wrong format / image-bomb over the alloc cap) — re-trying
-            //     won't help. Permanent block.
-            let img = match decode_image(&bytes) {
-                Ok(i) => i,
-                Err(e) => {
-                    warn!(uri = %uri, error = %e, "decode failed; marking unsupported");
-                    upsert_icon_moderation(
-                        pool,
-                        &IconModerationWrite {
-                            content_hash: &hash,
-                            source_url: uri,
-                            state: "blocked",
-                            nsfw_score: Some(score),
-                            block_reason: Some("unsupported_format"),
-                            bytes_size: bytes.len() as i32,
-                        },
-                    )
-                    .await?;
-                    link_url_to_hash(pool, uri, &hash).await?;
-                    return Ok(Outcome::BlockedUnsupported);
-                }
-            };
-
-            // 4b. Encode to WebP. CPU-bound + sync (the `image` crate has no
-            //     async API), so wrap in spawn_blocking to keep the tokio
-            //     runtime free for I/O. Failure here is almost always a
-            //     transient `image` crate bug; we leave the URL pending so a
-            //     future library version can retry — NEVER write a
-            //     `state='blocked'` row in this branch.
+            // 5. Encode to WebP (we already decoded in step 3, so `img` is in
+            //    scope here). CPU-bound + sync (the `image` crate has no
+            //    async API), so wrap in spawn_blocking to keep the tokio
+            //    runtime free for I/O. Failure here is almost always a
+            //    transient `image` crate bug; we leave the URL pending so a
+            //    future library version can retry — NEVER write a
+            //    `state='blocked'` row in this branch.
             let webp = match tokio::task::spawn_blocking(move || encode_to_webp(&img)).await {
                 Ok(Ok(b)) => b,
                 Ok(Err(e)) => {
@@ -358,7 +364,7 @@ async fn process_one(
                 }
             };
 
-            // 5. Write to /var/lib/tokenstork/icons/<hex_hash>.webp.
+            // 6. Write to /var/lib/tokenstork/icons/<hex_hash>.webp.
             let hex = hex::encode(hash);
             let path = output_dir.join(format!("{}.webp", hex));
             if let Err(e) = std::fs::write(&path, &webp) {
@@ -366,7 +372,7 @@ async fn process_one(
                 return Ok(Outcome::WriteError);
             }
 
-            // 6. Cleared.
+            // 7. Cleared.
             upsert_icon_moderation(
                 pool,
                 &IconModerationWrite {

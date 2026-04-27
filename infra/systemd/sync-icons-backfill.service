@@ -52,7 +52,11 @@ AmbientCapabilities=
 SystemCallFilter=@system-service
 SystemCallFilter=~@privileged @resources
 SystemCallArchitectures=native
-UMask=0077
+# UMask=0022 (NOT 0077) so files written here are mode 0644 / dirs 0755 —
+# Caddy runs as a different user and needs world-read on /icons/<hash>.webp
+# to serve them. The directory itself is owned by tokenstork:tokenstork
+# inside StateDirectory=tokenstork; only the inside-the-dir contents matter.
+UMask=0022
 ReadWritePaths=/var/lib/tokenstork
 
 # Vision API + IPFS gateways can be slow under load; bootstrap may run for
