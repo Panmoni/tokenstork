@@ -17,17 +17,13 @@
 </svelte:head>
 
 <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-	<div class="mb-6">
-		<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent">
-			CashTokens
-		</h1>
-	</div>
-
 	<!--
 		24h movers leads the directory — same component used on /stats so
 		gainers/losers/TVL-movers stay in lockstep. Lives ABOVE the token grid
 		so visitors land on the active-trading signal first; the long
-		exhaustive directory is what they scroll to.
+		exhaustive directory is what they scroll to. The "CashTokens" h1
+		that used to live here was redundant with the "Token Stork" wordmark
+		in the header — removed for vertical density.
 	-->
 	<Movers24h movers={data.movers} />
 
