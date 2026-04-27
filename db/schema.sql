@@ -472,3 +472,51 @@ CREATE TABLE IF NOT EXISTS user_watchlist (
 -- The `(cashaddr)` portion of the PK already serves the "all rows for
 -- this user" query — Postgres uses it as a leading-column index on its
 -- own. No explicit secondary index needed.
+
+-- ============================================================================
+-- Icon safety pipeline (item #22 / docs/icon-safety-plan.md). Two-table
+-- split — `icon_moderation` keyed by content hash (one decision per unique
+-- image, regardless of how many BCMR URIs serve it) + `icon_url_scan` keyed
+-- by URL (what the BCMR worker polls). Issuers reuse icons across categories;
+-- a single hash backing ten URIs scans once.
+--
+-- Default-deny: until `icon_moderation.state='cleared'` for an icon's hash,
+-- the UI shows the SVG placeholder. See docs/icon-safety-plan.md.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS icon_moderation (
+  content_hash   BYTEA       PRIMARY KEY,                     -- sha256 of fetched bytes
+  source_url     TEXT        NOT NULL,                        -- first URL we saw this hash at (informational)
+  state          TEXT        NOT NULL CHECK (state IN ('pending','cleared','blocked','review')),
+  scanned_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  nsfw_score     REAL,                                        -- NULL until NSFW check runs
+  block_reason   TEXT        CHECK (block_reason IN ('csam','adult','oversize','fetch_failed','unsupported_format') OR block_reason IS NULL),
+  bytes_size     INTEGER,                                     -- audit / quota; NOT the bytes themselves
+  -- State-machine consistency: only `blocked` rows may carry a block_reason,
+  -- everything else MUST have block_reason NULL. Defense-in-depth — the
+  -- worker code respects this invariant today, but the constraint stops a
+  -- future buggy code path or a manual operator INSERT from corrupting
+  -- the table with `state='cleared' AND block_reason='adult'`-style rows.
+  CHECK (
+    (state = 'blocked' AND block_reason IS NOT NULL)
+    OR (state IN ('pending', 'cleared', 'review') AND block_reason IS NULL)
+  )
+);
+
+CREATE INDEX IF NOT EXISTS icon_moderation_state_idx
+  ON icon_moderation (state, scanned_at DESC);
+
+CREATE TABLE IF NOT EXISTS icon_url_scan (
+  icon_uri        TEXT        PRIMARY KEY,                    -- raw BCMR URI (re-fetch-on-change works via natural URL key)
+  content_hash    BYTEA       REFERENCES icon_moderation(content_hash),
+  last_fetched_at TIMESTAMPTZ,
+  fetch_error     TEXT                                         -- last fetch failure, NULL on success
+);
+
+-- Hot path: pending + retry queue. Partial index keeps it tiny since the
+-- happy-path "cleared with successful fetch" rows fall out of scope.
+CREATE INDEX IF NOT EXISTS icon_url_scan_pending_idx
+  ON icon_url_scan (last_fetched_at NULLS FIRST)
+  WHERE content_hash IS NULL OR fetch_error IS NOT NULL;
+
+ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_icons_run_at TIMESTAMPTZ;
+ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_icons_backfill_through INTEGER;

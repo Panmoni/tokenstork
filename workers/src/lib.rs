@@ -12,6 +12,8 @@ pub mod blocks;
 pub mod cauldron;
 pub mod env;
 pub mod fex;
+pub mod google_vision;
+pub mod icons;
 pub mod pg;
 pub mod tapswap;
 pub mod tapswap_walker;

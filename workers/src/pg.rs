@@ -1414,6 +1414,171 @@ pub async fn shutdown(pool: PgPool) {
     pool.close().await;
 }
 
+// ---------------------------------------------------------------------------
+// Icon safety pipeline helpers — see docs/icon-safety-plan.md.
+// ---------------------------------------------------------------------------
+
+/// Seed `icon_url_scan` from every distinct non-null `token_metadata.icon_uri`
+/// not already tracked. Idempotent — re-running the bootstrap or the BCMR
+/// worker is safe. Returns rows-inserted (new URIs we haven't seen before).
+pub async fn seed_icon_url_scan_from_metadata(pool: &PgPool) -> Result<u64> {
+    let res = sqlx::query(
+        "INSERT INTO icon_url_scan (icon_uri)
+         SELECT DISTINCT m.icon_uri
+           FROM token_metadata m
+          WHERE m.icon_uri IS NOT NULL
+            AND BTRIM(m.icon_uri) <> ''
+         ON CONFLICT (icon_uri) DO NOTHING",
+    )
+    .execute(pool)
+    .await
+    .context("seeding icon_url_scan from token_metadata")?;
+    Ok(res.rows_affected())
+}
+
+/// Pull a batch of pending icon URLs to scan. "Pending" = no content_hash
+/// recorded yet OR a previous fetch error needs retry. Oldest first
+/// (NULLS FIRST means never-fetched rows lead).
+pub async fn find_pending_icon_urls(pool: &PgPool, batch_size: i64) -> Result<Vec<String>> {
+    let rows: Vec<(String,)> = sqlx::query_as(
+        "SELECT icon_uri
+           FROM icon_url_scan
+          WHERE content_hash IS NULL OR fetch_error IS NOT NULL
+          ORDER BY last_fetched_at NULLS FIRST
+          LIMIT $1",
+    )
+    .bind(batch_size)
+    .fetch_all(pool)
+    .await
+    .context("finding pending icon URLs")?;
+    Ok(rows.into_iter().map(|(s,)| s).collect())
+}
+
+/// Look up an existing decision by content hash. Used for dedupe — if
+/// hash already cleared/blocked, skip the scan and just link the URL.
+pub async fn find_icon_moderation_state(
+    pool: &PgPool,
+    content_hash: &[u8],
+) -> Result<Option<String>> {
+    let row: Option<(String,)> = sqlx::query_as(
+        "SELECT state FROM icon_moderation WHERE content_hash = $1",
+    )
+    .bind(content_hash)
+    .fetch_optional(pool)
+    .await
+    .context("looking up icon moderation state")?;
+    Ok(row.map(|(s,)| s))
+}
+
+#[derive(Debug, Clone)]
+pub struct IconModerationWrite<'a> {
+    pub content_hash: &'a [u8],
+    pub source_url: &'a str,
+    pub state: &'a str,            // 'pending' | 'cleared' | 'blocked' | 'review'
+    pub nsfw_score: Option<f32>,
+    pub block_reason: Option<&'a str>,
+    pub bytes_size: i32,
+}
+
+/// Insert (or update) the content-hash decision row.
+pub async fn upsert_icon_moderation(pool: &PgPool, w: &IconModerationWrite<'_>) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO icon_moderation
+           (content_hash, source_url, state, scanned_at, nsfw_score, block_reason, bytes_size)
+         VALUES ($1, $2, $3, now(), $4, $5, $6)
+         ON CONFLICT (content_hash) DO UPDATE SET
+           state        = EXCLUDED.state,
+           scanned_at   = now(),
+           nsfw_score   = EXCLUDED.nsfw_score,
+           block_reason = EXCLUDED.block_reason,
+           bytes_size   = EXCLUDED.bytes_size",
+    )
+    .bind(w.content_hash)
+    .bind(w.source_url)
+    .bind(w.state)
+    .bind(w.nsfw_score)
+    .bind(w.block_reason)
+    .bind(w.bytes_size)
+    .execute(pool)
+    .await
+    .context("upserting icon_moderation")?;
+    Ok(())
+}
+
+/// Link a URL row to its content hash. Clears any prior fetch_error.
+pub async fn link_url_to_hash(pool: &PgPool, uri: &str, hash: &[u8]) -> Result<()> {
+    sqlx::query(
+        "UPDATE icon_url_scan
+            SET content_hash = $2,
+                last_fetched_at = now(),
+                fetch_error = NULL
+          WHERE icon_uri = $1",
+    )
+    .bind(uri)
+    .bind(hash)
+    .execute(pool)
+    .await
+    .context("linking icon_url_scan to content_hash")?;
+    Ok(())
+}
+
+/// Record a fetch error against the URL row without linking a hash.
+/// `last_fetched_at` is bumped so the row drops to the back of the queue
+/// rather than spinning on the next tick.
+pub async fn mark_icon_fetch_failed(pool: &PgPool, uri: &str, err: &str) -> Result<()> {
+    sqlx::query(
+        "UPDATE icon_url_scan
+            SET fetch_error = $2,
+                last_fetched_at = now()
+          WHERE icon_uri = $1",
+    )
+    .bind(uri)
+    .bind(err)
+    .execute(pool)
+    .await
+    .context("marking icon fetch failed")?;
+    Ok(())
+}
+
+/// Try to acquire an exclusive session-level advisory lock for the icon
+/// pipeline. Returns `Ok(true)` if the lock was acquired, `Ok(false)` if
+/// another session already holds it (typically: a second bootstrap or
+/// periodic-sync run started while one is still in flight).
+///
+/// Lock key is the FNV-1a-ish hash of "tokenstork-sync-icons" projected
+/// into the BIGINT range Postgres expects. Constant — any worker calling
+/// `try_acquire_icons_lock` competes on the same key. Released
+/// automatically when the session disconnects (no explicit release
+/// needed; we always shutdown the pool at end of run).
+pub async fn try_acquire_icons_lock(pool: &PgPool) -> Result<bool> {
+    let row: (bool,) = sqlx::query_as("SELECT pg_try_advisory_lock($1)")
+        .bind(SYNC_ICONS_LOCK_KEY)
+        .fetch_one(pool)
+        .await
+        .context("acquiring sync-icons advisory lock")?;
+    Ok(row.0)
+}
+
+/// Stable lock key for `try_acquire_icons_lock`. Hand-picked from the
+/// hash of "tokenstork-sync-icons" so it doesn't collide with any other
+/// advisory-lock user in this DB.
+const SYNC_ICONS_LOCK_KEY: i64 = 0x547F_69C0_4373_4F4B; // ~"TstorkSI"
+
+/// Touch the `sync_state.last_icons_run_at` heartbeat. Operator alerts off
+/// staleness of this column the way they do for `last_tail_run_at`.
+pub async fn mark_icons_run(pool: &PgPool) -> Result<()> {
+    sqlx::query(
+        "UPDATE sync_state
+            SET last_icons_run_at = now(),
+                updated_at = now()
+          WHERE id = 1",
+    )
+    .execute(pool)
+    .await
+    .context("marking icons run")?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

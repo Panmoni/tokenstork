@@ -60,3 +60,16 @@ percent-encoding = "2"
 
 # sd_notify for the tail binary's systemd Type=notify + WatchdogSec wiring.
 sd-notify = "0.4"
+
+# SHA-256 for content-addressing icons in the safety pipeline. Pure-Rust;
+# no native deps.
+sha2 = "0.10"
+
+# Image format detection + WebP transcode for the icon safety pipeline.
+# `default-features=false` strips formats we don't need (tiff, ico, etc.);
+# we keep png/jpeg/webp/gif (first-frame only). Pure-Rust WebP encode — no
+# native libwebp linkage.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
+
+# Base64 of image bytes for the Google Vision REST API request body.
+# (`base64` crate already in scope above for BCHN auth.)
