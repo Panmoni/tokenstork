@@ -1,4 +1,6 @@
 <script lang="ts">
+	import Movers24h from '$lib/components/Movers24h.svelte';
+
 	let { data } = $props();
 
 	const fmt = (n: number) => n.toLocaleString('en-US');
@@ -10,17 +12,6 @@
 			: usd >= 1_000
 				? `$${(usd / 1_000).toLocaleString('en-US', { maximumFractionDigits: 1 })}k`
 				: `$${usd.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
-
-	const fmtPctSigned = (p: number): string => {
-		const sign = p > 0 ? '+' : p < 0 ? '' : '';
-		return `${sign}${p.toLocaleString('en-US', {
-			minimumFractionDigits: 1,
-			maximumFractionDigits: 1
-		})}%`;
-	};
-
-	const moverLabel = (m: { symbol: string; name: string; categoryHex: string }): string =>
-		m.symbol || m.name || `${m.categoryHex.slice(0, 8)}…`;
 
 	const byTypeTotal = $derived(data.byType.FT + data.byType.NFT + data.byType['FT+NFT']);
 	const pct = (n: number) => (byTypeTotal === 0 ? 0 : Math.round((n / byTypeTotal) * 1000) / 10);
@@ -417,188 +408,6 @@
 		{/if}
 	</section>
 
-	<!--
-		Icon safety pipeline — counts per UNIQUE IMAGE HASH. Tooltip / detail
-		view + per-blocked-hash listing live on /moderated; this card surfaces
-		just the headline numbers + a pointer.
-	-->
-	{#if data.iconStats && data.iconStats.totalUrls > 0}
-		<section class="mb-8">
-			<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">Icon safety</h2>
-			<p class="text-sm text-slate-500 dark:text-slate-400 mb-3">
-				Every BCMR-supplied token icon is scanned for adult content + CSAM, capped at 2 MiB,
-				transcoded to static WebP, and served from our origin (never hot-linked). Counts below
-				are per unique image hash — a single hash can back many tokens.
-				<a href="/moderated#image-safety" class="text-violet-600 dark:text-violet-400 hover:underline">
-					Per-reason breakdown on /moderated
-				</a>.
-			</p>
-			<div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-				<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Cleared</div>
-					<div class="mt-1 text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-						{fmt(data.iconStats.cleared)}
-					</div>
-					<div class="text-xs text-slate-500 dark:text-slate-400 mt-1">
-						{fmt(data.iconStats.tokensWithClearedIcon)} tokens use these
-					</div>
-				</div>
-				<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Blocked</div>
-					<div class="mt-1 text-2xl font-bold text-rose-600 dark:text-rose-400">
-						{fmt(
-							data.iconStats.blockedAdult +
-								data.iconStats.blockedOversize +
-								data.iconStats.blockedUnsupported +
-								data.iconStats.blockedCsam
-						)}
-					</div>
-					<div class="text-xs text-slate-500 dark:text-slate-400 mt-1">
-						adult / oversize / format
-					</div>
-				</div>
-				<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">In review</div>
-					<div class="mt-1 text-2xl font-bold text-violet-600 dark:text-violet-400">
-						{fmt(data.iconStats.review)}
-					</div>
-					<div class="text-xs text-slate-500 dark:text-slate-400 mt-1">operator decides</div>
-				</div>
-				<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Pending</div>
-					<div class="mt-1 text-2xl font-bold text-slate-600 dark:text-slate-400">
-						{fmt(data.iconStats.pendingUrls)}
-					</div>
-					<div class="text-xs text-slate-500 dark:text-slate-400 mt-1">
-						awaiting fetch / retry
-					</div>
-				</div>
-			</div>
-		</section>
-	{/if}
-
-	<!--
-		24h Movers — top gainers, top losers, biggest TVL movers.
-		Cauldron-only; needs ≥1 price_history point both ≥23h ago and
-		within the last 23h. The empty state honestly states "Building
-		24h history" because on a fresh deploy (or after a sync gap)
-		these queries return zero rows until enough sync-cauldron ticks
-		have accumulated.
-	-->
-	<section class="mb-8">
-		<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">24h movers</h2>
-		<p class="text-sm text-slate-500 dark:text-slate-400 mb-3">
-			Biggest 24-hour price + TVL changes among Cauldron-listed tokens. Computed from the
-			oldest price_history point ≥23h ago vs. the newest point within the last 23h. Tokens
-			without two qualifying points (newly listed, or sync gap) are excluded.
-		</p>
-		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-			<!-- Top gainers -->
-			<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-				<h3 class="text-sm font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400 mb-3">
-					Top gainers
-				</h3>
-				{#if data.topGainers24h.length === 0}
-					<p class="text-xs text-slate-500 dark:text-slate-400">
-						{#if data.has24hHistory}
-							No tokens up in the last 24h.
-						{:else}
-							Building 24h history — refreshes as <code>sync-cauldron</code> ticks accumulate.
-						{/if}
-					</p>
-				{:else}
-					<ul class="space-y-2">
-						{#each data.topGainers24h as m (m.categoryHex)}
-							<li>
-								<a
-									href={`/token/${m.categoryHex}`}
-									class="flex items-baseline justify-between gap-3 hover:text-violet-600 dark:hover:text-violet-400"
-								>
-									<span class="truncate text-sm font-medium text-slate-900 dark:text-white">
-										{moverLabel(m)}
-									</span>
-									<span class="text-sm font-mono font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
-										{fmtPctSigned(m.pricePct)}
-									</span>
-								</a>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			</div>
-
-			<!-- Top losers -->
-			<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-				<h3 class="text-sm font-semibold uppercase tracking-wide text-rose-700 dark:text-rose-400 mb-3">
-					Top losers
-				</h3>
-				{#if data.topLosers24h.length === 0}
-					<p class="text-xs text-slate-500 dark:text-slate-400">
-						{#if data.has24hHistory}
-							No tokens down in the last 24h.
-						{:else}
-							Building 24h history — refreshes as <code>sync-cauldron</code> ticks accumulate.
-						{/if}
-					</p>
-				{:else}
-					<ul class="space-y-2">
-						{#each data.topLosers24h as m (m.categoryHex)}
-							<li>
-								<a
-									href={`/token/${m.categoryHex}`}
-									class="flex items-baseline justify-between gap-3 hover:text-violet-600 dark:hover:text-violet-400"
-								>
-									<span class="truncate text-sm font-medium text-slate-900 dark:text-white">
-										{moverLabel(m)}
-									</span>
-									<span class="text-sm font-mono font-semibold text-rose-600 dark:text-rose-400 whitespace-nowrap">
-										{fmtPctSigned(m.pricePct)}
-									</span>
-								</a>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			</div>
-
-			<!-- TVL movers (signed; biggest absolute % move) -->
-			<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-				<h3 class="text-sm font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-400 mb-3">
-					TVL movers
-				</h3>
-				{#if data.topTvlMovers24h.length === 0}
-					<p class="text-xs text-slate-500 dark:text-slate-400">
-						{#if data.has24hHistory}
-							No measurable TVL changes in the last 24h.
-						{:else}
-							Building 24h history — refreshes as <code>sync-cauldron</code> ticks accumulate.
-						{/if}
-					</p>
-				{:else}
-					<ul class="space-y-2">
-						{#each data.topTvlMovers24h as m (m.categoryHex)}
-							<li>
-								<a
-									href={`/token/${m.categoryHex}`}
-									class="flex items-baseline justify-between gap-3 hover:text-violet-600 dark:hover:text-violet-400"
-								>
-									<span class="truncate text-sm font-medium text-slate-900 dark:text-white">
-										{moverLabel(m)}
-									</span>
-									<span
-										class={`text-sm font-mono font-semibold whitespace-nowrap ${m.tvlPct >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}
-									>
-										{fmtPctSigned(m.tvlPct)}
-									</span>
-								</a>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			</div>
-		</div>
-	</section>
-
 	<section class="mb-8">
 		<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">Growth by month</h2>
 		<p class="text-sm text-slate-500 dark:text-slate-400 mb-3">
@@ -885,6 +694,68 @@
 			</a>
 		</div>
 	</section>
+
+	<!--
+		Icon safety pipeline — counts per UNIQUE IMAGE HASH. Per-blocked-hash
+		listing + reason breakdown live on /moderated; this card surfaces just
+		the headline numbers + a pointer. Lives at the bottom of /stats
+		because it's an operational/safety metric, not an ecosystem-growth
+		one — the engaging stuff (movers, growth, supply) leads the page.
+	-->
+	{#if data.iconStats && data.iconStats.totalUrls > 0}
+		<section class="mb-8">
+			<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">Icon safety</h2>
+			<p class="text-sm text-slate-500 dark:text-slate-400 mb-3">
+				Every BCMR-supplied token icon is scanned for adult content + CSAM, capped at 2 MiB,
+				transcoded to static WebP, and served from our origin (never hot-linked). Counts below
+				are per unique image hash — a single hash can back many tokens.
+				<a href="/moderated#image-safety" class="text-violet-600 dark:text-violet-400 hover:underline">
+					Per-reason breakdown on /moderated
+				</a>.
+			</p>
+			<div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+				<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Cleared</div>
+					<div class="mt-1 text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+						{fmt(data.iconStats.cleared)}
+					</div>
+					<div class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+						{fmt(data.iconStats.tokensWithClearedIcon)} tokens use these
+					</div>
+				</div>
+				<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Blocked</div>
+					<div class="mt-1 text-2xl font-bold text-rose-600 dark:text-rose-400">
+						{fmt(
+							data.iconStats.blockedAdult +
+								data.iconStats.blockedOversize +
+								data.iconStats.blockedUnsupported +
+								data.iconStats.blockedCsam
+						)}
+					</div>
+					<div class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+						adult / oversize / format
+					</div>
+				</div>
+				<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">In review</div>
+					<div class="mt-1 text-2xl font-bold text-violet-600 dark:text-violet-400">
+						{fmt(data.iconStats.review)}
+					</div>
+					<div class="text-xs text-slate-500 dark:text-slate-400 mt-1">operator decides</div>
+				</div>
+				<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Pending</div>
+					<div class="mt-1 text-2xl font-bold text-slate-600 dark:text-slate-400">
+						{fmt(data.iconStats.pendingUrls)}
+					</div>
+					<div class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+						awaiting fetch / retry
+					</div>
+				</div>
+			</div>
+		</section>
+	{/if}
 
 	<p class="text-xs text-slate-500 dark:text-slate-400 mt-10">
 		Counts reflect what our indexer has seen since CashTokens activation at block 792,772 (May

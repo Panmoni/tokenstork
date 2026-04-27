@@ -1,5 +1,6 @@
 <script lang="ts">
 	import TokenGrid from '$lib/components/TokenGrid.svelte';
+	import Movers24h from '$lib/components/Movers24h.svelte';
 
 	let { data } = $props();
 </script>
@@ -16,16 +17,19 @@
 </svelte:head>
 
 <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-	<div class="mb-8">
+	<div class="mb-6">
 		<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent">
 			CashTokens
 		</h1>
-		{#if data.total}
-			<p class="text-slate-600 dark:text-slate-400 mt-2">
-				{data.total.toLocaleString()} tokens indexed across the Bitcoin Cash network.
-			</p>
-		{/if}
 	</div>
+
+	<!--
+		24h movers leads the directory — same component used on /stats so
+		gainers/losers/TVL-movers stay in lockstep. Lives ABOVE the token grid
+		so visitors land on the active-trading signal first; the long
+		exhaustive directory is what they scroll to.
+	-->
+	<Movers24h movers={data.movers} />
 
 	{#if data.error}
 		<div class="text-center py-12">
