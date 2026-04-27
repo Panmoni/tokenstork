@@ -337,6 +337,82 @@
 			</div>
 		</details>
 
+		<details id="faq-icons" class="group p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 scroll-mt-20">
+			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
+				<span>How does TokenStork filter token icons?</span>
+				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
+			</summary>
+			<div class="mt-3 text-slate-600 dark:text-slate-300 space-y-2">
+				<p>
+					Token icons come from BCMR metadata that issuers publish themselves — typically as
+					<code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-xs">ipfs://</code>
+					URIs anyone on the network can fill with anything. We don't render those URLs directly
+					in your browser; instead, every icon goes through a small safety pipeline before it's
+					served, and only icons that clear every gate end up visible on the site.
+				</p>
+
+				<p class="font-semibold text-slate-700 dark:text-slate-200">What we check</p>
+				<ul class="list-disc pl-5 space-y-1">
+					<li>
+						<strong>Size.</strong> Anything larger than 2 MiB is rejected outright — both
+						to keep page weight reasonable and to short-circuit decompression-bomb images.
+					</li>
+					<li>
+						<strong>Format.</strong> Only static rasters (PNG, JPEG, WebP, GIF first-frame).
+						Animated GIF/APNG get the placeholder; SVG isn't served at all (it can carry
+						script and is its own attack surface).
+					</li>
+					<li>
+						<strong>Adult content.</strong> Each icon is run through Google Cloud Vision's
+						SafeSearch classifier. Scores above a configured threshold are auto-blocked;
+						borderline scores route to an operator-reviewed queue.
+					</li>
+					<li>
+						<strong>CSAM.</strong> Cloudflare's CSAM Scanning Tool runs against every icon
+						the moment it transits their edge — backed by NCMEC + IWF hash databases.
+						Matches are blocked at the network edge and reported automatically per US/EU
+						mandatory-reporting law.
+					</li>
+				</ul>
+
+				<p class="font-semibold text-slate-700 dark:text-slate-200">How we serve them</p>
+				<p>
+					Icons that pass every gate are transcoded to a static WebP, content-addressed by their
+					SHA-256 hash, and served from
+					<code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-xs">/icons/&lt;hash&gt;.webp</code>
+					behind a long cache. We never hot-link to the issuer's IPFS gateway from your browser —
+					all bytes go through our origin, scanned and cached.
+				</p>
+
+				<p class="font-semibold text-slate-700 dark:text-slate-200">Why some tokens show a grey placeholder</p>
+				<p>
+					Default-deny: until an icon is scanned <em>and</em> cleared, you see the placeholder.
+					Reasons a token might still show grey:
+				</p>
+				<ul class="list-disc pl-5 space-y-1">
+					<li>The icon is queued for scanning but hasn't been processed yet (new mints flip from grey to real within ~15 minutes).</li>
+					<li>The fetch failed (IPFS gateway timeout) — we retry on a future tick.</li>
+					<li>The icon was rejected for one of the reasons above.</li>
+					<li>The token has no BCMR icon at all — the issuer never published one.</li>
+				</ul>
+
+				<p class="font-semibold text-slate-700 dark:text-slate-200">Privacy</p>
+				<p>
+					The classifier sees only the icon bytes — anonymous, no user identifier, no IP, no
+					session. Bytes are processed in transit and not retained by Google for SafeSearch
+					calls. We keep the SHA-256 hash and a score; we don't keep the bytes ourselves once
+					they're either cleared (transcoded copy on disk) or blocked (deleted).
+				</p>
+
+				<p class="text-xs text-slate-500 dark:text-slate-400">
+					Spotted an icon that looks wrong (false-blocked legitimate art, or a harmful image
+					that slipped through)? Email
+					<a href="mailto:hello@panmoni.com" class="text-violet-600 dark:text-violet-400 hover:underline">hello@panmoni.com</a>
+					with the token's category hex and we'll triage.
+				</p>
+			</div>
+		</details>
+
 		<details id="faq-tvl" class="group p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 scroll-mt-20">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
 				<span>How is the headline Total TVL computed?</span>
