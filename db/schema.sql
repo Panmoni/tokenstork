@@ -520,3 +520,49 @@ CREATE INDEX IF NOT EXISTS icon_url_scan_pending_idx
 
 ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_icons_run_at TIMESTAMPTZ;
 ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_icons_backfill_through INTEGER;
+
+-- ============================================================================
+-- Mint sessions — wallet-gated CashTokens minting wizard (item #28).
+-- Each row tracks one user's progress through the 5-step mint flow:
+-- type → identity → supply → review → sign+broadcast. Resumable across
+-- browser refreshes via the wallet-cookie session; the state machine
+-- enforces forward-only progression (e.g., 'signed' → 'broadcast'
+-- requires the broadcast endpoint to actually fire).
+--
+-- Bytes-of-icon are NOT stored here. Icon staging lives separately on
+-- disk under /var/lib/tokenstork/icon-staging/<session_id>/<filename>;
+-- only the path is recorded in `icon_staging_path`. A daily cleanup
+-- timer scrubs anything older than 24h.
+-- ============================================================================
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";  -- gen_random_uuid()
+
+CREATE TABLE IF NOT EXISTS user_mint_sessions (
+  id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  cashaddr            TEXT         NOT NULL REFERENCES users(cashaddr) ON DELETE CASCADE,
+  state               TEXT         NOT NULL CHECK (state IN ('drafting','signed','broadcast','confirmed','failed','abandoned')),
+  token_type          TEXT         CHECK (token_type IN ('FT','NFT','FT+NFT') OR token_type IS NULL),
+  ticker              TEXT,
+  name                TEXT,
+  description         TEXT,
+  decimals            SMALLINT     CHECK (decimals IS NULL OR (decimals BETWEEN 0 AND 8)),
+  -- FT supply or NFT count (depending on token_type). NUMERIC(78,0) to
+  -- match the rest of our supply columns.
+  supply              NUMERIC(78,0),
+  nft_capability      TEXT         CHECK (nft_capability IN ('none','mutable','minting') OR nft_capability IS NULL),
+  nft_commitment      BYTEA,
+  -- Path on the server's filesystem to the staged icon (pre-publication).
+  -- Cleaned up after 24h by the icon-staging cleanup timer.
+  icon_staging_path   TEXT,
+  -- Populated when broadcast (step 5).
+  genesis_txid        BYTEA,
+  -- Populated when sync-tail picks up the genesis tx (= confirmed).
+  category            BYTEA        REFERENCES tokens(category) ON DELETE SET NULL,
+  created_at          TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  updated_at          TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS user_mint_sessions_user_idx
+  ON user_mint_sessions (cashaddr, state);
+CREATE INDEX IF NOT EXISTS user_mint_sessions_genesis_txid_idx
+  ON user_mint_sessions (genesis_txid)
+  WHERE genesis_txid IS NOT NULL;

@@ -9,6 +9,7 @@
 	const navigation = [
 		{ name: 'Tokens', href: '/' },
 		{ name: 'Arbitrage', href: '/arbitrage' },
+		{ name: 'Mint', href: '/mint' },
 		{ name: 'Blocks', href: '/blocks' },
 		{ name: 'Mining', href: '/mining' },
 		{ name: 'Stats', href: '/stats' },
