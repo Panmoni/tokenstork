@@ -1,0 +1,54 @@
+[Unit]
+Description=tokenstork sync-icons (rescan mode) — same-URL-different-bytes detector
+Documentation=file:///opt/tokenstork/docs/icon-safety-plan.md
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=oneshot
+User=tokenstork
+Group=tokenstork
+WorkingDirectory=/opt/tokenstork
+ExecStart=/opt/tokenstork/workers/target/release/sync-icons
+
+# ICON_MODE=rescan flips the binary to walk already-scanned URLs
+# oldest-first, re-fetch + re-hash, and flip any drift back to
+# pending so the next periodic-pending tick scans the new bytes.
+# Same binary as sync-icons.service — the mode dispatch lives in
+# the Rust code, not in two binaries.
+Environment="ICON_MODE=rescan"
+Environment="RUST_LOG=info"
+EnvironmentFile=-/etc/tokenstork/env
+
+StateDirectory=tokenstork
+StateDirectoryMode=0755
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectProc=invisible
+ProcSubset=pid
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallArchitectures=native
+UMask=0022
+ReadWritePaths=/var/lib/tokenstork
+
+# Rescan walks ICON_RESCAN_BATCH (default 500) URLs at ~35ms
+# per fetch, ~30s wall-clock typical. Generous 30-min ceiling.
+TimeoutStartSec=30min

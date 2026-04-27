@@ -1,0 +1,16 @@
+[Unit]
+Description=Run tokenstork tail-watchdog every minute
+Documentation=https://github.com/Panmoni/tokenstork
+
+[Timer]
+# 1-min cadence so a wedged sync-tail is visible to the operator
+# within ~5 min (one tick to start failing, plus the
+# TAIL_STALE_THRESHOLD_SECS=300 grace period). Cheap to run — one
+# psql round-trip per tick.
+OnBootSec=2min
+OnUnitActiveSec=1min
+Persistent=true
+Unit=tail-watchdog.service
+
+[Install]
+WantedBy=timers.target

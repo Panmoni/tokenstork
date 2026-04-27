@@ -1,0 +1,50 @@
+[Unit]
+Description=tokenstork tail-watchdog — alert on stale sync_state.last_tail_run_at
+Documentation=https://github.com/Panmoni/tokenstork
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=oneshot
+User=tokenstork
+Group=tokenstork
+WorkingDirectory=/opt/tokenstork
+ExecStart=/opt/tokenstork/workers/target/release/tail-watchdog
+
+Environment="RUST_LOG=info"
+EnvironmentFile=-/etc/tokenstork/env
+
+# Hardening — read-only worker, no filesystem writes, no network
+# beyond Postgres.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectProc=invisible
+ProcSubset=pid
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallArchitectures=native
+UMask=0077
+
+# A stale heartbeat exits with code 1 (or 2 if the column is NULL).
+# systemd records that as `Result=exit-code` + `ActiveState=failed`,
+# which is exactly the state operators dashboard for. NO restart on
+# failure — we WANT the unit to stay marked `failed` until either
+# (a) sync-tail recovers and the next watchdog tick succeeds, or
+# (b) operator runs `systemctl reset-failed tail-watchdog.service`.
+TimeoutStartSec=30s

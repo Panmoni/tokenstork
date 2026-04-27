@@ -1,0 +1,17 @@
+[Unit]
+Description=Run tokenstork sync-icons rescan weekly (Sun 03:00 UTC)
+Documentation=file:///opt/tokenstork/docs/icon-safety-plan.md
+
+[Timer]
+# Sunday 03:00 UTC. Off-hours, low chance of overlap with the weekly
+# Cauldron full-scan tick (also off-hours, but at a different anchor)
+# or with the BCMR refresh. At ICON_RESCAN_BATCH=500 / week and ~10k
+# scanned URLs, a full sweep takes ~5 weeks — slow enough to be
+# polite to public IPFS gateways, fast enough that drift is detected
+# within a tolerable window.
+OnCalendar=Sun 03:00:00 UTC
+Persistent=true
+Unit=sync-icons-rescan.service
+
+[Install]
+WantedBy=timers.target

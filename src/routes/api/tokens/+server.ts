@@ -15,6 +15,12 @@ interface TokenApiRow {
 	decimals: number;
 	description: string | null;
 	icon: string | null;
+	/// Hex of the SHA-256 of this token's icon's cleared bytes, or null
+	/// if the icon hasn't been scanned + cleared by the icon-safety
+	/// pipeline (see docs/icon-safety-plan.md). External consumers can
+	/// resolve to https://tokenstork.com/icons/<hash>.webp for a safe,
+	/// origin-served image; null means render a placeholder.
+	iconClearedHash: string | null;
 	tokenType: TokenType;
 	isVerifiedOnchain: boolean;
 	isFullyBurned: boolean;
@@ -46,6 +52,7 @@ interface DbRow {
 	is_fully_burned: boolean | null;
 	verified_at: Date | null;
 	metadata_fetched_at: Date | null;
+	icon_cleared_hash: string | null;
 }
 
 function parseLimit(raw: string | null, fallback: number, max: number): number {
@@ -147,10 +154,14 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 				s.holder_count,
 				s.has_active_minting,
 				s.is_fully_burned,
-				s.verified_at
+				s.verified_at,
+				encode(imo.content_hash, 'hex') AS icon_cleared_hash
 			FROM tokens t
 			LEFT JOIN token_metadata m ON m.category = t.category
 			LEFT JOIN token_state s    ON s.category = t.category
+			LEFT JOIN icon_url_scan ius ON ius.icon_uri = m.icon_uri
+			LEFT JOIN icon_moderation imo
+				ON imo.content_hash = ius.content_hash AND imo.state = 'cleared'
 			${whereClause}
 			ORDER BY ${sort}
 			LIMIT $${values.length + 1} OFFSET $${values.length + 2}
@@ -173,6 +184,7 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 				decimals: row.decimals ?? 0,
 				description: row.description,
 				icon: row.icon_uri,
+				iconClearedHash: row.icon_cleared_hash ?? null,
 				tokenType: row.token_type,
 				isVerifiedOnchain: row.verified_at !== null,
 				isFullyBurned: row.is_fully_burned ?? false,

@@ -230,3 +230,77 @@ pub fn synthetic_hash(uri: &str, tag: &str) -> [u8; 32] {
     h.update(uri.as_bytes());
     h.finalize().into()
 }
+
+/// Phase D — periodic re-scan outcome. Surfaced separately from
+/// [`Outcome`] because the rescan loop's failure modes are different:
+/// it never produces NSFW / cleared / blocked decisions (those are made
+/// by the pending pipeline, possibly on a future tick), only "bytes
+/// matched" / "bytes drifted" / "fetch failed".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RescanOutcome {
+    /// Hash matched the stored value. Timestamp bumped; URL drops to
+    /// the back of the rescan rotation.
+    Unchanged,
+    /// Hash differs from the stored value. URL flipped back to pending
+    /// (`content_hash = NULL`) so the next periodic-pending tick
+    /// scans the new bytes from scratch via [`process_url`]. The OLD
+    /// hash's `icon_moderation` decision and on-disk WebP are
+    /// preserved — other URIs may still legitimately point at them.
+    Drifted,
+    /// Network / HTTP failure or oversize. URL stays scanned (we still
+    /// have a valid prior hash); operator alerts off `db_errors` /
+    /// `fetch_failed` aggregates.
+    FetchFailed,
+}
+
+/// Phase D — re-scan one previously-scanned URL. See [`RescanOutcome`].
+pub async fn rescan_url(
+    pool: &PgPool,
+    http: &reqwest::Client,
+    uri: &str,
+    expected_hash: &[u8; 32],
+) -> Result<RescanOutcome> {
+    use crate::icons::FetchOutcome;
+    use crate::pg::{flip_icon_url_to_pending, mark_icon_fetch_failed, touch_icon_url_last_fetched};
+
+    let actual = match fetch_and_hash(http, uri).await {
+        FetchOutcome::Ok { sha256, .. } => sha256,
+        FetchOutcome::Oversize { observed_bytes } => {
+            // The URL used to fit; now it's oversize. Treat as a fetch
+            // failure for rescan purposes — record it but don't drop the
+            // existing decision. Operator could investigate from the
+            // fetch_error column if it persists.
+            mark_icon_fetch_failed(
+                pool,
+                uri,
+                &format!("rescan: now oversize at {} bytes", observed_bytes),
+            )
+            .await?;
+            return Ok(RescanOutcome::FetchFailed);
+        }
+        FetchOutcome::NetworkError(err) => {
+            mark_icon_fetch_failed(pool, uri, &format!("rescan: {}", err)).await?;
+            return Ok(RescanOutcome::FetchFailed);
+        }
+    };
+
+    if &actual == expected_hash {
+        touch_icon_url_last_fetched(pool, uri).await?;
+        Ok(RescanOutcome::Unchanged)
+    } else {
+        // Bytes drifted. WARN-log so the audit trail captures the
+        // event; operator can chase it down via journalctl. Do NOT
+        // surface the hash mismatch payload at info level — it's
+        // signal that someone is messing with content under a stable
+        // URL, which is interesting to attackers who'd notice the
+        // chatter.
+        tracing::warn!(
+            uri,
+            old = hex::encode(expected_hash),
+            new = hex::encode(actual),
+            "rescan: bytes drifted; flipping URL back to pending"
+        );
+        flip_icon_url_to_pending(pool, uri).await?;
+        Ok(RescanOutcome::Drifted)
+    }
+}

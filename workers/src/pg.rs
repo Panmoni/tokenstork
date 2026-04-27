@@ -243,6 +243,20 @@ pub async fn save_tail_last_block(pool: &PgPool, height: i32) -> Result<()> {
 /// event), regardless of whether new blocks were found. Lets an external
 /// watchdog distinguish "tail is alive but chain is quiet" from "tail
 /// stopped polling".
+/// Tail-staleness watchdog — read the most recent `last_tail_run_at`
+/// heartbeat. `Ok(None)` means the column has never been touched (fresh
+/// deploy, never-run worker). The watchdog binary treats both
+/// "never-touched" and "older-than-threshold" as failure states.
+pub async fn load_last_tail_run_at(pool: &PgPool) -> Result<Option<DateTime<Utc>>> {
+    let row: Option<(Option<DateTime<Utc>>,)> = sqlx::query_as(
+        "SELECT last_tail_run_at FROM sync_state WHERE id = 1",
+    )
+    .fetch_optional(pool)
+    .await
+    .context("loading sync_state.last_tail_run_at")?;
+    Ok(row.and_then(|(ts,)| ts))
+}
+
 pub async fn mark_tail_run(pool: &PgPool) -> Result<()> {
     sqlx::query(
         "UPDATE sync_state
@@ -1434,6 +1448,82 @@ pub async fn seed_icon_url_scan_from_metadata(pool: &PgPool) -> Result<u64> {
     .await
     .context("seeding icon_url_scan from token_metadata")?;
     Ok(res.rows_affected())
+}
+
+/// Phase D — periodic re-scan. Pick the oldest-scanned `icon_url_scan`
+/// rows so we walk the table on a slow rotation and catch
+/// same-URL-different-bytes attacks (a malicious gateway swapping
+/// content under a stable HTTPS URL). Returns `(icon_uri, content_hash)`
+/// pairs so the caller can compare the freshly-fetched hash against the
+/// recorded one.
+///
+/// Excludes `icon_url_scan` rows where `content_hash IS NULL` — those
+/// belong to the pending queue, not the rescan rotation. Ordered by
+/// `last_fetched_at ASC NULLS LAST` so the oldest fully-scanned URLs
+/// surface first.
+pub async fn find_oldest_scanned_icon_urls(
+    pool: &PgPool,
+    batch_size: i64,
+) -> Result<Vec<(String, [u8; 32])>> {
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        icon_uri: String,
+        content_hash: Vec<u8>,
+    }
+    let rows: Vec<Row> = sqlx::query_as(
+        "SELECT icon_uri, content_hash
+           FROM icon_url_scan
+          WHERE content_hash IS NOT NULL
+          ORDER BY last_fetched_at ASC NULLS LAST
+          LIMIT $1",
+    )
+    .bind(batch_size)
+    .fetch_all(pool)
+    .await
+    .context("finding oldest-scanned icon URLs")?;
+    let mut out = Vec::with_capacity(rows.len());
+    for r in rows {
+        if r.content_hash.len() == 32 {
+            let mut h = [0u8; 32];
+            h.copy_from_slice(&r.content_hash);
+            out.push((r.icon_uri, h));
+        }
+    }
+    Ok(out)
+}
+
+/// Phase D — touch `last_fetched_at` without changing `content_hash`. Used
+/// when a rescan re-fetches successfully and the bytes are unchanged: bump
+/// the timestamp so this URL drops to the back of the rescan queue.
+pub async fn touch_icon_url_last_fetched(pool: &PgPool, uri: &str) -> Result<()> {
+    sqlx::query(
+        "UPDATE icon_url_scan SET last_fetched_at = now() WHERE icon_uri = $1",
+    )
+    .bind(uri)
+    .execute(pool)
+    .await
+    .context("touching icon_url_scan.last_fetched_at")?;
+    Ok(())
+}
+
+/// Phase D — flip a URL row back to pending after detecting a hash drift.
+/// The OLD `icon_moderation` row (and the corresponding /icons/<old>.webp
+/// on disk) is left UNCHANGED — other URIs may still legitimately point
+/// at that hash. The pending queue's natural retry semantics will pick
+/// this URL up on the next periodic tick and re-scan from scratch.
+pub async fn flip_icon_url_to_pending(pool: &PgPool, uri: &str) -> Result<()> {
+    sqlx::query(
+        "UPDATE icon_url_scan
+            SET content_hash = NULL,
+                last_fetched_at = now(),
+                fetch_error = NULL
+          WHERE icon_uri = $1",
+    )
+    .bind(uri)
+    .execute(pool)
+    .await
+    .context("flipping icon_url_scan back to pending")?;
+    Ok(())
 }
 
 /// Idempotent insert of a single icon URL into the scan queue. Called
