@@ -533,12 +533,15 @@
 							<span class="text-sm font-medium text-slate-700 dark:text-slate-300">{label}</span>
 							<span class="text-xs text-slate-500 dark:text-slate-400 font-mono">{fmt(count as number)} / {fmt(data.metadata.total)}</span>
 						</div>
-						<div class="relative h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-							<div
-								class="absolute inset-y-0 left-0 bg-gradient-to-r from-violet-500 to-indigo-500 rounded-full"
-								style:width={`${p}%`}
-							></div>
-						</div>
+						<!--
+							SVG progress bar (was a `<div style:width=...>` overlay
+							before — refactored to SVG so we can drop
+							`style-src 'unsafe-inline'` from the CSP). 100×8
+							viewBox stretched horizontally; rect width = pct.
+						-->
+						<svg viewBox="0 0 100 8" preserveAspectRatio="none" class="block w-full h-2 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800" role="progressbar" aria-valuenow={p} aria-valuemin="0" aria-valuemax="100">
+							<rect x="0" y="0" width={p} height="8" class="fill-violet-500 dark:fill-violet-400" />
+						</svg>
 						<div class="mt-1 text-xs text-slate-500 dark:text-slate-400 font-mono">{p.toFixed(1)}%</div>
 					</div>
 				{/each}
@@ -604,17 +607,23 @@
 			</div>
 		{:else}
 			{@const supplyMax = Math.max(...data.supplyBuckets.map((b) => b.count), 1)}
+			<!--
+				Per-bucket vertical bar via SVG geometry (was
+				`<div style:height=...>` before; refactored to SVG so we can
+				drop `style-src 'unsafe-inline'` from the CSP). Each bar is
+				its own 10×100 viewBox stretched into a 5rem-tall flex cell.
+				Bar height = max(4, (count / max) * 100) — matches the prior
+				CSS-percentage idiom exactly.
+			-->
 			<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
 				<div class="grid grid-cols-3 sm:grid-cols-9 gap-3">
 					{#each data.supplyBuckets as bucket (bucket.label)}
+						{@const h = Math.max(4, (bucket.count / supplyMax) * 100)}
 						<div class="flex flex-col items-center">
-							<div class="flex items-end h-20 w-full">
-								<div
-									class="w-full rounded-t bg-violet-500 dark:bg-violet-400 transition-all"
-									style:height={`${Math.max(4, (bucket.count / supplyMax) * 100)}%`}
-									title={`${bucket.count} tokens`}
-								></div>
-							</div>
+							<svg viewBox="0 0 10 100" preserveAspectRatio="none" class="h-20 w-full block" role="img" aria-label={`${bucket.label}: ${bucket.count} tokens`}>
+								<title>{bucket.count} tokens</title>
+								<rect x="0" y={100 - h} width="10" height={h} rx="1" ry="1" class="fill-violet-500 dark:fill-violet-400 transition-all" />
+							</svg>
 							<div class="mt-2 text-[10px] font-mono text-slate-500 dark:text-slate-400 text-center">{bucket.label}</div>
 							<div class="text-sm font-semibold text-slate-900 dark:text-white">{fmt(bucket.count)}</div>
 						</div>
@@ -633,18 +642,22 @@
 		<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
 			<div class="grid grid-cols-6 gap-3">
 				{#each data.decimalsBuckets as bucket (bucket.label)}
+					{@const h = bucket.count > 0 ? Math.max(4, (bucket.count / decMax) * 100) : 0.5}
 					<div class="flex flex-col items-center">
-						<div class="flex items-end h-24 w-full">
+						<!--
+							Same SVG-bar pattern as the supply distribution chart
+							above. The 0-count case renders a sliver-thin
+							slate baseline rather than nothing, matching the
+							pre-refactor visual.
+						-->
+						<svg viewBox="0 0 10 100" preserveAspectRatio="none" class="h-24 w-full block" role="img" aria-label={`${bucket.label} decimals: ${bucket.count} tokens`}>
+							<title>{bucket.count} tokens</title>
 							{#if bucket.count > 0}
-								<div
-									class="w-full rounded-t bg-violet-500 dark:bg-violet-400 transition-all"
-									style:height={`${Math.max(4, (bucket.count / decMax) * 100)}%`}
-									title={`${bucket.count} tokens`}
-								></div>
+								<rect x="0" y={100 - h} width="10" height={h} rx="1" ry="1" class="fill-violet-500 dark:fill-violet-400 transition-all" />
 							{:else}
-								<div class="w-full h-px bg-slate-200 dark:bg-slate-700" title="0 tokens"></div>
+								<rect x="0" y={99.5} width="10" height={0.5} class="fill-slate-200 dark:fill-slate-700" />
 							{/if}
-						</div>
+						</svg>
 						<div class="mt-2 text-xs font-mono text-slate-500 dark:text-slate-400">{bucket.label}</div>
 						<div class="text-sm font-semibold text-slate-900 dark:text-white">{fmt(bucket.count)}</div>
 					</div>

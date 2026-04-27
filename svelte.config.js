@@ -44,12 +44,13 @@ const config = {
 			directives: {
 				'default-src': ['self'],
 				'script-src': ['self'],
-				// Style-src keeps `unsafe-inline` because Tailwind +
-				// component styles emit inline `style=` attributes
-				// (CLS-prevention skeletons, theme switcher, etc.) that
-				// SvelteKit's hash mode doesn't catch. Risk is low: an
-				// inline `style` can't execute code, only restyle.
-				'style-src': ['self', 'unsafe-inline'],
+				// `style-src 'self'` only — no `'unsafe-inline'`. Inline
+				// `style=""` attributes were refactored to SVG geometry
+				// (chart bars on /stats) + a CSS class on app.html's
+				// body wrapper. Any new inline-style usage will fail at
+				// browser runtime; SvelteKit's `mode: 'hash'` handles
+				// `<style>` blocks emitted by component scoping.
+				'style-src': ['self'],
 				'img-src': ['self', 'https:', 'data:'],
 				'font-src': ['self', 'data:'],
 				// connect-src needs to allow:

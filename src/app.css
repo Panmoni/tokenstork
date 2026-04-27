@@ -1,3 +1,12 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Container for SvelteKit's body-injection point. `display: contents`
+   makes the wrapper div invisible to layout — the children participate
+   directly in the body's flex/grid context. Lives in CSS instead of an
+   inline `style=""` attribute on app.html so we can drop
+   `'unsafe-inline'` from `style-src` in svelte.config.js. */
+.sk-body-wrap {
+	display: contents;
+}
