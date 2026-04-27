@@ -120,7 +120,9 @@
 				{
 					kind: 'list',
 					items: [
-						`OVH — our hosting provider, which receives standard request metadata in order to serve pages.`,
+						`Netcup — our hosting provider (Germany), which receives standard request metadata in order to serve pages.`,
+						`Cloudflare — provides our CDN + DDoS protection. CF terminates TLS at its edge and forwards requests to our origin. Cloudflare's CSAM Scanning Tool runs against every image we serve from our origin (token icons cached at /icons/<hash>.webp); known CSAM hashes are matched against NCMEC + IWF databases at the edge, and any match is auto-reported by Cloudflare per US/EU mandatory-reporting law. We never see the original bytes; we never receive a copy of the report.`,
+						`Google Cloud Vision (SafeSearch) — classifies token icon images for adult content before we serve them. Each icon's bytes are sent once, classified as a single floating-point score, and discarded by Google per their SafeSearch retention policy. We send only the icon bytes — no user identifier, no IP, no session, no cookie. Google does not use the bytes to train models per their Cloud Vision data-use terms. See Google's Cloud Vision privacy notice.`,
 						`WalletConnect — used only on the wallet-login page to broker the connection between your wallet app and the website. See WalletConnect's own policy for details.`
 					]
 				},
