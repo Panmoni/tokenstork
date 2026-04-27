@@ -418,6 +418,66 @@
 	</section>
 
 	<!--
+		Icon safety pipeline — counts per UNIQUE IMAGE HASH. Tooltip / detail
+		view + per-blocked-hash listing live on /moderated; this card surfaces
+		just the headline numbers + a pointer.
+	-->
+	{#if data.iconStats && data.iconStats.totalUrls > 0}
+		<section class="mb-8">
+			<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">Icon safety</h2>
+			<p class="text-sm text-slate-500 dark:text-slate-400 mb-3">
+				Every BCMR-supplied token icon is scanned for adult content + CSAM, capped at 2 MiB,
+				transcoded to static WebP, and served from our origin (never hot-linked). Counts below
+				are per unique image hash — a single hash can back many tokens.
+				<a href="/moderated#image-safety" class="text-violet-600 dark:text-violet-400 hover:underline">
+					Per-reason breakdown on /moderated
+				</a>.
+			</p>
+			<div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+				<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Cleared</div>
+					<div class="mt-1 text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+						{fmt(data.iconStats.cleared)}
+					</div>
+					<div class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+						{fmt(data.iconStats.tokensWithClearedIcon)} tokens use these
+					</div>
+				</div>
+				<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Blocked</div>
+					<div class="mt-1 text-2xl font-bold text-rose-600 dark:text-rose-400">
+						{fmt(
+							data.iconStats.blockedAdult +
+								data.iconStats.blockedOversize +
+								data.iconStats.blockedUnsupported +
+								data.iconStats.blockedCsam
+						)}
+					</div>
+					<div class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+						adult / oversize / format
+					</div>
+				</div>
+				<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">In review</div>
+					<div class="mt-1 text-2xl font-bold text-violet-600 dark:text-violet-400">
+						{fmt(data.iconStats.review)}
+					</div>
+					<div class="text-xs text-slate-500 dark:text-slate-400 mt-1">operator decides</div>
+				</div>
+				<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Pending</div>
+					<div class="mt-1 text-2xl font-bold text-slate-600 dark:text-slate-400">
+						{fmt(data.iconStats.pendingUrls)}
+					</div>
+					<div class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+						awaiting fetch / retry
+					</div>
+				</div>
+			</div>
+		</section>
+	{/if}
+
+	<!--
 		24h Movers — top gainers, top losers, biggest TVL movers.
 		Cauldron-only; needs ≥1 price_history point both ≥23h ago and
 		within the last 23h. The empty state honestly states "Building

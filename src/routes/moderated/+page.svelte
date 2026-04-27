@@ -4,6 +4,14 @@
 	let { data } = $props();
 
 	const fmt = (n: number) => n.toLocaleString('en-US');
+	const totalIconBlocked = $derived(
+		data.iconStats
+			? data.iconStats.blockedAdult +
+				data.iconStats.blockedOversize +
+				data.iconStats.blockedUnsupported +
+				data.iconStats.blockedCsam
+			: 0
+	);
 
 	const fmtDate = (unix: number): string => {
 		const d = new Date(unix * 1000);
@@ -47,6 +55,79 @@
 			can see what we filter and why. To report a token, use the report link on its detail page.
 		</p>
 	</div>
+
+	{#if data.iconStats && data.iconStats.totalUrls > 0}
+		<!--
+			Image-safety transparency card. Counts are per UNIQUE IMAGE HASH
+			(issuers reuse icons across categories). The bigger
+			"tokensWithClearedIcon" footer shows the per-token rollup.
+			Deliberately does NOT list individual blocked icons — the goal is
+			a summary, not a directory of removed content.
+		-->
+		<section id="image-safety" class="mb-8 scroll-mt-20">
+			<h2 class="text-2xl font-bold text-slate-900 dark:text-white">Image safety</h2>
+			<p class="text-slate-600 dark:text-slate-400 mt-2 mb-4 max-w-3xl text-sm">
+				Every token icon is fetched, hashed, and scanned before it's served. We block adult
+				content and CSAM (the latter via Cloudflare's edge-resident NCMEC/IWF hash matcher),
+				reject oversize files (&gt; 2 MiB) and non-raster formats (SVG, AVIF, ICO, …), and route
+				borderline scores to an operator review queue. Cleared icons are transcoded to static
+				WebP and served from our origin — never hot-linked from issuer-controlled URLs. See the
+				<a href="/faq#faq-icons" class="text-violet-600 dark:text-violet-400 hover:underline"
+					>FAQ entry</a
+				> for the full pipeline.
+			</p>
+			<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+				<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Cleared</div>
+					<div class="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+						{fmt(data.iconStats.cleared)}
+					</div>
+					<div class="text-xs text-slate-500 dark:text-slate-400 mt-1">unique images on disk</div>
+				</div>
+				<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Blocked: adult</div>
+					<div class="text-2xl font-bold text-rose-600 dark:text-rose-400">
+						{fmt(data.iconStats.blockedAdult)}
+					</div>
+					<div class="text-xs text-slate-500 dark:text-slate-400 mt-1">NSFW score &ge; 0.9</div>
+				</div>
+				<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Blocked: CSAM</div>
+					<div class="text-2xl font-bold text-rose-600 dark:text-rose-400">
+						{fmt(data.iconStats.blockedCsam)}
+					</div>
+					<div class="text-xs text-slate-500 dark:text-slate-400 mt-1">edge-detected by Cloudflare</div>
+				</div>
+				<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Blocked: oversize</div>
+					<div class="text-2xl font-bold text-amber-600 dark:text-amber-400">
+						{fmt(data.iconStats.blockedOversize)}
+					</div>
+					<div class="text-xs text-slate-500 dark:text-slate-400 mt-1">over 2 MiB cap</div>
+				</div>
+				<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Blocked: format</div>
+					<div class="text-2xl font-bold text-amber-600 dark:text-amber-400">
+						{fmt(data.iconStats.blockedUnsupported)}
+					</div>
+					<div class="text-xs text-slate-500 dark:text-slate-400 mt-1">SVG / AVIF / ICO / corrupt</div>
+				</div>
+				<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">In review</div>
+					<div class="text-2xl font-bold text-violet-600 dark:text-violet-400">
+						{fmt(data.iconStats.review)}
+					</div>
+					<div class="text-xs text-slate-500 dark:text-slate-400 mt-1">awaiting operator decision</div>
+				</div>
+			</div>
+			<p class="text-xs text-slate-500 dark:text-slate-400 mt-3">
+				{fmt(data.iconStats.tokensWithClearedIcon)} tokens render a real WebP in the directory
+				today; {fmt(totalIconBlocked)} unique images blocked total ({fmt(
+					data.iconStats.pendingUrls
+				)} URLs still pending fetch / retry).
+			</p>
+		</section>
+	{/if}
 
 	{#if data.error}
 		<div class="text-center py-12">

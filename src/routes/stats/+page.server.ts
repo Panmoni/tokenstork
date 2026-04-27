@@ -23,6 +23,7 @@
 import { query } from '$lib/server/db';
 import { NOT_MODERATED_CLAUSE } from '$lib/moderation';
 import type { CauldronGlobalStats } from '$lib/server/external';
+import { getIconModerationStats } from '$lib/server/iconStats';
 import type { PageServerLoad } from './$types';
 
 interface TypeCount {
@@ -111,7 +112,11 @@ const EMPTY_CAULDRON_STATS: CauldronGlobalStats = {
 
 export const load: PageServerLoad = async ({ parent, fetch }) => {
 	const bchPriceP = fetchBchPrice(fetch);
-	const [parentData, pageResults, bchPriceUSD] = await Promise.all([
+	// Icon-pipeline stats live alongside the rest of the page metrics; fired
+	// in parallel via the same allSettled batch so a failure of any one
+	// query doesn't tank the page (each card has its own empty-state).
+	const iconStatsP = getIconModerationStats();
+	const [parentData, pageResults, bchPriceUSD, iconStats] = await Promise.all([
 		parent(),
 		Promise.allSettled([
 			query<TypeCount>(
@@ -408,7 +413,8 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 				 ORDER BY sort_order`
 			)
 		]),
-		bchPriceP
+		bchPriceP,
+		iconStatsP
 	]);
 
 	// Destructure all 16 allSettled results by name. Magic-number indexing
@@ -652,6 +658,7 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		topLosers24h,
 		topTvlMovers24h,
 		has24hHistory,
-		supplyBuckets
+		supplyBuckets,
+		iconStats
 	};
 };

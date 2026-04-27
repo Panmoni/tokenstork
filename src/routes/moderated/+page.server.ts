@@ -8,6 +8,7 @@
 
 import { query, hexFromBytes } from '$lib/server/db';
 import { REPORT_REASONS_SET, type ReportReason } from '$lib/moderation';
+import { getIconModerationStats } from '$lib/server/iconStats';
 import type { PageServerLoad } from './$types';
 
 interface DbRow {
@@ -29,8 +30,12 @@ export interface ModeratedRow {
 }
 
 export const load: PageServerLoad = async () => {
-	try {
-		const res = await query<DbRow>(
+	// Both queries are independent + small. Run in parallel; degrade
+	// independently — the icon-stats card and the token-moderation table
+	// are surfaced separately and a failure of one shouldn't take out the
+	// other.
+	const [tokensRes, iconStats] = await Promise.allSettled([
+		query<DbRow>(
 			`SELECT t.category,
 			        m.name,
 			        m.symbol,
@@ -41,9 +46,14 @@ export const load: PageServerLoad = async () => {
 			   JOIN tokens t           ON t.category = mod.category
 			   LEFT JOIN token_metadata m ON m.category = mod.category
 			  ORDER BY mod.hidden_at DESC`
-		);
+		),
+		getIconModerationStats()
+	]);
 
-		const rows: ModeratedRow[] = res.rows.map((r) => ({
+	let rows: ModeratedRow[] = [];
+	let error: string | null = null;
+	if (tokensRes.status === 'fulfilled') {
+		rows = tokensRes.value.rows.map((r) => ({
 			id: hexFromBytes(r.category)!,
 			name: r.name,
 			symbol: r.symbol,
@@ -51,10 +61,14 @@ export const load: PageServerLoad = async () => {
 			reason: REPORT_REASONS_SET.has(r.reason) ? (r.reason as ReportReason) : 'other',
 			hiddenAt: Math.floor(r.hidden_at.getTime() / 1000)
 		}));
-
-		return { rows, error: null as string | null };
-	} catch (err) {
-		console.error('[moderated] load failed:', err);
-		return { rows: [] as ModeratedRow[], error: 'Could not load the moderation list.' };
+	} else {
+		console.error('[moderated] load failed:', tokensRes.reason);
+		error = 'Could not load the moderation list.';
 	}
+
+	return {
+		rows,
+		error,
+		iconStats: iconStats.status === 'fulfilled' ? iconStats.value : null
+	};
 };
