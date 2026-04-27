@@ -64,7 +64,13 @@ const config = {
 					'wss://relay.walletconnect.com',
 					'wss://relay.walletconnect.org',
 					'https://*.walletconnect.com',
-					'https://*.walletconnect.org'
+					'https://*.walletconnect.org',
+					// Mint wizard (item #28) lets users pin their BCMR JSON
+					// + icon directly to IPFS using their OWN API key. The
+					// upload runs browser → provider, not via our backend,
+					// so the user's key never reaches our server.
+					'https://api.web3.storage',
+					'https://api.pinata.cloud'
 				],
 				// frame-src allows the WalletConnect verification iframe.
 				// Distinct from frame-ancestors (which controls who can

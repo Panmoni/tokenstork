@@ -555,8 +555,16 @@ CREATE TABLE IF NOT EXISTS user_mint_sessions (
   icon_staging_path   TEXT,
   -- Populated when broadcast (step 5).
   genesis_txid        BYTEA,
-  -- Populated when sync-tail picks up the genesis tx (= confirmed).
-  category            BYTEA        REFERENCES tokens(category) ON DELETE SET NULL,
+  -- Populated by the wizard immediately post-broadcast (the category id
+  -- is deterministic from the funding outpoint, no need to wait for
+  -- chain confirmation). NOT a foreign key into `tokens(category)` —
+  -- the tokens row only appears after sync-tail processes the genesis
+  -- tx, ~1 block later, so a FK here would force an UPDATE-fail right
+  -- when the wizard wants to record success. Informational coupling
+  -- only; if a token row vanishes (rare — moderation hides via
+  -- token_moderation, doesn't drop), the session row keeps its
+  -- categoryHex orphaned, which is harmless.
+  category            BYTEA,
   created_at          TIMESTAMPTZ  NOT NULL DEFAULT now(),
   updated_at          TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
@@ -566,3 +574,20 @@ CREATE INDEX IF NOT EXISTS user_mint_sessions_user_idx
 CREATE INDEX IF NOT EXISTS user_mint_sessions_genesis_txid_idx
   ON user_mint_sessions (genesis_txid)
   WHERE genesis_txid IS NOT NULL;
+
+-- Defensive drop of an earlier-deployment FK on user_mint_sessions.category
+-- (was REFERENCES tokens(category) ON DELETE SET NULL). The wizard sets
+-- categoryHex immediately post-broadcast — before sync-tail creates the
+-- tokens row — so the FK caused a guaranteed UPDATE failure right when
+-- the wizard recorded success. Idempotent: if the constraint was never
+-- created (fresh deploy after this edit), this is a no-op.
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'user_mint_sessions'::regclass
+          AND conname = 'user_mint_sessions_category_fkey'
+    ) THEN
+        ALTER TABLE user_mint_sessions DROP CONSTRAINT user_mint_sessions_category_fkey;
+    END IF;
+END $$;
