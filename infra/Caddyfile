@@ -32,6 +32,20 @@ tokenstork.com {
 	@assets path *.ico *.png *.webmanifest *.svg *.txt
 	header @assets Cache-Control "public, max-age=86400"
 
+	# Icon safety pipeline (item #22 / docs/icon-safety-plan.md). Cleared
+	# token icons live at /var/lib/tokenstork/icons/<sha256>.webp,
+	# served by Caddy directly without proxying through the Node app.
+	# Filenames are content-addressed by SHA-256, so the URL → bytes
+	# mapping is immutable: a year-long Cache-Control with `immutable`
+	# is correct. Cloudflare's CSAM Scanning Tool runs against bytes
+	# transiting the CF edge, which is the entire point of serving
+	# from our origin instead of hot-linking to ipfs.io.
+	handle_path /icons/* {
+		header Cache-Control "public, max-age=31536000, immutable"
+		root * /var/lib/tokenstork/icons
+		file_server
+	}
+
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 		X-Content-Type-Options "nosniff"

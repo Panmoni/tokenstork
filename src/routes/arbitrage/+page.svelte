@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { getIPFSUrl, stripEmoji, formatMarketCap } from '$lib/format';
+	import { stripEmoji, formatMarketCap } from '$lib/format';
+	import { iconHrefFor } from '$lib/icons';
 
 	type VenueId = 'cauldron' | 'fex' | 'tapswap';
 
@@ -149,11 +150,7 @@
 			{#each data.rows as r (r.id)}
 				<div class="grid grid-cols-[2.4fr_0.9fr_0.9fr_0.9fr_0.7fr_0.8fr_1.4fr] gap-2 px-4 py-3 border-b border-slate-100 dark:border-slate-800 last:border-b-0 items-center hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition-colors">
 					<a href={`/token/${r.id}`} class="flex items-center gap-3 min-w-0 no-underline group">
-						{#if r.icon}
-							<img src={getIPFSUrl(r.icon)} alt="" class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 shrink-0" loading="lazy" />
-						{:else}
-							<div class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 shrink-0" aria-hidden="true"></div>
-						{/if}
+						<img src={iconHrefFor(r.icon, r.iconClearedHash)} alt="" class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 shrink-0" loading="lazy" />
 						<div class="min-w-0">
 							<div class="font-semibold text-slate-900 dark:text-white truncate group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
 								{stripEmoji(r.name) || '—'}
@@ -218,11 +215,7 @@
 			{#each data.rows as r (r.id)}
 				<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
 					<a href={`/token/${r.id}`} class="flex items-center gap-3 mb-3 no-underline">
-						{#if r.icon}
-							<img src={getIPFSUrl(r.icon)} alt="" class="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800" />
-						{:else}
-							<div class="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800" aria-hidden="true"></div>
-						{/if}
+						<img src={iconHrefFor(r.icon, r.iconClearedHash)} alt="" class="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800" />
 						<div class="min-w-0 flex-1">
 							<div class="font-semibold text-slate-900 dark:text-white truncate">
 								{stripEmoji(r.name) || '—'}

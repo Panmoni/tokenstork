@@ -1,0 +1,17 @@
+[Unit]
+Description=Run tokenstork sync-icons every 15 minutes
+Documentation=file:///opt/tokenstork/docs/icon-safety-plan.md
+
+[Timer]
+# 15-min cadence keeps the worst-case mint→placeholder→real-icon
+# window short: BCMR worker discovers a new icon on its 4h tick and
+# seeds icon_url_scan; this timer picks it up within ≤15min. The
+# binary's first action is an advisory-lock check, so a slow tick
+# being lapped by the next fire just exits cleanly with no work done.
+OnBootSec=2min
+OnUnitActiveSec=15min
+Persistent=true
+Unit=sync-icons.service
+
+[Install]
+WantedBy=timers.target

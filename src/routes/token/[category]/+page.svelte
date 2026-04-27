@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { getIPFSUrl, humanizeNumericSupply, formatMarketCap, stripEmoji } from '$lib/format';
+	import { humanizeNumericSupply, formatMarketCap, stripEmoji } from '$lib/format';
+	import { iconHrefFor } from '$lib/icons';
 	import {
 		REPORT_REASONS,
 		REPORT_REASON_LABELS,
@@ -169,11 +170,7 @@
 
 <main class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 	<div class="flex items-start gap-4 mb-6">
-		{#if token.icon}
-			<img src={getIPFSUrl(token.icon)} alt={token.name ?? ''} class="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800" />
-		{:else}
-			<div class="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800"></div>
-		{/if}
+		<img src={iconHrefFor(token.icon, token.iconClearedHash)} alt={token.name ?? ''} class="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800" />
 		<div class="flex-1 min-w-0">
 			<h1 class="text-3xl font-bold text-slate-900 dark:text-white truncate flex items-center gap-2">
 				<StarButton categoryHex={token.id} size="md" />

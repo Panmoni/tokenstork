@@ -28,8 +28,8 @@ use tracing_subscriber::EnvFilter;
 use workers::bcmr::BcmrClient;
 use workers::env::parse_or_default;
 use workers::pg::{
-    self, TokenMetadataWrite, bytes_to_hex, mark_bcmr_run, pick_bcmr_batch, pool_from_env,
-    upsert_token_metadata,
+    self, TokenMetadataWrite, bytes_to_hex, ensure_icon_url_scan_row, mark_bcmr_run,
+    pick_bcmr_batch, pool_from_env, upsert_token_metadata,
 };
 
 const DEFAULT_BATCH: i32 = 200;
@@ -52,6 +52,25 @@ async fn hydrate_one(
     match bcmr.get_token_metadata(&category_hex).await? {
         Some(raw) => {
             let flat = raw.into_flat(&category_hex);
+            // Seed the icon-pipeline queue for any new icon URI before
+            // upserting metadata. The downstream sync-icons.timer (15-min
+            // cadence) picks up new rows on its next tick — so a
+            // newly-minted token's icon flips from placeholder to real
+            // WebP within ~4h 15m worst case (this 4h tick + sync-icons'
+            // 15m). Idempotent: same URI seen twice is a no-op.
+            if let Some(uri) = flat.icon_uri.as_deref()
+                && let Err(e) = ensure_icon_url_scan_row(pool, uri).await
+            {
+                // Don't fail the whole BCMR row over an icon-queue
+                // hiccup — the icon pipeline can be re-seeded any time
+                // via seed_icon_url_scan_from_metadata().
+                error!(
+                    category = %category_hex,
+                    uri,
+                    error = %e,
+                    "could not seed icon_url_scan row; will re-seed on next bootstrap"
+                );
+            }
             let w = TokenMetadataWrite {
                 category: category.to_vec(),
                 name: flat.name,

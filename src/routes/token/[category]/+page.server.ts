@@ -22,6 +22,7 @@ interface TokenRow {
 	decimals: number | null;
 	description: string | null;
 	icon_uri: string | null;
+	icon_cleared_hash: string | null;
 	current_supply: string | null;
 	live_utxo_count: number | null;
 	live_nft_count: number | null;
@@ -166,6 +167,7 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 			m.decimals,
 			m.description,
 			m.icon_uri,
+			encode(imo.content_hash, 'hex') AS icon_cleared_hash,
 			s.current_supply::text AS current_supply,
 			s.live_utxo_count,
 			s.live_nft_count,
@@ -178,6 +180,9 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 		   LEFT JOIN token_metadata  m   ON m.category  = t.category
 		   LEFT JOIN token_state     s   ON s.category  = t.category
 		   LEFT JOIN token_moderation mod ON mod.category = t.category
+		   LEFT JOIN icon_url_scan ius ON ius.icon_uri = m.icon_uri
+		   LEFT JOIN icon_moderation imo
+		     ON imo.content_hash = ius.content_hash AND imo.state = 'cleared'
 		  WHERE t.category = $1`,
 		[categoryBytes]
 	);
@@ -341,6 +346,7 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 			decimals,
 			description: row.description ?? bcmr?.description ?? null,
 			icon: row.icon_uri ?? bcmr?.iconUri ?? null,
+			iconClearedHash: row.icon_cleared_hash ?? null,
 			currentSupply: row.current_supply,
 			liveUtxoCount: row.live_utxo_count,
 			liveNftCount: row.live_nft_count,

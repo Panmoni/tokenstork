@@ -38,6 +38,7 @@ interface DbRow {
 	symbol: string | null;
 	decimals: number | null;
 	icon_uri: string | null;
+	icon_cleared_hash: string | null;
 	cauldron_price_sats: number | null;
 	cauldron_tvl_satoshis: string | null;
 	fex_price_sats: number | null;
@@ -54,6 +55,7 @@ export interface ArbitrageRow {
 	symbol: string | null;
 	decimals: number;
 	icon: string | null;
+	iconClearedHash: string | null;
 
 	// Per-venue USD prices. 0 means "not on this venue this run". Use
 	// the *Present flags below to disambiguate "not listed" from
@@ -168,6 +170,7 @@ export const load: PageServerLoad = async ({ url, fetch }) => {
 		       m.symbol,
 		       m.decimals,
 		       m.icon_uri,
+		       encode(imo.content_hash, 'hex') AS icon_cleared_hash,
 		       vc.price_sats           AS cauldron_price_sats,
 		       vc.tvl_satoshis::text   AS cauldron_tvl_satoshis,
 		       vf.price_sats           AS fex_price_sats,
@@ -181,6 +184,9 @@ export const load: PageServerLoad = async ({ url, fetch }) => {
 		    ON vf.category = t.category AND vf.venue = 'fex' AND vf.price_sats IS NOT NULL
 		  LEFT JOIN tapswap_min tm ON tm.category = t.category
 		  LEFT JOIN token_metadata m ON m.category = t.category
+		  LEFT JOIN icon_url_scan ius ON ius.icon_uri = m.icon_uri
+		  LEFT JOIN icon_moderation imo
+		    ON imo.content_hash = ius.content_hash AND imo.state = 'cleared'
 		 WHERE ${NOT_MODERATED_CLAUSE}
 		   AND (
 		     (vc.price_sats IS NOT NULL)::int
@@ -234,6 +240,7 @@ export const load: PageServerLoad = async ({ url, fetch }) => {
 				symbol: row.symbol,
 				decimals,
 				icon: row.icon_uri,
+				iconClearedHash: row.icon_cleared_hash ?? null,
 				cauldronPriceUSD: usdFromPriceSats(cs),
 				fexPriceUSD: usdFromPriceSats(fs),
 				tapswapPriceUSD: usdFromPriceSats(ts),

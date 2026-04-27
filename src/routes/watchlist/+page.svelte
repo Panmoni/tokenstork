@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { getIPFSUrl, stripEmoji, formatVenuePriceUSD, formatVenueTvlUSD } from '$lib/format';
+	import { stripEmoji, formatVenuePriceUSD, formatVenueTvlUSD } from '$lib/format';
+	import { iconHrefFor } from '$lib/icons';
 	import { bchPrice } from '$lib/stores/bchPrice';
 	import StarButton from '$lib/components/StarButton.svelte';
 
@@ -89,11 +90,7 @@
 					<div class="flex items-center gap-2 min-w-0">
 						<StarButton categoryHex={r.id} />
 						<a href={`/token/${r.id}`} class="flex items-center gap-3 min-w-0 no-underline group flex-1">
-							{#if r.icon}
-								<img src={getIPFSUrl(r.icon)} alt="" class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 shrink-0" loading="lazy" />
-							{:else}
-								<div class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 shrink-0" aria-hidden="true"></div>
-							{/if}
+							<img src={iconHrefFor(r.icon, r.iconClearedHash)} alt="" class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 shrink-0" loading="lazy" />
 							<div class="min-w-0">
 								<div class="font-semibold text-slate-900 dark:text-white truncate group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
 									{stripEmoji(r.name) || '—'}

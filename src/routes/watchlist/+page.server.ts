@@ -21,6 +21,7 @@ interface DbRow {
 	symbol: string | null;
 	decimals: number | null;
 	icon_uri: string | null;
+	icon_cleared_hash: string | null;
 	token_type: 'FT' | 'NFT' | 'FT+NFT';
 	cauldron_price_sats: number | null;
 	cauldron_tvl_satoshis: string | null;
@@ -36,6 +37,7 @@ export interface WatchlistRow {
 	symbol: string | null;
 	decimals: number;
 	icon: string | null;
+	iconClearedHash: string | null;
 	tokenType: 'FT' | 'NFT' | 'FT+NFT';
 	cauldronPriceSats: number | null;
 	cauldronTvlSatoshis: number | null;
@@ -73,7 +75,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 			   WHERE o.has_category = t.category AND o.status = 'open')
 			                       AS tapswap_listing_count,
 			vf.price_sats          AS fex_price_sats,
-			vf.tvl_satoshis::text  AS fex_tvl_satoshis
+			vf.tvl_satoshis::text  AS fex_tvl_satoshis,
+			encode(imo.content_hash, 'hex') AS icon_cleared_hash
 		   FROM user_watchlist w
 		   JOIN tokens t            ON t.category = w.category
 		   LEFT JOIN token_metadata m ON m.category = t.category
@@ -81,6 +84,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 		     ON vc.category = t.category AND vc.venue = 'cauldron'
 		   LEFT JOIN token_venue_listings vf
 		     ON vf.category = t.category AND vf.venue = 'fex'
+		   LEFT JOIN icon_url_scan ius ON ius.icon_uri = m.icon_uri
+		   LEFT JOIN icon_moderation imo
+		     ON imo.content_hash = ius.content_hash AND imo.state = 'cleared'
 		  WHERE w.cashaddr = $1
 		    AND ${NOT_MODERATED_CLAUSE}
 		  ORDER BY w.added_at DESC`,
@@ -94,6 +100,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		symbol: r.symbol,
 		decimals: r.decimals ?? 0,
 		icon: r.icon_uri,
+		iconClearedHash: r.icon_cleared_hash ?? null,
 		tokenType: r.token_type,
 		cauldronPriceSats: r.cauldron_price_sats,
 		cauldronTvlSatoshis: r.cauldron_tvl_satoshis ? Number(r.cauldron_tvl_satoshis) : null,

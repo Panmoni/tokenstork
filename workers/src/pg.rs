@@ -1436,6 +1436,26 @@ pub async fn seed_icon_url_scan_from_metadata(pool: &PgPool) -> Result<u64> {
     Ok(res.rows_affected())
 }
 
+/// Idempotent insert of a single icon URL into the scan queue. Called
+/// from `sync-bcmr` after upserting `token_metadata` so newly-discovered
+/// icon URIs land in the queue without waiting for the next bootstrap
+/// or for the periodic worker's seed pass. Empty / whitespace-only URIs
+/// are no-ops.
+pub async fn ensure_icon_url_scan_row(pool: &PgPool, icon_uri: &str) -> Result<()> {
+    let trimmed = icon_uri.trim();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+    sqlx::query(
+        "INSERT INTO icon_url_scan (icon_uri) VALUES ($1) ON CONFLICT (icon_uri) DO NOTHING",
+    )
+    .bind(trimmed)
+    .execute(pool)
+    .await
+    .context("ensuring icon_url_scan row")?;
+    Ok(())
+}
+
 /// Pull a batch of pending icon URLs to scan. "Pending" = no content_hash
 /// recorded yet OR a previous fetch error needs retry. Oldest first
 /// (NULLS FIRST means never-fetched rows lead).

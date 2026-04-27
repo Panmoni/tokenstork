@@ -51,6 +51,13 @@ export interface TokenApiRow {
 	// Last 7 days of Cauldron price points in sats, oldest-first. Rendered
 	// as an SVG sparkline. Empty array when history is missing.
 	sparklinePoints: number[];
+
+	// Icon safety pipeline (item #22 / docs/icon-safety-plan.md): hex of
+	// the SHA-256 content hash for this icon's cleared WebP, or null if
+	// the icon hasn't been scanned + cleared yet. UI helper
+	// $lib/icons.ts#iconHrefFor consumes this — null → placeholder,
+	// otherwise → /icons/<hex>.webp served from our origin.
+	iconClearedHash: string | null;
 }
 
 export interface TokensResponse {

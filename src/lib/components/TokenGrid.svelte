@@ -2,12 +2,12 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import {
-		getIPFSUrl,
 		humanizeNumericSupply,
 		formatVenuePriceUSD,
 		formatVenueTvlUSD,
 		stripEmoji
 	} from '$lib/format';
+	import { iconHrefFor } from '$lib/icons';
 	import { bchPrice } from '$lib/stores/bchPrice';
 	import FormatCategory from './FormatCategory.svelte';
 	import Sparkline from './Sparkline.svelte';
@@ -249,11 +249,7 @@
 				<div class="flex items-center gap-2 min-w-0">
 					<StarButton categoryHex={token.id} />
 					<a href={`/token/${token.id}`} class="flex items-center gap-3 min-w-0 no-underline group flex-1">
-					{#if token.icon}
-						<img src={getIPFSUrl(token.icon)} alt="" class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800" loading="lazy" />
-					{:else}
-						<div class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800" aria-hidden="true"></div>
-					{/if}
+					<img src={iconHrefFor(token.icon, token.iconClearedHash)} alt="" class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800" loading="lazy" />
 					<div class="min-w-0">
 						<div class="font-semibold text-slate-900 dark:text-white truncate group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
 							{stripEmoji(token.name) || '—'}
@@ -313,11 +309,7 @@
 				<a href={`/token/${token.id}`} class="block no-underline">
 					<div class="flex items-start justify-between mb-3 pr-8">
 						<div class="flex items-center gap-3 min-w-0">
-							{#if token.icon}
-								<img src={getIPFSUrl(token.icon)} alt="" class="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800" />
-							{:else}
-								<div class="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800" aria-hidden="true"></div>
-							{/if}
+							<img src={iconHrefFor(token.icon, token.iconClearedHash)} alt="" class="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800" />
 							<div class="min-w-0">
 								<div class="font-semibold text-slate-900 dark:text-white truncate">{stripEmoji(token.name) || '—'}</div>
 								<div class="text-sm text-slate-500 font-mono">{stripEmoji(token.symbol)}</div>

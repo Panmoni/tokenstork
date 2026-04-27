@@ -38,6 +38,11 @@ interface DbRow {
 	price_sats_7d_ago: number | null;
 	// Last-7d points as a Postgres double-precision array, oldest first.
 	sparkline_points: number[] | null;
+	// Icon safety pipeline (item #22): hex of the cleared content hash
+	// for this token's icon, or NULL if the icon hasn't been scanned and
+	// cleared. Drives the placeholder vs /icons/<hash>.webp decision in
+	// the UI helper $lib/icons.ts#iconHrefFor.
+	icon_cleared_hash: string | null;
 }
 
 // Bucket names by "quality" so the directory opens with recognisable
@@ -269,6 +274,15 @@ export const load: PageServerLoad = async ({ url }) => {
 			 WHERE category = t.category AND venue = 'cauldron'
 			   AND ts > now() - INTERVAL '7 days'
 		) ph_spark ON true
+		-- Icon safety pipeline (item #22): chain through icon_url_scan and
+		-- icon_moderation to surface a per-token cleared-hash. The
+		-- state=cleared predicate on the JOIN makes the column NULL for
+		-- any URL that was not scanned, was blocked, or is in review.
+		-- Default-deny: UI renders the placeholder unless this is non-null.
+		LEFT JOIN icon_url_scan ius ON ius.icon_uri = m.icon_uri
+		LEFT JOIN icon_moderation imo
+			ON imo.content_hash = ius.content_hash
+			AND imo.state = 'cleared'
 	`;
 
 	try {
@@ -308,7 +322,8 @@ export const load: PageServerLoad = async ({ url }) => {
 				ph_1h.price_sats   AS price_sats_1h_ago,
 				ph_24h.price_sats  AS price_sats_24h_ago,
 				ph_7d.price_sats   AS price_sats_7d_ago,
-				ph_spark.points    AS sparkline_points
+				ph_spark.points    AS sparkline_points,
+				encode(imo.content_hash, 'hex') AS icon_cleared_hash
 			   ${fromJoins}
 			   ${whereClause}
 			   ORDER BY ${searchOrderPrefix}${sort}
@@ -383,7 +398,8 @@ export const load: PageServerLoad = async ({ url }) => {
 				priceChange1hPct,
 				priceChange24hPct,
 				priceChange7dPct,
-				sparklinePoints
+				sparklinePoints,
+				iconClearedHash: row.icon_cleared_hash ?? null
 			};
 		});
 
