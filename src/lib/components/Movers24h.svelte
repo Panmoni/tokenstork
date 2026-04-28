@@ -28,12 +28,21 @@
 </script>
 
 <section class="mb-8">
-	<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">24h movers</h2>
-	<p class="text-sm text-slate-500 dark:text-slate-400 mb-3">
-		Biggest 24-hour price + TVL changes among Cauldron-listed tokens. Computed from the oldest
-		price_history point ≥23h ago vs. the newest point within the last 23h. Tokens without two
-		qualifying points (newly listed, or sync gap) are excluded.
-	</p>
+	<div class="flex items-center gap-1.5 mb-3">
+		<h2 class="text-xl font-semibold text-slate-900 dark:text-white">24h movers</h2>
+		<button
+			type="button"
+			class="text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
+			aria-label="About 24h movers"
+			title="Biggest 24-hour price + TVL changes among Cauldron-listed tokens. Computed from the oldest price_history point ≥23h ago vs. the newest point within the last 23h. Tokens without two qualifying points (newly listed, or sync gap) are excluded."
+		>
+			<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4" aria-hidden="true">
+				<circle cx="12" cy="12" r="10" />
+				<line x1="12" y1="16" x2="12" y2="12" />
+				<line x1="12" y1="8" x2="12.01" y2="8" />
+			</svg>
+		</button>
+	</div>
 	<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 		<!-- Top gainers -->
 		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
