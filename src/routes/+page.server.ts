@@ -4,6 +4,7 @@
 import { query, hexFromBytes } from '$lib/server/db';
 import { computeMcapTvlThresholdSats } from '$lib/server/mcapThreshold';
 import { getMovers24h } from '$lib/server/movers';
+import { getVoteLeaderboards } from '$lib/server/votes';
 import { NOT_MODERATED_CLAUSE } from '$lib/moderation';
 import type { PageServerLoad } from './$types';
 import type { TokenApiRow, TokenType } from '$lib/types';
@@ -433,10 +434,10 @@ export const load: PageServerLoad = async ({ url }) => {
 			};
 		});
 
-		// 24h movers — fired in parallel-ish via getMovers24h(), which has its
-		// own internal try/catch so a movers query failure degrades to an
-		// empty card on the page rather than a homepage error.
-		const movers = await getMovers24h();
+		// 24h movers + vote leaderboards — fired in parallel; each helper
+		// has its own internal try/catch so a single failure degrades to
+		// an empty card rather than a homepage error.
+		const [movers, voteLeaders] = await Promise.all([getMovers24h(), getVoteLeaderboards()]);
 
 		return {
 			tokens,
@@ -445,6 +446,7 @@ export const load: PageServerLoad = async ({ url }) => {
 			offset,
 			mcapTvlThresholdSats,
 			movers,
+			voteLeaders,
 			error: null
 		};
 	} catch (err) {
@@ -456,6 +458,7 @@ export const load: PageServerLoad = async ({ url }) => {
 			offset: 0,
 			mcapTvlThresholdSats: 0,
 			movers: { topGainers24h: [], topLosers24h: [], topTvlMovers24h: [], has24hHistory: false },
+			voteLeaders: { mostUpvoted: [], mostDownvoted: [], mostControversial: [], totalVotes: 0 },
 			error: 'Directory is temporarily unavailable.'
 		};
 	}

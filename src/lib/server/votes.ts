@@ -5,7 +5,7 @@
 // session). One row per (cashaddr, category) — flipping direction
 // overwrites; retracting deletes.
 
-import { query, withTransaction } from './db';
+import { query, withTransaction, hexFromBytes } from './db';
 import { NOT_MODERATED_CLAUSE } from '$lib/moderation';
 
 export type Vote = 'up' | 'down';
@@ -120,6 +120,144 @@ export async function listUserVotes(
 		out[r.category.toString('hex')] = r.vote;
 	}
 	return out;
+}
+
+/** Top-N leaderboards over `user_votes`. Three buckets — most upvoted
+ *  (net score), most downvoted (-net), most controversial (Reddit-style
+ *  product LEAST(up,down) × (up+down) — favours volume + balanced split,
+ *  so a 50-up/0-down token is correctly NOT controversial).
+ *
+ *  Single round-trip with bounded payload: the agg CTE runs once;
+ *  per-bucket `ORDER BY … LIMIT 10` CTEs cap the wire payload at 30
+ *  rows regardless of `user_votes` size; metadata + icon-safety joins
+ *  hit the already-narrowed set, not every voted-on category.
+ *
+ *  Moderation: `NOT_MODERATED_CLAUSE` keeps a moderated token from
+ *  appearing on any leaderboard, in lockstep with every other public
+ *  read path. */
+export async function getVoteLeaderboards(): Promise<{
+	mostUpvoted: VoteLeader[];
+	mostDownvoted: VoteLeader[];
+	mostControversial: VoteLeader[];
+	totalVotes: number;
+}> {
+	const sumQ = query<{ total: string }>(
+		`SELECT COUNT(*)::bigint AS total FROM user_votes`
+	);
+	const baseQ = query<VoteLeaderRow>(
+		`WITH agg AS (
+		   SELECT uv.category,
+		          SUM((uv.vote = 'up')::int)::int   AS up,
+		          SUM((uv.vote = 'down')::int)::int AS down
+		     FROM user_votes uv
+		     JOIN tokens t ON t.category = uv.category
+		    WHERE NOT EXISTS (SELECT 1 FROM token_moderation mod WHERE mod.category = t.category)
+		    GROUP BY uv.category
+		 ),
+		 top_upvoted AS (
+		   SELECT category, up, down, 'upvoted'::text AS bucket
+		     FROM agg
+		    ORDER BY (up - down) DESC, up DESC
+		    LIMIT 10
+		 ),
+		 top_downvoted AS (
+		   SELECT category, up, down, 'downvoted'::text AS bucket
+		     FROM agg
+		    ORDER BY (down - up) DESC, down DESC
+		    LIMIT 10
+		 ),
+		 top_controversial AS (
+		   SELECT category, up, down, 'controversial'::text AS bucket
+		     FROM agg
+		    ORDER BY LEAST(up, down) * (up + down) DESC, (up + down) DESC
+		    LIMIT 10
+		 ),
+		 combined AS (
+		   SELECT *, ROW_NUMBER() OVER (PARTITION BY bucket
+		                                ORDER BY
+		                                  CASE bucket
+		                                    WHEN 'upvoted'       THEN (up - down)
+		                                    WHEN 'downvoted'     THEN (down - up)
+		                                    ELSE LEAST(up, down) * (up + down)
+		                                  END DESC,
+		                                  CASE bucket
+		                                    WHEN 'upvoted'       THEN up
+		                                    WHEN 'downvoted'     THEN down
+		                                    ELSE (up + down)
+		                                  END DESC) AS rn
+		     FROM (SELECT * FROM top_upvoted
+		            UNION ALL SELECT * FROM top_downvoted
+		            UNION ALL SELECT * FROM top_controversial) x
+		 )
+		 SELECT c.category,
+		        m.name,
+		        m.symbol,
+		        encode(imo.content_hash, 'hex') AS icon_cleared_hash,
+		        m.icon_uri,
+		        c.up,
+		        c.down,
+		        c.bucket
+		   FROM combined c
+		   LEFT JOIN token_metadata m ON m.category = c.category
+		   LEFT JOIN icon_url_scan ius ON ius.icon_uri = m.icon_uri
+		   LEFT JOIN icon_moderation imo
+		     ON imo.content_hash = ius.content_hash AND imo.state = 'cleared'
+		  ORDER BY c.bucket, c.rn`
+	);
+
+	const [sumRes, baseRes] = await Promise.allSettled([sumQ, baseQ]);
+
+	const totalVotes =
+		sumRes.status === 'fulfilled' ? Number(sumRes.value.rows[0]?.total ?? 0) : 0;
+
+	const mostUpvoted: VoteLeader[] = [];
+	const mostDownvoted: VoteLeader[] = [];
+	const mostControversial: VoteLeader[] = [];
+
+	if (baseRes.status === 'fulfilled') {
+		// Rows arrive ordered by (bucket, rn) so push order matches display
+		// order. SQL already capped each bucket at 10 via per-CTE LIMIT —
+		// no in-JS cutoff needed.
+		for (const r of baseRes.value.rows) {
+			const item: VoteLeader = {
+				id: hexFromBytes(r.category)!,
+				name: r.name,
+				symbol: r.symbol,
+				iconClearedHash: r.icon_cleared_hash ?? null,
+				icon: r.icon_uri,
+				upCount: r.up,
+				downCount: r.down
+			};
+			if (r.bucket === 'upvoted') mostUpvoted.push(item);
+			else if (r.bucket === 'downvoted') mostDownvoted.push(item);
+			else if (r.bucket === 'controversial') mostControversial.push(item);
+		}
+	} else {
+		console.error('[votes] leaderboards failed:', baseRes.reason);
+	}
+
+	return { mostUpvoted, mostDownvoted, mostControversial, totalVotes };
+}
+
+interface VoteLeaderRow {
+	category: Buffer;
+	name: string | null;
+	symbol: string | null;
+	icon_cleared_hash: string | null;
+	icon_uri: string | null;
+	up: number;
+	down: number;
+	bucket: 'upvoted' | 'downvoted' | 'controversial';
+}
+
+export interface VoteLeader {
+	id: string;
+	name: string | null;
+	symbol: string | null;
+	iconClearedHash: string | null;
+	icon: string | null;
+	upCount: number;
+	downCount: number;
 }
 
 /** Aggregate (up, down) counts for one category. Used by the per-token

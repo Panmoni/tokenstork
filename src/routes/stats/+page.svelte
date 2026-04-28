@@ -1,7 +1,5 @@
 <script lang="ts">
 	import Movers24h from '$lib/components/Movers24h.svelte';
-	import { iconHrefFor } from '$lib/icons';
-	import { stripEmoji } from '$lib/format';
 
 	let { data } = $props();
 
@@ -768,61 +766,6 @@
 						awaiting fetch / retry
 					</div>
 				</div>
-			</div>
-		</section>
-	{/if}
-
-	{#if data.voteLeaders.totalVotes > 0}
-		<section class="mb-8">
-			<div class="flex items-baseline justify-between mb-3">
-				<h2 class="text-xl font-semibold text-slate-900 dark:text-white">Community sentiment</h2>
-				<span class="text-xs text-slate-500 dark:text-slate-400">
-					{fmt(data.voteLeaders.totalVotes)} vote{data.voteLeaders.totalVotes === 1 ? '' : 's'} cast
-				</span>
-			</div>
-			<p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
-				Logged-in users vote ↑ or ↓ on tokens. Score = up − down. Controversial =
-				LEAST(up, down) × (up + down) — favours tokens with both volume and a balanced split.
-			</p>
-			<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-				{#each [
-					{ label: 'Most upvoted', sub: 'highest net score', sortQuery: '?sort=upvoted', tone: 'emerald', items: data.voteLeaders.mostUpvoted },
-					{ label: 'Most downvoted', sub: 'lowest net score', sortQuery: '?sort=downvoted', tone: 'rose', items: data.voteLeaders.mostDownvoted },
-					{ label: 'Most controversial', sub: 'big & evenly split', sortQuery: '?sort=controversial', tone: 'amber', items: data.voteLeaders.mostControversial }
-				] as col (col.label)}
-					<div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
-						<div class="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-baseline justify-between">
-							<div>
-								<div class="text-sm font-semibold text-slate-900 dark:text-white">{col.label}</div>
-								<div class="text-xs text-slate-500 dark:text-slate-400">{col.sub}</div>
-							</div>
-							<a href={`/${col.sortQuery}`} class="text-xs text-violet-600 dark:text-violet-400 hover:underline">All →</a>
-						</div>
-						{#if col.items.length === 0}
-							<div class="px-4 py-6 text-sm text-slate-500 dark:text-slate-400 text-center">No votes yet.</div>
-						{:else}
-							<ol class="divide-y divide-slate-100 dark:divide-slate-800">
-								{#each col.items as t, i (t.id)}
-									<li>
-										<a href={`/token/${t.id}`} class="flex items-center gap-3 px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors no-underline">
-											<span class="w-5 text-xs font-mono text-slate-400 tabular-nums">{i + 1}</span>
-											<img src={iconHrefFor(t.icon, t.iconClearedHash)} alt="" class="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800" loading="lazy" />
-											<span class="flex-1 min-w-0 truncate text-sm text-slate-900 dark:text-white">
-												{stripEmoji(t.name) || t.id.slice(0, 10) + '…'}
-												{#if t.symbol}<span class="ml-1 text-xs text-slate-500 font-mono">{stripEmoji(t.symbol)}</span>{/if}
-											</span>
-											<span class="text-xs font-mono tabular-nums shrink-0">
-												<span class="text-emerald-600 dark:text-emerald-400">↑{t.upCount}</span>
-												<span class="text-slate-400 mx-0.5">·</span>
-												<span class="text-rose-600 dark:text-rose-400">↓{t.downCount}</span>
-											</span>
-										</a>
-									</li>
-								{/each}
-							</ol>
-						{/if}
-					</div>
-				{/each}
 			</div>
 		</section>
 	{/if}
