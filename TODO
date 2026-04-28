@@ -1,11 +1,7 @@
 # TODO
-
 Scratchpad roadmap.
 
-show real time blocks dropping? economic value of each block vs cost of paying the miner
-
-add a mining page? https://nakamoto.observer/hashmap
-
+Pending blockbook on carson, could be 2 weeks.
 ---
 
 ## Operator — on carson / registrar
@@ -28,7 +24,7 @@ add a mining page? https://nakamoto.observer/hashmap
 
 ## Now — blockers + actively-in-flight
 
-- **Phase 2d — BlockBook** (IBD started on carson 2026-04-24, 8-18h). Once in sync: add `BLOCKBOOK_URL=http://127.0.0.1:9131` to `/etc/tokenstork/env`; enable `sync-enrich.timer` + `sync-verify.timer`; the `—` placeholders for holder count / live UTXOs / live NFTs / fully-burned count flip to real data. Unblocks items below marked *(blocked on BlockBook)*.
+- **Phase 2d — BlockBook** (IBD started on carson 2026-04-24; mid-IBD as of 2026-04-26, ~41% at height 394,653, sustained ~40-50 blocks/min, **ETA ~1 week to tip** — memory-bound on a 16 GiB VPS even after the 8 GB swap doubling, throughput slowly degrading as block density rises). Post-IBD runbook lives in [docs/cashtoken-index-plan.md "Post-BlockBook-IBD operator runbook"](docs/cashtoken-index-plan.md): re-enable Cauldron timers, add `BLOCKBOOK_URL=http://127.0.0.1:9131` to `/etc/tokenstork/env`, manual `sync-enrich` one-shot, then enable `sync-enrich.timer` + `sync-verify.timer`. Flips the `—` placeholders for holder count / live UTXOs / live NFTs / fully-burned count to real data. Unblocks items below marked *(blocked on BlockBook)*.
 - **Verify + close [#14](https://github.com/Panmoni/tokenstork/issues/14) (XLV max-supply miscount)** post-BlockBook. Pull XLV's category hex, run `enrich` one-shot, confirm `current_supply` matches post-burn total (~61000.57996200 as of 2024-09-09, modulo burns since). *(blocked on BlockBook)*
 - **Verify sparklines populate end-to-end ~2026-05-01** (one week post-Phase-4f deploy, 2026-04-24). Expected: 317 Cauldron listings × ~6 points/day × 7 days ≈ 13,000+ rows in `token_price_history`. Runbook:
   ```
@@ -41,12 +37,19 @@ add a mining page? https://nakamoto.observer/hashmap
 
 ## Next — short list, roughly in order
 
-- **Operational hardening** — `pg_dump` nightly timer with 7-daily / 4-weekly retention + weekly offsite ship (Backblaze B2 or Hetzner Storage Box, ~€1/mo); UptimeRobot free-tier on `/api/tokens?limit=1`; tail-staleness watchdog timer using `sync_state.last_tail_run_at`; weekly Netcup snapshot toggle.
-- **Icon safety pipeline — CSAM + NSFW gating** for every BCMR image. Supersedes the earlier "transcode worker" idea. Default-deny: no image byte reaches a visitor until scanned + marked `cleared`; otherwise render the SVG placeholder. Cloudflare CSAM Scanning Tool + cloud NSFW API (GCV SafeSearch or AWS Rekognition, ~$20 one-shot + <$5/mo), transcode to static WebP, serve from `/var/lib/tokenstork/icons/<sha256>.webp` via Caddy. New `icon_moderation` + `icon_url_scan` tables. Full design in the plan doc. Legal: mandatory NCMEC reporting under 18 U.S.C. § 2258A; CF's tool auto-files. Ship **before** wallet login.
-- **Watchlist (anonymous, localStorage first)** — star button on token cards + detail page; persists category IDs to `localStorage['tokenstork:watchlist']`. New `/watchlist` route reads IDs and routes through existing `TokenGrid` + a `?ids=<csv>` loader. Header shows "Watchlist (N)" when non-empty. Foundation for wallet-login portfolio.
-- **Fex.cash on-chain indexer** (plan + recon landed at [docs/fex-plan.md](docs/fex-plan.md)). New `sync-fex` Rust worker modelled on `sync-cauldron`, scans asset P2SH `a9142b389120e9c741fbc5dbcd51fc4170d6640b9d3687` via `scantxoutset`. 10 pools, 15.14 BCH total. ~1.25 days. Ship after BlockBook so the directory isn't fighting two rollouts. Reuses `token_venue_listings` with `venue='fex'`.
-- **Cross-venue arbitrage scanner** — new `/arbitrage` page. For categories with BOTH `token_venue_listings(venue='cauldron')` AND open `tapswap_offers`, compute the spread after fees (Cauldron ~0.3%, Tapswap 3%, mining-fee buffer, Cauldron slippage vs TVL). Surface spreads >2%. Pure SQL (CTE joining the two tables), no new worker.
-- **Expanded `/stats` page** — pick 3-5 from: top gainers/losers 24h, largest TVL movers 24h, most-listed on Tapswap, ecosystem growth curve (genesis_time weekly buckets), metadata completeness %, decimals distribution, active minting count, supply-bracket distribution, Cauldron × Tapswap Venn, 30-day ecosystem TVL sparkline, genesis-block histogram. My pick: gainers/losers + growth curve + venue Venn + metadata completeness + active minting. ~1 day.
+> **Active focus (2026-04-26, post-watchlist-mining-stats-auth-batch):**
+> 1. **Operational hardening** (item below) — every passing day with wallet login + real user state in the DB raises the blast radius of a VPS loss
+> 2. **Long-horizon charts on token detail page** (item below) — visible polish on the most-trafficked inner page; data has been accumulating since 2026-04-24
+> 3. **Icon safety pipeline** (item below) — was originally tagged "ship before wallet login"; login already shipped without it, so this is now a "before public launch / advertising the site" item
+
+- ~~**Wallet login**~~ *(priority #1)* **✅ Shipped 2026-04-25/26** (commits `16b54fd` schema+verifier+API+UI, `12a3914` diagnostic logging, `c31cdb9` hex-signature compat, `04f7912` rate limit + cleanup timer). WalletConnect v2 over the wc2-bch-bcr namespace + paste-and-go fallback. Heavy-duty 3-pass review surfaced 1 HIGH (CSP blocking WC) + 1 HIGH (open-redirect bypass) — both fixed pre-commit.
+- ~~**Mining page**~~ *(priority #2)* **✅ Shipped 2026-04-26** (commit `30e1aa5`, +558/-20 across 7 files). Coinbase scriptSig column, miner-pool attribution from substring matching, 4-card headline strip + 3-window pool-attribution tables. Average block-time cards (24h/7d/30d) added in commit `78c65f8`.
+- ~~**Wallet-tied watchlist**~~ **✅ Shipped 2026-04-26** (commit `3c32afe`). Star button on every token surface, /watchlist destination page, header "Watchlist (N)" pill, atomic-CTE toggle.
+- ~~**Auth follow-ups bundle**~~ **✅ Shipped 2026-04-26** (commit `04f7912`). Rate limit on /api/auth/challenge (10/min/IP, cf-connecting-ip-aware), hourly cleanup timer for expired challenges + sessions.
+- **Operational hardening** *(now priority #1)* — `pg_dump` nightly timer with 7-daily / 4-weekly retention + weekly offsite ship (Backblaze B2 or Hetzner Storage Box, ~€1/mo); UptimeRobot free-tier on `/api/tokens?limit=1`; tail-staleness watchdog timer using `sync_state.last_tail_run_at`; weekly Netcup snapshot toggle. ~1-1.5 days; quarter-day each.
+- **Long-horizon charts + per-day volume on token detail page** *(now priority #2)* — replace the inline 7-day sparkline with a real line chart (native SVG, no heavy JS libs) + range toggles 24h/7d/30d/90d/1y/all. Second series: per-day volume derived from consecutive `token_price_history` TVL deltas. Data source already accumulating since Phase 4f.
+- **Icon safety pipeline — CSAM + NSFW gating** *(now priority #3)* — for every BCMR image. Default-deny: no image byte reaches a visitor until scanned + marked `cleared`; otherwise render the SVG placeholder. Cloudflare CSAM Scanning Tool + cloud NSFW API (GCV SafeSearch or AWS Rekognition, ~$20 one-shot + <$5/mo), transcode to static WebP, serve from `/var/lib/tokenstork/icons/<sha256>.webp` via Caddy. New `icon_moderation` + `icon_url_scan` tables. Full design in the plan doc. Legal: mandatory NCMEC reporting under 18 U.S.C. § 2258A; CF's tool auto-files. Originally tagged "ship before wallet login" — login is now shipped, so this is a "ship before public launch / advertising" item.
+- **Expanded `/stats` page** — already shipped most candidates 2026-04-24/25/26 (growth curve, decimals histogram, 3-venue Venn, metadata completeness, Tradeable cards, Cauldron live aggregates, **30d ecosystem TVL sparkline + FT supply distribution** added 2026-04-26 in commit `3ef4eb4`). **Remaining**: top gainers/losers 24h + largest TVL movers 24h (need ≥ 2 weeks of accumulated `token_price_history`).
 - **Long-horizon charts + per-day volume on token detail page** — replace the inline 7-day sparkline with a real line chart (native SVG, no heavy JS libs) + range toggles 24h/7d/30d/90d/1y/all. Second series: per-day volume derived from consecutive `token_price_history` TVL deltas. Data source already accumulating since Phase 4f.
 - **Holder distribution + concentration metrics** on the token detail page — top 10 holders bar chart, Gini, Herfindahl, "top-10 hold X%" headline. *(blocked on BlockBook — `token_holders` empty until enrichment runs.)*
 - **Runbook** — collect failure-mode recipes into `docs/runbook.md` for the tired 3am self.
@@ -55,8 +58,8 @@ add a mining page? https://nakamoto.observer/hashmap
 
 ## Later — wallet login + the features that stack on it
 
-- **BCH wallet login** — `/api/auth/challenge` → wallet signs canonical message → `/api/auth/verify` recovers the address (via libauth ECDSA). Session cookie (HttpOnly, SameSite=Strict, 30-day). Schema: `users(cashaddr PK)`, `auth_challenges(nonce PK, expires_at)`, `sessions(id PK, cashaddr FK)`. Hard constraint: wallet signing only — no email/password, no OAuth, no magic links. Day-one UX is a `/login` page with "paste (cashaddr, signature)" for universal wallet support; Paytaca Connect / WalletConnect later. On first login, prompt to merge localStorage watchlist into `user_watchlist`. Full heavy-duty 3-pass review before ship.
-- **User watchlist + portfolio** (unlocks after wallet login): `user_watchlist` cross-device; later `user_portfolio` with manual buy entries OR derive from on-chain holdings at the linked address via BlockBook.
+- **BCH wallet login** — promoted to "Next" above. Spec lives there; this entry kept as a milestone marker so the dependents below stay grouped.
+- **User portfolio** (unlocks after wallet login): `user_portfolio` with manual buy entries OR derive from on-chain holdings at the linked address via BlockBook. Watchlist already moved to "Next" above; portfolio is the heavier follow-up.
 - **CSV export** on `/api/tokens` (`?format=csv`) and a new `/api/tokens/<cat>/history`. Power-user credibility at couple-of-hours cost.
 - **Per-user price alerts** (wallet-delivered notification via the wallet's messaging layer, or optional email-as-metadata-only; never used for login).
 - **Personal annotations** on tokens ("this one was the rug").
@@ -67,10 +70,10 @@ add a mining page? https://nakamoto.observer/hashmap
 
 - Better logos for Tapswap, Fex, Cauldron.
 - Major information update on bchworks.com (use claude-chrome).
-- Custom 404 page.
-- Normalize empty-string BCMR `name` to `NULL` at upsert time in [workers/src/bin/bcmr.rs](workers/src/bin/bcmr.rs). Today stored as `''` and defended against in SQL.
-- Future CSP tightening — migrate from Caddyfile CSP (`'unsafe-inline'` on script-src) to `kit.csp { mode: 'hash' }` in [svelte.config.js](svelte.config.js) so SvelteKit advertises SHA-256 of its own inline hydration script.
-- Fuzzy search using the existing `token_metadata_name_trgm` index — `ORDER BY similarity(name, $q) DESC` with a minimum-score cutoff so "grm" matches "GRIM" and "suhi" matches "sushi". Optional step-up from the current ILIKE.
+- ~~Custom 404 page~~ *(shipped 2026-04-25 — `+error.svelte` polished with `Try one of these` nav grid, status-specific subline, robots noindex)*
+- ~~Normalize empty-string BCMR `name` to `NULL` at upsert time in [workers/src/bcmr.rs](workers/src/bcmr.rs)~~ *(shipped 2026-04-25 — new `nonempty()` helper in `into_flat`, trims + collapses blank to None across name / symbol / description / icon_uri; SQL-side `NULLIF(BTRIM(...))` defenses kept for idempotence)*
+- ~~CSP tightening~~ *(shipped 2026-04-25 — `kit.csp { mode: 'hash' }` in [svelte.config.js](svelte.config.js) emits SvelteKit-side meta CSP with SHA-256 hashes per build; Caddy CSP header removed in lockstep so the two policies don't intersect to "block everything")*
+- ~~Fuzzy search using the existing `token_metadata_name_trgm` index~~ *(shipped 2026-04-25 — directory `+page.server.ts` adds `m.name % $q` predicate using pg_trgm's GIN trigram index alongside the existing ILIKE OR; `ORDER BY similarity(name, $q) DESC` prepended when search is active so best matches surface first; "grm" matches "GRIM", "suhi" matches "sushi" via default 0.3 threshold)*
 - Update `package.json` version to `0.1.0` once the ecosystem dashboard expansion ships.
 - Migrations framework / runner (deferred until we need a multi-step schema change — today `db/schema.sql` idempotent is enough).
 - Regular sync of the TokenStork BCMR registry with OTR.
@@ -82,17 +85,22 @@ add a mining page? https://nakamoto.observer/hashmap
 ## Feature roadmap
 
 ### 0.1.0 — ecosystem dashboard maturity
-- BlockBook-driven enrichment live (holder counts, live UTXOs, live NFTs, fully-burned).
+- BlockBook-driven enrichment live (holder counts, live UTXOs, live NFTs, fully-burned). *(in flight — IBD ETA ~1 week from 2026-04-26 at height ~395k of ~948k)*
 - Icon safety pipeline live.
-- Watchlist (anonymous) live.
-- Fex indexer live.
-- Arbitrage scanner live.
-- `/stats` expanded.
+- Fex indexer live. *(shipped 2026-04-25, commits `0994af6` + `3f48f6c`)*
+- Arbitrage scanner live. *(shipped 2026-04-25 as Cauldron×Fex commit `f1b4864`, expanded to 3-venue with per-row dynamic fees commit `89a00b7`)*
+- Tapswap full lifecycle (open → taken / cancelled). *(shipped 2026-04-25, commits `91e750c` + `fe172d9` historical-close backfill)*
+- `/blocks` per-block economics dashboard. *(shipped 2026-04-25, commit `3b37e99`; avg block-time cards added 2026-04-26 commit `78c65f8`)*
+- `/mining` page with miner-pool attribution + fee dynamics. *(shipped 2026-04-26, commit `30e1aa5`)*
+- `/stats` expanded — growth curve / 3-venue Venn / metadata completeness / Cauldron live aggregates / Tradeable cards. *(shipped 2026-04-24/25)*; **30d ecosystem TVL sparkline + FT supply distribution** added 2026-04-26 commit `3ef4eb4`.
+- Per-pool TVL aggregates so headline matches /stats. *(shipped 2026-04-25, commit `b90da4b`)*
+- BCH wallet login (WalletConnect v2 + manual fallback). *(shipped 2026-04-25/26)*
+- Wallet-tied watchlist. *(shipped 2026-04-26, commit `3c32afe`)*
 - Operational hardening live.
 
 ### 0.2.0 — accounts + persistence
-- BCH wallet login.
-- User watchlist + portfolio.
+- ~~BCH wallet login~~ *(shipped 2026-04-25/26)*
+- ~~User watchlist~~ *(shipped 2026-04-26)* + user portfolio *(remaining; gated on BlockBook for the on-chain-derive path)*.
 - CSV export + history endpoint.
 - Long-horizon charts + volume on token detail page.
 - Holder distribution + concentration on token detail page.
@@ -179,9 +187,170 @@ add a mining page? https://nakamoto.observer/hashmap
 - Front-page category hubs ([cmc near ecosystem](https://coinmarketcap.com/view/near-protocol-ecosystem/)).
 - Countdowns in header.
 - Airdrops page (coming + past).
+- **Arbitrary airdrop tool page** — paste/import any set of BCH addresses (manual entry, paste-many, or CSV) and airdrop a chosen cashtoken to all of them in one tx. Per-row amount or single uniform amount. Validate addresses + amounts + balance, preview fee + total, sign with WalletConnect, broadcast. Sibling tools: airdrop to holders of category X, airdrop to last N active L1 addresses, airdrop to flipstarter backers. (Companion repo: <https://github.com/Panmoni/drop>.)
 - SFTs ([writeup](https://kettan007.medium.com/sft-semi-fungible-tokens-implementation-benefits-use-cases-45801388dcc9)).
 - FDV on inner pages.
 - Newsletter signup.
 - Stronger policy statements.
 - Turn an ICO into a DAO.
 - Reference links: [moneroj metcalfeusd](https://moneroj.net/metcalfeusd/), [tokenized.com](https://tokenized.com/), [chaingraph owners-of-category example](https://www.reddit.com/r/BCHCashTokens/comments/1aoasq3/how_to_use_chaingraph_to_list_owners_of_some/).
+
+---
+
+## Prior art — `dropship.cash` (mainnet-pat, 2025)
+
+Source: <https://github.com/mainnet-pat/dropship.cash> · live: <https://bch-airdrop-tool.vercel.app> · last commit 2025-07-11. Next 15 + React 19 + shadcn/ui, `mainnet-js` + `cashscript`, WalletConnect v2. Single-author, MIT-by-omission (no LICENSE).
+
+### What it does (feature inventory)
+
+- **Source / target asset model**: pick the asset to disperse (BCH or any cashtoken in the wallet) + a *target category* whose holders receive it. They do not have to be the same.
+- **Recipient loaders**:
+  - Manual one-at-a-time entry.
+  - **FT holders** of any category (Chaingraph GraphQL → `gql.chaingraph.pat.mn`, `output` rows where `fungible_token_amount > 0` and unspent).
+  - **NFT holders** with commitments preserved (capped at 2 × 5000 = 10k holders).
+  - **Inputs of an arbitrary txid** — that's how it does "airdrop to flipstarter backers": the funding tx's `vin[].address` becomes the roster.
+  - **CSV import + export** (round-trip).
+- **Payout strategies**: `Even` (budget split across rows where `amount > 0`; `amount = 0` rows are locked/manual) and `Proportional` (weighted by holder amount).
+- **Cauldron pool → owner P2PKH unwrap**: if a recipient address matches a Cauldron pool P2SH, swap it for the pool owner's P2PKH (derived by hashing the pool template with the owner's PKH). Cauldron-only.
+- **Include / exclude contracts** toggle (filters `:p…` token-aware P2SH addresses).
+- **BCMR resolution** with localStorage caching (1-day TTL); IPFS gateway configurable in localStorage (`w3s.link` default).
+- **Send pipeline**: chunks recipients into batches of `MaxPayoutsInTx = 1000`, builds each tx unsigned via `mainnet-js`, signs over WalletConnect v2 sequentially, broadcasts. **1000 sats per token output** (hardcoded). BCH-payout floor `1000e-8`. **`OP_RETURN "DROP"` prepended** to every tx as marker.
+- Chipnet vs mainnet via `NEXT_PUBLIC_USE_CHIPNET` env var (no UI toggle).
+- All state is session-only — page refresh wipes the roster.
+- Donation prompt + funder credits; no DB, no receipts.
+
+### Where tokenstork can do strictly better
+
+The genuinely smart bits (strategy modes, FT/NFT loaders, Cauldron unwrap, OP_RETURN marker, 1000-output chunking) are the floor. The ceiling is higher because of what we already have that dropship doesn't:
+
+1. **Persistence**: drafts, named campaigns, full history. Wallet login is shipped; Postgres is right there.
+2. **Block-height snapshots**: post-BlockBook, "holders as of block 950,000" instead of "whoever held when the user clicked, racy with mempool". The single biggest fairness improvement.
+3. **Use our own `token_holders`** instead of Chaingraph round-trips — faster, no third-party dependency on `gql.chaingraph.pat.mn`.
+4. **Multi-venue DEX unwrap**: Cauldron + Tapswap + Fex are already indexed; we can swap LP-contract addresses → underlying owners across all three, not just Cauldron.
+5. **Fee preview + sat/vB selection** using `mempool.get_fee_histogram` (already on the 0.0.1 import list). Show estimated fee + total dust *before* the first WalletConnect prompt, not after a build failure.
+6. **Set-algebra recipient builder**: union / intersect / exclude across multiple categories + blocklists + watchlist. Dropship is union-only.
+7. **Per-recipient min/max cap** in Proportional mode → one whale can't eat the budget.
+8. **CSV import validation surface**: count valid / invalid / duplicate rows up front. Dropship silently appends.
+9. **Resumable campaigns**: persist a cursor across chunk boundaries; chunk 3/5 failure shouldn't force a manual restart.
+10. **Receipt page** at `/airdrops/<id>` — full roster + per-chunk tx hashes + OP_RETURN memo, shareable. Free credibility for token issuers.
+11. **Custom OP_RETURN memo** (campaign name + optional URL), not the bare `"DROP"` literal.
+12. **Discoverability**: opt-in `/airdrops` index of past public campaigns, surfaced back on token detail pages ("3 airdrops · 1,847 unique recipients · last 2026-04-24").
+13. **Dry-run / build-only mode**: emit raw tx hex for offline signing (already on the 0.0.6 import list — keep it prominent).
+14. **Eligibility gates beyond holders**: "watchlist intersects holders of X", "addresses in last N blocks", "addresses that touched contract Y" — composable filters on top of the loaders dropship has.
+
+### Things to *not* reinvent
+
+- **Don't re-do** the Chaingraph FT/NFT queries — use our DB once `token_holders` is populated. Keep Chaingraph as a fallback for categories we haven't enriched yet.
+- **Don't keep the React/Next.js stack** — we're SvelteKit. The 0.7.0 / drop-import code review issues (Solid vs React confusion, `parseFloat` vs `MAX_SAFE_INTEGER`, etc.) become moot when rewritten as Svelte.
+- **Don't build a bespoke UI table** — reuse the directory table primitives + sort/filter that the rest of the site already uses.
+- **Keep dropship's defaults that just work**: 1000 outputs/tx ceiling, OP_RETURN marker per tx, locked rows for manual overrides, contract-filter toggle.
+
+---
+
+## Imported — `Panmoni/drop` (standalone airdrop tool, to be merged in)
+
+> Imported verbatim 2026-04-26 from the standalone `drop` project's TODO. To be reconciled into the roadmap above (the arbitrary-airdrop entry under NOTES is the umbrella; the version-bullets below are pre-merge tactical notes).
+
+### 0.0.1
+
+#### Create, Sign and Broadcast Transaction
+
+##### Create Tx
+
+##### Sign Tx (with WalletConnect)
+
+##### Broadcast Tx (via ElectrumCash API?)
+
+- ensure a token is selected
+- validate addresses
+- validate amounts
+- validate sufficient BCH and token balances
+- create transaction
+  - the backend logic for creating the transaction.
+  - estimate fee <https://libauth.org/functions/getMinimumFee.html>
+  - each token output gets 800 sats
+  - broadcast tx (use minimal slp wallet?)
+  - maybe need to create a template?
+  - learn from <https://github.com/orgs/cashninjas/repositories>, <https://github.com/mainnet-pat/emerald_dao/blob/master/src/pages/index.tsx>
+
+##### Fee estimation
+
+- improve estimated fee calculation, find an example to follow, maybe use libauth `getMinimumFee` function.
+- electrumcash has `blockchain.estimatefee` <https://electrum-cash.readthedocs.io/en/latest/protocol-methods.html#blockchain-estimatefee>; also `mempool.get_fee_histogram`.
+
+##### Final checks
+
+- significant revision of the code to use effect and signal properly and remove redundant code.
+- understand interfaces better.
+
+##### Build it and put it live
+
+- sync with repo <https://github.com/Panmoni/drop>.
+- put it on Vercel <https://vercel.com/panmoni> + put `.env` there.
+- ensure DNS is correct <https://dash.cloudflare.com/ff39df988463cd9f50fd45698bf71925/tokenstork.com/dns/records>.
+
+### 0.0.2
+
+- enforce valid addresses, amounts and complete rows on the client side.
+- work on SEO, add meta tags, open graph, etc.
+- add link to this from `tokenstork.com` proper.
+- greater reactivity? subscribe to balance with `electrum-cash`?
+
+### 0.0.3
+
+- what is the limit (or best practice) if any (besides current block size limit) to the number of outputs in a transaction?
+- add `BigInt` support (>9,007,199,254,740,991, 9 quadrillion).
+
+### 0.0.4
+
+- add modality of how to input addresses/amounts.
+- add ability to do CSV import of addresses and amounts.
+- implement cashconnect.
+
+### 0.0.5
+
+- add ability to airdrop to addresses holding X token/NFT.
+- add ability to airdrop to last X active addresses on L1.
+- add type guard functions.
+
+### 0.0.6
+
+- add ability to airdrop to flipstarter backers.
+- add ability to generate raw transaction for broadcast elsewhere.
+
+### 0.0.7
+
+- "add new row" plus button inserts row below current row.
+- add UI error messages for async operations, esp `fetchUserDetails`, `bchPrice`, WalletConnect.
+
+### 0.0.8
+
+- rationalize, simplify, modularize & optimize code.
+- put in skeletons for loading objects.
+
+### 0.0.9
+
+- add NFT drops.
+
+### 0.0.10
+
+- add ability to airdrop multiple tokens at once.
+
+### Code-review notes carried over from `drop`
+
+Pre-merge code review of the standalone tool. Most of these become non-issues if the page is rewritten as a SvelteKit route inside this repo (Solid.js/React confusion goes away entirely). Kept for reference until the merge actually happens.
+
+1. **Unused imports and variables** — `SignClient`, `WalletConnectModal`, etc. either unused or not fully implemented; `network`, `apiURL` and similar dead variables to remove.
+2. **React vs Solid.js confusion** — code mixes idioms (e.g. `useState` vs `createSignal`). Pick one. (Becomes moot if rewritten as Svelte.)
+3. **Inconsistent error handling** — `fetchBalance`, `fetchUserDetails` etc. each handle errors differently; unify on one approach.
+4. **State management** — review signal updates to ensure re-renders happen as expected.
+5. **Async in event handlers** — `validateAddress` is awaited inside `onChange`; check for race conditions and stale-state writes.
+6. **`parseFloat` vs integer checks** — `validateAmount` parses with `parseFloat` then compares against `MAX_SAFE_INTEGER`; will misvalidate large decimals.
+7. **`For` component usage** — verify Solid.js `<For>` is used correctly (keyed, not over-indexed).
+8. **Inline styles** — extract to CSS-in-JS or stylesheets for maintainability.
+9. **Accessibility** — buttons/inputs need `aria-label`s, roles, focus management.
+10. **Stale comments and TODOs** — resolve or delete.
+11. **Formatting** — run Prettier (or whatever the host project uses post-merge).
+12. **Security** — audit user-data handling and API calls; no `innerHTML` from untrusted sources, no unbounded fetches.
+13. **TypeScript types** — tighten where `any`/loose unions slipped in.
+14. **UI/UX** — review flows for clarity + alignment.
