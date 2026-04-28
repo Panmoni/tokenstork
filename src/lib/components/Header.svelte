@@ -12,8 +12,7 @@
 		{ name: 'Mint', href: '/mint' },
 		{ name: 'Blocks', href: '/blocks' },
 		{ name: 'Mining', href: '/mining' },
-		{ name: 'Stats', href: '/stats' },
-		{ name: 'Learn', href: '/learn' }
+		{ name: 'Stats', href: '/stats' }
 	];
 
 	// Logged-in cashaddr (or null) comes through the layout server load
@@ -50,6 +49,22 @@
 
 	let mobileMenuOpen = $state(false);
 
+	// Account dropdown — shown when authenticated. Holds the cashaddr pill +
+	// Sign out so the header stops carrying both inline. Click-outside +
+	// Esc both close.
+	let userMenuOpen = $state(false);
+	let userMenuEl: HTMLDivElement | undefined = $state();
+
+	function onWindowClick(e: MouseEvent) {
+		if (!userMenuOpen) return;
+		if (userMenuEl && !userMenuEl.contains(e.target as Node)) {
+			userMenuOpen = false;
+		}
+	}
+	function onWindowKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape') userMenuOpen = false;
+	}
+
 	const pathname = $derived(page.url.pathname);
 
 	// Header search — only surfaces on non-home pages. The home page
@@ -75,6 +90,8 @@
 		}
 	}
 </script>
+
+<svelte:window onclick={onWindowClick} onkeydown={onWindowKeydown} />
 
 <header class="sticky top-0 z-50 backdrop-blur-xl bg-white/80 dark:bg-slate-950/80 border-b border-slate-200 dark:border-slate-800">
 	<nav class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -117,20 +134,46 @@
 								</span>
 							</a>
 						{/if}
-						<span
-							class="px-2 py-1 rounded-md bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs font-mono"
-							title={user.cashaddr}
-						>
-							{truncatedCashaddr}
-						</span>
-						<button
-							type="button"
-							onclick={logout}
-							class="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-							title="Sign out"
-						>
-							Sign out
-						</button>
+						<div class="relative" bind:this={userMenuEl}>
+							<button
+								type="button"
+								onclick={() => (userMenuOpen = !userMenuOpen)}
+								class="p-1.5 rounded-full text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800 transition-colors"
+								aria-label="Account menu"
+								aria-haspopup="menu"
+								aria-expanded={userMenuOpen}
+								title={user.cashaddr}
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5" aria-hidden="true">
+									<circle cx="12" cy="8" r="4" />
+									<path d="M4 21c0-4 4-7 8-7s8 3 8 7" />
+								</svg>
+							</button>
+							{#if userMenuOpen}
+								<div
+									class="absolute right-0 mt-2 w-56 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-lg py-1 z-50"
+									role="menu"
+								>
+									<div class="px-3 py-2 border-b border-slate-100 dark:border-slate-800">
+										<div class="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">Signed in as</div>
+										<div class="font-mono text-xs text-emerald-700 dark:text-emerald-300 mt-1 truncate" title={user.cashaddr}>
+											{truncatedCashaddr}
+										</div>
+									</div>
+									<button
+										type="button"
+										onclick={() => {
+											userMenuOpen = false;
+											logout();
+										}}
+										class="w-full text-left px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+										role="menuitem"
+									>
+										Sign out
+									</button>
+								</div>
+							{/if}
+						</div>
 					</div>
 				{:else}
 					<a
