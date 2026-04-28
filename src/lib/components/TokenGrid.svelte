@@ -12,6 +12,7 @@
 	import FormatCategory from './FormatCategory.svelte';
 	import Sparkline from './Sparkline.svelte';
 	import StarButton from './StarButton.svelte';
+	import VoteButton from './VoteButton.svelte';
 	import type { TokenApiRow, TokenType } from '$lib/types';
 
 	interface Props {
@@ -248,6 +249,7 @@
 			>
 				<div class="flex items-center gap-2 min-w-0">
 					<StarButton categoryHex={token.id} />
+					<VoteButton categoryHex={token.id} upCount={token.upCount} downCount={token.downCount} />
 					<a href={`/token/${token.id}`} class="flex items-center gap-3 min-w-0 no-underline group flex-1">
 					<img src={iconHrefFor(token.icon, token.iconClearedHash)} alt="" class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800" loading="lazy" />
 					<div class="min-w-0">
@@ -303,7 +305,8 @@
 	<div class="md:hidden grid gap-3">
 		{#each tokens as token (token.id)}
 			<div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 hover:shadow-lg hover:border-violet-200 dark:hover:border-violet-800 transition-all relative">
-				<div class="absolute top-3 right-3 z-10">
+				<div class="absolute top-3 right-3 z-10 flex items-center gap-2">
+					<VoteButton categoryHex={token.id} upCount={token.upCount} downCount={token.downCount} size="md" />
 					<StarButton categoryHex={token.id} size="md" />
 				</div>
 				<a href={`/token/${token.id}`} class="block no-underline">

@@ -7,6 +7,7 @@ import { error } from '@sveltejs/kit';
 import { query, hexFromBytes, bytesFromHex } from '$lib/server/db';
 import { fetchBcmr, fetchCauldron } from '$lib/server/external';
 import { computeMcapTvlThresholdSats } from '$lib/server/mcapThreshold';
+import { getVoteCounts } from '$lib/server/votes';
 import type { PageServerLoad } from './$types';
 import type { TokenType } from '$lib/types';
 
@@ -206,7 +207,8 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 		tapswapRes,
 		fexRes,
 		mcapTvlThresholdSats,
-		priceHistoryRes
+		priceHistoryRes,
+		voteCounts
 	] = await Promise.all([
 		query<HolderRow>(
 			`SELECT address, balance::text AS balance, nft_count
@@ -298,7 +300,12 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 			  GROUP BY bucket
 			  ORDER BY bucket ASC`,
 			[categoryBytes]
-		)
+		),
+		// Aggregate up/down counts for this category. One COUNT(*) FILTER
+		// against user_votes_category_vote_idx — index-only scan, no heap
+		// fetches. Returns { upCount: 0, downCount: 0 } for tokens with no
+		// votes yet (the SELECT returns one row even with zero matches).
+		getVoteCounts(categoryBytes)
 	]);
 
 	const decimals = row.decimals ?? bcmr?.decimals ?? 0;
@@ -408,6 +415,12 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 			range,
 			rangeLabel: rangeSpec.label,
 			buckets: priceBuckets
+		},
+		// Live vote aggregates. The user's own vote (if any) is read by the
+		// VoteButton from page.data.userVoteByCategory in the layout load.
+		votes: {
+			upCount: voteCounts.upCount,
+			downCount: voteCounts.downCount
 		}
 	};
 };

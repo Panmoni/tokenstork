@@ -20,12 +20,154 @@
 // `newIn24h` is sourced from the parent layout load so /stats doesn't
 // re-run the same 24h count twice in one pageview.
 
-import { query } from '$lib/server/db';
+import { query, hexFromBytes } from '$lib/server/db';
 import { NOT_MODERATED_CLAUSE } from '$lib/moderation';
 import type { CauldronGlobalStats } from '$lib/server/external';
 import { getIconModerationStats } from '$lib/server/iconStats';
 import { getMovers24h } from '$lib/server/movers';
 import type { PageServerLoad } from './$types';
+
+// Top-10 leaderboards from `user_votes`. Single query — three CTEs share
+// the same per-category aggregation, then each leaderboard sorts the
+// shared base differently. Net score for "upvoted" / "downvoted";
+// Reddit-style controversy product (LEAST(up,down) * (up+down)) for
+// "controversial" — favours tokens with both volume AND a balanced
+// split, so a 50-up/0-down token is correctly NOT controversial.
+//
+// Moderation filter: NOT_MODERATED_CLAUSE keeps governance one source of
+// truth — a moderated token can't appear on a leaderboard.
+async function getVoteLeaderboards(): Promise<{
+	mostUpvoted: VoteLeader[];
+	mostDownvoted: VoteLeader[];
+	mostControversial: VoteLeader[];
+	totalVotes: number;
+}> {
+	const sumQ = query<{ total: string }>(
+		`SELECT COUNT(*)::bigint AS total FROM user_votes`
+	);
+	// Three top-10s in one round-trip. The aggregate runs once in `agg`;
+	// each bucket pulls its own `LIMIT 10` ordered slice, so the wire
+	// payload is at most 30 rows regardless of how many categories have
+	// votes. (Earlier shape used UNION ALL of full ROW_NUMBER scans and
+	// filtered rn<=10 in JS — that emitted 3×N rows. Pushing the LIMIT
+	// into SQL keeps payload bounded as the vote table grows.) Final
+	// JOINs to metadata + icon-safety happen on the already-narrowed
+	// 30-row set, not on every voted-on category.
+	const baseQ = query<VoteLeaderRow>(
+		`WITH agg AS (
+		   SELECT uv.category,
+		          SUM((uv.vote = 'up')::int)::int   AS up,
+		          SUM((uv.vote = 'down')::int)::int AS down
+		     FROM user_votes uv
+		     JOIN tokens t ON t.category = uv.category
+		    WHERE NOT EXISTS (SELECT 1 FROM token_moderation mod WHERE mod.category = t.category)
+		    GROUP BY uv.category
+		 ),
+		 top_upvoted AS (
+		   SELECT category, up, down, 'upvoted'::text AS bucket
+		     FROM agg
+		    ORDER BY (up - down) DESC, up DESC
+		    LIMIT 10
+		 ),
+		 top_downvoted AS (
+		   SELECT category, up, down, 'downvoted'::text AS bucket
+		     FROM agg
+		    ORDER BY (down - up) DESC, down DESC
+		    LIMIT 10
+		 ),
+		 top_controversial AS (
+		   SELECT category, up, down, 'controversial'::text AS bucket
+		     FROM agg
+		    ORDER BY LEAST(up, down) * (up + down) DESC, (up + down) DESC
+		    LIMIT 10
+		 ),
+		 combined AS (
+		   SELECT *, ROW_NUMBER() OVER (PARTITION BY bucket
+		                                ORDER BY
+		                                  CASE bucket
+		                                    WHEN 'upvoted'       THEN (up - down)
+		                                    WHEN 'downvoted'     THEN (down - up)
+		                                    ELSE LEAST(up, down) * (up + down)
+		                                  END DESC,
+		                                  CASE bucket
+		                                    WHEN 'upvoted'       THEN up
+		                                    WHEN 'downvoted'     THEN down
+		                                    ELSE (up + down)
+		                                  END DESC) AS rn
+		     FROM (SELECT * FROM top_upvoted
+		            UNION ALL SELECT * FROM top_downvoted
+		            UNION ALL SELECT * FROM top_controversial) x
+		 )
+		 SELECT c.category,
+		        m.name,
+		        m.symbol,
+		        encode(imo.content_hash, 'hex') AS icon_cleared_hash,
+		        m.icon_uri,
+		        c.up,
+		        c.down,
+		        c.bucket
+		   FROM combined c
+		   LEFT JOIN token_metadata m ON m.category = c.category
+		   LEFT JOIN icon_url_scan ius ON ius.icon_uri = m.icon_uri
+		   LEFT JOIN icon_moderation imo
+		     ON imo.content_hash = ius.content_hash AND imo.state = 'cleared'
+		  ORDER BY c.bucket, c.rn`
+	);
+
+	const [sumRes, baseRes] = await Promise.allSettled([sumQ, baseQ]);
+
+	const totalVotes = sumRes.status === 'fulfilled' ? Number(sumRes.value.rows[0]?.total ?? 0) : 0;
+
+	const mostUpvoted: VoteLeader[] = [];
+	const mostDownvoted: VoteLeader[] = [];
+	const mostControversial: VoteLeader[] = [];
+
+	if (baseRes.status === 'fulfilled') {
+		// Rows arrive ordered by (bucket, rn) — see the ORDER BY at the
+		// tail of baseQ — so push order matches display order. The SQL
+		// already capped each bucket at 10 via per-CTE LIMIT, so no
+		// in-JS rn cutoff is needed.
+		for (const r of baseRes.value.rows) {
+			const item: VoteLeader = {
+				id: hexFromBytes(r.category)!,
+				name: r.name,
+				symbol: r.symbol,
+				iconClearedHash: r.icon_cleared_hash ?? null,
+				icon: r.icon_uri,
+				upCount: r.up,
+				downCount: r.down
+			};
+			if (r.bucket === 'upvoted') mostUpvoted.push(item);
+			else if (r.bucket === 'downvoted') mostDownvoted.push(item);
+			else if (r.bucket === 'controversial') mostControversial.push(item);
+		}
+	} else {
+		console.error('[stats] vote leaderboards failed:', baseRes.reason);
+	}
+
+	return { mostUpvoted, mostDownvoted, mostControversial, totalVotes };
+}
+
+interface VoteLeaderRow {
+	category: Buffer;
+	name: string | null;
+	symbol: string | null;
+	icon_cleared_hash: string | null;
+	icon_uri: string | null;
+	up: number;
+	down: number;
+	bucket: 'upvoted' | 'downvoted' | 'controversial';
+}
+
+export interface VoteLeader {
+	id: string;
+	name: string | null;
+	symbol: string | null;
+	iconClearedHash: string | null;
+	icon: string | null;
+	upCount: number;
+	downCount: number;
+}
 
 interface TypeCount {
 	token_type: 'FT' | 'NFT' | 'FT+NFT';
@@ -108,7 +250,8 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 	// query doesn't tank the page (each card has its own empty-state).
 	const iconStatsP = getIconModerationStats();
 	const moversP = getMovers24h();
-	const [parentData, pageResults, bchPriceUSD, iconStats, movers] = await Promise.all([
+	const voteLeadersP = getVoteLeaderboards();
+	const [parentData, pageResults, bchPriceUSD, iconStats, movers, voteLeaders] = await Promise.all([
 		parent(),
 		Promise.allSettled([
 			query<TypeCount>(
@@ -358,7 +501,8 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		]),
 		bchPriceP,
 		iconStatsP,
-		moversP
+		moversP,
+		voteLeadersP
 	]);
 
 	// Destructure all 16 allSettled results by name. Magic-number indexing
@@ -546,6 +690,7 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		ecosystemTvl30d,
 		movers,
 		supplyBuckets,
-		iconStats
+		iconStats,
+		voteLeaders
 	};
 };

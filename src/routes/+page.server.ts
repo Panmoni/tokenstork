@@ -43,6 +43,11 @@ interface DbRow {
 	// cleared. Drives the placeholder vs /icons/<hash>.webp decision in
 	// the UI helper $lib/icons.ts#iconHrefFor.
 	icon_cleared_hash: string | null;
+	// Live aggregates from `user_votes`. COUNT(*) FILTER on the
+	// (category, vote) index — one lateral subquery per row, no heap
+	// fetches. Both 0 for tokens with no votes.
+	up_count: number;
+	down_count: number;
 }
 
 // Bucket names by "quality" so the directory opens with recognisable
@@ -75,7 +80,16 @@ const VALID_SORTS: Record<string, string> = {
 	// the top); unlisted tokens sink to the bottom via NULLS LAST.
 	tvl: `vl_cauldron.tvl_satoshis DESC NULLS LAST, ${NAME_QUALITY}, ${NAME_SORTABLE} ASC NULLS LAST`,
 	recent: 't.genesis_block DESC, t.first_seen_at DESC',
-	oldest: 't.genesis_block ASC, t.first_seen_at ASC'
+	oldest: 't.genesis_block ASC, t.first_seen_at ASC',
+	// Vote-driven sorts. Net score (up - down) for "upvoted"; Reddit-
+	// style controversy product (LEAST(up,down) * (up+down)) for
+	// "controversial" — favours tokens with both volume AND a balanced
+	// split. Tokens with zero votes sort last via NULLS-equivalent
+	// behaviour (the expressions evaluate to 0 / 0 and tie-break on
+	// name quality + name).
+	upvoted: `(v.up_count - v.down_count) DESC, v.up_count DESC, ${NAME_QUALITY}, ${NAME_SORTABLE} ASC NULLS LAST`,
+	downvoted: `(v.down_count - v.up_count) DESC, v.down_count DESC, ${NAME_QUALITY}, ${NAME_SORTABLE} ASC NULLS LAST`,
+	controversial: `LEAST(v.up_count, v.down_count) * (v.up_count + v.down_count) DESC, (v.up_count + v.down_count) DESC, ${NAME_QUALITY}, ${NAME_SORTABLE} ASC NULLS LAST`
 };
 
 // Default sort: TVL desc. The directory used to open name-sorted, which
@@ -283,6 +297,18 @@ export const load: PageServerLoad = async ({ url }) => {
 		LEFT JOIN icon_moderation imo
 			ON imo.content_hash = ius.content_hash
 			AND imo.state = 'cleared'
+		-- Wallet-tied votes — one COUNT(*) FILTER pass per row against
+		-- user_votes_category_vote_idx. Both columns default to 0 via
+		-- COALESCE so the upvoted/controversial sorts (and the grid
+		-- arithmetic) never see NULL. v.up_count / v.down_count are
+		-- referenced by ORDER BY upvoted / controversial.
+		LEFT JOIN LATERAL (
+			SELECT
+			  COALESCE(COUNT(*) FILTER (WHERE vote = 'up'),   0)::int AS up_count,
+			  COALESCE(COUNT(*) FILTER (WHERE vote = 'down'), 0)::int AS down_count
+			  FROM user_votes
+			 WHERE category = t.category
+		) v ON true
 	`;
 
 	try {
@@ -323,7 +349,9 @@ export const load: PageServerLoad = async ({ url }) => {
 				ph_24h.price_sats  AS price_sats_24h_ago,
 				ph_7d.price_sats   AS price_sats_7d_ago,
 				ph_spark.points    AS sparkline_points,
-				encode(imo.content_hash, 'hex') AS icon_cleared_hash
+				encode(imo.content_hash, 'hex') AS icon_cleared_hash,
+				v.up_count,
+				v.down_count
 			   ${fromJoins}
 			   ${whereClause}
 			   ORDER BY ${searchOrderPrefix}${sort}
@@ -399,7 +427,9 @@ export const load: PageServerLoad = async ({ url }) => {
 				priceChange24hPct,
 				priceChange7dPct,
 				sparklinePoints,
-				iconClearedHash: row.icon_cleared_hash ?? null
+				iconClearedHash: row.icon_cleared_hash ?? null,
+				upCount: row.up_count ?? 0,
+				downCount: row.down_count ?? 0
 			};
 		});
 

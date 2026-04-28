@@ -58,6 +58,13 @@ export interface TokenApiRow {
 	// $lib/icons.ts#iconHrefFor consumes this — null → placeholder,
 	// otherwise → /icons/<hex>.webp served from our origin.
 	iconClearedHash: string | null;
+
+	// Wallet-tied user votes. Live aggregates from `user_votes`; counts
+	// reflect every wallet's vote (one row per user-token pair). Net
+	// score = upCount - downCount. Both default to 0 for tokens with no
+	// votes yet.
+	upCount: number;
+	downCount: number;
 }
 
 export interface TokensResponse {

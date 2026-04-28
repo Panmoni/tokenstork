@@ -21,22 +21,31 @@
 import { query } from '$lib/server/db';
 import { NOT_MODERATED_CLAUSE } from '$lib/moderation';
 import { listWatchlistCategories } from '$lib/server/watchlist';
+import { listUserVotes, type Vote } from '$lib/server/votes';
 import type { LayoutServerLoad } from './$types';
 
 export const load: LayoutServerLoad = async ({ locals }) => {
-	// When authenticated, fetch the user's watchlist categories so the
-	// star button on every token-rendering surface knows current state
-	// without an N+1 query. One-row index range scan; cheap enough at
-	// expected watchlist sizes (<100 tokens per user typical).
+	// When authenticated, fetch (a) the user's watchlist categories and
+	// (b) the user's vote map so the star + vote buttons on every
+	// token-rendering surface know current state without N+1 lookups.
+	// Both are small index range scans; firing them in parallel adds no
+	// measurable latency.
 	let watchlistCategoryHexes: string[] = [];
+	let userVoteByCategory: Record<string, Vote> = {};
 	if (locals.user) {
-		try {
-			const cats = await listWatchlistCategories(locals.user.cashaddr);
-			watchlistCategoryHexes = cats.map((c) => c.toString('hex'));
-		} catch (err) {
-			// Auth surface shouldn't 5xx the directory if the watchlist
-			// query hiccups — just render with an empty set.
-			console.error('[+layout.server] watchlist fetch failed:', err);
+		const [wRes, vRes] = await Promise.allSettled([
+			listWatchlistCategories(locals.user.cashaddr),
+			listUserVotes(locals.user.cashaddr)
+		]);
+		if (wRes.status === 'fulfilled') {
+			watchlistCategoryHexes = wRes.value.map((c) => c.toString('hex'));
+		} else {
+			console.error('[+layout.server] watchlist fetch failed:', wRes.reason);
+		}
+		if (vRes.status === 'fulfilled') {
+			userVoteByCategory = vRes.value;
+		} else {
+			console.error('[+layout.server] votes fetch failed:', vRes.reason);
 		}
 	}
 	// Every tokens-reading query excludes moderation-hidden categories via
@@ -159,6 +168,7 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 		totalTvlSats,
 		listedCount,
 		user: locals.user ?? null,
-		watchlistCategoryHexes
+		watchlistCategoryHexes,
+		userVoteByCategory
 	};
 };

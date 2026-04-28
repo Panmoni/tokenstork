@@ -591,3 +591,24 @@ BEGIN
         ALTER TABLE user_mint_sessions DROP CONSTRAINT user_mint_sessions_category_fkey;
     END IF;
 END $$;
+
+-- ============================================================================
+-- User up/down votes on tokens. One vote per (cashaddr, category) pair —
+-- changing direction overwrites the row, retracting deletes it. Cascading
+-- deletes keep votes consistent if a user or token is removed.
+--
+-- Live aggregation via COUNT(*) FILTER on the (category, vote) index. At
+-- expected scale (~10–20k tokens, single-digit votes each near-term) the
+-- aggregation join cost is negligible; denormalising into token_state is
+-- a follow-up only if a query plan shows it as the bottleneck.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS user_votes (
+  cashaddr   TEXT        NOT NULL REFERENCES users(cashaddr) ON DELETE CASCADE,
+  category   BYTEA       NOT NULL REFERENCES tokens(category) ON DELETE CASCADE,
+  vote       TEXT        NOT NULL CHECK (vote IN ('up','down')),
+  voted_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (cashaddr, category)
+);
+
+CREATE INDEX IF NOT EXISTS user_votes_category_vote_idx
+  ON user_votes (category, vote);

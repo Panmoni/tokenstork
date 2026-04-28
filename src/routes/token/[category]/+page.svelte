@@ -9,6 +9,7 @@
 	import FormatCategory from '$lib/components/FormatCategory.svelte';
 	import PriceChart from '$lib/components/PriceChart.svelte';
 	import StarButton from '$lib/components/StarButton.svelte';
+	import VoteButton from '$lib/components/VoteButton.svelte';
 
 	let { data } = $props();
 
@@ -179,7 +180,13 @@
 					{#if token.symbol}<span class="ml-3 text-lg text-slate-500 font-mono font-normal">{stripEmoji(token.symbol)}</span>{/if}
 				</span>
 			</h1>
-			<div class="mt-2 flex items-center gap-3">
+			<div class="mt-2 flex items-center gap-3 flex-wrap">
+				<VoteButton
+					categoryHex={token.id}
+					upCount={data.votes.upCount}
+					downCount={data.votes.downCount}
+					size="md"
+				/>
 				<span class="px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-xs font-medium">
 					{token.tokenType}
 				</span>
