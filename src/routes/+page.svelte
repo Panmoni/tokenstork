@@ -36,18 +36,18 @@
 			<div class="flex items-baseline justify-between mb-3">
 				<div class="flex items-center gap-1.5">
 					<h2 class="text-xl font-semibold text-slate-900 dark:text-white">Community sentiment</h2>
-					<button
-						type="button"
+					<a
+						href="/faq#faq-vote-ranking"
 						class="text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
-						aria-label="About community sentiment"
-						title="Logged-in users vote ↑ or ↓ on tokens. Score = up − down. Controversial = LEAST(up, down) × (up + down) — favours tokens with both volume and a balanced split."
+						aria-label="About community sentiment — opens FAQ"
+						title="Ranks weight votes by voter tenure × recency (7-day half-life). Click for the full formula."
 					>
 						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4" aria-hidden="true">
 							<circle cx="12" cy="12" r="10" />
 							<line x1="12" y1="16" x2="12" y2="12" />
 							<line x1="12" y1="8" x2="12.01" y2="8" />
 						</svg>
-					</button>
+					</a>
 				</div>
 				<span class="text-xs text-slate-500 dark:text-slate-400">
 					{fmt(data.voteLeaders.totalVotes)} vote{data.voteLeaders.totalVotes === 1 ? '' : 's'} cast

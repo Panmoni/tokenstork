@@ -468,6 +468,56 @@
 			</div>
 		</details>
 
+		<details id="faq-vote-ranking" class="group p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 scroll-mt-20">
+			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
+				<span>How are tokens ranked on the up/down vote leaderboards?</span>
+				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
+			</summary>
+			<div class="mt-3 text-slate-600 dark:text-slate-300 space-y-3">
+				<p>
+					The "Most upvoted / downvoted / controversial" leaderboards on the homepage don't
+					just count raw <span class="font-mono">↑</span> and <span class="font-mono">↓</span>
+					clicks. Each vote contributes a <em>weighted</em> score, and the leaderboard sorts on
+					the sum of those weights. The directory's <code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-xs">?sort=upvoted</code> /
+					<code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-xs">downvoted</code> /
+					<code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-xs">controversial</code> options use the same weights.
+				</p>
+				<p>Two things shape a single vote's weight:</p>
+				<ol class="list-decimal list-inside ml-2 space-y-2">
+					<li>
+						<strong>How long the voter has been around.</strong> Each wallet's tenure is the number
+						of distinct UTC days on which it has cast at least one vote action. A vote from a
+						brand-new wallet contributes <span class="font-mono">1.0</span>; a vote from a wallet
+						that's been active 30 days contributes <span class="font-mono">5.0</span>; a year-tenured
+						wallet contributes about <span class="font-mono">8.5</span>. Growth is logarithmic
+						(<span class="font-mono">log₂(tenure_days + 2)</span>) — established voters get more
+						say, but a tireless contributor doesn't dominate.
+					</li>
+					<li>
+						<strong>How recently the vote was cast.</strong> Vote weight halves every 7 days
+						(<span class="font-mono">0.5<sup>age_days / 7</sup></span>). A vote cast today is worth
+						<span class="font-mono">1.0×</span>, last week's is worth <span class="font-mono">0.5×</span>,
+						two weeks old is <span class="font-mono">0.25×</span>, a month-old vote is about
+						<span class="font-mono">0.05×</span>. Old enthusiasm fades; the leaderboard reflects
+						the current mood.
+					</li>
+				</ol>
+				<p>
+					Multiplied together, the formula favours <strong>consistent votes from established
+					voters</strong>, and naturally pushes raid-style bursts of fresh wallets toward the
+					bottom of the ranking. The raw <span class="font-mono">↑</span> /
+					<span class="font-mono">↓</span> counts shown next to each token are still the simple
+					totals — only the <em>ordering</em> uses the weighted score.
+				</p>
+				<p>
+					Each wallet may cast, change, or retract at most <strong>20 vote actions per UTC
+					day</strong>. That's well above any organic per-day activity but tight enough that a
+					script-controlled wallet can't shove a token to the top in one sitting. The counter
+					resets at 00:00 UTC.
+				</p>
+			</div>
+		</details>
+
 		<details class="group p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
 				<span>Is TokenStork open source?</span>

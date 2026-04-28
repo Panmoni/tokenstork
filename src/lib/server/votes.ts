@@ -29,6 +29,60 @@ export class VoteRejectedError extends Error {
 	}
 }
 
+/** Thrown by `setVote` when the caller has used up their daily quota.
+ *  Translated to 429 by the API. The increment that triggered the
+ *  rejection is rolled back with the rest of the transaction, so a
+ *  rejected action does not consume budget. */
+export class VoteQuotaError extends Error {
+	constructor(message = 'daily vote limit reached (20 / UTC day)') {
+		super(message);
+		this.name = 'VoteQuotaError';
+	}
+}
+
+/** Per-wallet daily vote-action limit (UTC). Counts every successful
+ *  setVote call — cast, change, or retract — toward the same budget.
+ *  Tunable here without a schema change. */
+export const DAILY_VOTE_LIMIT = 20;
+
+// =====================================================================
+// Shared SQL fragments for the tenure-weighted hot-ranking score.
+//
+// Two consumers — getVoteLeaderboards (homepage leaderboards) and the
+// directory's `?sort=upvoted/downvoted/controversial` lateral in
+// src/routes/+page.server.ts — both compute the same per-vote
+// contribution. Single source of truth here so the two can't drift:
+// if the half-life or log-base is ever retuned, both sites update via
+// a single edit.
+//
+// Caller conventions:
+//   * Wrap `VOTE_TENURE_CTE_BODY` in `WITH tenure AS MATERIALIZED (...)`
+//     at the top of the query. MATERIALIZED forces PG to compute the
+//     full-table aggregate once per query rather than inline it into
+//     each reference (which would defeat the hoist).
+//   * Reference the CTE via alias `tn` (so `t` stays free for the
+//     `tokens` table — keeps NOT_MODERATED_CLAUSE working unchanged).
+//   * Reference `user_votes` rows via alias `uv`.
+//
+// The contribution expression assumes those aliases are in scope.
+// =====================================================================
+
+/** Body of the `tenure` CTE — distinct UTC days per voter. Wrap in
+ *  `WITH tenure AS MATERIALIZED (…)` at the top of a query. */
+export const VOTE_TENURE_CTE_BODY =
+	`SELECT cashaddr, COUNT(*)::int AS tenure_days
+	   FROM user_vote_actions
+	  GROUP BY cashaddr`;
+
+/** Per-vote contribution: `voter_weight × time_decay`, where
+ *    voter_weight = LN(tenure_days + 2) / LN(2)    -- log₂(t+2)
+ *    time_decay   = 0.5 ^ (age_days / 7)            -- 7-day half-life
+ *  Caller binds aliases `uv` (user_votes) and `tn` (tenure CTE).
+ *  See /faq#faq-vote-ranking for the user-facing explanation. */
+export const VOTE_CONTRIBUTION_SQL =
+	`(LN(COALESCE(tn.tenure_days, 0) + 2) / LN(2))
+	 * POWER(0.5, EXTRACT(EPOCH FROM (now() - uv.voted_at)) / 86400.0 / 7.0)`;
+
 /** Set / change / retract a user's vote on a token in a single transaction.
  *
  *  Semantics:
@@ -53,6 +107,24 @@ export async function setVote(
 	vote: VoteState
 ): Promise<VoteResult> {
 	return withTransaction(async (client) => {
+		// Daily-quota gate. Increment first; if the post-increment count
+		// exceeds the limit, throw — the transaction rollback then undoes
+		// this increment along with anything else, so a rejected action
+		// does not consume budget. Doubles as the source of truth for
+		// voter tenure (COUNT(*) of distinct day_utc rows per cashaddr)
+		// — see `voter_weight` in getVoteLeaderboards / +page.server.ts.
+		const quota = await client.query<{ count: number }>(
+			`INSERT INTO user_vote_actions (cashaddr, day_utc, count)
+			 VALUES ($1, (now() AT TIME ZONE 'UTC')::date, 1)
+			 ON CONFLICT (cashaddr, day_utc) DO UPDATE
+			   SET count = user_vote_actions.count + 1
+			 RETURNING count`,
+			[cashaddr]
+		);
+		if ((quota.rows[0]?.count ?? 0) > DAILY_VOTE_LIMIT) {
+			throw new VoteQuotaError();
+		}
+
 		if (vote === null) {
 			await client.query(
 				`DELETE FROM user_votes WHERE cashaddr = $1 AND category = $2`,
@@ -122,15 +194,24 @@ export async function listUserVotes(
 	return out;
 }
 
-/** Top-N leaderboards over `user_votes`. Three buckets — most upvoted
- *  (net score), most downvoted (-net), most controversial (Reddit-style
- *  product LEAST(up,down) × (up+down) — favours volume + balanced split,
- *  so a 50-up/0-down token is correctly NOT controversial).
+/** Hot-ranked top-N leaderboards over `user_votes`. Three buckets —
+ *  most upvoted (highest weighted net score), most downvoted (lowest
+ *  weighted net score), most controversial (LEAST(weighted_up,
+ *  weighted_down) × (weighted_up + weighted_down)).
  *
- *  Single round-trip with bounded payload: the agg CTE runs once;
- *  per-bucket `ORDER BY … LIMIT 10` CTEs cap the wire payload at 30
- *  rows regardless of `user_votes` size; metadata + icon-safety joins
- *  hit the already-narrowed set, not every voted-on category.
+ *  Each vote contributes `±1 × voter_weight × time_decay`:
+ *    voter_weight = LN(tenure_days + 2) / LN(2)         — log₂(t+2)
+ *    time_decay   = 0.5 ^ (age_days / 7)                 — 7d half-life
+ *  See `/faq#faq-vote-ranking` for the user-facing explanation.
+ *
+ *  The leaderboard *displays* raw integer up/down counts (intuitive for
+ *  visitors) but *ranks* by the weighted hot score. Both are returned
+ *  in the same row.
+ *
+ *  Single round-trip with bounded payload: tenure runs once per voter;
+ *  weighted contributions aggregate by category; per-bucket
+ *  `ORDER BY … LIMIT 10` CTEs cap the wire payload at 30 rows.
+ *  Metadata + icon-safety joins hit the narrowed set only.
  *
  *  Moderation: `NOT_MODERATED_CLAUSE` keeps a moderated token from
  *  appearing on any leaderboard, in lockstep with every other public
@@ -145,45 +226,55 @@ export async function getVoteLeaderboards(): Promise<{
 		`SELECT COUNT(*)::bigint AS total FROM user_votes`
 	);
 	const baseQ = query<VoteLeaderRow>(
-		`WITH agg AS (
+		`WITH tenure AS MATERIALIZED (${VOTE_TENURE_CTE_BODY}),
+		 weighted AS (
 		   SELECT uv.category,
-		          SUM((uv.vote = 'up')::int)::int   AS up,
-		          SUM((uv.vote = 'down')::int)::int AS down
+		          uv.vote,
+		          (${VOTE_CONTRIBUTION_SQL}) AS contribution
 		     FROM user_votes uv
+		     LEFT JOIN tenure tn ON tn.cashaddr = uv.cashaddr
 		     JOIN tokens t ON t.category = uv.category
-		    WHERE NOT EXISTS (SELECT 1 FROM token_moderation mod WHERE mod.category = t.category)
-		    GROUP BY uv.category
+		    WHERE ${NOT_MODERATED_CLAUSE}
+		 ),
+		 agg AS (
+		   SELECT category,
+		          SUM((vote = 'up')::int)::int   AS up,
+		          SUM((vote = 'down')::int)::int AS down,
+		          COALESCE(SUM(contribution) FILTER (WHERE vote = 'up'),   0)::float8 AS hot_up,
+		          COALESCE(SUM(contribution) FILTER (WHERE vote = 'down'), 0)::float8 AS hot_down
+		     FROM weighted
+		     GROUP BY category
 		 ),
 		 top_upvoted AS (
-		   SELECT category, up, down, 'upvoted'::text AS bucket
+		   SELECT category, up, down, hot_up, hot_down, 'upvoted'::text AS bucket
 		     FROM agg
-		    ORDER BY (up - down) DESC, up DESC
+		    ORDER BY (hot_up - hot_down) DESC, hot_up DESC
 		    LIMIT 10
 		 ),
 		 top_downvoted AS (
-		   SELECT category, up, down, 'downvoted'::text AS bucket
+		   SELECT category, up, down, hot_up, hot_down, 'downvoted'::text AS bucket
 		     FROM agg
-		    ORDER BY (down - up) DESC, down DESC
+		    ORDER BY (hot_down - hot_up) DESC, hot_down DESC
 		    LIMIT 10
 		 ),
 		 top_controversial AS (
-		   SELECT category, up, down, 'controversial'::text AS bucket
+		   SELECT category, up, down, hot_up, hot_down, 'controversial'::text AS bucket
 		     FROM agg
-		    ORDER BY LEAST(up, down) * (up + down) DESC, (up + down) DESC
+		    ORDER BY LEAST(hot_up, hot_down) * (hot_up + hot_down) DESC, (hot_up + hot_down) DESC
 		    LIMIT 10
 		 ),
 		 combined AS (
 		   SELECT *, ROW_NUMBER() OVER (PARTITION BY bucket
 		                                ORDER BY
 		                                  CASE bucket
-		                                    WHEN 'upvoted'       THEN (up - down)
-		                                    WHEN 'downvoted'     THEN (down - up)
-		                                    ELSE LEAST(up, down) * (up + down)
+		                                    WHEN 'upvoted'       THEN (hot_up - hot_down)
+		                                    WHEN 'downvoted'     THEN (hot_down - hot_up)
+		                                    ELSE LEAST(hot_up, hot_down) * (hot_up + hot_down)
 		                                  END DESC,
 		                                  CASE bucket
-		                                    WHEN 'upvoted'       THEN up
-		                                    WHEN 'downvoted'     THEN down
-		                                    ELSE (up + down)
+		                                    WHEN 'upvoted'       THEN hot_up
+		                                    WHEN 'downvoted'     THEN hot_down
+		                                    ELSE (hot_up + hot_down)
 		                                  END DESC) AS rn
 		     FROM (SELECT * FROM top_upvoted
 		            UNION ALL SELECT * FROM top_downvoted

@@ -612,3 +612,25 @@ CREATE TABLE IF NOT EXISTS user_votes (
 
 CREATE INDEX IF NOT EXISTS user_votes_category_vote_idx
   ON user_votes (category, vote);
+
+-- ============================================================================
+-- Per-wallet daily vote-action counter. One row per (cashaddr, UTC day);
+-- count increments on every setVote call (cast, change, retract). Used
+-- for two purposes:
+--   1. Daily cap of 20 actions/wallet/day — incremented inside setVote's
+--      transaction; if returned count > 20, the transaction rolls back
+--      and the API returns 429.
+--   2. Voter tenure — `tenure_days(cashaddr) = COUNT(*) FROM
+--      user_vote_actions WHERE cashaddr = $1` — feeds the hot-ranking
+--      voter_weight term `LN(tenure_days + 2) / LN(2)`. Rows are NEVER
+--      deleted (cascading from users is fine; never manually pruned).
+-- The (cashaddr) leading-column of the PK serves the tenure COUNT(*)
+-- query without a separate index. Single-table on purpose: one source
+-- of truth for both the daily cap and the tenure lookup.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS user_vote_actions (
+  cashaddr   TEXT        NOT NULL REFERENCES users(cashaddr) ON DELETE CASCADE,
+  day_utc    DATE        NOT NULL,
+  count      INT         NOT NULL DEFAULT 0,
+  PRIMARY KEY (cashaddr, day_utc)
+);

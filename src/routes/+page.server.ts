@@ -4,7 +4,11 @@
 import { query, hexFromBytes } from '$lib/server/db';
 import { computeMcapTvlThresholdSats } from '$lib/server/mcapThreshold';
 import { getMovers24h } from '$lib/server/movers';
-import { getVoteLeaderboards } from '$lib/server/votes';
+import {
+	getVoteLeaderboards,
+	VOTE_TENURE_CTE_BODY,
+	VOTE_CONTRIBUTION_SQL
+} from '$lib/server/votes';
 import { NOT_MODERATED_CLAUSE } from '$lib/moderation';
 import type { PageServerLoad } from './$types';
 import type { TokenApiRow, TokenType } from '$lib/types';
@@ -82,15 +86,17 @@ const VALID_SORTS: Record<string, string> = {
 	tvl: `vl_cauldron.tvl_satoshis DESC NULLS LAST, ${NAME_QUALITY}, ${NAME_SORTABLE} ASC NULLS LAST`,
 	recent: 't.genesis_block DESC, t.first_seen_at DESC',
 	oldest: 't.genesis_block ASC, t.first_seen_at ASC',
-	// Vote-driven sorts. Net score (up - down) for "upvoted"; Reddit-
-	// style controversy product (LEAST(up,down) * (up+down)) for
-	// "controversial" — favours tokens with both volume AND a balanced
-	// split. Tokens with zero votes sort last via NULLS-equivalent
-	// behaviour (the expressions evaluate to 0 / 0 and tie-break on
-	// name quality + name).
-	upvoted: `(v.up_count - v.down_count) DESC, v.up_count DESC, ${NAME_QUALITY}, ${NAME_SORTABLE} ASC NULLS LAST`,
-	downvoted: `(v.down_count - v.up_count) DESC, v.down_count DESC, ${NAME_QUALITY}, ${NAME_SORTABLE} ASC NULLS LAST`,
-	controversial: `LEAST(v.up_count, v.down_count) * (v.up_count + v.down_count) DESC, (v.up_count + v.down_count) DESC, ${NAME_QUALITY}, ${NAME_SORTABLE} ASC NULLS LAST`
+	// Vote-driven sorts — ranked by WEIGHTED hot scores from `vw`, not
+	// raw counts. Each vote contributes voter_weight × time_decay
+	// (log₂(tenure_days+2) × 0.5^(age_days/7)); a fresh vote from a
+	// long-tenured wallet outweighs a fresh vote from a brand-new
+	// wallet, and old votes decay. Controversial favours tokens with
+	// both volume AND a balanced split (LEAST(u,d) × (u+d) — degrades
+	// to 0 if one side empty). Tokens with zero votes sort last via
+	// the implicit 0 evaluation. See /faq#faq-vote-ranking.
+	upvoted: `(vw.hot_up - vw.hot_down) DESC, vw.hot_up DESC, ${NAME_QUALITY}, ${NAME_SORTABLE} ASC NULLS LAST`,
+	downvoted: `(vw.hot_down - vw.hot_up) DESC, vw.hot_down DESC, ${NAME_QUALITY}, ${NAME_SORTABLE} ASC NULLS LAST`,
+	controversial: `LEAST(vw.hot_up, vw.hot_down) * (vw.hot_up + vw.hot_down) DESC, (vw.hot_up + vw.hot_down) DESC, ${NAME_QUALITY}, ${NAME_SORTABLE} ASC NULLS LAST`
 };
 
 // Default sort: TVL desc. The directory used to open name-sorted, which
@@ -298,11 +304,10 @@ export const load: PageServerLoad = async ({ url }) => {
 		LEFT JOIN icon_moderation imo
 			ON imo.content_hash = ius.content_hash
 			AND imo.state = 'cleared'
-		-- Wallet-tied votes — one COUNT(*) FILTER pass per row against
-		-- user_votes_category_vote_idx. Both columns default to 0 via
-		-- COALESCE so the upvoted/controversial sorts (and the grid
-		-- arithmetic) never see NULL. v.up_count / v.down_count are
-		-- referenced by ORDER BY upvoted / controversial.
+		-- Wallet-tied votes — RAW counts, displayed as-is in the grid.
+		-- One COUNT(*) FILTER pass per row against
+		-- user_votes_category_vote_idx; both columns default to 0 so
+		-- the UI never sees NULL.
 		LEFT JOIN LATERAL (
 			SELECT
 			  COALESCE(COUNT(*) FILTER (WHERE vote = 'up'),   0)::int AS up_count,
@@ -310,12 +315,43 @@ export const load: PageServerLoad = async ({ url }) => {
 			  FROM user_votes
 			 WHERE category = t.category
 		) v ON true
+		-- Wallet-tied votes — WEIGHTED hot scores, used only for the
+		-- upvoted / downvoted / controversial sort orders. Each vote's
+		-- contribution comes from VOTE_CONTRIBUTION_SQL in
+		-- $lib/server/votes (= voter_weight x time_decay), shared with
+		-- the homepage leaderboards so the two can't drift. The tenure
+		-- aggregate is hoisted to a top-level CTE (see tenureCte below)
+		-- and MATERIALIZED once per query, so joining tn here is a
+		-- small key lookup rather than a per-row table scan. The inner
+		-- sub-select computes contribution once per vote row; SUM/FILTER
+		-- then splits it by direction. Two laterals per row is
+		-- intentional: raw counts (v) drive the UI; weighted scores
+		-- (vw) drive the leaderboards. See /faq#faq-vote-ranking.
+		LEFT JOIN LATERAL (
+			SELECT
+			  COALESCE(SUM(c) FILTER (WHERE vote = 'up'),   0)::float8 AS hot_up,
+			  COALESCE(SUM(c) FILTER (WHERE vote = 'down'), 0)::float8 AS hot_down
+			  FROM (
+			    SELECT uv.vote,
+			           (${VOTE_CONTRIBUTION_SQL}) AS c
+			      FROM user_votes uv
+			      LEFT JOIN tenure tn ON tn.cashaddr = uv.cashaddr
+			     WHERE uv.category = t.category
+			  ) per_vote
+		) vw ON true
 	`;
+
+	// Per-voter tenure (distinct UTC voting days), referenced by the `vw`
+	// weighted-score lateral in `fromJoins`. MATERIALIZED forces PG to
+	// compute the full-table aggregate ONCE per query — without it, PG14+
+	// would inline the CTE into every lateral evaluation and the per-row
+	// scan would defeat the whole hoist.
+	const tenureCte = `WITH tenure AS MATERIALIZED (${VOTE_TENURE_CTE_BODY})`;
 
 	try {
 		const [countRes, mcapTvlThresholdSats] = await Promise.all([
 			query<{ total: string }>(
-				`SELECT COUNT(*)::bigint AS total ${fromJoins} ${whereClause}`,
+				`${tenureCte} SELECT COUNT(*)::bigint AS total ${fromJoins} ${whereClause}`,
 				values
 			),
 			computeMcapTvlThresholdSats()
@@ -323,7 +359,7 @@ export const load: PageServerLoad = async ({ url }) => {
 		const total = Number(countRes.rows[0]?.total ?? 0);
 
 		const dataRes = await query<DbRow>(
-			`SELECT
+			`${tenureCte} SELECT
 				t.category,
 				t.token_type,
 				t.genesis_block,

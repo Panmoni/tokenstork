@@ -90,6 +90,13 @@
 				await goto(`/login?return=${encodeURIComponent(path)}`);
 				return;
 			}
+			if (res.status === 429) {
+				// Daily quota exhausted — fall through to the catch path so
+				// the optimistic flip rolls back. Console hint distinguishes
+				// "you hit your limit" from generic failure for anyone
+				// inspecting devtools.
+				console.warn('[vote] daily limit reached (20 / UTC day) — try again tomorrow');
+			}
 			if (!res.ok) throw new Error(`${res.status}`);
 			const data = (await res.json()) as { vote: VoteState; upCount: number; downCount: number };
 			optimisticVote = data.vote;

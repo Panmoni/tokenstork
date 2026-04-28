@@ -11,7 +11,12 @@
 //   404                                 if the category doesn't exist
 
 import { error, json } from '@sveltejs/kit';
-import { setVote, VoteRejectedError, type VoteState } from '$lib/server/votes';
+import {
+	setVote,
+	VoteRejectedError,
+	VoteQuotaError,
+	type VoteState
+} from '$lib/server/votes';
 import type { RequestHandler } from './$types';
 
 const HEX_CATEGORY_RE = /^[0-9a-fA-F]{64}$/;
@@ -50,6 +55,12 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 		const result = await setVote(locals.user.cashaddr, categoryBytes, vote);
 		return json(result);
 	} catch (err) {
+		// Daily-quota exhausted — 429 with a clear hint that it resets at
+		// 00:00 UTC. The transaction rollback already undid the increment
+		// that triggered this, so a 429 doesn't burn any more budget.
+		if (err instanceof VoteQuotaError) {
+			throw error(429, 'daily vote limit reached — try again tomorrow (UTC)');
+		}
 		// setVote rejected the cast — token is missing from `tokens` or is
 		// moderation-hidden. 410 Gone matches the per-token detail page's
 		// behaviour for moderated tokens; 404 would suggest the URL was
