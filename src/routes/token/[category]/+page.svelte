@@ -176,6 +176,7 @@
 			data.moverBadges.tvlMoverRank > 0 ||
 			data.arbitrage.eligible ||
 			(data.cauldronTvlSharePct != null && data.cauldronTvlSharePct >= 10) ||
+			data.tvlRank != null ||
 			standings.length > 0
 	);
 
@@ -380,6 +381,15 @@
 	-->
 	{#if showBadges}
 		<div class="mb-6 flex flex-wrap items-center gap-2">
+			{#if data.tvlRank != null}
+				<a
+					href="/?sort=tvl"
+					class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-600 text-white text-xs font-semibold hover:bg-cyan-700"
+					title={`Ranked #${data.tvlRank} by Cauldron pool TVL across all listed tokens. Other venues (Fex, Tapswap) are not factored in. Click to view the directory sorted by TVL.`}
+				>
+					🏆 #{data.tvlRank} by Cauldron TVL
+				</a>
+			{/if}
 			{#if data.cauldronTvlSharePct != null && data.cauldronTvlSharePct >= 10}
 				<span
 					class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-600 text-white text-xs font-semibold"

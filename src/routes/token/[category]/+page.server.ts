@@ -236,7 +236,8 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 		priceExtremesRes,
 		recentTradesRes,
 		reportCountRes,
-		leaderboardStandingsRes
+		leaderboardStandingsRes,
+		tvlRankRes
 	] = await Promise.all([
 		query<HolderRow>(
 			`SELECT address, balance::text AS balance, nft_count
@@ -421,7 +422,42 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 		// three buckets, plus streak + medal counts pulled from
 		// vote_leaderboard_history. Empty arrays if the snapshot worker
 		// has never run; the UI hides the section in that case.
-		getLeaderboardStandings(categoryBytes)
+		getLeaderboardStandings(categoryBytes),
+		// Rank of this token by Cauldron pool TVL across all listed,
+		// non-moderated tokens. The CTE pins the self-row's TVL once,
+		// then counts how many other listings outrank it; the +1 makes
+		// it 1-based. Returns no rows when the token isn't on Cauldron at
+		// all — the UI gates the badge on that.
+		//
+		// Wrapped in `.catch` mirroring the resilience pattern in
+		// `getMovers24h` / `getLeaderboardStandings`: a transient DB
+		// hiccup on this single aggregate shouldn't 500 the whole detail
+		// page. Empty rows → tvlRank stays null → badge hides.
+		query<{ rank: string }>(
+			`WITH self AS (
+			   SELECT tvl_satoshis
+			     FROM token_venue_listings
+			    WHERE category = $1
+			      AND venue = 'cauldron'
+			      AND tvl_satoshis IS NOT NULL
+			 )
+			 SELECT (1 + (
+			   SELECT COUNT(*)::bigint
+			     FROM token_venue_listings tvl
+			     JOIN tokens t ON t.category = tvl.category
+			    WHERE tvl.venue = 'cauldron'
+			      AND tvl.tvl_satoshis IS NOT NULL
+			      AND tvl.tvl_satoshis > self.tvl_satoshis
+			      AND NOT EXISTS (
+			        SELECT 1 FROM token_moderation mod WHERE mod.category = tvl.category
+			      )
+			 ))::text AS rank
+			 FROM self`,
+			[categoryBytes]
+		).catch((err) => {
+			console.error('[token detail] TVL rank query failed:', err);
+			return { rows: [] as Array<{ rank: string }> };
+		})
 	]);
 
 	const decimals = row.decimals ?? bcmr?.decimals ?? 0;
@@ -630,6 +666,13 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 	const reportCount = Number(reportCountRes.rows[0]?.n ?? 0);
 	const watchlistCount = Number(watchlistCountRes.rows[0]?.n ?? 0);
 
+	// Top-N-by-Cauldron-TVL badge. The query returns no rows for tokens
+	// not listed on Cauldron; otherwise rank is 1-based against every
+	// non-moderated Cauldron-listed token. We surface the badge only
+	// for ranks 1-10 — anything below that is informational noise.
+	const tvlRankRaw = tvlRankRes.rows[0]?.rank ? Number(tvlRankRes.rows[0].rank) : null;
+	const tvlRank = tvlRankRaw != null && tvlRankRaw >= 1 && tvlRankRaw <= 10 ? tvlRankRaw : null;
+
 	return {
 		token: {
 			id: hexFromBytes(row.category)!,
@@ -741,6 +784,10 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 		// Cauldron exchange-wide TVL share. The >10% badge fires above
 		// that threshold; the percentage is shown either way when present.
 		cauldronTvlSharePct,
+		// Rank by Cauldron TVL across all listed, non-moderated tokens.
+		// Only set when this token is in the top 10; null otherwise. The
+		// detail page renders a "🏆 #N TVL" badge when present.
+		tvlRank,
 		// Per-venue first_listed_at (UNIX seconds). UI: "Listed on
 		// Cauldron since 2025-08-12" line under the AMM venues section.
 		venueListings: {
