@@ -245,21 +245,32 @@ export async function getVoteLeaderboards(): Promise<{
 		     FROM weighted
 		     GROUP BY category
 		 ),
+		 -- Per-bucket WHERE filters keep degenerate rows out of each list:
+		 -- 'upvoted' requires at least one upvote (otherwise a 0-up / 0-down
+		 -- token sorts to the top of "most upvoted" with score 0); 'downvoted'
+		 -- requires at least one downvote so a token nobody has voted on at
+		 -- all can't surface in the most-downvoted column; 'controversial'
+		 -- requires BOTH directions because LEAST(hot_up, 0) × (…) = 0
+		 -- collapses every single-direction entry to the same ineligible
+		 -- score and they'd otherwise inflate the LIMIT 10 cap.
 		 top_upvoted AS (
 		   SELECT category, up, down, hot_up, hot_down, 'upvoted'::text AS bucket
 		     FROM agg
+		    WHERE up > 0
 		    ORDER BY (hot_up - hot_down) DESC, hot_up DESC
 		    LIMIT 10
 		 ),
 		 top_downvoted AS (
 		   SELECT category, up, down, hot_up, hot_down, 'downvoted'::text AS bucket
 		     FROM agg
+		    WHERE down > 0
 		    ORDER BY (hot_down - hot_up) DESC, hot_down DESC
 		    LIMIT 10
 		 ),
 		 top_controversial AS (
 		   SELECT category, up, down, hot_up, hot_down, 'controversial'::text AS bucket
 		     FROM agg
+		    WHERE up > 0 AND down > 0
 		    ORDER BY LEAST(hot_up, hot_down) * (hot_up + hot_down) DESC, (hot_up + hot_down) DESC
 		    LIMIT 10
 		 ),

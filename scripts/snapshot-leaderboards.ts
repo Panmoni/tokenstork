@@ -43,12 +43,24 @@ const NOT_MODERATED_CLAUSE = `NOT EXISTS (
 interface BucketSpec {
   name: "upvoted" | "downvoted" | "controversial";
   orderExpr: string;
+  // Secondary tie-breaker. MUST match the per-bucket secondary key in
+  // src/lib/server/votes.ts:getVoteLeaderboards, otherwise two tokens
+  // tied on the primary score would rank one way on the live homepage
+  // card and the other way in this snapshot — making the badges +
+  // medal counts diverge from what visitors saw "as of yesterday."
+  tieBreakExpr: string;
+  // Per-bucket eligibility WHERE clause. Mirrors the per-bucket filters
+  // in src/lib/server/votes.ts:getVoteLeaderboards — keeps degenerate
+  // rows (0-up tokens in "most upvoted", 0-down tokens in "most
+  // downvoted", single-direction entries in "controversial") out of
+  // both the live homepage list and the daily snapshot history.
+  whereExpr: string;
 }
 
 const BUCKETS: BucketSpec[] = [
-  { name: "upvoted",       orderExpr: "(hot_up - hot_down)" },
-  { name: "downvoted",     orderExpr: "(hot_down - hot_up)" },
-  { name: "controversial", orderExpr: "LEAST(hot_up, hot_down) * (hot_up + hot_down)" },
+  { name: "upvoted",       orderExpr: "(hot_up - hot_down)",                            tieBreakExpr: "hot_up",              whereExpr: "up_count > 0" },
+  { name: "downvoted",     orderExpr: "(hot_down - hot_up)",                            tieBreakExpr: "hot_down",            whereExpr: "down_count > 0" },
+  { name: "controversial", orderExpr: "LEAST(hot_up, hot_down) * (hot_up + hot_down)",  tieBreakExpr: "(hot_up + hot_down)", whereExpr: "up_count > 0 AND down_count > 0" },
 ];
 
 async function main() {
@@ -94,20 +106,25 @@ async function main() {
     // make the snapshot table reflect "ranking as of this run" rather
     // than the union of all runs.
     const counts: Record<string, number> = {};
-    for (const { name, orderExpr } of BUCKETS) {
+    for (const { name, orderExpr, tieBreakExpr, whereExpr } of BUCKETS) {
       await client.query(
         `DELETE FROM vote_leaderboard_history
           WHERE day_utc = $1::date AND bucket = $2`,
         [day, name]
       );
       const ins = await client.query(
-        `WITH ranked AS (
+        `WITH eligible AS (
+           SELECT category, up_count, down_count, hot_up, hot_down
+             FROM _snap_agg
+            WHERE ${whereExpr}
+         ),
+         ranked AS (
            SELECT category,
                   up_count,
                   down_count,
                   ${orderExpr}::float8 AS score,
-                  ROW_NUMBER() OVER (ORDER BY ${orderExpr} DESC, (hot_up + hot_down) DESC) AS rn
-             FROM _snap_agg
+                  ROW_NUMBER() OVER (ORDER BY ${orderExpr} DESC, ${tieBreakExpr} DESC) AS rn
+             FROM eligible
          )
          INSERT INTO vote_leaderboard_history
            (day_utc, bucket, category, rank, score, up_count, down_count)
