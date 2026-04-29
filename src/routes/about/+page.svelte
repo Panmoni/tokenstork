@@ -74,8 +74,7 @@
 		<section class="p-6 rounded-xl border border-violet-200 dark:border-violet-900/50 bg-violet-50/40 dark:bg-violet-950/20 md:col-span-2">
 			<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-3">Support this project</h2>
 			<p class="text-slate-600 dark:text-slate-300 mb-4">
-				TokenStork is self-funded. Ongoing costs include a ~$25/month VPS bill (Netcup RS 2000 G12,
-				where the archival BCH node, Postgres, indexer workers, and web app all live), domain
+				TokenStork is self-funded. Ongoing costs include a ~$50/month VPS bill (where the archival BCH node, Postgres, indexer workers, and web app all live), domain
 				registration, and my time. If the site is useful to you, please consider chipping in by
 				donating to the address below. Thank you!
 			</p>
