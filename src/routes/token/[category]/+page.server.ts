@@ -7,7 +7,9 @@ import { error } from '@sveltejs/kit';
 import { query, hexFromBytes, bytesFromHex } from '$lib/server/db';
 import { fetchBcmr, fetchCauldron } from '$lib/server/external';
 import { computeMcapTvlThresholdSats } from '$lib/server/mcapThreshold';
-import { getVoteCounts } from '$lib/server/votes';
+import { getVoteCounts, getLeaderboardStandings } from '$lib/server/votes';
+import { getMovers24h } from '$lib/server/movers';
+import { resolveIconStatus } from '$lib/icons';
 import type { PageServerLoad } from './$types';
 import type { TokenType } from '$lib/types';
 
@@ -17,6 +19,7 @@ interface TokenRow {
 	category: Buffer;
 	token_type: TokenType;
 	genesis_block: number;
+	genesis_time: Date;
 	first_seen_at: Date;
 	name: string | null;
 	symbol: string | null;
@@ -24,6 +27,11 @@ interface TokenRow {
 	description: string | null;
 	icon_uri: string | null;
 	icon_cleared_hash: string | null;
+	icon_state: string | null;
+	icon_block_reason: string | null;
+	icon_fetch_error: string | null;
+	icon_scan_present: boolean;
+	bcmr_fetched_at: Date | null;
 	current_supply: string | null;
 	live_utxo_count: number | null;
 	live_nft_count: number | null;
@@ -162,13 +170,19 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 			t.category,
 			t.token_type,
 			t.genesis_block,
+			t.genesis_time,
 			t.first_seen_at,
 			m.name,
 			m.symbol,
 			m.decimals,
 			m.description,
 			m.icon_uri,
-			encode(imo.content_hash, 'hex') AS icon_cleared_hash,
+			m.fetched_at AS bcmr_fetched_at,
+			encode(imo_clear.content_hash, 'hex') AS icon_cleared_hash,
+			imo_any.state          AS icon_state,
+			imo_any.block_reason   AS icon_block_reason,
+			ius.fetch_error        AS icon_fetch_error,
+			(ius.icon_uri IS NOT NULL) AS icon_scan_present,
 			s.current_supply::text AS current_supply,
 			s.live_utxo_count,
 			s.live_nft_count,
@@ -182,8 +196,15 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 		   LEFT JOIN token_state     s   ON s.category  = t.category
 		   LEFT JOIN token_moderation mod ON mod.category = t.category
 		   LEFT JOIN icon_url_scan ius ON ius.icon_uri = m.icon_uri
-		   LEFT JOIN icon_moderation imo
-		     ON imo.content_hash = ius.content_hash AND imo.state = 'cleared'
+		   -- Cleared-only join keeps the existing iconHrefFor() contract:
+		   -- icon_cleared_hash is non-null iff this URI's bytes have been
+		   -- explicitly cleared. The second join (imo_any) returns whatever
+		   -- moderation row exists regardless of state, powering the
+		   -- "why is this icon hidden?" reason banner.
+		   LEFT JOIN icon_moderation imo_clear
+		     ON imo_clear.content_hash = ius.content_hash AND imo_clear.state = 'cleared'
+		   LEFT JOIN icon_moderation imo_any
+		     ON imo_any.content_hash = ius.content_hash
 		  WHERE t.category = $1`,
 		[categoryBytes]
 	);
@@ -208,7 +229,14 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 		fexRes,
 		mcapTvlThresholdSats,
 		priceHistoryRes,
-		voteCounts
+		voteCounts,
+		watchlistCountRes,
+		movers,
+		venueAggregateRes,
+		priceExtremesRes,
+		recentTradesRes,
+		reportCountRes,
+		leaderboardStandingsRes
 	] = await Promise.all([
 		query<HolderRow>(
 			`SELECT address, balance::text AS balance, nft_count
@@ -305,11 +333,153 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 		// against user_votes_category_vote_idx — index-only scan, no heap
 		// fetches. Returns { upCount: 0, downCount: 0 } for tokens with no
 		// votes yet (the SELECT returns one row even with zero matches).
-		getVoteCounts(categoryBytes)
+		getVoteCounts(categoryBytes),
+		// Number of distinct wallets watching this token. Cheap COUNT(*)
+		// over the (cashaddr, category) PK; renders an "On N watchlists"
+		// pill when > 0.
+		query<{ n: string }>(
+			`SELECT COUNT(*)::bigint AS n FROM user_watchlist WHERE category = $1`,
+			[categoryBytes]
+		),
+		// 24h gainers / losers / TVL movers — same shared module the
+		// homepage + /stats use. We fan out per-token by checking
+		// membership in the returned arrays; no per-token round-trip.
+		getMovers24h(),
+		// Per-venue (cauldron, fex) snapshot for first_listed_at +
+		// pool aggregates. Used for "Listed on Cauldron since YYYY-MM-DD"
+		// + the >10% TVL share badge. Two-row return at most.
+		query<{
+			venue: 'cauldron' | 'fex';
+			tvl_satoshis: string | null;
+			pools_count: number | null;
+			pools_total_tvl_sats: string | null;
+			first_listed_at: Date;
+		}>(
+			`SELECT venue,
+			        tvl_satoshis::text AS tvl_satoshis,
+			        pools_count,
+			        pools_total_tvl_sats::text AS pools_total_tvl_sats,
+			        first_listed_at
+			   FROM token_venue_listings
+			  WHERE category = $1`,
+			[categoryBytes]
+		),
+		// 24h / 7d / 30d high-low extremes. One MIN/MAX pass per window
+		// from the (category, venue, ts DESC) index. Skip 'all' and '1y'
+		// — at large windows the absolute high/low rarely tells the user
+		// anything actionable about the current price action.
+		query<{
+			window: '24h' | '7d' | '30d';
+			price_min: number | null;
+			price_max: number | null;
+		}>(
+			`WITH windows AS (
+			   SELECT '24h'::text AS window, INTERVAL '24 hours' AS interval
+			   UNION ALL SELECT '7d',  INTERVAL '7 days'
+			   UNION ALL SELECT '30d', INTERVAL '30 days'
+			 )
+			 SELECT w.window,
+			        MIN(h.price_sats)::double precision AS price_min,
+			        MAX(h.price_sats)::double precision AS price_max
+			   FROM windows w
+			   LEFT JOIN token_price_history h
+			     ON h.category = $1
+			    AND h.venue = 'cauldron'
+			    AND h.ts > now() - w.interval
+			    AND h.price_sats > 0
+			  GROUP BY w.window`,
+			[categoryBytes]
+		),
+		// Count of price-history buckets in the last 24h with non-zero
+		// |TVL delta| — a proxy for trade activity since we don't have
+		// per-trade rows. Same |delta| logic the chart uses for volume.
+		query<{ trade_buckets: string; volume_sats: string | null }>(
+			`WITH ordered AS (
+			   SELECT ts,
+			          tvl_satoshis,
+			          tvl_satoshis - LAG(tvl_satoshis) OVER (ORDER BY ts) AS tvl_delta
+			     FROM token_price_history
+			    WHERE category = $1
+			      AND venue = 'cauldron'
+			      AND ts > now() - INTERVAL '24 hours'
+			 )
+			 SELECT
+			   COUNT(*) FILTER (WHERE tvl_delta IS NOT NULL AND tvl_delta != 0)::bigint AS trade_buckets,
+			   SUM(ABS(tvl_delta)) FILTER (WHERE tvl_delta IS NOT NULL)::text AS volume_sats
+			   FROM ordered`,
+			[categoryBytes]
+		),
+		// Public report count — number of as-yet-unactioned user reports
+		// for this category. Only 'new' status is shown publicly so a
+		// dismissed-then-actioned chain doesn't double-count.
+		query<{ n: string }>(
+			`SELECT COUNT(*)::bigint AS n FROM token_reports
+			  WHERE category = $1 AND status IN ('new','reviewed')`,
+			[categoryBytes]
+		),
+		// Per-token leaderboard standings — current rank in each of the
+		// three buckets, plus streak + medal counts pulled from
+		// vote_leaderboard_history. Empty arrays if the snapshot worker
+		// has never run; the UI hides the section in that case.
+		getLeaderboardStandings(categoryBytes)
 	]);
 
 	const decimals = row.decimals ?? bcmr?.decimals ?? 0;
-	const cauldron = await fetchCauldron(category, decimals, bchPriceUSD);
+	const [cauldron, cauldronGlobalRes] = await Promise.all([
+		fetchCauldron(category, decimals, bchPriceUSD),
+		// Exchange-wide Cauldron TVL — singleton row populated by the
+		// `sync-cauldron-stats` worker. We don't fail the page if it's
+		// unreachable; the >10% share badge simply doesn't render.
+		query<{ tvl_sats: string }>(
+			`SELECT tvl_sats::text AS tvl_sats FROM cauldron_global_stats WHERE id = 1`
+		)
+	]);
+
+	// Per-venue first_listed_at lookup. Cauldron-side entry is what the
+	// "Listed on Cauldron since" line uses; Fex mirrors it for symmetry.
+	const venueByName: Record<'cauldron' | 'fex', { tvlSats: string | null; firstListedAt: number | null }> = {
+		cauldron: { tvlSats: null, firstListedAt: null },
+		fex: { tvlSats: null, firstListedAt: null }
+	};
+	for (const r of venueAggregateRes.rows) {
+		venueByName[r.venue] = {
+			tvlSats: r.tvl_satoshis,
+			firstListedAt: Math.floor(r.first_listed_at.getTime() / 1000)
+		};
+	}
+
+	// Cauldron exchange-wide TVL share. Only meaningful when the global
+	// stats row + the per-token row both have data. The badge fires when
+	// this token is ≥ 10% of total TVL.
+	let cauldronTvlSharePct: number | null = null;
+	const globalTvlSats = cauldronGlobalRes.rows[0]?.tvl_sats
+		? Number(cauldronGlobalRes.rows[0].tvl_sats)
+		: 0;
+	const tokenCauldronTvlSats = venueByName.cauldron.tvlSats
+		? Number(venueByName.cauldron.tvlSats)
+		: 0;
+	if (globalTvlSats > 0 && tokenCauldronTvlSats > 0) {
+		// Single-side reserve / single-side global = same units.
+		cauldronTvlSharePct = (tokenCauldronTvlSats / globalTvlSats) * 100;
+	}
+
+	// Membership in the 24h-mover leaderboards. Find by category hex —
+	// `getMovers24h` already returns capped top-5 arrays.
+	const findMover = (
+		list: Array<{ categoryHex: string }>,
+		cat: string
+	): number => list.findIndex((m) => m.categoryHex === cat) + 1; // 1-based, 0 = absent
+	const moverRanks = {
+		gainerRank: findMover(movers.topGainers24h, category),
+		loserRank: findMover(movers.topLosers24h, category),
+		tvlMoverRank: findMover(movers.topTvlMovers24h, category)
+	};
+	// Pull the matching row's pricePct so the UI can show the magnitude.
+	const moverEntry =
+		movers.topGainers24h.find((m) => m.categoryHex === category) ??
+		movers.topLosers24h.find((m) => m.categoryHex === category) ??
+		null;
+	const moverTvlEntry = movers.topTvlMovers24h.find((m) => m.categoryHex === category) ?? null;
 
 	// Fex price/TVL — same conventions Cauldron uses, kept in lockstep so
 	// `token_venue_listings.tvl_satoshis` has one unambiguous unit (single-
@@ -342,11 +512,130 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 		volumeSats: r.volume_sats ? Number(r.volume_sats) : null
 	}));
 
+	// Top-1 holder share — quick concentration signal. Uses the top holder's
+	// balance vs current_supply if both available. Same idea for the top-10
+	// concentration. Both are bounded ratios so we keep them as %.
+	//
+	// Clamp at 100%: snapshots can briefly observe a holder balance > the
+	// current_supply column (the sum is rebuilt by a separate enrichment
+	// pass; mid-pass reads can see the new balances against the old supply
+	// total or vice versa). Showing "Top holder controls 132%" is more
+	// alarming than informative — clamp so the user sees "100%" instead.
+	const topHolderShare = (() => {
+		const top = holdersRes.rows[0];
+		if (!top || !row.current_supply) return null;
+		try {
+			const supply = BigInt(row.current_supply);
+			if (supply === 0n) return null;
+			const bal = BigInt(top.balance);
+			// 4 decimal places: (bal * 1_000_000) / supply, then /10000.0
+			return Math.min(100, Number((bal * 1_000_000n) / supply) / 10_000);
+		} catch {
+			return null;
+		}
+	})();
+	const top10HolderShare = (() => {
+		if (!row.current_supply || holdersRes.rows.length === 0) return null;
+		try {
+			const supply = BigInt(row.current_supply);
+			if (supply === 0n) return null;
+			let sum = 0n;
+			for (const h of holdersRes.rows) sum += BigInt(h.balance);
+			return Math.min(100, Number((sum * 1_000_000n) / supply) / 10_000);
+		} catch {
+			return null;
+		}
+	})();
+
+	const iconStatus = resolveIconStatus({
+		iconUri: row.icon_uri,
+		clearedHash: row.icon_cleared_hash,
+		moderationState: row.icon_state,
+		blockReason: row.icon_block_reason,
+		fetchError: row.icon_fetch_error,
+		hasScanRow: row.icon_scan_present
+	});
+
+	// 24h Cauldron volume estimate — already aggregated by the recent-trades
+	// query above. Convert to USD with the live BCH price (mirrors the chart
+	// caption's lower-bound disclaimer).
+	const recentRow = recentTradesRes.rows[0];
+	const recentVolumeSats = recentRow?.volume_sats ? Number(recentRow.volume_sats) : 0;
+	const recentVolumeUSD =
+		bchPriceUSD > 0 && recentVolumeSats > 0
+			? (recentVolumeSats / 1e8) * bchPriceUSD
+			: 0;
+	const recentTradeBuckets = recentRow?.trade_buckets ? Number(recentRow.trade_buckets) : 0;
+
+	// Flatten 24h/7d/30d high-low into a record for the UI.
+	const priceExtremes: Record<'24h' | '7d' | '30d', { min: number | null; max: number | null }> = {
+		'24h': { min: null, max: null },
+		'7d': { min: null, max: null },
+		'30d': { min: null, max: null }
+	};
+	for (const r of priceExtremesRes.rows) {
+		// USD conversion: same formula fetchCauldron uses.
+		const toUsd = (px: number | null): number | null => {
+			if (px == null || px <= 0 || bchPriceUSD <= 0) return null;
+			return (px * Math.pow(10, decimals) / 1e8) * bchPriceUSD;
+		};
+		priceExtremes[r.window] = { min: toUsd(r.price_min), max: toUsd(r.price_max) };
+	}
+
+	// Arbitrage eligibility — same ≥ 2-venue rule as /arbitrage, and same
+	// SOURCE OF TRUTH as /arbitrage: the DB-side `token_venue_listings`
+	// presence (canonical pool's BCH reserve in sats) for the AMM venues
+	// + Tapswap open FT-only offers for the P2P venue.
+	//
+	// Important: do NOT key off the live `cauldron.priceUSD` — that field
+	// reflects whatever the live indexer.cauldron.quest API returned this
+	// request, and a transient API hiccup would flip arbitrage eligibility
+	// on/off here while leaving /arbitrage's DB-driven view unchanged.
+	// The detail page's badge has to agree with the listing on /arbitrage,
+	// so both sites read from the same DB-side source.
+	const cauldronListed = venueByName.cauldron.tvlSats != null;
+	const fexListed = venueByName.fex.tvlSats != null;
+	const tapswapFtOffer = tapswapRes.rows.find(
+		(o) => o.has_commitment == null && o.has_amount && o.want_amount == null && Number(o.want_sats) > 0
+	);
+	const tapswapHasPrice = !!tapswapFtOffer;
+	const arbitrageVenuesPresent =
+		(cauldronListed ? 1 : 0) + (fexListed ? 1 : 0) + (tapswapHasPrice ? 1 : 0);
+	// Spread % is informational only (the arbitrage badge fires on
+	// listing presence regardless). We use the live USD prices here for
+	// the spread magnitude because that's what a visitor would see if
+	// they crossed venues right now; if a venue's live price is missing
+	// we just exclude it from the spread calc rather than dropping the
+	// badge entirely.
+	let arbitrageRawSpreadPct: number | null = null;
+	if (arbitrageVenuesPresent >= 2) {
+		const usdPrices: number[] = [];
+		if (cauldron.priceUSD > 0) usdPrices.push(cauldron.priceUSD);
+		if (fexPriceUSD > 0) usdPrices.push(fexPriceUSD);
+		if (tapswapHasPrice && tapswapFtOffer && tapswapFtOffer.has_amount) {
+			// (want_sats / has_amount) is sats per smallest unit; convert
+			// to USD per whole token using the same shape as fetchCauldron.
+			const askSats = Number(tapswapFtOffer.want_sats) / Number(tapswapFtOffer.has_amount);
+			if (Number.isFinite(askSats) && askSats > 0 && bchPriceUSD > 0) {
+				usdPrices.push((askSats * Math.pow(10, decimals) / 1e8) * bchPriceUSD);
+			}
+		}
+		if (usdPrices.length >= 2) {
+			const min = Math.min(...usdPrices);
+			const max = Math.max(...usdPrices);
+			arbitrageRawSpreadPct = min > 0 ? ((max - min) / min) * 100 : null;
+		}
+	}
+
+	const reportCount = Number(reportCountRes.rows[0]?.n ?? 0);
+	const watchlistCount = Number(watchlistCountRes.rows[0]?.n ?? 0);
+
 	return {
 		token: {
 			id: hexFromBytes(row.category)!,
 			tokenType: row.token_type,
 			genesisBlock: row.genesis_block,
+			genesisTime: Math.floor(row.genesis_time.getTime() / 1000),
 			firstSeenAt: Math.floor(row.first_seen_at.getTime() / 1000),
 			name: row.name ?? bcmr?.name ?? null,
 			symbol: row.symbol ?? bcmr?.symbol ?? null,
@@ -354,13 +643,19 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 			description: row.description ?? bcmr?.description ?? null,
 			icon: row.icon_uri ?? bcmr?.iconUri ?? null,
 			iconClearedHash: row.icon_cleared_hash ?? null,
+			iconStatus,
+			bcmrFetchedAt: row.bcmr_fetched_at
+				? Math.floor(row.bcmr_fetched_at.getTime() / 1000)
+				: null,
 			currentSupply: row.current_supply,
 			liveUtxoCount: row.live_utxo_count,
 			liveNftCount: row.live_nft_count,
 			holderCount: row.holder_count,
 			hasActiveMinting: row.has_active_minting ?? false,
 			isFullyBurned: row.is_fully_burned ?? false,
-			isVerifiedOnchain: row.verified_at !== null
+			isVerifiedOnchain: row.verified_at !== null,
+			topHolderSharePct: topHolderShare,
+			top10HolderSharePct: top10HolderShare
 		},
 		// Full BCMR dump — surfaced in a dedicated card on the detail page
 		// so users can see every metadata field the registry publishes
@@ -421,6 +716,54 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 		votes: {
 			upCount: voteCounts.upCount,
 			downCount: voteCounts.downCount
-		}
+		},
+		// Number of distinct wallets watching this token. Header pill
+		// renders only when > 0.
+		watchlistCount,
+		// 24h-mover memberships. Each rank is 1-based; 0 means "not on the
+		// list". `pricePct` magnitude lets the UI show "+12.4%" alongside
+		// the rank pill. tvlPct similarly for the TVL-mover surface.
+		moverBadges: {
+			gainerRank: moverRanks.gainerRank,
+			loserRank: moverRanks.loserRank,
+			tvlMoverRank: moverRanks.tvlMoverRank,
+			pricePct: moverEntry?.pricePct ?? null,
+			tvlPct: moverTvlEntry?.tvlPct ?? null
+		},
+		// /arbitrage eligibility — when this token would render on the
+		// page. The UI surfaces this as a "Listed for arbitrage" pill that
+		// links to /arbitrage with the row highlighted.
+		arbitrage: {
+			eligible: arbitrageVenuesPresent >= 2,
+			venuesPresent: arbitrageVenuesPresent,
+			rawSpreadPct: arbitrageRawSpreadPct
+		},
+		// Cauldron exchange-wide TVL share. The >10% badge fires above
+		// that threshold; the percentage is shown either way when present.
+		cauldronTvlSharePct,
+		// Per-venue first_listed_at (UNIX seconds). UI: "Listed on
+		// Cauldron since 2025-08-12" line under the AMM venues section.
+		venueListings: {
+			cauldronFirstListedAt: venueByName.cauldron.firstListedAt,
+			fexFirstListedAt: venueByName.fex.firstListedAt
+		},
+		// 24h trading proxies. recentTradeBuckets is the count of price-
+		// history buckets with non-zero TVL delta over the last 24h;
+		// recentVolumeUSD is the lower-bound volume estimate (same |delta|
+		// math the chart uses).
+		recentActivity: {
+			recentTradeBuckets,
+			recentVolumeUSD
+		},
+		// 24h / 7d / 30d high-low extremes (USD). Each entry may have
+		// null min/max if no Cauldron history landed in that window.
+		priceExtremes,
+		// Public report count for moderation transparency. Only 'new' +
+		// 'reviewed' (unactioned) reports count.
+		reportCount,
+		// Per-bucket leaderboard standings. `latestDay` is the most
+		// recent snapshot day across all buckets; if null, the snapshot
+		// worker has never run and the UI hides the section entirely.
+		leaderboardStandings: leaderboardStandingsRes
 	};
 };

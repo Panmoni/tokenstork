@@ -112,6 +112,86 @@
 	const decimalSupply = $derived(
 		humanizeNumericSupply(token.currentSupply, token.decimals)
 	);
+
+	// Days since chain genesis — stable across page renders since
+	// genesisTime is a fixed past timestamp; we don't need a reactive clock.
+	const ageDays = $derived(
+		Math.max(0, Math.floor((Date.now() / 1000 - token.genesisTime) / 86_400))
+	);
+	function formatAge(days: number): string {
+		if (days < 1) return 'today';
+		if (days === 1) return '1 day ago';
+		if (days < 30) return `${days} days ago`;
+		const months = Math.floor(days / 30);
+		if (months < 12) return `${months} mo ago`;
+		const years = Math.floor(days / 365);
+		const rem = Math.floor((days % 365) / 30);
+		return rem > 0 ? `${years}y ${rem}mo ago` : `${years}y ago`;
+	}
+	function formatRelative(unixSec: number | null | undefined): string | null {
+		if (unixSec == null) return null;
+		const diffSec = Math.floor(Date.now() / 1000) - unixSec;
+		if (diffSec < 60) return 'just now';
+		if (diffSec < 3600) return `${Math.floor(diffSec / 60)} min ago`;
+		if (diffSec < 86_400) return `${Math.floor(diffSec / 3600)}h ago`;
+		const days = Math.floor(diffSec / 86_400);
+		if (days < 30) return `${days}d ago`;
+		const months = Math.floor(days / 30);
+		if (months < 12) return `${months}mo ago`;
+		return `${Math.floor(days / 365)}y ago`;
+	}
+	function formatAbsoluteDate(unixSec: number | null | undefined): string | null {
+		if (unixSec == null) return null;
+		return new Date(unixSec * 1000).toISOString().slice(0, 10);
+	}
+	const BUCKET_LABEL: Record<'upvoted' | 'downvoted' | 'controversial', string> = {
+		upvoted: 'Most upvoted',
+		downvoted: 'Most downvoted',
+		controversial: 'Most controversial'
+	};
+	const BUCKET_TONE: Record<'upvoted' | 'downvoted' | 'controversial', string> = {
+		upvoted: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300',
+		downvoted: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
+		controversial: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+	};
+	function fmtUsd(v: number): string {
+		if (v >= 1) return `$${v.toFixed(2)}`;
+		return `$${v.toFixed(6)}`;
+	}
+
+	// Top-5 standings across the three vote-leaderboard buckets, gating
+	// the inline badge strip near the page header. Filtered to currentRank
+	// ≤ 5 so the strip only fires for honestly-top-tier rankings; the
+	// underlying `leaderboardStandings.standings` array still carries the
+	// full set for the dedicated "Sentiment standings" card lower down.
+	const standings = $derived(
+		data.leaderboardStandings.standings.filter(
+			(s) => s.currentRank !== null && s.currentRank <= 5
+		)
+	);
+	const showBadges = $derived(
+		data.watchlistCount > 0 ||
+			data.moverBadges.gainerRank > 0 ||
+			data.moverBadges.loserRank > 0 ||
+			data.moverBadges.tvlMoverRank > 0 ||
+			data.arbitrage.eligible ||
+			(data.cauldronTvlSharePct != null && data.cauldronTvlSharePct >= 10) ||
+			standings.length > 0
+	);
+
+	// FT UTXO count derived from live_utxo_count − live_nft_count for
+	// hybrid (FT+NFT) tokens. Pure-FT and pure-NFT tokens skip the
+	// "composition" line entirely; the "FT UTXOs" framing only makes
+	// sense when both halves coexist on-chain.
+	const ftCount = $derived((token.liveUtxoCount ?? 0) - (token.liveNftCount ?? 0));
+	const showHybridComposition = $derived(
+		(token.liveNftCount ?? 0) > 0 && ftCount > 0 && token.tokenType === 'FT+NFT'
+	);
+	const hasExtremes = $derived(
+		(data.priceExtremes['24h'].min != null && data.priceExtremes['24h'].max != null) ||
+			(data.priceExtremes['7d'].min != null && data.priceExtremes['7d'].max != null) ||
+			(data.priceExtremes['30d'].min != null && data.priceExtremes['30d'].max != null)
+	);
 	const marketCapUSD = $derived.by(() => {
 		if (!token.currentSupply || data.priceUSD === 0) return 0;
 		// Integer-shift in BigInt space to keep the integer part exact for supplies > 2^53.
@@ -291,6 +371,113 @@
 		{/if}
 	{/if}
 
+	<!--
+		Status & sentiment badges. Each pill renders only when its
+		signal applies — invisible on most tokens, dense on tokens that
+		actually move on multiple axes (top-of-leaderboard meme, big TVL
+		share, mover, etc.). Lives between the BCMR compact bar and the
+		core stats grid so it doesn't wedge into either.
+	-->
+	{#if showBadges}
+		<div class="mb-6 flex flex-wrap items-center gap-2">
+			{#if data.cauldronTvlSharePct != null && data.cauldronTvlSharePct >= 10}
+				<span
+					class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-600 text-white text-xs font-semibold"
+					title="This token's Cauldron pool TVL is {data.cauldronTvlSharePct.toFixed(1)}% of the entire Cauldron exchange. Concentration this high means the pool is a major part of the AMM's liquidity."
+				>
+					⚡ {data.cauldronTvlSharePct.toFixed(1)}% of Cauldron TVL
+				</span>
+			{/if}
+			{#each standings as s (s.bucket)}
+				<a
+					href="/#community-sentiment"
+					class={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${BUCKET_TONE[s.bucket]}`}
+					title={`Ranked #${s.currentRank} in ${BUCKET_LABEL[s.bucket]} on ${data.leaderboardStandings.latestDay}. Click to view leaderboards.`}
+				>
+					<span>#{s.currentRank} {BUCKET_LABEL[s.bucket]}</span>
+					{#if s.streakDays >= 3}
+						<span class="opacity-80" title="{s.streakDays}-day streak in the top 5">🔥{s.streakDays}d</span>
+					{/if}
+					{#if s.medalGold > 0}
+						<span title="{s.medalGold} day{s.medalGold === 1 ? '' : 's'} ranked #1 lifetime">🥇{s.medalGold}</span>
+					{:else if s.medalSilver > 0}
+						<span title="{s.medalSilver} day{s.medalSilver === 1 ? '' : 's'} ranked top-3 lifetime">🥈{s.medalSilver}</span>
+					{:else if s.medalBronze > 0}
+						<span title="{s.medalBronze} day{s.medalBronze === 1 ? '' : 's'} ranked top-5 lifetime">🥉{s.medalBronze}</span>
+					{/if}
+				</a>
+			{/each}
+			{#if data.moverBadges.gainerRank > 0}
+				{@const pct = data.moverBadges.pricePct ?? 0}
+				<span
+					class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs font-semibold"
+					title="Top {data.moverBadges.gainerRank} of 5 24h gainers on Cauldron"
+				>
+					📈 #{data.moverBadges.gainerRank} 24h gainer
+					{#if pct !== 0}<span class="opacity-80">+{pct.toFixed(1)}%</span>{/if}
+				</span>
+			{/if}
+			{#if data.moverBadges.loserRank > 0}
+				{@const pct = data.moverBadges.pricePct ?? 0}
+				<span
+					class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-xs font-semibold"
+					title="Top {data.moverBadges.loserRank} of 5 24h losers on Cauldron"
+				>
+					📉 #{data.moverBadges.loserRank} 24h loser
+					{#if pct !== 0}<span class="opacity-80">{pct.toFixed(1)}%</span>{/if}
+				</span>
+			{/if}
+			{#if data.moverBadges.tvlMoverRank > 0}
+				{@const pct = data.moverBadges.tvlPct ?? 0}
+				<span
+					class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 text-xs font-semibold"
+					title="Top {data.moverBadges.tvlMoverRank} of 5 24h TVL movers on Cauldron"
+				>
+					💧 #{data.moverBadges.tvlMoverRank} TVL mover
+					{#if pct !== 0}<span class="opacity-80">{pct >= 0 ? '+' : ''}{pct.toFixed(1)}%</span>{/if}
+				</span>
+			{/if}
+			{#if data.arbitrage.eligible}
+				<a
+					href="/arbitrage"
+					class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-fuchsia-100 dark:bg-fuchsia-900/30 text-fuchsia-700 dark:text-fuchsia-300 text-xs font-semibold hover:bg-fuchsia-200 dark:hover:bg-fuchsia-900/50"
+					title={`Listed on ${data.arbitrage.venuesPresent} venues — visible on the /arbitrage page${data.arbitrage.rawSpreadPct != null ? ` with a ${data.arbitrage.rawSpreadPct.toFixed(2)}% raw spread` : ''}`}
+				>
+					⇄ Arbitrage
+					{#if data.arbitrage.rawSpreadPct != null}
+						<span class="opacity-80">{data.arbitrage.rawSpreadPct.toFixed(2)}%</span>
+					{/if}
+				</a>
+			{/if}
+			{#if data.watchlistCount > 0}
+				<span
+					class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium"
+					title="Number of distinct wallets that have added this token to their watchlist"
+				>
+					⭐ On {data.watchlistCount} watchlist{data.watchlistCount === 1 ? '' : 's'}
+				</span>
+			{/if}
+		</div>
+	{/if}
+
+	<!--
+		Icon-status banner — only fires when the icon is hidden AND we
+		have something concrete to say about why. Keeps the page honest
+		about why the placeholder is showing instead of leaving visitors
+		guessing whether the issuer didn't ship one.
+	-->
+	{#if token.iconStatus.status !== 'cleared'}
+		{@const tone =
+			token.iconStatus.status === 'blocked'
+				? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900/40 text-red-800 dark:text-red-200'
+				: token.iconStatus.status === 'no_uri'
+					? 'bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'
+					: 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-amber-200'}
+		<div class={`mb-6 px-3 py-2 rounded-lg border text-xs ${tone}`} role="note">
+			<span class="font-medium">Icon:</span> {token.iconStatus.label}
+		</div>
+	{/if}
+
 	<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
 		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800">
 			<div class="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Supply</div>
@@ -345,6 +532,115 @@
 			<div class="text-xl font-mono">{token.liveNftCount ?? '—'}</div>
 		</div>
 	</div>
+
+	<!--
+		Extra per-token info that doesn't fit the four-up headline grid:
+		token age, holder concentration, FT/NFT split, recent-trade
+		proxies, BCMR freshness, public report count, listed-since.
+		Each row only renders when its underlying data is meaningful.
+	-->
+	<section class="mb-8 grid grid-cols-1 md:grid-cols-2 gap-3">
+		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+			<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Profile</div>
+			<dl class="space-y-2 text-sm">
+				<div class="flex justify-between gap-3">
+					<dt class="text-slate-500 dark:text-slate-400">Age</dt>
+					<dd class="font-mono text-slate-900 dark:text-slate-100" title={new Date(token.genesisTime * 1000).toISOString()}>
+						{formatAge(ageDays)} <span class="text-slate-500 ml-1">({ageDays.toLocaleString()}d)</span>
+					</dd>
+				</div>
+				{#if token.topHolderSharePct != null}
+					<div class="flex justify-between gap-3">
+						<dt class="text-slate-500 dark:text-slate-400">Top holder controls</dt>
+						<dd class="font-mono {token.topHolderSharePct >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-slate-100'}" title="Largest single holder's balance ÷ current supply">
+							{token.topHolderSharePct.toFixed(token.topHolderSharePct >= 10 ? 1 : 2)}%
+						</dd>
+					</div>
+				{/if}
+				{#if token.top10HolderSharePct != null && data.holders.length >= 5}
+					<div class="flex justify-between gap-3">
+						<dt class="text-slate-500 dark:text-slate-400">Top {data.holders.length} hold</dt>
+						<dd class="font-mono text-slate-900 dark:text-slate-100">
+							{token.top10HolderSharePct.toFixed(token.top10HolderSharePct >= 10 ? 1 : 2)}%
+						</dd>
+					</div>
+				{/if}
+				{#if showHybridComposition}
+					<div class="flex justify-between gap-3">
+						<dt class="text-slate-500 dark:text-slate-400">Composition</dt>
+						<dd class="font-mono text-slate-900 dark:text-slate-100">
+							{ftCount.toLocaleString()} FT UTXOs · {(token.liveNftCount ?? 0).toLocaleString()} NFTs
+						</dd>
+					</div>
+				{/if}
+				{#if data.venueListings.cauldronFirstListedAt}
+					<div class="flex justify-between gap-3">
+						<dt class="text-slate-500 dark:text-slate-400">Listed on Cauldron</dt>
+						<dd class="font-mono text-slate-900 dark:text-slate-100" title={`First seen on Cauldron at ${formatAbsoluteDate(data.venueListings.cauldronFirstListedAt)}`}>
+							{formatAbsoluteDate(data.venueListings.cauldronFirstListedAt)}
+						</dd>
+					</div>
+				{/if}
+				{#if data.venueListings.fexFirstListedAt}
+					<div class="flex justify-between gap-3">
+						<dt class="text-slate-500 dark:text-slate-400">Listed on Fex</dt>
+						<dd class="font-mono text-slate-900 dark:text-slate-100">
+							{formatAbsoluteDate(data.venueListings.fexFirstListedAt)}
+						</dd>
+					</div>
+				{/if}
+				{#if token.bcmrFetchedAt}
+					<div class="flex justify-between gap-3">
+						<dt class="text-slate-500 dark:text-slate-400">BCMR refreshed</dt>
+						<dd class="font-mono text-slate-900 dark:text-slate-100" title={new Date(token.bcmrFetchedAt * 1000).toISOString()}>
+							{formatRelative(token.bcmrFetchedAt)}
+						</dd>
+					</div>
+				{/if}
+				{#if data.reportCount > 0}
+					<div class="flex justify-between gap-3">
+						<dt class="text-slate-500 dark:text-slate-400">Open reports</dt>
+						<dd class="font-mono text-amber-600 dark:text-amber-400" title="Number of unactioned user reports against this token">
+							{data.reportCount}
+						</dd>
+					</div>
+				{/if}
+			</dl>
+		</div>
+
+		{#if hasExtremes || data.recentActivity.recentTradeBuckets > 0}
+			<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+				<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Trading</div>
+				<dl class="space-y-2 text-sm">
+					{#if data.recentActivity.recentTradeBuckets > 0}
+						<div class="flex justify-between gap-3">
+							<dt class="text-slate-500 dark:text-slate-400" title="Number of price-history buckets in the last 24h with non-zero TVL delta — proxy for trade activity">24h activity</dt>
+							<dd class="font-mono text-slate-900 dark:text-slate-100">
+								{data.recentActivity.recentTradeBuckets} active bucket{data.recentActivity.recentTradeBuckets === 1 ? '' : 's'}
+								{#if data.recentActivity.recentVolumeUSD > 0}
+									<span class="text-slate-500 ml-1">· ~${data.recentActivity.recentVolumeUSD.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+								{/if}
+							</dd>
+						</div>
+					{/if}
+					{#each ['24h', '7d', '30d'] as const as windowKey (windowKey)}
+						{@const ext = data.priceExtremes[windowKey]}
+						{#if ext.min != null && ext.max != null}
+							<div class="flex justify-between gap-3">
+								<dt class="text-slate-500 dark:text-slate-400">{windowKey} range</dt>
+								<dd class="font-mono text-slate-900 dark:text-slate-100">
+									{fmtUsd(ext.min)} – {fmtUsd(ext.max)}
+								</dd>
+							</div>
+						{/if}
+					{/each}
+				</dl>
+				<p class="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
+					Volume is a lower-bound estimate from |TVL deltas|; price extremes are sampled at our 4 h Cauldron sync cadence.
+				</p>
+			</div>
+		{/if}
+	</section>
 
 	{#if data.priceUSD > 0 || data.fexPriceUSD > 0}
 		<!--
