@@ -471,7 +471,12 @@ CREATE TABLE IF NOT EXISTS user_watchlist (
 
 -- The `(cashaddr)` portion of the PK already serves the "all rows for
 -- this user" query — Postgres uses it as a leading-column index on its
--- own. No explicit secondary index needed.
+-- own. The reverse-direction lookup ("how many wallets watch this
+-- category?") is the new per-token detail page's "On N watchlists" pill;
+-- the PK can't serve it as a leading-column index, so we add a
+-- secondary single-column index on category for that path.
+CREATE INDEX IF NOT EXISTS user_watchlist_category_idx
+  ON user_watchlist (category);
 
 -- ============================================================================
 -- Icon safety pipeline (item #22 / docs/icon-safety-plan.md). Two-table
@@ -634,3 +639,47 @@ CREATE TABLE IF NOT EXISTS user_vote_actions (
   count      INT         NOT NULL DEFAULT 0,
   PRIMARY KEY (cashaddr, day_utc)
 );
+
+-- ============================================================================
+-- Daily snapshot of the three vote leaderboards (upvoted / downvoted /
+-- controversial). Populated by `scripts/snapshot-leaderboards.ts` (one
+-- row inserted per day per bucket per top-N category). Drives:
+--
+--   1. "#N in <bucket>" badges on the per-token detail page (latest-day
+--      lookup keyed by (bucket, category)).
+--   2. Streak detection — consecutive day_utc rows for the same
+--      (bucket, category) inside the top-N window. The page renders
+--      "🔥 12-day streak" when the latest run sits at the head of an
+--      uninterrupted run.
+--   3. Medal counts — lifetime count of top-1 / top-3 / top-5 days per
+--      (bucket, category). Surfaced on the detail page as
+--      bronze/silver/gold pills.
+--
+-- Snapshot cadence: daily (UTC midnight via systemd timer or external
+-- cron). One row per bucket per top-N — TOP_N_TO_KEEP captured as a
+-- script constant. Re-running the same day_utc is idempotent: the PK
+-- is (day_utc, bucket, category) and the script does INSERT … ON
+-- CONFLICT DO UPDATE.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS vote_leaderboard_history (
+  day_utc    DATE        NOT NULL,
+  bucket     TEXT        NOT NULL CHECK (bucket IN ('upvoted','downvoted','controversial')),
+  category   BYTEA       NOT NULL REFERENCES tokens(category) ON DELETE CASCADE,
+  rank       INT         NOT NULL CHECK (rank >= 1),
+  score      DOUBLE PRECISION NOT NULL,
+  up_count   INT         NOT NULL,
+  down_count INT         NOT NULL,
+  PRIMARY KEY (day_utc, bucket, category)
+);
+
+-- Lookup-by-token: streak + medal queries for the detail page filter
+-- by (bucket, category) and order by day_utc DESC.
+CREATE INDEX IF NOT EXISTS vote_leaderboard_history_category_bucket_day_idx
+  ON vote_leaderboard_history (category, bucket, day_utc DESC);
+
+-- Latest-day-per-bucket lookup: "is this token in today's top-N?"
+CREATE INDEX IF NOT EXISTS vote_leaderboard_history_bucket_day_rank_idx
+  ON vote_leaderboard_history (bucket, day_utc DESC, rank);
+
+ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_leaderboard_snapshot_at TIMESTAMPTZ;
+ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_leaderboard_snapshot_day DATE;
