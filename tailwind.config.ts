@@ -36,6 +36,14 @@ const config: Config = {
       // object fully replaces the default palette, so anything not listed
       // here silently resolves to no CSS. Add cautiously.
       rose: colors.rose,
+      // sky: 24h TVL-mover badge on the per-token detail page (water /
+      // liquidity semantics — distinct from emerald/rose's price-direction
+      // signal so the user can see "TVL moved" vs "price moved" at a glance).
+      sky: colors.sky,
+      // cyan: "top N by Cauldron TVL" badge on the per-token detail page —
+      // a sibling of the violet "% of Cauldron TVL" pill, kept distinct so
+      // ordinal-rank vs share-of-TVL aren't visually confused.
+      cyan: colors.cyan,
     },
     fontSize: {
       sm: "0.8rem",
