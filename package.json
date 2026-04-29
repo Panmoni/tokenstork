@@ -14,6 +14,7 @@
     "sync:tail": "tsx scripts/tail-from-bchn.ts",
     "sync:enrich": "tsx scripts/enrich-from-blockbook.ts",
     "sync:verify": "tsx scripts/verify-current-state.ts",
+    "sync:leaderboards": "tsx scripts/snapshot-leaderboards.ts",
     "typecheck": "tsc --noEmit --project scripts/tsconfig.json"
   },
   "dependencies": {
