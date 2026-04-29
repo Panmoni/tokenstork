@@ -4,6 +4,7 @@
 	// $lib/server/movers.ts#getMovers24h.
 
 	import type { MoverDisplay, MoversResult } from '$lib/server/movers';
+	import { stripEmoji } from '$lib/format';
 
 	interface Props {
 		movers: MoversResult;
@@ -21,9 +22,16 @@
 
 	// Token label fallback ladder: symbol → name → 8-char hex prefix. The
 	// latter is a last-resort identifier for tokens whose BCMR has no
-	// non-empty symbol or name fields.
+	// non-empty symbol or name fields. Each candidate is stripped of
+	// emoji + zero-width characters so a token whose symbol is purely
+	// emoji ("🔥🐶🌭") doesn't render as an empty string and to keep the
+	// directory's anti-spoofing rule (FAQ #faq-emoji) consistent here.
 	function moverLabel(m: MoverDisplay | (MoverDisplay & { tvlPct: number })): string {
-		return m.symbol || m.name || `${m.categoryHex.slice(0, 8)}…`;
+		const sym = stripEmoji(m.symbol).trim();
+		if (sym) return sym;
+		const name = stripEmoji(m.name).trim();
+		if (name) return name;
+		return `${m.categoryHex.slice(0, 8)}…`;
 	}
 </script>
 
