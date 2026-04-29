@@ -25,28 +25,42 @@ RestartSec=30s
 # once under load; raising it costs nothing when shutdown is fast.
 TimeoutStopSec=900s
 
-# Memory guardrails. 16 GB box; BCHN + Postgres + SvelteKit + workers need
-# ~6-7 GB combined in steady-state with the current dbcache=1000 setting
-# in /var/lib/bchn/.bitcoin/bitcoin.conf (BCHN observed at ~5G after the
-# trim). BlockBook's IBD-phase working set grows past 10 GB if uncapped
-# (observed: OOM-killed at anon-rss 10,697,728 kB during a deploy that
-# also ran `cargo build --release` concurrently).
+# Memory guardrails. 32 GB box (RS 4000 G12, post Apr 29 upgrade from
+# 16 GB). BCHN + Postgres + SvelteKit + workers need ~6-8 GB combined
+# in steady-state with dbcache=1000 set in /var/lib/bchn/.bitcoin/
+# bitcoin.conf. BlockBook's IBD-phase working set grows past 10 GB if
+# uncapped (observed: OOM-killed at anon-rss 10,697,728 kB during a
+# deploy that also ran `cargo build --release` concurrently on the old
+# 16 GB box).
 #
 # Cap evolution log:
 # - 6G/7G (Apr 24, post-OOM): throttled RocksDB cache hard, IBD dropped
 #   from ~650 blocks/min to ~72/min. Too aggressive.
 # - 8G/10G (Apr 24, mid-IBD bump): RSS hit MemoryHigh, settled at ~34
 #   blocks/min in the early-CashTokens block range — still painful.
-# - 9G/11G (current): paired with BCHN dbcache trim to 1000, gives
-#   RocksDB another GB of cache headroom.
+# - 9G/11G (Apr 24): paired with BCHN dbcache trim to 1000, gives
+#   RocksDB another GB of cache headroom. Final values for 16 GB box.
+# - 20G/23G (Apr 29, post-G12 upgrade attempt 1): bumped after RAM
+#   doubled to 32 GB. Indexer immediately ran up against MemoryHigh
+#   under bulk-import load (available: 588K), still being throttled.
+# - 24G/26G (Apr 29, post-G12 upgrade attempt 2): bumped during fresh
+#   resync after the inconsistent-state recovery (see the Apr 24
+#   blockbook-resetinconsistentstate.patch). With BCHN at ~1.6 G
+#   steady-state plus postgres + tokenstork + buff/cache, ~6 G
+#   reserved for non-blockbook workload leaves ~26 G for the indexer
+#   bulk-import working set. NOTE: a redeploy that overwrites this
+#   unit file applies new caps to the live cgroup via daemon-reload
+#   even without a service restart — be deliberate about cap changes
+#   while the indexer is mid-IBD; tightening the cap under a hot
+#   cgroup will stall throughput.
 #
 # MemoryHigh = soft throttle: cgroup v2 applies reclaim pressure once
 # exceeded but doesn't kill. MemoryMax = hard kill line; sized above
 # MemoryHigh so the throttle gets a chance to work first. OOMPolicy=stop
 # means systemd's own OOM handler will stop() the unit rather than
 # letting RestartSec loop us into rapid crash cycles if we hit MemoryMax.
-MemoryHigh=9G
-MemoryMax=11G
+MemoryHigh=24G
+MemoryMax=26G
 OOMPolicy=stop
 
 # Hardening profile matching sync-tail / sync-cauldron / tokenstork.service.
