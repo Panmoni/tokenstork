@@ -1,0 +1,24 @@
+[Unit]
+Description=Run tokenstork sync-leaderboards daily, shortly after UTC midnight
+
+[Timer]
+# Once per UTC day. We capture the day's top-N per leaderboard bucket
+# (upvoted / downvoted / controversial) into vote_leaderboard_history;
+# streak walks + medal counts on the detail page assume one row per
+# (day, bucket, category) per snapshot. Running more than once a day
+# is harmless (the script DELETE-then-INSERTs per (day_utc, bucket)) but
+# spends DB cycles for no UI gain — the rankings are already cached for
+# the live homepage leaderboards by getVoteLeaderboards on every hit.
+#
+# OnCalendar binds to UTC explicitly so an operator-timezone change can't
+# drift the boundary. 00:05 gives a 5-minute cushion past midnight to
+# absorb RandomizedDelaySec jitter and avoid the boundary-fence case
+# where the script starts at 23:59 and its server-side
+# `(now() AT TIME ZONE 'UTC')::date` lands on the previous day.
+OnCalendar=*-*-* 00:05:00 UTC
+Persistent=true
+RandomizedDelaySec=2min
+Unit=sync-leaderboards.service
+
+[Install]
+WantedBy=timers.target

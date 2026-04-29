@@ -1,0 +1,47 @@
+[Unit]
+Description=tokenstork sync-leaderboards — daily snapshot of vote leaderboards (upvoted/downvoted/controversial top-N) into vote_leaderboard_history; powers the per-token detail-page rank/streak/medal pills
+Documentation=https://github.com/Panmoni/tokenstork
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=oneshot
+User=tokenstork
+Group=tokenstork
+WorkingDirectory=/opt/tokenstork
+# Node + tsx rather than a Rust binary — this is the only TS-script-driven
+# sync unit. The package.json `sync:leaderboards` script wraps the same
+# invocation; this absolute path keeps the systemd unit self-contained
+# (no PATH dependency on the tokenstork user's shell profile).
+ExecStart=/opt/tokenstork/node_modules/.bin/tsx /opt/tokenstork/scripts/snapshot-leaderboards.ts
+
+# `-` prefix: start even if /etc/tokenstork/env is missing. The script will
+# then exit with "DATABASE_URL is not set" — operator sees the failure in
+# journalctl. Timer unit retries on the next tick.
+EnvironmentFile=-/etc/tokenstork/env
+
+# Hardening — same profile as sync-bcmr / sync-cauldron-stats / sync-fex.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectProc=invisible
+ProcSubset=pid
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallArchitectures=native
+UMask=0077
