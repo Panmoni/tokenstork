@@ -351,6 +351,154 @@ export interface VoteLeader {
 	downCount: number;
 }
 
+// =====================================================================
+// Leaderboard history — daily snapshot read paths.
+//
+// `vote_leaderboard_history` is populated by scripts/snapshot-leaderboards.ts
+// (one row per (day_utc, bucket, category) in the top-N for that bucket
+// on that day). Read paths here power the per-token detail page badges
+// + streak / medal pills.
+//
+// Three buckets, same labels as `getVoteLeaderboards`:
+//   'upvoted' | 'downvoted' | 'controversial'
+// =====================================================================
+
+export type LeaderboardBucket = 'upvoted' | 'downvoted' | 'controversial';
+
+export interface BucketStanding {
+	bucket: LeaderboardBucket;
+	currentRank: number | null;       // null if not in latest snapshot's top-N
+	streakDays: number;               // consecutive days at top-N up to and including the latest
+	medalGold: number;                // lifetime count of rank=1 days
+	medalSilver: number;              // lifetime count of rank in (2,3) days
+	medalBronze: number;              // lifetime count of rank in (4,5) days
+}
+
+const BUCKETS: LeaderboardBucket[] = ['upvoted', 'downvoted', 'controversial'];
+
+/** Per-token leaderboard standings across all three buckets. Single
+ *  query: pulls every history row for the category, then groups in JS.
+ *  Cheap because the index `(category, bucket, day_utc DESC)` lets PG
+ *  serve the read as an index range scan. Even after years of daily
+ *  snapshots a single token's history is bounded at ≤ 3 × N days where
+ *  N is "days in top-N at all" — a few thousand rows max in the worst
+ *  case (a permanent fixture).
+ *
+ *  Streak math: walk day_utc descending from the latest row in the
+ *  bucket, counting consecutive 1-day gaps. A gap > 1 day breaks the
+ *  streak. We additionally require the bucket's most recent row to fall
+ *  on `latestDay` — the most recent snapshot day this CATEGORY appears
+ *  on across all three buckets. If the bucket's last appearance predates
+ *  the category's last appearance, the token has been displaced from
+ *  this bucket's top-N and its streak resets even when the snapshot
+ *  worker has been running normally. (Skipped snapshot days break
+ *  streaks too — by design; the worker is expected to run every day.)
+ *
+ *  Resilience: returns empty defaults on any DB error (e.g.,
+ *  vote_leaderboard_history missing on a fresh deploy). The detail
+ *  page renders without leaderboard standings rather than 500-ing.
+ *
+ *  Medal counts: lifetime tally of rank=1 (gold), rank∈{2,3} (silver),
+ *  rank∈{4,5} (bronze) days. Includes the current day if applicable. */
+export async function getLeaderboardStandings(
+	category: Buffer
+): Promise<{ standings: BucketStanding[]; latestDay: string | null }> {
+	const emptyStandings: BucketStanding[] = BUCKETS.map((bucket) => ({
+		bucket,
+		currentRank: null,
+		streakDays: 0,
+		medalGold: 0,
+		medalSilver: 0,
+		medalBronze: 0
+	}));
+
+	let res;
+	try {
+		res = await query<{
+			bucket: LeaderboardBucket;
+			day_utc: Date;
+			rank: number;
+		}>(
+			`SELECT bucket, day_utc, rank
+			   FROM vote_leaderboard_history
+			  WHERE category = $1
+			  ORDER BY bucket, day_utc DESC`,
+			[category]
+		);
+	} catch (err) {
+		console.error('[votes] leaderboard standings failed:', err);
+		return { standings: emptyStandings, latestDay: null };
+	}
+
+	// `latestDay` is the most recent day this CATEGORY appears on in
+	// ANY bucket — not the global latest snapshot day across all
+	// categories. A token can sit in just one bucket's top-N (e.g.,
+	// 'upvoted') and the streak math for the other two correctly
+	// resets because their per-bucket latest row is older than this
+	// `latestDay`.
+	let latestDayMs = 0;
+	for (const r of res.rows) {
+		const ms = r.day_utc.getTime();
+		if (ms > latestDayMs) latestDayMs = ms;
+	}
+	const latestDay = latestDayMs > 0
+		? new Date(latestDayMs).toISOString().slice(0, 10)
+		: null;
+
+	const byBucket = new Map<LeaderboardBucket, Array<{ day: string; rank: number }>>();
+	for (const b of BUCKETS) byBucket.set(b, []);
+	for (const r of res.rows) {
+		byBucket.get(r.bucket)?.push({
+			day: r.day_utc.toISOString().slice(0, 10),
+			rank: r.rank
+		});
+	}
+
+	const standings: BucketStanding[] = BUCKETS.map((bucket) => {
+		const rows = byBucket.get(bucket) ?? [];
+		// Lifetime medal tally across the full history.
+		let gold = 0, silver = 0, bronze = 0;
+		for (const r of rows) {
+			if (r.rank === 1) gold++;
+			else if (r.rank <= 3) silver++;
+			else if (r.rank <= 5) bronze++;
+		}
+		// Streak only counts if the most recent row is also the most
+		// recent snapshot day overall — otherwise the token is no longer
+		// in today's top-N and the streak has reset.
+		let currentRank: number | null = null;
+		let streak = 0;
+		if (rows.length > 0 && latestDay && rows[0].day === latestDay) {
+			currentRank = rows[0].rank;
+			streak = 1;
+			let prevMs = new Date(rows[0].day).getTime();
+			for (let i = 1; i < rows.length; i++) {
+				const curMs = new Date(rows[i].day).getTime();
+				const dayDiff = Math.round((prevMs - curMs) / 86_400_000);
+				if (dayDiff !== 1) break;
+				streak++;
+				prevMs = curMs;
+			}
+		}
+		return {
+			bucket,
+			currentRank,
+			streakDays: streak,
+			medalGold: gold,
+			medalSilver: silver,
+			medalBronze: bronze
+		};
+	});
+
+	return { standings, latestDay };
+}
+
+// The daily snapshot writer lives in scripts/snapshot-leaderboards.ts
+// (it runs as a tsx script under a systemd timer, outside the SvelteKit
+// module graph). The script duplicates VOTE_TENURE_CTE_BODY +
+// VOTE_CONTRIBUTION_SQL with a pointer comment in both files — if the
+// hot-ranking math changes here, update the script in lockstep.
+
 /** Aggregate (up, down) counts for one category. Used by the per-token
  *  detail page where we don't have the directory's bulk LEFT JOIN. The
  *  detail page already 410s for moderated tokens before this is called,
