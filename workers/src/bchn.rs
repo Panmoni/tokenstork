@@ -243,6 +243,35 @@ impl BchnClient {
         .await
     }
 
+    /// Resolve a tx hash to the height of the block that confirmed it.
+    /// Two RPCs (`getrawtransaction <txid> 1` → `getblockheader <hash>`)
+    /// because BCHN doesn't return tx height directly. Returns `None` if
+    /// the tx is in the mempool (no `blockhash`).
+    ///
+    /// Used by the CRC-20 detector to compute `H_commit` for the
+    /// `fair_genesis_height = max(H_commit, H_reveal − 20)` canonical-sort
+    /// rule. Per CRC-20 spec, `H_commit` is the height of the block that
+    /// confirmed the *commit* transaction (i.e. the prevout of the
+    /// genesis input). Two RPCs is fine because CRC-20 hits are rare.
+    pub async fn tx_block_height(&self, txid: &str) -> Result<Option<i32>> {
+        let raw: RawTransactionVerbose = self
+            .rpc(
+                "getrawtransaction",
+                Value::Array(vec![Value::String(txid.to_string()), Value::from(1)]),
+            )
+            .await?;
+        let Some(blockhash) = raw.blockhash else {
+            return Ok(None);
+        };
+        let header: BlockHeader = self
+            .rpc(
+                "getblockheader",
+                Value::Array(vec![Value::String(blockhash), Value::from(true)]),
+            )
+            .await?;
+        Ok(Some(header.height as i32))
+    }
+
     /// `scantxoutset start [{desc: "raw(<locking_hex>)"}]` — enumerate every
     /// unspent output whose locking bytecode matches `locking_hex` exactly.
     /// Used by `sync-fex` to pull every Fex AssetCovenant UTXO in one shot:
@@ -456,6 +485,20 @@ pub enum NftCapability {
 // ---------------------------------------------------------------------------
 // scantxoutset response types. Only the fields the verifier actually reads.
 // ---------------------------------------------------------------------------
+
+/// Subset of `getrawtransaction <txid> 1` we read. Mempool txs lack
+/// `blockhash`; confirmed ones have it.
+#[derive(Debug, Deserialize)]
+pub struct RawTransactionVerbose {
+    #[serde(default)]
+    pub blockhash: Option<String>,
+}
+
+/// Subset of `getblockheader <hash>` we read.
+#[derive(Debug, Deserialize)]
+pub struct BlockHeader {
+    pub height: u64,
+}
 
 #[derive(Debug, Deserialize)]
 pub struct ScanTxOutSet {

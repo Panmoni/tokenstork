@@ -22,9 +22,11 @@ use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
 use workers::bchn::{BchnClient, Tx};
+use workers::crc20::detect_in_tx;
 use workers::pg::{
-    self, FoundCategory, TokenType, load_sync_state, pool_from_env, save_backfill_through,
-    upsert_tokens,
+    self, FoundCategory, TokenType, crc20_canonical_resolve, load_sync_state,
+    mark_crc20_run, pool_from_env, save_backfill_through, upsert_tokens,
+    write_crc20_detection,
 };
 
 const CASHTOKEN_START_BLOCK: i32 = 792_772;
@@ -180,6 +182,21 @@ async fn main() -> Result<()> {
             for (cat, (has_ft, has_nft)) in per_tx {
                 observe(&mut batch, cat, has_ft, has_nft, height, block_time, &tx.txid);
             }
+
+            // CRC-20 detection. Independent of the cross-block tokens
+            // batch — every CRC-20 reveal is a single tx event, so we
+            // upsert immediately rather than buffering. Errors are
+            // soft-failed (warn + continue) so a single bad row doesn't
+            // pin the whole backfill.
+            if let Some(d) = detect_in_tx(tx)
+                && let Err(e) = write_crc20_detection(&pool, &bchn, &d, height).await
+            {
+                warn!(
+                    category = %d.category_hex,
+                    error = %e,
+                    "crc20 write failed during backfill; continuing"
+                );
+            }
         }
 
         if height % PROGRESS_EVERY == 0 {
@@ -211,6 +228,17 @@ async fn main() -> Result<()> {
     // Final flush.
     flushed_total += flush_batch(&pool, &mut batch).await?;
     save_backfill_through(&pool, tip, true).await?;
+
+    // Single canonical-winner pass at end of backfill — much cheaper
+    // than running it per block, and the data is only consumed after
+    // backfill completes anyway.
+    match crc20_canonical_resolve(&pool).await {
+        Ok(n) => info!(rows_updated = n, "crc20 canonical resolve complete"),
+        Err(e) => warn!(error = %e, "crc20 canonical resolve failed"),
+    }
+    if let Err(e) = mark_crc20_run(&pool).await {
+        warn!(error = %e, "mark_crc20_run failed; observability only");
+    }
 
     let elapsed = started.elapsed().as_secs_f64();
     let count = pg::count_tokens(&pool).await.unwrap_or(-1);

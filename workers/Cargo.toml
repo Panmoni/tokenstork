@@ -65,6 +65,10 @@ sd-notify = "0.4"
 # no native deps.
 sha2 = "0.10"
 
+# RIPEMD-160 — second leg of hash160 (RIPEMD160(SHA256(x))). Used by the
+# CRC-20 detector to verify output[0] is P2PKH(hash160(symbol)). Pure-Rust.
+ripemd = "0.1"
+
 # Image format detection + WebP transcode for the icon safety pipeline.
 # `default-features=false` strips formats we don't need (tiff, ico, etc.);
 # we keep png/jpeg/webp/gif (first-frame only). Pure-Rust WebP encode — no

@@ -34,10 +34,12 @@ use tracing_subscriber::EnvFilter;
 
 use workers::bchn::{BchnClient, Block, HashBlockSubscriber, zmq_url_from_env};
 use workers::blocks::{ACTIVATION_HEIGHT, summarize_block};
+use workers::crc20::detect_in_tx;
 use workers::pg::{
-    self, BlockWrite, FoundCategory, OfferWrite, TokenType, load_sync_state,
-    mark_blocks_run, mark_tail_run, mark_tapswap_run, pool_from_env, save_tail_last_block,
-    upsert_block, upsert_tapswap_offers_batch, upsert_tokens,
+    self, BlockWrite, FoundCategory, OfferWrite, TokenType,
+    crc20_canonical_resolve, load_sync_state, mark_blocks_run, mark_crc20_run,
+    mark_tail_run, mark_tapswap_run, pool_from_env, save_tail_last_block,
+    upsert_block, upsert_tapswap_offers_batch, upsert_tokens, write_crc20_detection,
 };
 use workers::tapswap::try_decode_tx;
 use workers::tapswap_walker::process_block_spends;
@@ -64,22 +66,35 @@ struct BlockStats {
     /// (Per-block economics is observability data; a transient DB error
     /// shouldn't pin the tail's checkpoint.)
     blocks_written: usize,
+    /// Count of CRC-20 reveals detected and upserted in this block.
+    crc20_written: usize,
 }
 
-/// Walk one block's transactions four times:
+/// Walk one block's transactions:
 ///  1. Collect distinct token categories (existing behaviour) → `tokens`.
 ///  2. Detect MPSW Tapswap listings → `tapswap_offers`.
 ///  3. Detect Tapswap closes (taken / cancelled) → updates the same table.
 ///  4. Summarize per-block economics (tx count, coinbase, fees, size,
 ///     subsidy) → `blocks`.
+///  5. Detect CRC-20 covenant reveals on genesis inputs → `token_crc20`,
+///     followed by canonical-winner re-resolution if any rows were
+///     written.
 ///
 /// Order matters: pass 2 must precede pass 3 so a listing minted and
 /// closed in the same block (rare but legal) gets inserted before the
-/// close-walker tries to update it. Pass 4 is independent and runs last.
+/// close-walker tries to update it. Passes 4 + 5 are independent and
+/// run last.
 ///
 /// One block fetch per tail tick; the extra walkers are cheap because
-/// we're already iterating every output for the token walker.
-async fn process_block(pool: &pg::PgPool, block: &Block) -> Result<BlockStats> {
+/// we're already iterating every output for the token walker. CRC-20
+/// detection adds at most one BCHN RPC per detected covenant (to look
+/// up `H_commit`), and CRC-20 reveals are rare (~hundreds since
+/// activation), so the per-block overhead is essentially zero.
+async fn process_block(
+    pool: &pg::PgPool,
+    bchn: &BchnClient,
+    block: &Block,
+) -> Result<BlockStats> {
     let height: i32 = block
         .height
         .try_into()
@@ -221,11 +236,44 @@ async fn process_block(pool: &pg::PgPool, block: &Block) -> Result<BlockStats> {
         }
     };
 
+    // --- Pass 5: CRC-20 detection ---
+    //
+    // Walk every tx that creates a category, parse the genesis input's
+    // scriptSig against the CRC-20 covenant pattern, and on a match
+    // write a row into `token_crc20`. After any successful detection
+    // re-run the canonical-winner resolver so readers see a consistent
+    // view.
+    //
+    // Errors here are HARD-failed (propagated) for the same reason as
+    // Pass 2 (Tapswap): tail never revisits past blocks once
+    // save_tail_last_block advances the checkpoint, so silently
+    // dropping a CRC-20 row would be permanent data loss until an
+    // operator runs `crc20-rescan`. Re-processing the block on the
+    // next tick is fine — upsert_token_crc20 is idempotent on the
+    // category PK and preserves is_canonical / detected_at on conflict.
+    let mut crc20_written = 0;
+    for tx in &block.tx {
+        let Some(d) = detect_in_tx(tx) else { continue };
+        write_crc20_detection(pool, bchn, &d, height)
+            .await
+            .with_context(|| format!("crc20 write at height {height} category={}", d.category_hex))?;
+        crc20_written += 1;
+    }
+    if crc20_written > 0 {
+        crc20_canonical_resolve(pool)
+            .await
+            .with_context(|| format!("crc20 canonical resolve at height {height}"))?;
+        if let Err(e) = mark_crc20_run(pool).await {
+            warn!(error = %e, "mark_crc20_run failed; observability only");
+        }
+    }
+
     Ok(BlockStats {
         tokens_touched,
         tapswap_written,
         tapswap_closed,
         blocks_written,
+        crc20_written,
     })
 }
 
@@ -250,14 +298,19 @@ async fn catch_up(pool: &pg::PgPool, bchn: &BchnClient, from: i32, to: i32) -> R
             .get_block_by_height(h as u64)
             .await
             .with_context(|| format!("fetching block {h}"))?;
-        let stats = process_block(pool, &block).await?;
+        let stats = process_block(pool, bchn, &block).await?;
         save_tail_last_block(pool, h).await?;
-        if stats.tokens_touched > 0 || stats.tapswap_written > 0 || stats.tapswap_closed > 0 {
+        if stats.tokens_touched > 0
+            || stats.tapswap_written > 0
+            || stats.tapswap_closed > 0
+            || stats.crc20_written > 0
+        {
             info!(
                 height = h,
                 touched = stats.tokens_touched,
                 tapswap_written = stats.tapswap_written,
                 tapswap_closed = stats.tapswap_closed,
+                crc20_written = stats.crc20_written,
                 blocks_written = stats.blocks_written,
                 "block processed"
             );
@@ -265,7 +318,7 @@ async fn catch_up(pool: &pg::PgPool, bchn: &BchnClient, from: i32, to: i32) -> R
             info!(
                 height = h,
                 blocks_written = stats.blocks_written,
-                "block processed (no tokens, no listings, no closes)"
+                "block processed (no tokens, no listings, no closes, no CRC-20)"
             );
         }
     }

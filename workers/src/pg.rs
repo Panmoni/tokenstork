@@ -579,6 +579,254 @@ pub async fn mark_bcmr_run(pool: &PgPool) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
+// CRC-20 detection helpers. See workers/src/crc20.rs for the parser and
+// docs/crc20-plan.md for the design.
+// ---------------------------------------------------------------------------
+
+/// One row's worth of data for upsert into `token_crc20`. Mirrors the
+/// schema column-for-column. `fair_genesis_height` is generated server-side.
+#[derive(Debug, Clone)]
+pub struct Crc20Write {
+    pub category: Vec<u8>,
+    pub symbol_bytes: Vec<u8>,
+    pub symbol: String,
+    pub symbol_is_hex: bool,
+    pub decimals: i16,
+    pub name_bytes: Vec<u8>,
+    pub name: Option<String>,
+    pub recipient_pubkey: Vec<u8>,
+    pub commit_txid: Vec<u8>,
+    pub commit_block: i32,
+    pub reveal_block: i32,
+    pub reveal_input_index: i32,
+}
+
+/// Upsert into `token_crc20`. Idempotent on the `category` PK; refreshes
+/// every parsed field on conflict so a re-run picks up code changes to
+/// the parser (e.g. better UTF-8 fallback). `is_canonical` is *not*
+/// touched here — that's the canonical resolver's job.
+pub async fn upsert_token_crc20(pool: &PgPool, w: &Crc20Write) -> Result<()> {
+    sqlx::query(
+        r#"
+        INSERT INTO token_crc20
+            (category, symbol_bytes, symbol, symbol_is_hex, decimals,
+             name_bytes, name, recipient_pubkey,
+             commit_txid, commit_block, reveal_block, reveal_input_index,
+             is_canonical, detected_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, false, now())
+        ON CONFLICT (category) DO UPDATE SET
+            symbol_bytes       = EXCLUDED.symbol_bytes,
+            symbol             = EXCLUDED.symbol,
+            symbol_is_hex      = EXCLUDED.symbol_is_hex,
+            decimals           = EXCLUDED.decimals,
+            name_bytes         = EXCLUDED.name_bytes,
+            name               = EXCLUDED.name,
+            recipient_pubkey   = EXCLUDED.recipient_pubkey,
+            commit_txid        = EXCLUDED.commit_txid,
+            commit_block       = EXCLUDED.commit_block,
+            reveal_block       = EXCLUDED.reveal_block,
+            reveal_input_index = EXCLUDED.reveal_input_index
+            -- detected_at intentionally NOT overwritten on conflict so it
+            -- preserves "first-detection time" semantics across rescan /
+            -- backfill re-runs. The default `now()` populates fresh INSERTs.
+        "#,
+    )
+    .bind(&w.category)
+    .bind(&w.symbol_bytes)
+    .bind(&w.symbol)
+    .bind(w.symbol_is_hex)
+    .bind(w.decimals)
+    .bind(&w.name_bytes)
+    .bind(&w.name)
+    .bind(&w.recipient_pubkey)
+    .bind(&w.commit_txid)
+    .bind(w.commit_block)
+    .bind(w.reveal_block)
+    .bind(w.reveal_input_index)
+    .execute(pool)
+    .await
+    .with_context(|| {
+        format!(
+            "upsert token_crc20 category={} symbol={}",
+            bytes_to_hex(&w.category),
+            w.symbol
+        )
+    })?;
+    Ok(())
+}
+
+/// Delete CRC-20 detections at `height`. Called from the tail's reorg-
+/// rewind path so a reverted block's CRC-20 rows don't outlive the
+/// chain reorg. Re-detection on the new branch repopulates whatever
+/// still exists.
+pub async fn delete_crc20_at_height(pool: &PgPool, height: i32) -> Result<u64> {
+    let result = sqlx::query("DELETE FROM token_crc20 WHERE reveal_block = $1")
+        .bind(height)
+        .execute(pool)
+        .await
+        .context("delete_crc20_at_height")?;
+    Ok(result.rows_affected())
+}
+
+/// Recompute `is_canonical` per symbol bucket. Picks the row with the
+/// lowest `(fair_genesis_height, category, reveal_input_index)` tuple
+/// per `symbol_bytes` group as the winner. Wraps the recompute in a
+/// single transaction so readers always see a consistent view.
+///
+/// Cheap to call: the table is small (CRC-20 categories number in the
+/// hundreds today, low thousands at most for years) and the
+/// `token_crc20_sort_idx` index drives the window function directly.
+pub async fn crc20_canonical_resolve(pool: &PgPool) -> Result<u64> {
+    let mut tx = pool.begin().await.context("begin crc20_canonical_resolve")?;
+    let result = sqlx::query(
+        r#"
+        WITH ranked AS (
+            SELECT category,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY symbol_bytes
+                       ORDER BY fair_genesis_height ASC,
+                                category ASC,
+                                reveal_input_index ASC
+                   ) AS rn
+              FROM token_crc20
+        )
+        UPDATE token_crc20 c
+           SET is_canonical = (r.rn = 1)
+          FROM ranked r
+         WHERE c.category = r.category
+           AND c.is_canonical IS DISTINCT FROM (r.rn = 1)
+        "#,
+    )
+    .execute(&mut *tx)
+    .await
+    .context("crc20_canonical_resolve update")?;
+    sqlx::query(
+        "UPDATE sync_state
+            SET last_crc20_canonical_run_at = now(), updated_at = now()
+          WHERE id = 1",
+    )
+    .execute(&mut *tx)
+    .await
+    .context("crc20_canonical_resolve mark_run")?;
+    tx.commit().await.context("commit crc20_canonical_resolve")?;
+    Ok(result.rows_affected())
+}
+
+/// Resolve `H_commit` for a detection (one BCHN RPC) and upsert it into
+/// `token_crc20`. Shared between tail / backfill / rescan so the
+/// translation from `Crc20Detection` to `Crc20Write` lives in one place.
+///
+/// On RPC failure the row's `commit_block` falls back to `reveal_block`
+/// (logged as a warn). The fallback degrades the spec's anti-squatter
+/// penalty for that one row but keeps detection itself reliable; the
+/// canonical resolver still picks a winner.
+pub async fn write_crc20_detection(
+    pool: &PgPool,
+    bchn: &crate::bchn::BchnClient,
+    d: &crate::crc20::Crc20Detection,
+    reveal_block: i32,
+) -> Result<()> {
+    let commit_block = match bchn.tx_block_height(&d.commit_txid_hex).await {
+        Ok(Some(h)) => h,
+        Ok(None) => {
+            tracing::warn!(
+                category = %d.category_hex,
+                commit_txid = %d.commit_txid_hex,
+                "commit tx not in a block (mempool?); falling back to reveal height"
+            );
+            reveal_block
+        }
+        Err(e) => {
+            tracing::warn!(
+                category = %d.category_hex,
+                commit_txid = %d.commit_txid_hex,
+                error = %e,
+                "tx_block_height RPC failed; falling back to reveal height"
+            );
+            reveal_block
+        }
+    };
+    let category_bytes = hex_to_bytes(&d.category_hex)?;
+    let commit_txid_bytes = category_bytes.clone();
+    let write = Crc20Write {
+        category: category_bytes,
+        symbol_bytes: d.reveal.symbol_bytes.clone(),
+        symbol: d.reveal.symbol.clone(),
+        symbol_is_hex: d.reveal.symbol_is_hex,
+        decimals: d.reveal.decimals,
+        name_bytes: d.reveal.name_bytes.clone(),
+        name: d.reveal.name.clone(),
+        recipient_pubkey: d.reveal.recipient_pubkey.clone(),
+        commit_txid: commit_txid_bytes,
+        commit_block,
+        reveal_block,
+        reveal_input_index: d.reveal_input_index as i32,
+    };
+    upsert_token_crc20(pool, &write).await?;
+    tracing::info!(
+        category = %d.category_hex,
+        symbol = %d.reveal.symbol,
+        decimals = d.reveal.decimals,
+        reveal_block,
+        commit_block,
+        "CRC-20 reveal detected"
+    );
+    Ok(())
+}
+
+pub async fn mark_crc20_run(pool: &PgPool) -> Result<()> {
+    sqlx::query(
+        "UPDATE sync_state
+            SET last_crc20_run_at = now(), updated_at = now()
+          WHERE id = 1",
+    )
+    .execute(pool)
+    .await
+    .context("mark_crc20_run")?;
+    Ok(())
+}
+
+/// Categories whose `tokens` row exists but `token_crc20` row does not —
+/// i.e. candidates for the one-shot rescan binary. Sorted by genesis
+/// block ascending so progress is monotone (and resumable: re-running
+/// continues where it left off because already-detected rows are no
+/// longer in this set).
+pub async fn pick_crc20_rescan_batch(pool: &PgPool, limit: i32) -> Result<Vec<Vec<u8>>> {
+    let rows: Vec<(Vec<u8>,)> = sqlx::query_as(
+        r#"
+        SELECT t.category
+          FROM tokens t
+          LEFT JOIN token_crc20 c ON c.category = t.category
+         WHERE c.category IS NULL
+         ORDER BY t.genesis_block ASC, t.category ASC
+         LIMIT $1
+        "#,
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+    .context("pick_crc20_rescan_batch")?;
+    Ok(rows.into_iter().map(|(c,)| c).collect())
+}
+
+/// Look up `(genesis_block, genesis_txid)` for a known category. Used by
+/// the rescan binary to populate `reveal_block` without re-fetching the
+/// whole genesis block from BCHN when the row is already in `tokens`.
+pub async fn get_token_genesis(
+    pool: &PgPool,
+    category: &[u8],
+) -> Result<Option<(i32, Vec<u8>)>> {
+    let row: Option<(i32, Vec<u8>)> = sqlx::query_as(
+        "SELECT genesis_block, genesis_txid FROM tokens WHERE category = $1",
+    )
+    .bind(category)
+    .fetch_optional(pool)
+    .await
+    .context("get_token_genesis")?;
+    Ok(row)
+}
+
+// ---------------------------------------------------------------------------
 // Venue-listings helpers (Phase 4d — currently only Cauldron, but the
 // `venue` column is a string to keep the shape open for Fex / Tapswap /
 // Jazz when they're added).
