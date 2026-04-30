@@ -315,7 +315,12 @@
 			bcmr.splitId ||
 			uriEntries.length > 0 ||
 			(bcmr.tags && bcmr.tags.length > 0)}
-		{#if hasCompact}
+		<!--
+			Always render the bar when BCMR exists — even if hasCompact is
+			false — so the canonical-JSON link is reachable. The link is
+			the universal anchor to the registry's raw payload.
+		-->
+		{#if hasCompact || data.bcmr}
 			<div class="mb-8 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-wrap items-center gap-x-5 gap-y-3">
 				{#if uriEntries.length > 0}
 					<div class="flex flex-wrap items-center gap-2">
@@ -377,6 +382,24 @@
 						{/if}
 					</div>
 				{/if}
+
+				<!--
+					Link to the canonical BCMR JSON. Same Paytaca endpoint we
+					fetch from server-side; surfacing it here lets users
+					verify the registry's payload directly.
+				-->
+				<div class="flex items-center gap-1.5 text-xs min-w-0">
+					<span class="text-slate-500 dark:text-slate-400 uppercase tracking-wider flex-shrink-0">BCMR JSON</span>
+					<a
+						href={`https://bcmr.paytaca.com/api/tokens/${token.id}`}
+						target="_blank"
+						rel="noopener noreferrer"
+						class="font-mono text-violet-600 dark:text-violet-400 hover:underline"
+						title="Open the raw BCMR JSON from the Paytaca registry"
+					>
+						bcmr.paytaca.com ↗
+					</a>
+				</div>
 			</div>
 		{/if}
 	{/if}
