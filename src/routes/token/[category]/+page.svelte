@@ -333,7 +333,15 @@
 									title={`${spec.label}: ${value}`}
 									aria-label={spec.label}
 								>
-									<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox={spec.viewBox} fill="currentColor" stroke="currentColor" stroke-width={spec.viewBox === '0 0 24 24' && (key === 'web' || spec.label === 'Link') ? '2' : '0'} stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+									<!--
+										fill-rule="evenodd" matters for brand marks whose path
+										data encodes an outer body + inner cutouts as separate
+										subpaths (Reddit's eyes/mouth, GitHub's octocat). With
+										the default nonzero rule those cutouts fill solid in the
+										same direction as the body and the icon collapses to a
+										silhouette. Mirrors the Footer's social-icon block.
+									-->
+									<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox={spec.viewBox} fill="currentColor" stroke="currentColor" stroke-width={spec.viewBox === '0 0 24 24' && (key === 'web' || spec.label === 'Link') ? '2' : '0'} stroke-linecap="round" stroke-linejoin="round" fill-rule="evenodd" clip-rule="evenodd" aria-hidden="true">
 										{#each spec.paths as d (d)}
 											<path {d} fill={key === 'web' || spec.label === 'Link' ? 'none' : 'currentColor'} />
 										{/each}
@@ -1061,7 +1069,15 @@
 		})()}
 		<section class="mb-8">
 			<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-4">Top holders</h2>
-			<div class="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
+			<!--
+				overflow-x-auto, not overflow-hidden: with the % Supply column
+				added the row width can exceed narrow viewports. Hiding overflow
+				here would chop the NFT column off-screen on phones; auto lets
+				the user scroll horizontally instead. The rounded-xl border still
+				clips correctly because the wrapper itself has no inner content
+				beyond the table.
+			-->
+			<div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
 				<table class="w-full text-sm">
 					<thead class="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
 						<tr>
@@ -1077,6 +1093,12 @@
 								if (supplyBig === 0n) return null;
 								try {
 									const bal = BigInt(holder.balance);
+									// Snapshot drift can show bal slightly > supply; we clamp
+									// at 100% below. A negative bal would never come from the
+									// indexer's NUMERIC(78,0) balances, but if one ever leaks
+									// through (corruption, manual repair) we'd rather render a
+									// dash than a misleading negative percentage.
+									if (bal < 0n) return null;
 									return Math.min(100, Number((bal * 1_000_000n) / supplyBig) / 10_000);
 								} catch {
 									return null;

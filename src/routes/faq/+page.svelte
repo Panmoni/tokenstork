@@ -403,9 +403,11 @@
 						to keep page weight reasonable and to short-circuit decompression-bomb images.
 					</li>
 					<li>
-						<strong>Format.</strong> Only static rasters (PNG, JPEG, WebP, GIF first-frame).
-						Animated GIF/APNG get the placeholder; SVG isn't served at all (it can carry
-						script and is its own attack surface).
+						<strong>Format.</strong> PNG, JPEG, WebP, and GIF first-frame are supported as
+						static rasters. SVG is rasterized server-side via <code class="px-1 rounded bg-slate-100 dark:bg-slate-800 font-mono text-xs">resvg</code>
+						before serving — your browser never sees the SVG XML, so embedded scripts,
+						event handlers, and external <code class="px-1 rounded bg-slate-100 dark:bg-slate-800 font-mono text-xs">href</code>
+						references can't reach you. Animated GIF/APNG render their first frame only.
 					</li>
 					<li>
 						<strong>Adult content.</strong> Each icon is run through Google Cloud Vision's
