@@ -683,3 +683,57 @@ CREATE INDEX IF NOT EXISTS vote_leaderboard_history_bucket_day_rank_idx
 
 ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_leaderboard_snapshot_at TIMESTAMPTZ;
 ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_leaderboard_snapshot_day DATE;
+
+-- ============================================================================
+-- CRC-20 detection. CRC-20 is a permissionless naming convention layered on
+-- CashTokens — the symbol / decimals / name are encoded inside a 21-byte
+-- covenant whose redeem script is revealed in the genesis input of the
+-- genesis transaction. A canonical-winner sort
+-- (max(commit_block, reveal_block - 20) ASC, category ASC, input_index ASC)
+-- picks one winner per symbol.
+--
+-- One row per CashTokens category whose genesis transaction carries a
+-- CRC-20 covenant reveal. Populated incrementally by sync-tail + backfill
+-- (which already walk every block since CashTokens activation) and
+-- one-shot by sync-crc20-rescan. Canonical-winner resolution per symbol
+-- is recomputed by sync-crc20-canonical (hourly + after every reorg).
+-- See docs/crc20-plan.md for the full design.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS token_crc20 (
+  category           BYTEA       PRIMARY KEY REFERENCES tokens(category) ON DELETE CASCADE,
+  -- Raw covenant fields. symbol_bytes is authoritative; symbol is its
+  -- best-effort UTF-8 decoding when valid, otherwise '0x'||hex(symbol_bytes)
+  -- with symbol_is_hex = true.
+  symbol_bytes       BYTEA       NOT NULL,
+  symbol             TEXT        NOT NULL,
+  symbol_is_hex      BOOLEAN     NOT NULL DEFAULT false,
+  decimals           SMALLINT    NOT NULL,
+  name_bytes         BYTEA       NOT NULL,
+  name               TEXT,                                                -- nullable when name_bytes is non-UTF-8; raw bytes always preserved
+  recipient_pubkey   BYTEA       NOT NULL,                                -- 33 (compressed) or 65 (uncompressed) bytes
+  -- Genesis-input provenance. commit_txid is the prevout of the genesis
+  -- input (= category id, since CashTokens defines category id := prevout
+  -- txid for vout==0). Stored explicitly for clarity / reorg cleanup.
+  commit_txid        BYTEA       NOT NULL,
+  commit_block       INTEGER     NOT NULL,                                -- H_commit
+  reveal_block       INTEGER     NOT NULL,                                -- H_reveal (= tokens.genesis_block)
+  reveal_input_index INTEGER     NOT NULL DEFAULT 0,                      -- almost always 0; tie-break for the canonical sort
+  -- Canonical-winner flag. Recomputed per symbol by sync-crc20-canonical
+  -- after every detection batch and after every reorg.
+  is_canonical       BOOLEAN     NOT NULL DEFAULT false,
+  -- Generated column for the canonical-sort key. Postgres ≥ 12 supports
+  -- STORED generated columns; the (symbol_bytes, fair_genesis_height,
+  -- category, reveal_input_index) index below uses it.
+  fair_genesis_height INTEGER GENERATED ALWAYS AS (GREATEST(commit_block, reveal_block - 20)) STORED,
+  detected_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Symbol-bucket lookup for canonical resolution and the /crc20 page.
+CREATE INDEX IF NOT EXISTS token_crc20_symbol_idx       ON token_crc20 (symbol_bytes);
+CREATE INDEX IF NOT EXISTS token_crc20_canonical_idx    ON token_crc20 (is_canonical);
+-- Sort key for picking the winner per symbol.
+CREATE INDEX IF NOT EXISTS token_crc20_sort_idx
+  ON token_crc20 (symbol_bytes, fair_genesis_height, category, reveal_input_index);
+
+ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_crc20_run_at TIMESTAMPTZ;
+ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_crc20_canonical_run_at TIMESTAMPTZ;
