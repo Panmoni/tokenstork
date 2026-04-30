@@ -61,10 +61,13 @@ export const GET: RequestHandler = async ({ params, url, setHeaders }) => {
 		const total = Number(countRes.rows[0]?.total ?? 0);
 
 		const rowsRes = await query<HolderRow>(
+			// Qualify `balance` with the table name so ORDER BY sorts the
+			// underlying NUMERIC column rather than the text alias (which
+			// produces a lexicographic sort that scrambles holders).
 			`SELECT address, balance::text AS balance, nft_count, snapshot_at
 			   FROM token_holders
 			  WHERE category = $1
-			  ORDER BY balance DESC, address ASC
+			  ORDER BY token_holders.balance DESC, address ASC
 			  LIMIT $2 OFFSET $3`,
 			[categoryBytes, limit, offset]
 		);

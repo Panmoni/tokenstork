@@ -242,10 +242,16 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 		crc20Detail
 	] = await Promise.all([
 		query<HolderRow>(
+			// `balance::text AS balance` aliases the text cast under the
+			// same name as the underlying NUMERIC column, so a bare
+			// `ORDER BY balance` resolves to the alias and sorts the
+			// digits lexicographically — putting "978000" above "9376000"
+			// and scrambling the holders list. Qualify with the table
+			// name so the NUMERIC column does the sort.
 			`SELECT address, balance::text AS balance, nft_count
 			   FROM token_holders
 			  WHERE category = $1
-			  ORDER BY balance DESC, address ASC
+			  ORDER BY token_holders.balance DESC, address ASC
 			  LIMIT 10`,
 			[categoryBytes]
 		),
