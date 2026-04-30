@@ -53,6 +53,12 @@ interface DbRow {
 	// fetches. Both 0 for tokens with no votes.
 	up_count: number;
 	down_count: number;
+	// CRC-20 detection (LEFT JOIN token_crc20 c). All four fields are
+	// null for non-CRC-20 categories.
+	crc20_symbol: string | null;
+	crc20_symbol_is_hex: boolean | null;
+	crc20_is_canonical: boolean | null;
+	is_crc20: boolean | null;
 }
 
 // Bucket names by "quality" so the directory opens with recognisable
@@ -121,6 +127,12 @@ export const load: PageServerLoad = async ({ url }) => {
 	// Powers the Listed pill in MetricsBar, which matches the same
 	// universe that `listedCount` reports in the layout load.
 	const onlyListed = url.searchParams.get('listed') === '1';
+	// CRC-20 filter — three modes:
+	//   ?crc20=true        any CRC-20 token (canonical or non-canonical)
+	//   ?crc20=canonical   canonical winner only
+	//   ?crc20=noncanonical contender that lost the canonical sort
+	// Anything else is ignored.
+	const crc20Param = url.searchParams.get('crc20');
 	const offset = Math.max(Number(url.searchParams.get('offset') ?? 0) || 0, 0);
 
 	const search = (url.searchParams.get('search') ?? '').trim();
@@ -179,6 +191,13 @@ export const load: PageServerLoad = async ({ url }) => {
 			  OR vl_tapswap.category IS NOT NULL
 			  OR vl_fex.category IS NOT NULL)`
 		);
+	}
+	if (crc20Param === 'true') {
+		where.push('c.category IS NOT NULL');
+	} else if (crc20Param === 'canonical') {
+		where.push('c.is_canonical = true');
+	} else if (crc20Param === 'noncanonical') {
+		where.push('c.category IS NOT NULL AND c.is_canonical = false');
 	}
 	// When a free-form search is active, prepend a similarity-DESC fragment
 	// to the ORDER BY so best fuzzy matches surface first. The user's
@@ -304,6 +323,10 @@ export const load: PageServerLoad = async ({ url }) => {
 		LEFT JOIN icon_moderation imo
 			ON imo.content_hash = ius.content_hash
 			AND imo.state = 'cleared'
+		-- CRC-20 covenant detection. NULL columns for non-CRC-20 categories;
+		-- ?crc20=... filters above promote this LEFT JOIN to an effective
+		-- INNER via category IS NOT NULL when active.
+		LEFT JOIN token_crc20 c ON c.category = t.category
 		-- Wallet-tied votes — RAW counts, displayed as-is in the grid.
 		-- One COUNT(*) FILTER pass per row against
 		-- user_votes_category_vote_idx; both columns default to 0 so
@@ -388,7 +411,11 @@ export const load: PageServerLoad = async ({ url }) => {
 				ph_spark.points    AS sparkline_points,
 				encode(imo.content_hash, 'hex') AS icon_cleared_hash,
 				v.up_count,
-				v.down_count
+				v.down_count,
+				(c.category IS NOT NULL) AS is_crc20,
+				c.symbol           AS crc20_symbol,
+				c.symbol_is_hex    AS crc20_symbol_is_hex,
+				c.is_canonical     AS crc20_is_canonical
 			   ${fromJoins}
 			   ${whereClause}
 			   ORDER BY ${searchOrderPrefix}${sort}
@@ -466,7 +493,11 @@ export const load: PageServerLoad = async ({ url }) => {
 				sparklinePoints,
 				iconClearedHash: row.icon_cleared_hash ?? null,
 				upCount: row.up_count ?? 0,
-				downCount: row.down_count ?? 0
+				downCount: row.down_count ?? 0,
+				isCrc20: row.is_crc20 === true,
+				crc20Symbol: row.crc20_symbol ?? null,
+				crc20SymbolIsHex: row.crc20_symbol_is_hex === true,
+				crc20IsCanonical: row.crc20_is_canonical === true
 			};
 		});
 

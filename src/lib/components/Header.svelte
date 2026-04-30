@@ -8,6 +8,7 @@
 	// stay in the footer — the header is for primary navigation.
 	const navigation = [
 		{ name: 'Tokens', href: '/' },
+		{ name: 'CRC-20', href: '/crc20' },
 		{ name: 'Arbitrage', href: '/arbitrage' },
 		{ name: 'Mint', href: '/mint' },
 		{ name: 'Blocks', href: '/blocks' },

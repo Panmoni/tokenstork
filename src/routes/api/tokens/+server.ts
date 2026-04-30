@@ -32,6 +32,12 @@ interface TokenApiRow {
 	firstSeenAt: number;
 	genesisBlock: number;
 	updatedAt: number;
+	// CRC-20 covenant detection. See docs/crc20-plan.md and
+	// $lib/types.ts#TokenApiRow for the full description.
+	isCrc20: boolean;
+	crc20Symbol: string | null;
+	crc20SymbolIsHex: boolean;
+	crc20IsCanonical: boolean;
 }
 
 interface DbRow {
@@ -53,6 +59,10 @@ interface DbRow {
 	verified_at: Date | null;
 	metadata_fetched_at: Date | null;
 	icon_cleared_hash: string | null;
+	is_crc20: boolean | null;
+	crc20_symbol: string | null;
+	crc20_symbol_is_hex: boolean | null;
+	crc20_is_canonical: boolean | null;
 }
 
 function parseLimit(raw: string | null, fallback: number, max: number): number {
@@ -87,6 +97,8 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 		const symbol = params.get('symbol');
 		const nameSearch = params.get('nameSearch');
 		const minSupplyRaw = params.get('minSupply');
+		// ?crc20=true | canonical | noncanonical — see SSR loader for semantics.
+		const crc20Param = params.get('crc20');
 		const sort = VALID_SORTS[params.get('sort') ?? 'name'] ?? VALID_SORTS.name;
 		const limit = parseLimit(params.get('limit'), 100, 1000);
 		const offset = parseOffset(params.get('offset'));
@@ -115,13 +127,27 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 			where.push('(s.is_fully_burned IS NULL OR s.is_fully_burned = false)');
 		}
 		if (symbol) {
-			push('LOWER(m.symbol) = LOWER($$)', symbol);
+			// Match against either the BCMR symbol (token_metadata.symbol) or
+			// the CRC-20 on-chain symbol (token_crc20.symbol). The two come
+			// from different sources and are commonly different strings — a
+			// CRC-20-BCH token's BCMR symbol may be "CRC20-BCH" but its
+			// on-chain claim is "BCH". Single bind reused for both halves.
+			values.push(symbol);
+			const idx = values.length;
+			where.push(`(LOWER(m.symbol) = LOWER($${idx}) OR LOWER(c.symbol) = LOWER($${idx}))`);
 		}
 		if (nameSearch) {
 			push('m.name ILIKE $$', `%${nameSearch}%`);
 		}
 		if (minSupplyRaw) {
 			push('s.current_supply >= $$', minSupplyRaw);
+		}
+		if (crc20Param === 'true') {
+			where.push('c.category IS NOT NULL');
+		} else if (crc20Param === 'canonical') {
+			where.push('c.is_canonical = true');
+		} else if (crc20Param === 'noncanonical') {
+			where.push('c.category IS NOT NULL AND c.is_canonical = false');
 		}
 
 		const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
@@ -131,6 +157,7 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 			FROM tokens t
 			LEFT JOIN token_metadata m ON m.category = t.category
 			LEFT JOIN token_state s    ON s.category = t.category
+			LEFT JOIN token_crc20 c    ON c.category = t.category
 			${whereClause}
 		`;
 		const countRes = await query<{ total: string }>(countSql, values);
@@ -155,10 +182,15 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 				s.has_active_minting,
 				s.is_fully_burned,
 				s.verified_at,
-				encode(imo.content_hash, 'hex') AS icon_cleared_hash
+				encode(imo.content_hash, 'hex') AS icon_cleared_hash,
+				(c.category IS NOT NULL) AS is_crc20,
+				c.symbol           AS crc20_symbol,
+				c.symbol_is_hex    AS crc20_symbol_is_hex,
+				c.is_canonical     AS crc20_is_canonical
 			FROM tokens t
 			LEFT JOIN token_metadata m ON m.category = t.category
 			LEFT JOIN token_state s    ON s.category = t.category
+			LEFT JOIN token_crc20 c    ON c.category = t.category
 			LEFT JOIN icon_url_scan ius ON ius.icon_uri = m.icon_uri
 			LEFT JOIN icon_moderation imo
 				ON imo.content_hash = ius.content_hash AND imo.state = 'cleared'
@@ -195,7 +227,11 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 				hasActiveMinting: row.has_active_minting ?? false,
 				firstSeenAt,
 				genesisBlock: row.genesis_block,
-				updatedAt: Math.floor(updatedAtMs / 1000)
+				updatedAt: Math.floor(updatedAtMs / 1000),
+				isCrc20: row.is_crc20 === true,
+				crc20Symbol: row.crc20_symbol ?? null,
+				crc20SymbolIsHex: row.crc20_symbol_is_hex === true,
+				crc20IsCanonical: row.crc20_is_canonical === true
 			};
 		});
 

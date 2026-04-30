@@ -65,6 +65,20 @@ export interface TokenApiRow {
 	// votes yet.
 	upCount: number;
 	downCount: number;
+
+	// CRC-20 covenant-detected naming claim. CRC-20 (https://crc20.cash/)
+	// is a permissionless naming convention layered on CashTokens that
+	// encodes symbol/decimals/name inside a 21-byte covenant in the
+	// genesis tx. `crc20Symbol` is the raw on-chain symbol bytes (UTF-8
+	// when decodable; falls back to "0x"-prefixed hex when not, with
+	// `crc20SymbolIsHex` set). `crc20IsCanonical` reflects whether this
+	// category won the per-symbol canonical-winner sort (one winner per
+	// symbol bucket; losers exist but didn't claim the symbol). All
+	// three fields are null for non-CRC-20 tokens.
+	isCrc20: boolean;
+	crc20Symbol: string | null;
+	crc20SymbolIsHex: boolean;
+	crc20IsCanonical: boolean;
 }
 
 export interface TokensResponse {

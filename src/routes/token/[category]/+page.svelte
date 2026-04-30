@@ -6,6 +6,7 @@
 		REPORT_REASON_LABELS,
 		type ReportReason
 	} from '$lib/moderation';
+	import Crc20Badge from '$lib/components/Crc20Badge.svelte';
 	import FormatCategory from '$lib/components/FormatCategory.svelte';
 	import PriceChart from '$lib/components/PriceChart.svelte';
 	import StarButton from '$lib/components/StarButton.svelte';
@@ -271,6 +272,14 @@
 				<span class="px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-xs font-medium">
 					{token.tokenType}
 				</span>
+				{#if data.crc20}
+					<Crc20Badge
+						isCanonical={data.crc20.isCanonical}
+						symbol={data.crc20.symbol}
+						symbolIsHex={data.crc20.symbolIsHex}
+						size="sm"
+					/>
+				{/if}
 				{#if token.isVerifiedOnchain}
 					<span class="text-xs text-emerald-600 dark:text-emerald-400">✓ Verified on-chain</span>
 				{/if}
@@ -370,6 +379,124 @@
 				{/if}
 			</div>
 		{/if}
+	{/if}
+
+	<!--
+		CRC-20 detail card. Renders only for tokens whose genesis tx
+		carries a CRC-20 covenant reveal. Surfaces:
+		  - canonical-winner status (won this symbol's per-symbol sort)
+		  - raw on-chain symbol / decimals / name (authoritative — note
+		    the BCMR-published symbol may differ; both are shown here
+		    when they disagree)
+		  - genesis provenance (commit_block, reveal_block, fair_genesis_height)
+		  - full list of contenders sharing this symbol bucket, with the
+		    canonical winner pinned at the top
+		See docs/crc20-plan.md for the protocol design.
+	-->
+	{#if data.crc20}
+		{@const crc20 = data.crc20}
+		<div class="mb-8 p-5 rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-950/10">
+			<div class="flex items-start justify-between gap-4 flex-wrap mb-4">
+				<div class="flex items-center gap-3">
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						viewBox="0 0 20 20"
+						fill="currentColor"
+						class="w-6 h-6 text-amber-600 dark:text-amber-400"
+						aria-hidden="true"
+					>
+						<path
+							fill-rule="evenodd"
+							d="M10 1.5l7 3v5c0 4.5-3 8.4-7 9-4-0.6-7-4.5-7-9v-5l7-3zm0 4.2l-3.2 3.2-1.3-1.3-1.4 1.4 2.7 2.7 4.6-4.6-1.4-1.4z"
+							clip-rule="evenodd"
+						/>
+					</svg>
+					<div>
+						<h2 class="text-lg font-semibold text-slate-900 dark:text-white">CRC-20 token</h2>
+						<p class="text-xs text-slate-500 dark:text-slate-400">
+							On-chain naming claim via covenant in genesis transaction.
+							<a href="https://crc20.cash/" target="_blank" rel="noopener noreferrer" class="text-amber-700 dark:text-amber-400 hover:underline">Learn more →</a>
+						</p>
+					</div>
+				</div>
+				{#if crc20.isCanonical}
+					<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-600 text-white text-xs font-semibold" title={`This category is the canonical winner for "${crc20.symbol}" — the earliest valid genesis under the per-symbol sort.`}>
+						🏆 Canonical winner for "{crc20.symbol || '<empty>'}"
+					</span>
+				{:else}
+					<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold" title="This category claims the same symbol but lost the per-symbol canonical sort to an earlier genesis.">
+						Non-canonical contender for "{crc20.symbol || '<empty>'}"
+					</span>
+				{/if}
+			</div>
+
+			<dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+				<div>
+					<dt class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-0.5">On-chain symbol</dt>
+					<dd class="font-mono text-slate-900 dark:text-white break-all">
+						{crc20.symbol || '<empty>'}
+						{#if crc20.symbolIsHex}
+							<span class="ml-2 text-[10px] uppercase tracking-wider text-amber-700 dark:text-amber-400" title="Symbol bytes are not valid UTF-8; rendered as hex.">non-UTF-8</span>
+						{/if}
+					</dd>
+					<dd class="text-xs text-slate-500 dark:text-slate-400 font-mono mt-1">bytes: 0x{crc20.symbolBytesHex || '(empty)'}</dd>
+				</div>
+				<div>
+					<dt class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-0.5">On-chain decimals</dt>
+					<dd class="font-mono text-slate-900 dark:text-white">{crc20.decimals}</dd>
+				</div>
+				<div class="sm:col-span-2">
+					<dt class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-0.5">On-chain name</dt>
+					<dd class="font-mono text-slate-900 dark:text-white break-all">{crc20.name ?? '<non-UTF-8 bytes>'}</dd>
+					{#if token.name && crc20.name && token.name !== crc20.name}
+						<dd class="text-xs text-amber-700 dark:text-amber-400 mt-1">
+							⚠ BCMR name (<span class="font-mono">{stripEmoji(token.name)}</span>) differs from the on-chain claim.
+						</dd>
+					{/if}
+				</div>
+				<div>
+					<dt class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-0.5">Genesis provenance</dt>
+					<dd class="text-slate-700 dark:text-slate-300 text-xs">
+						Commit block <span class="font-mono">{crc20.commitBlock.toLocaleString()}</span><br />
+						Reveal block <span class="font-mono">{crc20.revealBlock.toLocaleString()}</span><br />
+						Fair genesis height <span class="font-mono">{crc20.fairGenesisHeight.toLocaleString()}</span>
+						<span class="text-slate-500 dark:text-slate-500" title="max(commit_block, reveal_block - 20). Drives the per-symbol canonical sort.">ⓘ</span>
+					</dd>
+				</div>
+				<div>
+					<dt class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-0.5">Recipient pubkey</dt>
+					<dd class="font-mono text-xs text-slate-700 dark:text-slate-300 break-all">{crc20.recipientPubkeyHex.slice(0, 16)}…{crc20.recipientPubkeyHex.slice(-8)}</dd>
+				</div>
+			</dl>
+
+			{#if crc20.contenders.length > 1}
+				<div class="mt-5 pt-4 border-t border-amber-200 dark:border-amber-900/40">
+					<h3 class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+						Contenders for "{crc20.symbol || '<empty>'}" ({crc20.contenders.length})
+					</h3>
+					<ul class="space-y-1.5 text-xs">
+						{#each crc20.contenders as cont (cont.categoryHex)}
+							<li class="flex items-center gap-2">
+								{#if cont.isCanonical}
+									<span class="px-1.5 py-0.5 rounded bg-amber-600 text-white text-[10px] font-semibold">winner</span>
+								{:else}
+									<span class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px]">n.c.</span>
+								{/if}
+								{#if cont.categoryHex === token.id}
+									<span class="font-mono text-slate-700 dark:text-slate-300">{cont.categoryHex.slice(0, 12)}…{cont.categoryHex.slice(-6)}</span>
+									<span class="text-amber-700 dark:text-amber-400 font-medium">(this token)</span>
+								{:else}
+									<a href={`/token/${cont.categoryHex}`} class="font-mono text-violet-600 dark:text-violet-400 hover:underline">
+										{cont.categoryHex.slice(0, 12)}…{cont.categoryHex.slice(-6)}
+									</a>
+								{/if}
+								<span class="text-slate-500 dark:text-slate-500 ml-auto">fair height {cont.fairGenesisHeight.toLocaleString()}</span>
+							</li>
+						{/each}
+					</ul>
+				</div>
+			{/if}
+		</div>
 	{/if}
 
 	<!--

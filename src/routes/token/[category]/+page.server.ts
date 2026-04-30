@@ -6,6 +6,7 @@
 import { error } from '@sveltejs/kit';
 import { query, hexFromBytes, bytesFromHex } from '$lib/server/db';
 import { fetchBcmr, fetchCauldron } from '$lib/server/external';
+import { fetchCrc20Detail } from '$lib/server/crc20';
 import { computeMcapTvlThresholdSats } from '$lib/server/mcapThreshold';
 import { getVoteCounts, getLeaderboardStandings } from '$lib/server/votes';
 import { getMovers24h } from '$lib/server/movers';
@@ -237,7 +238,8 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 		recentTradesRes,
 		reportCountRes,
 		leaderboardStandingsRes,
-		tvlRankRes
+		tvlRankRes,
+		crc20Detail
 	] = await Promise.all([
 		query<HolderRow>(
 			`SELECT address, balance::text AS balance, nft_count
@@ -457,6 +459,12 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 		).catch((err) => {
 			console.error('[token detail] TVL rank query failed:', err);
 			return { rows: [] as Array<{ rank: string }> };
+		}),
+		// CRC-20 detection lookup. Returns null for non-CRC-20 categories;
+		// the detail card on the page only renders when this is non-null.
+		fetchCrc20Detail(categoryBytes).catch((err) => {
+			console.error('[token detail] CRC-20 detail query failed:', err);
+			return null;
 		})
 	]);
 
@@ -794,6 +802,12 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 			cauldronFirstListedAt: venueByName.cauldron.firstListedAt,
 			fexFirstListedAt: venueByName.fex.firstListedAt
 		},
+		// CRC-20 covenant detection. Null for non-CRC-20 tokens (no card
+		// renders). Otherwise the detail card surfaces the on-chain symbol /
+		// decimals / name bytes, the canonical-winner status, the genesis
+		// provenance (commit + reveal blocks, fair_genesis_height), and the
+		// list of contenders sharing this symbol bucket.
+		crc20: crc20Detail,
 		// 24h trading proxies. recentTradeBuckets is the count of price-
 		// history buckets with non-zero TVL delta over the last 24h;
 		// recentVolumeUSD is the lower-bound volume estimate (same |delta|

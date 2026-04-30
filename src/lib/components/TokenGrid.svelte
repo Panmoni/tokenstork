@@ -9,6 +9,7 @@
 	} from '$lib/format';
 	import { iconHrefFor } from '$lib/icons';
 	import { bchPrice } from '$lib/stores/bchPrice';
+	import Crc20Badge from './Crc20Badge.svelte';
 	import FormatCategory from './FormatCategory.svelte';
 	import Sparkline from './Sparkline.svelte';
 	import StarButton from './StarButton.svelte';
@@ -257,6 +258,9 @@
 							{stripEmoji(token.name) || '—'}
 							{#if token.symbol}<span class="ml-2 text-xs text-slate-500 font-mono">{stripEmoji(token.symbol)}</span>{/if}
 							<span class="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" title="Token type">{token.tokenType}</span>
+							{#if token.isCrc20}
+								<span class="ml-2 inline-flex"><Crc20Badge isCanonical={token.crc20IsCanonical} symbol={token.crc20Symbol} symbolIsHex={token.crc20SymbolIsHex} /></span>
+							{/if}
 							{#if token.cauldronPriceSats != null}
 								<img src="/cauldron-logo.png" alt="Cauldron" title="Listed on Cauldron (AMM)" class="ml-1 inline-block h-4 w-4 align-text-bottom rounded-full bg-slate-900 p-0.5" />
 							{/if}
@@ -318,9 +322,14 @@
 								<div class="text-sm text-slate-500 font-mono">{stripEmoji(token.symbol)}</div>
 							</div>
 						</div>
-						<span class="px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-xs font-medium">
-							{token.tokenType}
-						</span>
+						<div class="flex items-center gap-1.5 flex-wrap justify-end">
+							<span class="px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-xs font-medium">
+								{token.tokenType}
+							</span>
+							{#if token.isCrc20}
+								<Crc20Badge isCanonical={token.crc20IsCanonical} symbol={token.crc20Symbol} symbolIsHex={token.crc20SymbolIsHex} size="sm" />
+							{/if}
+						</div>
 					</div>
 					{#if token.cauldronPriceSats != null}
 						<div class="grid grid-cols-2 gap-2 text-sm mb-2">
