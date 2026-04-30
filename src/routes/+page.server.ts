@@ -58,6 +58,7 @@ interface DbRow {
 	crc20_symbol: string | null;
 	crc20_symbol_is_hex: boolean | null;
 	crc20_is_canonical: boolean | null;
+	crc20_name: string | null;
 	is_crc20: boolean | null;
 }
 
@@ -415,7 +416,8 @@ export const load: PageServerLoad = async ({ url }) => {
 				(c.category IS NOT NULL) AS is_crc20,
 				c.symbol           AS crc20_symbol,
 				c.symbol_is_hex    AS crc20_symbol_is_hex,
-				c.is_canonical     AS crc20_is_canonical
+				c.is_canonical     AS crc20_is_canonical,
+				c.name             AS crc20_name
 			   ${fromJoins}
 			   ${whereClause}
 			   ORDER BY ${searchOrderPrefix}${sort}
@@ -497,7 +499,8 @@ export const load: PageServerLoad = async ({ url }) => {
 				isCrc20: row.is_crc20 === true,
 				crc20Symbol: row.crc20_symbol ?? null,
 				crc20SymbolIsHex: row.crc20_symbol_is_hex === true,
-				crc20IsCanonical: row.crc20_is_canonical === true
+				crc20IsCanonical: row.crc20_is_canonical === true,
+				crc20Name: row.crc20_name ?? null
 			};
 		});
 

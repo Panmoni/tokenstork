@@ -255,8 +255,8 @@
 					<img src={iconHrefFor(token.icon, token.iconClearedHash)} alt="" class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800" loading="lazy" />
 					<div class="min-w-0">
 						<div class="font-semibold text-slate-900 dark:text-white truncate group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
-							{stripEmoji(token.name) || '—'}
-							{#if token.symbol}<span class="ml-2 text-xs text-slate-500 font-mono">{stripEmoji(token.symbol)}</span>{/if}
+							{stripEmoji(token.name) || stripEmoji(token.crc20Name) || '—'}
+							{#if token.symbol}<span class="ml-2 text-xs text-slate-500 font-mono">{stripEmoji(token.symbol)}</span>{:else if token.crc20Symbol}<span class="ml-2 text-xs text-slate-500 font-mono" title="On-chain CRC-20 symbol (no BCMR symbol published)">{token.crc20Symbol}</span>{/if}
 							<span class="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" title="Token type">{token.tokenType}</span>
 							{#if token.isCrc20}
 								<span class="ml-2 inline-flex"><Crc20Badge isCanonical={token.crc20IsCanonical} symbol={token.crc20Symbol} symbolIsHex={token.crc20SymbolIsHex} /></span>
@@ -318,8 +318,8 @@
 						<div class="flex items-center gap-3 min-w-0">
 							<img src={iconHrefFor(token.icon, token.iconClearedHash)} alt="" class="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800" />
 							<div class="min-w-0">
-								<div class="font-semibold text-slate-900 dark:text-white truncate">{stripEmoji(token.name) || '—'}</div>
-								<div class="text-sm text-slate-500 font-mono">{stripEmoji(token.symbol)}</div>
+								<div class="font-semibold text-slate-900 dark:text-white truncate">{stripEmoji(token.name) || stripEmoji(token.crc20Name) || '—'}</div>
+								<div class="text-sm text-slate-500 font-mono">{stripEmoji(token.symbol) || (token.crc20Symbol ?? '')}</div>
 							</div>
 						</div>
 						<div class="flex items-center gap-1.5 flex-wrap justify-end">

@@ -83,6 +83,51 @@
 			</div>
 		</details>
 
+		<details id="faq-crc20-vs-bcmr" class="group p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 scroll-mt-20">
+			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
+				<span>What's the difference between <strong>CRC-20</strong> and <strong>BCMR</strong>?</span>
+				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
+			</summary>
+			<div class="mt-3 text-slate-600 dark:text-slate-300 space-y-3">
+				<p>
+					Both are ways to attach a name, symbol, and decimals to a CashTokens category. They
+					answer different questions and use very different mechanisms:
+				</p>
+				<ul class="list-disc list-inside ml-2 space-y-2">
+					<li>
+						<strong>BCMR</strong> (<a href="https://github.com/bitjson/chip-bcmr" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">CHIP-BCMR</a>)
+						is the BCH ecosystem's standard <em>off-chain</em> metadata registry. Issuers
+						publish a JSON file (icon, description, links, NFT types, extensions) at a URL
+						pinned to their token's identity output. We mirror Paytaca's BCMR indexer so
+						this metadata shows up across the directory.
+					</li>
+					<li>
+						<strong>CRC-20</strong> (<a href="https://crc20.cash/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">crc20.cash</a>)
+						is a permissionless <em>on-chain</em> naming convention. The symbol, decimals,
+						and name are encoded inside a 21-byte CashScript covenant in the token's
+						<strong>genesis transaction</strong>. We detect it directly from chain data — no
+						third-party registry, no publisher, no DNS dependency.
+					</li>
+				</ul>
+				<p>
+					The big practical difference: BCMR is <strong>self-asserted</strong> (any issuer can
+					declare any symbol they like in their JSON), while CRC-20 is
+					<strong>first-come-first-served on chain</strong>, with one canonical winner per symbol
+					determined by a deterministic sort
+					(<code class="px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-xs">max(commit_block, reveal_block − 20)</code>,
+					ties broken by category id). A token can have BCMR alone, CRC-20 alone, both, or
+					neither. When both exist, the on-chain CRC-20 bytes win on authenticity (you can verify
+					them against the genesis tx); BCMR wins on richness (icons, descriptions, social
+					links).
+				</p>
+				<p>
+					Browse all CRC-20 tokens at <a href="/crc20" class="text-violet-600 dark:text-violet-400 hover:underline">/crc20</a>
+					— the page splits canonical winners from non-canonical contenders so you can see
+					where symbols are contested.
+				</p>
+			</div>
+		</details>
+
 		<details id="faq-ft-nft" class="group p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 scroll-mt-20">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
 				<span>What does <code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-sm">FT+NFT</code> mean?</span>

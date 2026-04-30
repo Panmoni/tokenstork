@@ -412,7 +412,19 @@
 						/>
 					</svg>
 					<div>
-						<h2 class="text-lg font-semibold text-slate-900 dark:text-white">CRC-20 token</h2>
+						<h2 class="text-lg font-semibold text-slate-900 dark:text-white inline-flex items-center gap-1.5">
+							CRC-20 token
+							<a
+								href="/faq#faq-crc20-vs-bcmr"
+								class="inline-flex items-center justify-center w-5 h-5 rounded-full text-slate-400 hover:text-amber-700 dark:hover:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
+								title="What's the difference between CRC-20 and BCMR?"
+								aria-label="What's the difference between CRC-20 and BCMR?"
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4" aria-hidden="true">
+									<path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+								</svg>
+							</a>
+						</h2>
 						<p class="text-xs text-slate-500 dark:text-slate-400">
 							On-chain naming claim via covenant in genesis transaction.
 							<a href="https://crc20.cash/" target="_blank" rel="noopener noreferrer" class="text-amber-700 dark:text-amber-400 hover:underline">Learn more →</a>
@@ -470,11 +482,20 @@
 			</dl>
 
 			{#if crc20.contenders.length > 1}
-				<div class="mt-5 pt-4 border-t border-amber-200 dark:border-amber-900/40">
-					<h3 class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
-						Contenders for "{crc20.symbol || '<empty>'}" ({crc20.contenders.length})
-					</h3>
-					<ul class="space-y-1.5 text-xs">
+				<details class="group mt-5 pt-4 border-t border-amber-200 dark:border-amber-900/40">
+					<summary class="cursor-pointer flex items-center gap-2 text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 list-none select-none">
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							viewBox="0 0 20 20"
+							fill="currentColor"
+							class="w-4 h-4 transition-transform group-open:rotate-90"
+							aria-hidden="true"
+						>
+							<path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+						</svg>
+						<span>Contenders for "{crc20.symbol || '<empty>'}" ({crc20.contenders.length})</span>
+					</summary>
+					<ul class="mt-3 space-y-1.5 text-xs">
 						{#each crc20.contenders as cont (cont.categoryHex)}
 							<li class="flex items-center gap-2">
 								{#if cont.isCanonical}
@@ -494,7 +515,7 @@
 							</li>
 						{/each}
 					</ul>
-				</div>
+				</details>
 			{/if}
 		</div>
 	{/if}

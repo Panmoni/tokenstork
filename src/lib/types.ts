@@ -79,6 +79,11 @@ export interface TokenApiRow {
 	crc20Symbol: string | null;
 	crc20SymbolIsHex: boolean;
 	crc20IsCanonical: boolean;
+	/// Best-effort UTF-8 decoding of the on-chain name bytes from the
+	/// CRC-20 covenant. Surfaced as a name fallback when BCMR metadata
+	/// has nothing — without this, CRC-20 tokens with no BCMR show as
+	/// "—" in the directory despite the chain carrying a real name.
+	crc20Name: string | null;
 }
 
 export interface TokensResponse {

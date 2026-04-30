@@ -74,6 +74,12 @@ export function resolveIconStatus(input: {
 	blockReason: string | null | undefined;
 	fetchError: string | null | undefined;
 	hasScanRow: boolean;
+	/// True iff some BCMR metadata exists for the category (any of name,
+	/// symbol, description, or icon_uri populated AND bcmr_source is not
+	/// the 404 sentinel). When false, the no-icon banner reads "No BCMR
+	/// metadata published" instead of incorrectly blaming missing icon
+	/// fields on a registry that was never consulted.
+	hasBcmrMetadata: boolean;
 }): IconStatusInfo {
 	if (input.clearedHash) {
 		return { status: 'cleared', label: 'Icon cleared', blockReason: null };
@@ -81,7 +87,9 @@ export function resolveIconStatus(input: {
 	if (!input.iconUri) {
 		return {
 			status: 'no_uri',
-			label: 'No icon — BCMR metadata does not include one.',
+			label: input.hasBcmrMetadata
+				? 'No icon — BCMR metadata does not include one.'
+				: 'No BCMR metadata published for this category.',
 			blockReason: null
 		};
 	}

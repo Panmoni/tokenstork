@@ -591,13 +591,25 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 		}
 	})();
 
+	// "Does any BCMR metadata exist for this category?" — true if at least
+	// one BCMR-derived column is populated. token_metadata rows with
+	// bcmr_source = 'paytaca-missing' are inserted as 404 sentinels (all
+	// fields null) and shouldn't count.
+	const hasBcmrMetadata =
+		row.name != null ||
+		row.symbol != null ||
+		row.description != null ||
+		row.icon_uri != null ||
+		bcmr != null;
+
 	const iconStatus = resolveIconStatus({
 		iconUri: row.icon_uri,
 		clearedHash: row.icon_cleared_hash,
 		moderationState: row.icon_state,
 		blockReason: row.icon_block_reason,
 		fetchError: row.icon_fetch_error,
-		hasScanRow: row.icon_scan_present
+		hasScanRow: row.icon_scan_present,
+		hasBcmrMetadata
 	});
 
 	// 24h Cauldron volume estimate — already aggregated by the recent-trades
@@ -688,8 +700,12 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 			genesisBlock: row.genesis_block,
 			genesisTime: Math.floor(row.genesis_time.getTime() / 1000),
 			firstSeenAt: Math.floor(row.first_seen_at.getTime() / 1000),
-			name: row.name ?? bcmr?.name ?? null,
-			symbol: row.symbol ?? bcmr?.symbol ?? null,
+			// Name / symbol / decimals fall back through BCMR (already
+			// applied above) and finally to the on-chain CRC-20 covenant
+			// reveal — the chain carries authoritative bytes even when no
+			// BCMR is published for the category.
+			name: row.name ?? bcmr?.name ?? crc20Detail?.name ?? null,
+			symbol: row.symbol ?? bcmr?.symbol ?? crc20Detail?.symbol ?? null,
 			decimals,
 			description: row.description ?? bcmr?.description ?? null,
 			icon: row.icon_uri ?? bcmr?.iconUri ?? null,

@@ -6,9 +6,20 @@
 	// Nav entries render left-to-right on desktop and top-down in the
 	// mobile drawer. Terms and Privacy live at /terms and /privacy and
 	// stay in the footer — the header is for primary navigation.
-	const navigation = [
-		{ name: 'Tokens', href: '/' },
-		{ name: 'CRC-20', href: '/crc20' },
+	// Nav entries; `children` enables a dropdown on desktop and a flat
+	// indented list in the mobile drawer. The parent's href stays
+	// clickable on its own — the chevron toggles the dropdown.
+	type NavChild = { name: string; href: string; description?: string };
+	type NavItem = { name: string; href: string; children?: NavChild[] };
+	const navigation: NavItem[] = [
+		{
+			name: 'Tokens',
+			href: '/',
+			children: [
+				{ name: 'All tokens', href: '/', description: 'Full directory' },
+				{ name: 'CRC-20', href: '/crc20', description: 'Tokens with on-chain symbol claims' }
+			]
+		},
 		{ name: 'Arbitrage', href: '/arbitrage' },
 		{ name: 'Mint', href: '/mint' },
 		{ name: 'Blocks', href: '/blocks' },
@@ -56,14 +67,28 @@
 	let userMenuOpen = $state(false);
 	let userMenuEl: HTMLDivElement | undefined = $state();
 
+	// Nav dropdowns (currently just "Tokens"). Keyed by the parent item's
+	// name. Click outside the relevant menu element closes it; Esc closes
+	// any open menu.
+	let openNavMenu: string | null = $state(null);
+	let navMenuEls: Record<string, HTMLDivElement | undefined> = $state({});
+
 	function onWindowClick(e: MouseEvent) {
-		if (!userMenuOpen) return;
-		if (userMenuEl && !userMenuEl.contains(e.target as Node)) {
+		if (userMenuOpen && userMenuEl && !userMenuEl.contains(e.target as Node)) {
 			userMenuOpen = false;
+		}
+		if (openNavMenu) {
+			const el = navMenuEls[openNavMenu];
+			if (el && !el.contains(e.target as Node)) {
+				openNavMenu = null;
+			}
 		}
 	}
 	function onWindowKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') userMenuOpen = false;
+		if (e.key === 'Escape') {
+			userMenuOpen = false;
+			openNavMenu = null;
+		}
 	}
 
 	const pathname = $derived(page.url.pathname);
@@ -105,18 +130,83 @@
 
 			<div class="hidden md:flex md:items-center md:space-x-6 lg:space-x-8">
 				{#each navigation as item (item.name)}
-					{@const active = pathname === item.href}
-					<a
-						href={item.href}
-						class="relative text-sm font-medium transition-colors duration-200 {active
-							? 'text-violet-600 dark:text-violet-400'
-							: 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'}"
-					>
-						{item.name}
-						{#if active}
-							<span class="absolute -bottom-[1.625rem] left-0 right-0 h-0.5 bg-gradient-to-r from-violet-600 to-indigo-500 rounded-full"></span>
-						{/if}
-					</a>
+					{@const active =
+						pathname === item.href ||
+						(item.children?.some((c) => c.href === pathname) ?? false)}
+					{#if item.children}
+						<div class="relative" bind:this={navMenuEls[item.name]}>
+							<button
+								type="button"
+								onclick={() => (openNavMenu = openNavMenu === item.name ? null : item.name)}
+								aria-haspopup="menu"
+								aria-expanded={openNavMenu === item.name}
+								class="relative inline-flex items-center gap-1 text-sm font-medium transition-colors duration-200 {active
+									? 'text-violet-600 dark:text-violet-400'
+									: 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'}"
+							>
+								{item.name}
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									viewBox="0 0 20 20"
+									fill="currentColor"
+									class="w-4 h-4 transition-transform {openNavMenu === item.name
+										? 'rotate-180'
+										: ''}"
+									aria-hidden="true"
+								>
+									<path
+										fill-rule="evenodd"
+										d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+										clip-rule="evenodd"
+									/>
+								</svg>
+								{#if active}
+									<span class="absolute -bottom-[1.625rem] left-0 right-4 h-0.5 bg-gradient-to-r from-violet-600 to-indigo-500 rounded-full"></span>
+								{/if}
+							</button>
+							{#if openNavMenu === item.name}
+								<div
+									class="absolute left-0 mt-3 w-56 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-lg py-1 z-50"
+									role="menu"
+								>
+									{#each item.children as child (child.href)}
+										{@const childActive = pathname === child.href}
+										<a
+											href={child.href}
+											onclick={() => (openNavMenu = null)}
+											role="menuitem"
+											class="block px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 {childActive
+												? 'bg-violet-50 dark:bg-violet-900/20'
+												: ''}"
+										>
+											<div class="text-sm font-medium {childActive
+												? 'text-violet-600 dark:text-violet-400'
+												: 'text-slate-900 dark:text-white'}">
+												{child.name}
+											</div>
+											{#if child.description}
+												<div class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+													{child.description}
+												</div>
+											{/if}
+										</a>
+									{/each}
+								</div>
+							{/if}
+						</div>
+					{:else}
+						<a
+							href={item.href}
+							class="relative text-sm font-medium transition-colors duration-200 {active
+								? 'text-violet-600 dark:text-violet-400'
+								: 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'}"
+						>
+							{item.name}
+							{#if active}
+								<span class="absolute -bottom-[1.625rem] left-0 right-0 h-0.5 bg-gradient-to-r from-violet-600 to-indigo-500 rounded-full"></span>
+							{/if}
+						</a>
+					{/if}
 				{/each}
 			</div>
 
@@ -256,6 +346,22 @@
 					>
 						{item.name}
 					</a>
+					{#if item.children}
+						<div class="ml-4 mb-2 space-y-1">
+							{#each item.children.filter((c) => c.href !== item.href) as child (child.href)}
+								{@const childActive = pathname === child.href}
+								<a
+									href={child.href}
+									onclick={() => (mobileMenuOpen = false)}
+									class="block px-4 py-2 rounded-lg text-sm transition-colors duration-200 {childActive
+										? 'bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400'
+										: 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}"
+								>
+									{child.name}
+								</a>
+							{/each}
+						</div>
+					{/if}
 				{/each}
 				<div class="border-t border-slate-200 dark:border-slate-800 mt-2 pt-2">
 					{#if user && truncatedCashaddr}

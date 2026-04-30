@@ -38,6 +38,7 @@ interface TokenApiRow {
 	crc20Symbol: string | null;
 	crc20SymbolIsHex: boolean;
 	crc20IsCanonical: boolean;
+	crc20Name: string | null;
 }
 
 interface DbRow {
@@ -63,6 +64,7 @@ interface DbRow {
 	crc20_symbol: string | null;
 	crc20_symbol_is_hex: boolean | null;
 	crc20_is_canonical: boolean | null;
+	crc20_name: string | null;
 }
 
 function parseLimit(raw: string | null, fallback: number, max: number): number {
@@ -186,7 +188,8 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 				(c.category IS NOT NULL) AS is_crc20,
 				c.symbol           AS crc20_symbol,
 				c.symbol_is_hex    AS crc20_symbol_is_hex,
-				c.is_canonical     AS crc20_is_canonical
+				c.is_canonical     AS crc20_is_canonical,
+				c.name             AS crc20_name
 			FROM tokens t
 			LEFT JOIN token_metadata m ON m.category = t.category
 			LEFT JOIN token_state s    ON s.category = t.category
@@ -231,7 +234,8 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 				isCrc20: row.is_crc20 === true,
 				crc20Symbol: row.crc20_symbol ?? null,
 				crc20SymbolIsHex: row.crc20_symbol_is_hex === true,
-				crc20IsCanonical: row.crc20_is_canonical === true
+				crc20IsCanonical: row.crc20_is_canonical === true,
+				crc20Name: row.crc20_name ?? null
 			};
 		});
 
