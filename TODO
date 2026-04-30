@@ -1,7 +1,16 @@
 # TODO
-Scratchpad roadmap.
 
-Pending blockbook on carson, could be 2 weeks.
+- pending blockbook on carson
+
+- CRC20 support
+- test mint page
+- enable users to claim tokens
+- enable management of tokens created via the website, importing of tokens created elsewhere so they can be managed via tokenstork.
+- announce updates on reddit and post something about this in cashtokens group
+- enable people to 1 click submit their tokens to our BCH metadata registry rather than just mirroring otr.cash.
+- enable adding bcmr support to existing tokens
+- update TODO, docs/cashtoken-index-plan.md and roadmap
+
 ---
 
 ## Operator — on carson / registrar
