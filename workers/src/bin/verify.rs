@@ -142,11 +142,11 @@ async fn main() -> Result<()> {
                 continue;
             }
         };
-        let bb_utxos = match bb.get_utxos_by_category(&category_hex).await {
+        let bb_utxos = match bb.walk_category_utxos(&category_hex).await {
             Ok(u) => u,
             Err(e) => {
                 errors += 1;
-                error!(category = %category_hex, error = %e, "BlockBook utxo fetch failed");
+                error!(category = %category_hex, error = %e, "BlockBook tx-history walk failed");
                 continue;
             }
         };

@@ -4,8 +4,18 @@
 //!
 //! Port of `scripts/enrich-from-blockbook.ts`.
 //!
+//! ## How we get UTXOs
+//!
+//! The fork's `/api/v2/utxo/<category>` endpoint returns `[]` for every
+//! category (the address index doesn't surface category-keyed UTXOs there).
+//! Instead we walk `/api/v2/address/<category>?details=txs` paginated and
+//! reconstruct the live UTXO set from token-bearing vouts whose `spent` flag
+//! is not `true`. See `BlockbookClient::walk_category_utxos` for the full
+//! workaround. The aggregator below is unchanged from the original UTXO-list
+//! shape — same `Vec<Utxo>` interface, different upstream call.
+//!
 //! Env vars:
-//! - BLOCKBOOK_URL       (default http://127.0.0.1:9130)
+//! - BLOCKBOOK_URL       (default http://127.0.0.1:9131)
 //! - BLOCKBOOK_MAX_RPS   (default 10)
 //! - DATABASE_URL
 //! - ENRICH_BATCH        (default 200)
@@ -119,9 +129,9 @@ async fn enrich_one(
 ) -> Result<usize> {
     let category_hex = bytes_to_hex(category);
     let utxos = bb
-        .get_utxos_by_category(&category_hex)
+        .walk_category_utxos(&category_hex)
         .await
-        .with_context(|| format!("blockbook utxos for {}", &category_hex[..16]))?;
+        .with_context(|| format!("blockbook tx-history walk for {}", &category_hex[..16]))?;
     let agg = aggregate(&utxos)?;
 
     // Sanity warning for per-category holder blow-up. BlockBook returns the
