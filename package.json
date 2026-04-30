@@ -3,6 +3,11 @@
   "version": "0.1.1",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
@@ -19,6 +24,7 @@
   },
   "dependencies": {
     "@bitauth/libauth": "^3.0.0",
+    "@internationalized/date": "^3.8.1",
     "@types/pg": "^8.20.0",
     "@walletconnect/modal": "^2.7.0",
     "@walletconnect/sign-client": "^2.23.9",
@@ -47,7 +53,19 @@
     "vite": "^8.0.9",
     "zeromq": "^6.5.0"
   },
-  "overrides": {
-    "cookie": "^0.7.2"
+  "pnpm": {
+    "overrides": {
+      "cookie": "^0.7.2"
+    },
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "zeromq"
+    ],
+    "peerDependencyRules": {
+      "ignoreMissing": [
+        "react",
+        "use-sync-external-store"
+      ]
+    }
   }
 }

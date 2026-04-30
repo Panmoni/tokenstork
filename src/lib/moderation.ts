@@ -9,7 +9,7 @@
 //   2. update the `reason TEXT CHECK (reason IN (...))` list in
 //      db/schema.sql for both token_moderation and token_reports,
 //   3. add a human-readable label to REPORT_REASON_LABELS,
-//   4. run `npm run db:init` against carson.
+//   4. run `pnpm run db:init` against carson.
 
 export const REPORT_REASONS = [
 	'spam',

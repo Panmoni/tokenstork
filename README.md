@@ -66,7 +66,7 @@ workers/                   Rust crate. cargo build --release produces 10 binarie
            tapswap-backfill,tapswap-spend-backfill,verify}.rs   Binaries.
 infra/
   Caddyfile                Reverse proxy + CSP/HSTS/XFO.
-  redeploy.sh              One-shot deploy: git pull → npm + cargo build → schema → systemd.
+  redeploy.sh              One-shot deploy: git pull → pnpm + cargo build → schema → systemd.
   systemd/                 Service + timer units for tokenstork.service + every worker.
   blockbook-resetinconsistentstate.patch   Local patch for mainnet-pat/blockbook recovery.
 public/.well-known/bitcoin-cash-metadata-registry.json   Self-hosted BCMR.
@@ -77,7 +77,7 @@ scripts/                   Legacy TypeScript sync prototypes — superseded by w
 
 ## Data model
 
-Schema is idempotent and lives in [db/schema.sql](db/schema.sql). Every `CREATE TABLE` is `IF NOT EXISTS`, every column add is `ADD COLUMN IF NOT EXISTS` — re-running `npm run db:init` on a deployed instance is safe.
+Schema is idempotent and lives in [db/schema.sql](db/schema.sql). Every `CREATE TABLE` is `IF NOT EXISTS`, every column add is `ADD COLUMN IF NOT EXISTS` — re-running `pnpm run db:init` on a deployed instance is safe.
 
 Core tables:
 
@@ -104,7 +104,7 @@ Two design decisions worth calling out:
 Deploy:
 
 ```
-npm run db:init    # psql "$DATABASE_URL" -f db/schema.sql
+pnpm run db:init    # psql "$DATABASE_URL" -f db/schema.sql
 ```
 
 ---
@@ -132,13 +132,13 @@ Prerequisites: Node 22, Postgres 17, Rust 1.75+ (only if you want to run the wor
 ```
 git clone https://github.com/Panmoni/tokenstork.git
 cd tokenstork
-npm ci
+pnpm install --frozen-lockfile
 
 createdb tokenstork
 export DATABASE_URL="postgres:///tokenstork"
-npm run db:init
+pnpm run db:init
 
-npm run dev           # http://localhost:5173
+pnpm run dev           # http://localhost:5173
 ```
 
 The app runs fine against an empty schema — every loader handles the no-data case. To populate, you'll need a reachable BCH node + the workers crate built:
@@ -162,14 +162,14 @@ cd workers && cargo build --release
 **Useful scripts:**
 
 ```
-npm run dev           # Vite dev server
-npm run build         # production build (output in build/)
-npm run start         # node build  — what systemd runs
-npm run check         # svelte-check + tsc
-npm run db:init       # apply db/schema.sql idempotently
+pnpm run dev           # Vite dev server
+pnpm run build         # production build (output in build/)
+pnpm run start         # node build  — what systemd runs
+pnpm run check         # svelte-check + tsc
+pnpm run db:init       # apply db/schema.sql idempotently
 ```
 
-The legacy `npm run sync:*` commands run the [scripts/](scripts/) TypeScript prototypes; they predate the Rust port and are kept only as a fallback path.
+The legacy `pnpm run sync:*` commands run the [scripts/](scripts/) TypeScript prototypes; they predate the Rust port and are kept only as a fallback path.
 
 ---
 
@@ -179,7 +179,7 @@ All of the moving parts are checked in:
 
 - [infra/Caddyfile](infra/Caddyfile) — reverse proxy, caching rules, full CSP/HSTS/XFO header chain. Assumes Cloudflare proxy in front with SSL/TLS **Full (strict)** and a Cloudflare Origin Certificate on disk at `/etc/caddy/tls/`. Comments at the top explain how to swap in Let's Encrypt for a non-CF deploy.
 - [infra/systemd/](infra/systemd/) — hardened unit files for `tokenstork.service`, `blockbook-bcash.service`, `sync-tail.service` (always-on with `Type=notify` + `WatchdogSec=120s`), `sync-bcmr.{service,timer}`, `sync-cauldron{,-fast}.{service,timer}`, `sync-fex.{service,timer}`, `sync-enrich.{service,timer}`, `sync-verify.{service,timer}`, `sync-tapswap-backfill.service`. Same hardening profile across the board: `ProtectSystem=strict`, `CapabilityBoundingSet=`, filtered syscalls, `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`.
-- [infra/redeploy.sh](infra/redeploy.sh) — one-shot deploy script: `git pull`, `npm ci && npm run build`, `cargo build --release`, schema apply, systemd unit refresh + `daemon-reload`, Caddyfile validate + sync, restart `tokenstork.service` + always-on workers.
+- [infra/redeploy.sh](infra/redeploy.sh) — one-shot deploy script: `git pull`, `pnpm install --frozen-lockfile && pnpm run build`, `cargo build --release`, schema apply, systemd unit refresh + `daemon-reload`, Caddyfile validate + sync, restart `tokenstork.service` + always-on workers.
 - Secrets load from `/etc/tokenstork/env` (chmod 600, owner `tokenstork`).
 
 The step-by-step VPS runbook — BCHN install, Postgres tuning, UFW, fail2ban, Caddy + Cloudflare Origin Cert, systemd, smoke tests — lives in [docs/cashtoken-index-plan.md](docs/cashtoken-index-plan.md) under Phase 2a. The BlockBook install runbook (including the `-resetinconsistentstate` recovery patch and the memory-cap rationale) is at [docs/blockbook-install.md](docs/blockbook-install.md).
@@ -248,8 +248,8 @@ Issues and PRs welcome at <https://github.com/Panmoni/tokenstork>. The architect
 Before opening a PR, please run:
 
 ```
-npm run check                          # svelte-check + tsc
-npm run build                          # adapter-node output
+pnpm run check                         # svelte-check + tsc
+pnpm run build                         # adapter-node output
 cd workers && cargo test --release --lib && cargo clippy --all-targets --release
 ```
 

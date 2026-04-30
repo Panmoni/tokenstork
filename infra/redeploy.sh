@@ -4,7 +4,7 @@
 #
 # Sequence:
 #   1. git pull in /opt/tokenstork as the tokenstork user
-#   2. npm ci + npm run build (SvelteKit app)
+#   2. pnpm install --frozen-lockfile + pnpm run build (SvelteKit app)
 #   3. cargo build --release (Rust workers)
 #   4. psql -f db/schema.sql (idempotent; ALTERs + CREATE INDEX IF NOT EXISTS)
 #   5. install/refresh infra/systemd/* into /etc/systemd/system (+ daemon-reload)
@@ -68,8 +68,12 @@ if [ "$(sha256sum "${SELF}" | cut -d' ' -f1)" != "${SELF_HASH}" ]; then
 	exec "${SELF}" "$@"
 fi
 
-echo "==> [2/7] SvelteKit: npm ci + build"
-run_as_tokenstork "cd ${REPO_DIR} && npm ci && npm run build"
+echo "==> [2/7] SvelteKit: pnpm install --frozen-lockfile + build"
+# corepack ships with Node 22 and reads packageManager from package.json,
+# so this resolves to the pinned pnpm version. --frozen-lockfile is the
+# pnpm equivalent of `npm ci` — fail fast if pnpm-lock.yaml drifts from
+# package.json instead of mutating the lockfile mid-deploy.
+run_as_tokenstork "cd ${REPO_DIR} && corepack pnpm install --frozen-lockfile && corepack pnpm run build"
 
 echo "==> [3/7] Workers: cargo build --release"
 run_as_tokenstork "cd ${REPO_DIR}/workers && cargo build --release"

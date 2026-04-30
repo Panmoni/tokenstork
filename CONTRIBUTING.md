@@ -21,7 +21,7 @@ Good first issues are tagged [`good first issue`](https://github.com/Panmoni/tok
 
 - **Node.js 22** (tested on 22.22.2).
 - **Postgres 17** with the `pg_trgm` extension available (shipped with the stock `postgresql` package on Debian 13+).
-- **npm 10+**. The lockfile is maintained under npm 10; using npm 9 will cause `npm ci` to fail.
+- **pnpm 10+**, pinned via the `packageManager` field in `package.json`. Run `corepack enable` once after installing Node 22 and pnpm will auto-activate at the pinned version on first `pnpm` invocation.
 - A reachable BCH node is only needed if you plan to run the sync workers. The SvelteKit app runs fine against an empty schema.
 
 ---
@@ -31,13 +31,13 @@ Good first issues are tagged [`good first issue`](https://github.com/Panmoni/tok
 ```
 git clone https://github.com/Panmoni/tokenstork.git
 cd tokenstork
-npm ci
+pnpm install --frozen-lockfile
 
 createdb tokenstork
 export DATABASE_URL="postgres:///tokenstork"
-npm run db:init
+pnpm run db:init
 
-npm run dev           # http://localhost:5173
+pnpm run dev           # http://localhost:5173
 ```
 
 Optional environment variables (all read by the app; all safe to leave unset):
@@ -54,14 +54,14 @@ For worker development you will additionally need `BCHN_RPC_URL`, `BCHN_ZMQ_URL`
 Run both of these and make sure they pass:
 
 ```
-npm run check        # svelte-check + tsc
-npm run build        # production build
+pnpm run check        # svelte-check + tsc
+pnpm run build        # production build
 ```
 
 If you touched worker code under [scripts/](scripts/) or [lib/](lib/):
 
 ```
-npm run typecheck    # scripts/tsconfig.json
+pnpm run typecheck   # scripts/tsconfig.json
 ```
 
 If you changed the schema in [db/schema.sql](db/schema.sql), confirm it still applies cleanly on an empty database and on a database that already has the previous version (the file is idempotent by design — please keep it that way).
@@ -90,7 +90,7 @@ TokenStork uses [Conventional Commits](https://www.conventionalcommits.org/) wit
 feat(sveltekit): build directory home with Postgres-backed SSR loader
 fix(format): harden IPFS URL fallthrough and preserve NUMERIC precision
 infra(caddy): switch Caddyfile to Cloudflare Origin Certificate path
-chore(deps): regenerate lockfile under npm 10
+chore(deps): regenerate lockfile under pnpm 10
 docs(todo): note cloudflare + DNS actions for tokenstork.com
 ```
 

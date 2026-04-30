@@ -195,7 +195,7 @@ ALTER TABLE token_price_history
 -- `token_venue_listings`, but only once. Without this the sparklines are
 -- empty until the sync-cauldron timer has fired enough times — boring for
 -- the first few days post-deploy. Idempotent: the NOT EXISTS guard means
--- re-running `npm run db:init` never double-seeds.
+-- re-running `pnpm run db:init` never double-seeds.
 INSERT INTO token_price_history (category, venue, ts, price_sats, tvl_satoshis)
 SELECT vl.category, vl.venue, vl.updated_at, vl.price_sats, vl.tvl_satoshis
   FROM token_venue_listings vl

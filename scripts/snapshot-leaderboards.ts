@@ -14,7 +14,7 @@
 // the SvelteKit module graph and can't import `$env/dynamic/private`.
 //
 // Usage:
-//   npm run sync:leaderboards
+//   pnpm run sync:leaderboards
 // or directly:
 //   tsx scripts/snapshot-leaderboards.ts
 

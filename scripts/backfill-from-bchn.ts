@@ -3,7 +3,7 @@
 // CashToken category, insert into the `tokens` table.
 //
 // Usage (on the VPS after BCHN IBD is complete):
-//   npm run sync:backfill
+//   pnpm run sync:backfill
 //
 // Resumable: checkpoints sync_state.backfill_through every 1000 blocks so a
 // Ctrl-C or crash loses at most ~1000 blocks of work (< 1 minute).
