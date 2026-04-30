@@ -444,6 +444,17 @@
 						>
 							<title>{bar.label}: {fmt(bar.count)} new tokens</title>
 						</rect>
+						{#if bar.count > 0}
+							<text
+								x={bar.x + bar.w / 2}
+								y={Math.max(bar.y - 3, chartPadTop - 1)}
+								text-anchor="middle"
+								class="text-[9px] fill-slate-700 dark:fill-slate-200"
+								font-family="ui-monospace,monospace"
+							>
+								{fmt(bar.count)}
+							</text>
+						{/if}
 						{#if i === 0 || i === growthBars.length - 1 || i % Math.max(1, Math.ceil(growthBars.length / chartMaxLabels)) === 0}
 							<text
 								x={bar.x + bar.w / 2}
