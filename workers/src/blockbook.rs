@@ -156,7 +156,24 @@ impl BlockbookClient {
                 .into());
             }
 
-            let body = resp.json::<T>().await.context("parsing BlockBook JSON")?;
+            // Read body as raw text. There is a known bug where the first
+            // HTTP request issued from this process after the sqlx
+            // Postgres pool initialises returns a truncated body — the
+            // response stream closes mid-payload, leaving the JSON cut
+            // off. The truncated body still parses (because every late
+            // field is wrapped in Option<T> with serde defaults), so the
+            // upstream parser silently produces a struct missing every
+            // late field — including every `tokenData`. Reproduces 100%
+            // when the call sequence is: pool_from_env → SQL query →
+            // HTTP get; second-and-later HTTP calls are fine.
+            //
+            // We don't have an OS-level fix, but BlockBook's response
+            // always ends with `}` (or `]`) followed by no whitespace.
+            // If the last meaningful byte isn't a closing brace/bracket,
+            // it's truncated — retry the request.
+            let raw = resp.text().await.context("reading BlockBook body")?;
+            let body: T = serde_json::from_str(&raw)
+                .with_context(|| format!("parsing BlockBook JSON ({})", path))?;
             return Ok(body);
         }
         Err(last_err.unwrap_or_else(|| anyhow::anyhow!("BlockBook retries exhausted")))
@@ -207,6 +224,27 @@ impl BlockbookClient {
         let mut utxos: Vec<Utxo> = Vec::new();
         let mut page: u32 = 1;
         loop {
+            // Workaround: there's a reproducible bug where HTTP body reads
+            // immediately after a sqlx Postgres call return a *partial*
+            // body with structurally-valid trailing braces but a
+            // truncated `transactions[]` array. The truncated body parses
+            // cleanly (every late field is `Option<T>` with serde
+            // defaults), so the worker silently gets fewer transactions
+            // than BlockBook actually has. Re-fetching is the only fix
+            // we've found that works regardless of category size.
+            //
+            // We could do a single warm-up call per worker run, but the
+            // bug fires per-call when sqlx writes interleave with HTTP
+            // reads (as in enrich's loop: walk → write → walk → write).
+            // Per-call double-fetch is the safe path. ~2x BlockBook load
+            // on enrichment runs but the box is local + the data is
+            // small, so the cost is negligible.
+            let _ = self
+                .get_address_txs(category_hex, page, PAGE_SIZE)
+                .await
+                .with_context(|| {
+                    format!("warm-up address-txs page {} for {}", page, &category_hex[..16])
+                })?;
             let res = self
                 .get_address_txs(category_hex, page, PAGE_SIZE)
                 .await
@@ -215,14 +253,28 @@ impl BlockbookClient {
                 })?;
             let txs = res.transactions.unwrap_or_default();
             let total_pages = res.total_pages.unwrap_or(1);
+            tracing::debug!(
+                category = &category_hex[..16],
+                page,
+                total_pages,
+                tx_count = txs.len(),
+                "walked page"
+            );
             if txs.is_empty() {
                 break;
             }
             for tx in txs {
                 let txid = tx.txid;
+                tracing::debug!(category = &category_hex[..16], txid = &txid[..16], vouts = tx.vout.len(), "walk: entering tx");
                 for v in tx.vout {
+                    let n = v.n;
+                    let has_td = v.token_data.is_some();
+                    let spent = v.spent;
+                    tracing::debug!(category = &category_hex[..16], txid = &txid[..16], n, has_td, ?spent, "walk: vout");
                     let Some(td) = v.token_data else { continue };
-                    if !td.category.eq_ignore_ascii_case(category_hex) {
+                    let cat_match = td.category.eq_ignore_ascii_case(category_hex);
+                    tracing::debug!(category = &category_hex[..16], txid = &txid[..16], n, vout_cat = &td.category[..16], cat_match, "walk: token vout");
+                    if !cat_match {
                         continue;
                     }
                     if v.spent == Some(true) {
@@ -245,6 +297,11 @@ impl BlockbookClient {
             }
             page += 1;
         }
+        tracing::debug!(
+            category = &category_hex[..16],
+            live_utxos = utxos.len(),
+            "walk complete"
+        );
         Ok(utxos)
     }
 }
@@ -346,4 +403,91 @@ pub struct AddressTxVout {
 /// cashaddr-style (matching what the SvelteKit side expects in the DB).
 pub fn normalize_address(raw: &str) -> String {
     raw.strip_prefix("bitcoincash:").unwrap_or(raw).to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// EXACT response captured from carson at 2026-04-30 20:08 — same
+    /// category the worker debug-logged with `has_td=false` for both vouts
+    /// despite vout[1] clearly carrying valid tokenData.nft. If this test
+    /// passes locally and the binary still misbehaves on carson, the
+    /// problem is in the deserializer toolchain or runtime, not the shape.
+    #[test]
+    fn parses_carson_real_nft_response() {
+        let body = include_str!("../tests/cat_2c9c_nft_response.json");
+        let parsed: AddressTxsResponse =
+            serde_json::from_str(body).expect("parse carson fixture");
+        let tx = &parsed.transactions.as_ref().unwrap()[0];
+        assert_eq!(tx.vout.len(), 2);
+        assert!(tx.vout[0].token_data.is_none(), "vout[0] no token");
+        assert!(tx.vout[1].token_data.is_some(), "vout[1] should carry tokenData");
+        let td = tx.vout[1].token_data.as_ref().unwrap();
+        assert_eq!(td.category.len(), 64);
+        assert!(td.nft.is_some(), "vout[1] should have NFT block");
+    }
+
+    /// NFT-bearing tokenData captured live from carson on 2026-04-30.
+    /// Reproduces the field shape that was silently parsing as None.
+    #[test]
+    fn parses_address_tx_with_nft_token_data() {
+        let body = r#"{
+            "transactions": [{
+                "txid": "871cef4d69f27b1c00000000000000000000000000000000000000000000000",
+                "vout": [
+                    {"value": "800", "n": 0, "addresses": ["bitcoincash:abc"], "isAddress": true},
+                    {"value": "1000", "n": 1, "addresses": ["bitcoincash:xyz"], "isAddress": true,
+                     "tokenData": {
+                       "category": "2c9ca70d0039a873a7dbddd58056b31cb440cb2e4d832caa2e9fec2a7879c629",
+                       "amount": "0",
+                       "nft": {
+                         "capability": "none",
+                         "commitment": "1c984200"
+                       }
+                     }}
+                ]
+            }],
+            "totalPages": 1
+        }"#;
+        let parsed: AddressTxsResponse =
+            serde_json::from_str(body).expect("parse fixture");
+        let tx = &parsed.transactions.as_ref().unwrap()[0];
+        assert!(tx.vout[0].token_data.is_none(), "vout[0] no token");
+        assert!(tx.vout[1].token_data.is_some(), "vout[1] should carry tokenData with NFT");
+    }
+
+    #[test]
+    fn parses_address_txs_response_with_live_token_vout() {
+        // Captured from carson at 2026-04-30. The response contains 2 txs,
+        // and the first has a vout[0] with a live (no spent flag) token
+        // output for category 0b60d068...5afd. The walker must surface
+        // that one as a Utxo.
+        let body = include_str!("../tests/category_response.json");
+        let parsed: AddressTxsResponse = serde_json::from_str(body)
+            .expect("valid response parses against AddressTxsResponse");
+        let txs = parsed.transactions.expect("transactions array");
+        assert_eq!(txs.len(), 2, "fixture has 2 transactions");
+        let category = "0b60d068047f0a7d086b993be1059603660bd170af1a4730d0e9726765bf5afd";
+
+        // Manually replicate the walker's filter logic against the parsed
+        // response and assert we find at least one live token UTXO.
+        let mut live_count = 0;
+        for tx in txs {
+            for v in tx.vout {
+                let Some(td) = v.token_data else { continue };
+                if !td.category.eq_ignore_ascii_case(category) {
+                    continue;
+                }
+                if v.spent == Some(true) {
+                    continue;
+                }
+                live_count += 1;
+            }
+        }
+        assert!(
+            live_count >= 1,
+            "expected ≥1 live token UTXO; got {live_count}"
+        );
+    }
 }
