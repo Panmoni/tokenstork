@@ -283,7 +283,7 @@ impl BlockbookClient {
                     let address = v
                         .addresses
                         .and_then(|xs| xs.into_iter().next())
-                        .map(|a| normalize_address(&a));
+                        .and_then(|a| normalize_address(&a));
                     utxos.push(Utxo {
                         txid: txid.clone(),
                         vout: v.n,
@@ -401,8 +401,21 @@ pub struct AddressTxVout {
 
 /// Strip a `bitcoincash:` prefix if present, so addresses normalize to bare
 /// cashaddr-style (matching what the SvelteKit side expects in the DB).
-pub fn normalize_address(raw: &str) -> String {
-    raw.strip_prefix("bitcoincash:").unwrap_or(raw).to_string()
+///
+/// Returns `None` for non-cashaddr strings — BlockBook surfaces OP_RETURN
+/// disassemblies (e.g. `OP_RETURN (SUMMON     )`) in the `addresses` field
+/// of token outputs locked to data scripts. Those aren't valid holder
+/// keys; we skip them silently rather than fail the whole enrichment.
+pub fn normalize_address(raw: &str) -> Option<String> {
+    let s = raw.strip_prefix("bitcoincash:").unwrap_or(raw);
+    // BCH cashaddrs are bech32-style: lowercase, alphanumeric, ~42-65
+    // chars. P2PKH/P2SH/P2SH32 prefixes are q/p/z. Anything containing
+    // a space or open-paren or starting with `OP_` is an OP_RETURN
+    // disassembly or some other non-address; skip.
+    if s.is_empty() || s.contains(' ') || s.contains('(') || s.starts_with("OP_") {
+        return None;
+    }
+    Some(s.to_string())
 }
 
 #[cfg(test)]

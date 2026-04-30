@@ -32,6 +32,12 @@ pub const FETCH_TIMEOUT: Duration = Duration::from_secs(20);
 /// thumbnail is invisible.
 pub const WEBP_QUALITY: u8 = 80;
 
+/// Maximum render dimension (px) for rasterized SVG. An SVG can declare
+/// a 100k×100k viewBox in a few hundred bytes, which would allocate ~40
+/// GB of pixels. Cap each side proportionally so the largest output is
+/// 1024 px — generous for any UI thumbnail use, hard limit on bombs.
+pub const SVG_MAX_RENDER_DIM: u32 = 1024;
+
 /// Public IPFS gateway used to dereference `ipfs://` URIs. Mirrors the
 /// hard-coded gateway in [`src/lib/format.ts#getIPFSUrl`] — keep in sync
 /// if either side changes.
@@ -199,25 +205,137 @@ pub fn classify_nsfw(score: f32, block_threshold: f32, review_threshold: f32) ->
     }
 }
 
-/// Decode bytes into a `DynamicImage`, applying a strict allocation cap to
-/// short-circuit decompression bombs.
+/// Cheap pre-decode check: does this look like an SVG document?
 ///
-/// Failure here means the bytes are NOT a valid still raster (or are an
-/// image bomb). The caller should treat decode failures as a permanent
-/// `state='blocked' reason='unsupported_format'` decision — re-trying
-/// won't help; the bytes won't suddenly become valid.
+/// `image::guess_format` only sniffs raster magic bytes, so SVG (an XML
+/// text format) trips it. We do a tiny prefix probe instead — the bytes
+/// must be valid UTF-8 and start with `<svg`, or with an XML / DOCTYPE /
+/// comment prologue that contains `<svg` within the first ~2 KiB. That's
+/// tight enough to avoid false positives on arbitrary text files.
+fn looks_like_svg(bytes: &[u8]) -> bool {
+    let head_len = bytes.len().min(2048);
+    let head = match std::str::from_utf8(&bytes[..head_len]) {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+    let trimmed = head.trim_start_matches('\u{FEFF}').trim_start();
+    if trimmed.starts_with("<svg") {
+        return true;
+    }
+    if trimmed.starts_with("<?xml") || trimmed.starts_with("<!DOCTYPE") || trimmed.starts_with("<!--") {
+        return head.contains("<svg");
+    }
+    false
+}
+
+/// Rasterize SVG bytes to PNG via `resvg`.
+///
+/// Security model — what makes serving SVG-derived icons safe:
+///   - `resvg` is a parser+renderer, not a browser. It does NOT execute
+///     `<script>`, evaluate `on*` event handlers, or run CSS animations.
+///   - We install a no-op `resolve_string` on the `image_href_resolver`
+///     so a hostile `<image href="http://attacker/log">` (tracking),
+///     `<image href="file:///etc/passwd">` (filesystem disclosure), or
+///     any relative path resolved against the worker's CWD is *refused*
+///     at parse time. The default `resolve_data` is kept so legitimately
+///     embedded `data:image/png;base64,...` raster payloads still render.
+///   - `<foreignObject>` (HTML-in-SVG) is not parsed by usvg at all —
+///     the element is dropped during tree construction, so its contents
+///     never reach the renderer.
+///   - usvg uses `roxmltree` for XML parsing; `roxmltree` does not
+///     support custom DTD entity declarations, so the classic
+///     "billion laughs" entity-expansion bomb (`<!ENTITY lol ...>`)
+///     fails to expand and the document is rejected.
+///   - Output is a PNG. The browser only ever sees the static raster.
+///
+/// Decompression-bomb defenses:
+///   - We refuse to allocate more than [`SVG_MAX_RENDER_DIM`] per side;
+///     larger viewBoxes are scaled down to fit.
+///   - [`ICON_SIZE_CAP_BYTES`] (applied in [`fetch_and_hash`]) caps the
+///     SVG payload itself at 2 MiB, which transitively bounds the depth
+///     of `<use>` chains and the size of `<filter>` kernel matrices.
+///   - The output PNG flows back through [`decode_raster`] which applies
+///     [`DECODED_ALLOC_CAP_BYTES`] — a second guard against pathological
+///     intermediates.
+fn rasterize_svg(bytes: &[u8]) -> Result<Vec<u8>> {
+    let mut opt = usvg::Options::default();
+    // Defense in depth: refuse every non-data href, regardless of
+    // `resources_dir`. The default `resolve_string` would join the href
+    // against `resources_dir` and try to read from the filesystem; we
+    // never want that on a worker process. Data URIs (the only legitimate
+    // way to embed a raster inside an SVG icon) are still decoded by the
+    // unchanged `resolve_data`.
+    opt.image_href_resolver = usvg::ImageHrefResolver {
+        resolve_data: usvg::ImageHrefResolver::default_data_resolver(),
+        resolve_string: Box::new(|_, _| None),
+    };
+    let tree = usvg::Tree::from_data(bytes, &opt).context("parse SVG")?;
+
+    let size = tree.size().to_int_size();
+    let (svg_w, svg_h) = (size.width(), size.height());
+    if svg_w == 0 || svg_h == 0 {
+        return Err(anyhow!("SVG has zero dimensions"));
+    }
+
+    let max_dim = svg_w.max(svg_h);
+    let scale = if max_dim > SVG_MAX_RENDER_DIM {
+        SVG_MAX_RENDER_DIM as f32 / max_dim as f32
+    } else {
+        1.0
+    };
+    let render_w = ((svg_w as f32 * scale).round() as u32).max(1);
+    let render_h = ((svg_h as f32 * scale).round() as u32).max(1);
+
+    let mut pixmap = tiny_skia::Pixmap::new(render_w, render_h)
+        .ok_or_else(|| anyhow!("alloc {}x{} pixmap failed", render_w, render_h))?;
+
+    let transform = tiny_skia::Transform::from_scale(scale, scale);
+    resvg::render(&tree, transform, &mut pixmap.as_mut());
+
+    // `Pixmap::encode_png` un-premultiplies alpha for us, so the PNG
+    // output is straight RGBA — what every downstream consumer expects.
+    pixmap.encode_png().context("PNG encode of rasterized SVG")
+}
+
+/// Result of [`decode_image`]. `vision_bytes` is `Some(png)` when the
+/// caller MUST send these bytes to Cloud Vision instead of the original
+/// (Vision returns `Bad image data` on SVG and other non-raster inputs);
+/// `None` when the original bytes are themselves a Vision-acceptable
+/// raster.
+pub struct DecodedImage {
+    pub image: DynamicImage,
+    pub vision_bytes: Option<Vec<u8>>,
+}
+
+/// Decode bytes into a [`DecodedImage`], applying a strict allocation cap
+/// to short-circuit decompression bombs. Transparently rasterizes SVG
+/// inputs via `resvg` so the rest of the pipeline (Vision NSFW + CSAM +
+/// WebP transcode) can treat them like any other still raster.
+///
+/// Failure here means the bytes are NOT a valid still raster, NOT a
+/// parseable SVG, or are an image bomb. The caller should treat decode
+/// failures as a permanent `state='blocked' reason='unsupported_format'`
+/// decision — re-trying won't help; the bytes won't suddenly become
+/// valid.
 ///
 /// Animated inputs (multi-frame GIF / APNG) are accepted by the decoder
 /// but decode to the FIRST frame only — which is what we want (no
 /// animation served). The animated-format extension filter in
 /// `src/lib/format.ts` already rejects most of these at URL parse time.
-pub fn decode_image(bytes: &[u8]) -> Result<DynamicImage> {
+pub fn decode_image(bytes: &[u8]) -> Result<DecodedImage> {
+    if looks_like_svg(bytes) {
+        let png = rasterize_svg(bytes)?;
+        let image = decode_raster(&png)?;
+        return Ok(DecodedImage { image, vision_bytes: Some(png) });
+    }
+    let image = decode_raster(bytes)?;
+    Ok(DecodedImage { image, vision_bytes: None })
+}
+
+fn decode_raster(bytes: &[u8]) -> Result<DynamicImage> {
     // Sniff format from the bytes (don't trust `Content-Type` or extension).
     let format = image::guess_format(bytes).context("could not guess image format")?;
 
-    // Reject formats we don't want to serve. SVG is not supported by the
-    // `image` crate at all so it'd fail at decode anyway, but this gives
-    // us a clear error message.
     let supported = matches!(
         format,
         ImageFormat::Png | ImageFormat::Jpeg | ImageFormat::WebP | ImageFormat::Gif
@@ -256,8 +374,8 @@ pub fn encode_to_webp(img: &DynamicImage) -> Result<Vec<u8>> {
 /// Production callers (sync-icons-backfill) should use the split form so
 /// they can apply different retry policies per failure type.
 pub fn transcode_to_webp(bytes: &[u8]) -> Result<Vec<u8>> {
-    let img = decode_image(bytes)?;
-    encode_to_webp(&img)
+    let decoded = decode_image(bytes)?;
+    encode_to_webp(&decoded.image)
 }
 
 // ---------------------------------------------------------------------------
@@ -337,9 +455,92 @@ mod tests {
     #[test]
     fn decode_image_round_trip() {
         let png = make_png_fixture();
-        let img = decode_image(&png).expect("decode");
-        assert_eq!(img.width(), 4);
-        assert_eq!(img.height(), 4);
+        let decoded = decode_image(&png).expect("decode");
+        assert_eq!(decoded.image.width(), 4);
+        assert_eq!(decoded.image.height(), 4);
+        // Raster input → caller sends original bytes to Vision.
+        assert!(decoded.vision_bytes.is_none(), "raster input should not need re-encoded vision bytes");
+    }
+
+    #[test]
+    fn looks_like_svg_recognises_common_shapes() {
+        assert!(looks_like_svg(b"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"></svg>"));
+        assert!(looks_like_svg(
+            b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"></svg>"
+        ));
+        // BOM + leading whitespace.
+        assert!(looks_like_svg(b"\xEF\xBB\xBF\n  <svg></svg>"));
+        // DOCTYPE prologue.
+        assert!(looks_like_svg(b"<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\">\n<svg></svg>"));
+    }
+
+    #[test]
+    fn looks_like_svg_rejects_non_svg() {
+        assert!(!looks_like_svg(b"\x89PNG\r\n\x1a\n"));
+        assert!(!looks_like_svg(b"<html><body>hi</body></html>"));
+        assert!(!looks_like_svg(b"<?xml version=\"1.0\"?><rss></rss>"));
+        // Non-UTF-8 — raster bytes never accidentally look like SVG.
+        assert!(!looks_like_svg(&[0xff, 0xd8, 0xff, 0xe0]));
+    }
+
+    #[test]
+    fn rasterize_svg_round_trips_via_decode() {
+        // 32×32 red square — minimal SVG that resvg accepts.
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect width="32" height="32" fill="#ff0000"/></svg>"##;
+        let decoded = decode_image(svg).expect("svg decode");
+        assert_eq!(decoded.image.width(), 32);
+        assert_eq!(decoded.image.height(), 32);
+        // SVG path MUST surface vision bytes — original SVG would crash Vision.
+        let vision_bytes = decoded.vision_bytes.expect("svg path should produce vision_bytes");
+        // Vision-side bytes are PNG (signature 89 50 4E 47 …).
+        assert!(vision_bytes.starts_with(&[0x89, 0x50, 0x4e, 0x47]));
+        // And the raster must transcode cleanly to WebP (the eventual served form).
+        let webp = encode_to_webp(&decoded.image).expect("webp encode");
+        assert!(webp.starts_with(b"RIFF"));
+        assert_eq!(&webp[8..12], b"WEBP");
+    }
+
+    #[test]
+    fn rasterize_svg_caps_oversized_viewbox() {
+        // 100k × 50k declared viewBox — naive rendering would be ~20 GB.
+        // Cap clamps the larger side to SVG_MAX_RENDER_DIM.
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="100000" height="50000" viewBox="0 0 100000 50000"><rect width="100000" height="50000" fill="#00ff00"/></svg>"##;
+        let decoded = decode_image(svg).expect("oversized svg decode");
+        assert!(decoded.image.width() <= SVG_MAX_RENDER_DIM);
+        assert!(decoded.image.height() <= SVG_MAX_RENDER_DIM);
+        // Aspect ratio preserved (within a px of rounding).
+        assert_eq!(decoded.image.width(), SVG_MAX_RENDER_DIM);
+        assert_eq!(decoded.image.height(), SVG_MAX_RENDER_DIM / 2);
+    }
+
+    #[test]
+    fn rasterize_svg_refuses_external_image_href() {
+        // An <image> with a remote / file:// / relative href would, under
+        // usvg's default resolver, attempt to load bytes from disk. Our
+        // override returns None for every non-data href, so the document
+        // still rasterizes cleanly (the <image> element renders empty)
+        // without any I/O — the rest of the SVG is unaffected.
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+            <rect width="32" height="32" fill="#ff0000"/>
+            <image href="file:///etc/passwd" x="0" y="0" width="32" height="32"/>
+            <image href="http://attacker.example/log" x="0" y="0" width="32" height="32"/>
+            <image href="../../../../etc/shadow" x="0" y="0" width="32" height="32"/>
+        </svg>"##;
+        let decoded = decode_image(svg).expect("svg-with-external-hrefs must still rasterize");
+        assert_eq!(decoded.image.width(), 32);
+        assert_eq!(decoded.image.height(), 32);
+        assert!(decoded.vision_bytes.is_some());
+    }
+
+    #[test]
+    fn rasterize_svg_with_script_tag_still_parses_inert() {
+        // `resvg` parses but does not execute `<script>`. We just want to
+        // confirm the document round-trips into a DynamicImage rather than
+        // erroring out — proving that "SVG with script" is a valid input
+        // we can safely rasterize.
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><script>alert(1)</script><rect width="16" height="16" fill="blue"/></svg>"##;
+        let decoded = decode_image(svg).expect("svg-with-script decode");
+        assert_eq!(decoded.image.width(), 16);
     }
 
     #[test]

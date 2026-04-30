@@ -102,12 +102,32 @@ pub async fn process_url(
     }
 
     // 3. Decode FIRST, before spending a Vision API call. Failure here is
-    // a property of the bytes (corrupt, wrong format like SVG, image-bomb
-    // over the alloc cap) — re-trying won't help. Earlier versions ran
-    // Vision before decode, which meant SVG icons looped through
-    // fetch + Vision ("Bad image data") forever paying $0.0015 per retry.
-    let img = match decode_image(&bytes) {
-        Ok(i) => i,
+    // a property of the bytes (corrupt, AVIF/ICO/etc., un-parseable SVG,
+    // image-bomb over the alloc cap) — re-trying won't help. Earlier
+    // versions ran Vision before decode, which meant unsupported icons
+    // looped through fetch + Vision ("Bad image data") forever paying
+    // $0.0015 per retry.
+    //
+    // CPU-bound + sync (image-crate decode, plus resvg parse+rasterize
+    // on the SVG branch — a 1024×1024 render is hundreds of ms).
+    // `spawn_blocking` keeps the tokio runtime free for I/O; the closure
+    // returns `bytes` back so the outer scope can still use it for
+    // size-tracking on the failure paths and as a Vision fallback when
+    // `vision_bytes` is None.
+    //
+    // SVG note: `decode_image` rasterizes parseable SVG to PNG and
+    // returns it via `vision_bytes`, so the Vision call below can use
+    // the raster — Vision rejects the SVG XML directly.
+    let (decode_result, bytes) =
+        match tokio::task::spawn_blocking(move || (decode_image(&bytes), bytes)).await {
+            Ok(t) => t,
+            Err(e) => {
+                warn!(uri = %uri, error = %e, "decode task panicked; URL stays pending");
+                return Ok(Outcome::TranscodeError);
+            }
+        };
+    let (img, vision_bytes) = match decode_result {
+        Ok(d) => (d.image, d.vision_bytes),
         Err(e) => {
             warn!(uri = %uri, error = %e, "decode failed; marking unsupported (no Vision call made)");
             upsert_icon_moderation(
@@ -127,9 +147,11 @@ pub async fn process_url(
         }
     };
 
-    // 4. NSFW gate. Vision wants the original raw bytes, not the
-    // decoded image.
-    let scores = match safe_search(http, api_key, &bytes).await {
+    // 4. NSFW gate. For raster inputs we send the original bytes (saves
+    // a re-encode round-trip); for SVG we send the rasterized PNG that
+    // `decode_image` produced.
+    let vision_input: &[u8] = vision_bytes.as_deref().unwrap_or(&bytes);
+    let scores = match safe_search(http, api_key, vision_input).await {
         Ok(s) => s,
         Err(e) => {
             warn!(uri = %uri, error = %e, "vision API error; leaving URL pending for retry");

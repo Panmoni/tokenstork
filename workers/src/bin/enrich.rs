@@ -85,7 +85,7 @@ fn aggregate(utxos: &[Utxo]) -> Result<Aggregate> {
         };
         agg.current_supply += &amount;
 
-        let owner = u.address.as_deref().map(normalize_address);
+        let owner = u.address.as_deref().and_then(normalize_address);
 
         if let Some(addr) = &owner {
             let entry = agg.holders.entry(addr.clone()).or_default();

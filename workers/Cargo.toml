@@ -75,5 +75,18 @@ ripemd = "0.1"
 # native libwebp linkage.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
 
+# SVG rasterization for the icon safety pipeline. `resvg` deliberately
+# does NOT execute scripts, fetch external `href`s, or follow file://
+# references — XSS / SSRF / tracking-pixel surfaces that ruled out
+# serving raw SVG bytes don't reach the rendered output. The PNG output
+# is then fed back through the same raster path (`decode_raster` →
+# Vision → WebP) the rest of the pipeline already trusts.
+# `default-features = false` strips system-font discovery (we don't want
+# the worker reading /usr/share/fonts) and text rendering — token icons
+# with text fall back to no-glyph; issuers should flatten text to paths.
+resvg = { version = "0.45", default-features = false, features = ["raster-images"] }
+tiny-skia = "0.11"
+usvg = { version = "0.45", default-features = false }
+
 # Base64 of image bytes for the Google Vision REST API request body.
 # (`base64` crate already in scope above for BCHN auth.)
