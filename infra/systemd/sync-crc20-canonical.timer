@@ -1,0 +1,17 @@
+[Unit]
+Description=Run tokenstork CRC-20 canonical-winner resolver hourly
+
+[Timer]
+# Hourly belt-and-braces resolver — sync-tail re-resolves inline after
+# every detected covenant, so this catches edge cases (e.g. reorg-rewind
+# without an immediate new detection, or a row inserted by the rescan
+# binary). Pure SQL, sub-second runtime against the small token_crc20
+# table; cheap to run hourly.
+OnBootSec=10min
+OnUnitActiveSec=1h
+Persistent=true
+RandomizedDelaySec=2min
+Unit=sync-crc20-canonical.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,41 @@
+[Unit]
+Description=tokenstork sync-crc20-canonical — recompute canonical CRC-20 winners
+Documentation=https://github.com/Panmoni/tokenstork
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=oneshot
+User=tokenstork
+Group=tokenstork
+WorkingDirectory=/opt/tokenstork
+ExecStart=/opt/tokenstork/workers/target/release/crc20-canonical
+
+Environment="RUST_LOG=info"
+EnvironmentFile=-/etc/tokenstork/env
+
+# Hardening — same profile as sync-bcmr / sync-enrich / sync-verify / sync-tail.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectProc=invisible
+ProcSubset=pid
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallArchitectures=native
+UMask=0077
