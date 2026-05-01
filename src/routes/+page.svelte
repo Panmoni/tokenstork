@@ -107,7 +107,6 @@
 			total={data.total}
 			limit={data.limit}
 			offset={data.offset}
-			mcapTvlThresholdSats={data.mcapTvlThresholdSats}
 		/>
 	{/if}
 </main>

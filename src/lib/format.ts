@@ -80,7 +80,10 @@ export function humanizeBigNumber(value: number): string {
 	if (!Number.isFinite(value)) return '—';
 	const units = ['', 'K', 'M', 'B', 'T', 'P', 'E'];
 	const abs = Math.abs(value);
-	if (abs < 1000) return value.toString();
+	// Under 1000 — show the raw value with at most 2 fractional digits.
+	// `toFixed(2)` then `parseFloat → toString` strips trailing zeros so
+	// 9.00 renders as "9", 9.99999 renders as "10", 9.504 renders as "9.5".
+	if (abs < 1000) return parseFloat(value.toFixed(2)).toString();
 
 	const unitIndex = Math.min(
 		units.length - 1,
