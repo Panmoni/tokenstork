@@ -52,10 +52,16 @@ pub enum Outcome {
 /// WebP is later served — we never call out from here for CSAM. The
 /// cascade-on-CSAM flow lives in the operator runbook (manual today,
 /// future webhook automation).
+///
+/// `api_key = None` means Vision is disabled (e.g. cost cutoff). In
+/// that mode every newly-decoded icon is routed to `state='review'`
+/// with the WebP written to disk so an operator can inspect the file
+/// before flipping the row to `cleared` or `blocked`. Default-deny
+/// still holds — `iconHrefFor` only serves `state='cleared'` rows.
 pub async fn process_url(
     pool: &PgPool,
     http: &reqwest::Client,
-    api_key: &str,
+    api_key: Option<&str>,
     output_dir: &Path,
     uri: &str,
     block_threshold: f32,
@@ -147,19 +153,26 @@ pub async fn process_url(
         }
     };
 
-    // 4. NSFW gate. For raster inputs we send the original bytes (saves
-    // a re-encode round-trip); for SVG we send the rasterized PNG that
+    // 4. NSFW gate (or manual-review bypass when Vision is disabled).
+    // For raster inputs we send the original bytes (saves a re-encode
+    // round-trip); for SVG we send the rasterized PNG that
     // `decode_image` produced.
-    let vision_input: &[u8] = vision_bytes.as_deref().unwrap_or(&bytes);
-    let scores = match safe_search(http, api_key, vision_input).await {
-        Ok(s) => s,
-        Err(e) => {
-            warn!(uri = %uri, error = %e, "vision API error; leaving URL pending for retry");
-            return Ok(Outcome::VisionError);
+    let (outcome, score) = match api_key {
+        Some(key) => {
+            let vision_input: &[u8] = vision_bytes.as_deref().unwrap_or(&bytes);
+            match safe_search(http, key, vision_input).await {
+                Ok(s) => {
+                    let score = s.nsfw_score();
+                    (classify_nsfw(score, block_threshold, review_threshold), Some(score))
+                }
+                Err(e) => {
+                    warn!(uri = %uri, error = %e, "vision API error; leaving URL pending for retry");
+                    return Ok(Outcome::VisionError);
+                }
+            }
         }
+        None => (NsfwOutcome::Review, None),
     };
-    let score = scores.nsfw_score();
-    let outcome = classify_nsfw(score, block_threshold, review_threshold);
 
     match outcome {
         NsfwOutcome::Block => {
@@ -169,7 +182,7 @@ pub async fn process_url(
                     content_hash: &hash,
                     source_url: uri,
                     state: "blocked",
-                    nsfw_score: Some(score),
+                    nsfw_score: score,
                     block_reason: Some("adult"),
                     bytes_size: bytes.len() as i32,
                 },
@@ -178,30 +191,17 @@ pub async fn process_url(
             link_url_to_hash(pool, uri, &hash).await?;
             Ok(Outcome::BlockedAdult)
         }
-        NsfwOutcome::Review => {
-            upsert_icon_moderation(
-                pool,
-                &IconModerationWrite {
-                    content_hash: &hash,
-                    source_url: uri,
-                    state: "review",
-                    nsfw_score: Some(score),
-                    block_reason: None,
-                    bytes_size: bytes.len() as i32,
-                },
-            )
-            .await?;
-            link_url_to_hash(pool, uri, &hash).await?;
-            Ok(Outcome::Review)
-        }
-        NsfwOutcome::Clear => {
-            // 5. Encode to WebP (we already decoded in step 3, so `img` is
-            // in scope here). CPU-bound + sync (the `image` crate has no
-            // async API), so wrap in spawn_blocking to keep the tokio
-            // runtime free for I/O. Encode failure is almost always a
-            // transient `image` crate bug; we leave the URL pending so
-            // a future library version can retry — NEVER write a
-            // `state='blocked'` row in this branch.
+        // Review and Clear share the encode + write path so the WebP is
+        // on disk in both cases — the operator can inspect a review-
+        // state file before flipping it to `cleared`. Default-deny
+        // still holds: `iconHrefFor` only serves `state='cleared'`.
+        NsfwOutcome::Review | NsfwOutcome::Clear => {
+            // CPU-bound + sync (the `image` crate has no async API), so
+            // wrap in spawn_blocking to keep the tokio runtime free for
+            // I/O. Encode failure is almost always a transient `image`
+            // crate bug; we leave the URL pending so a future library
+            // version can retry — NEVER write a `state='blocked'` row
+            // in this branch.
             let webp = match tokio::task::spawn_blocking(move || encode_to_webp(&img)).await {
                 Ok(Ok(b)) => b,
                 Ok(Err(e)) => {
@@ -214,7 +214,6 @@ pub async fn process_url(
                 }
             };
 
-            // 6. Write to /var/lib/tokenstork/icons/<hex_hash>.webp.
             let hex = hex::encode(hash);
             let path = output_dir.join(format!("{}.webp", hex));
             if let Err(e) = std::fs::write(&path, &webp) {
@@ -222,21 +221,21 @@ pub async fn process_url(
                 return Ok(Outcome::WriteError);
             }
 
-            // 7. Cleared.
+            let is_review = matches!(outcome, NsfwOutcome::Review);
             upsert_icon_moderation(
                 pool,
                 &IconModerationWrite {
                     content_hash: &hash,
                     source_url: uri,
-                    state: "cleared",
-                    nsfw_score: Some(score),
+                    state: if is_review { "review" } else { "cleared" },
+                    nsfw_score: score,
                     block_reason: None,
                     bytes_size: bytes.len() as i32,
                 },
             )
             .await?;
             link_url_to_hash(pool, uri, &hash).await?;
-            Ok(Outcome::Cleared)
+            Ok(if is_review { Outcome::Review } else { Outcome::Cleared })
         }
     }
 }

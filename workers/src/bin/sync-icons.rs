@@ -20,12 +20,13 @@
 //!
 //! Env vars:
 //! - DATABASE_URL                       — Postgres connection
-//! - GOOGLE_VISION_API_KEY              — required for `pending` mode (rescan doesn't call Vision)
+//! - GOOGLE_VISION_API_KEY              — required for `pending` mode unless ICON_VISION_DISABLED=1 (rescan doesn't call Vision)
+//! - ICON_VISION_DISABLED               — `1` to skip Vision; new icons land in `state='review'` for manual review (default unset)
 //! - ICON_MODE                          — `pending` (default) | `rescan`
 //! - ICON_TICK_BATCH                    — max URLs per pending tick (default 200)
 //! - ICON_RESCAN_BATCH                  — max URLs per rescan tick (default 500)
-//! - ICON_NSFW_BLOCK_THRESHOLD          — default 0.9
-//! - ICON_NSFW_REVIEW_THRESHOLD         — default 0.6
+//! - ICON_NSFW_BLOCK_THRESHOLD          — default 0.9 (unused when ICON_VISION_DISABLED=1)
+//! - ICON_NSFW_REVIEW_THRESHOLD         — default 0.6 (unused when ICON_VISION_DISABLED=1)
 //! - ICON_OUTPUT_DIR                    — default /var/lib/tokenstork/icons
 //! - RUST_LOG                           — default info
 //!
@@ -146,8 +147,13 @@ async fn main() -> Result<()> {
 }
 
 async fn run_pending(pool: &pg::PgPool, http: &reqwest::Client) -> Result<()> {
-    let api_key =
-        std::env::var("GOOGLE_VISION_API_KEY").context("GOOGLE_VISION_API_KEY not set")?;
+    let vision_disabled = matches!(std::env::var("ICON_VISION_DISABLED").as_deref(), Ok("1"));
+    let api_key = if vision_disabled {
+        info!("ICON_VISION_DISABLED=1 — skipping Vision; new icons will land in state='review'");
+        None
+    } else {
+        Some(std::env::var("GOOGLE_VISION_API_KEY").context("GOOGLE_VISION_API_KEY not set")?)
+    };
     let block_threshold: f32 =
         parse_or_default("ICON_NSFW_BLOCK_THRESHOLD", DEFAULT_BLOCK_THRESHOLD);
     let review_threshold: f32 =
@@ -195,7 +201,7 @@ async fn run_pending(pool: &pg::PgPool, http: &reqwest::Client) -> Result<()> {
         match process_url(
             pool,
             http,
-            &api_key,
+            api_key.as_deref(),
             &output_dir,
             uri,
             block_threshold,
