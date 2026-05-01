@@ -134,6 +134,11 @@ export const load: PageServerLoad = async ({ url }) => {
 	//   ?crc20=noncanonical contender that lost the canonical sort
 	// Anything else is ignored.
 	const crc20Param = url.searchParams.get('crc20');
+	// Gini-tier filter — links from /stats's distribution histogram. Each
+	// tier maps to a half-open Gini range; rows below 10 holders are
+	// suppressed at the worker layer (gini_coefficient IS NULL) so they
+	// never match any tier.
+	const giniTierParam = url.searchParams.get('gini_tier');
 	const offset = Math.max(Number(url.searchParams.get('offset') ?? 0) || 0, 0);
 
 	const rawSearch = (url.searchParams.get('search') ?? '').trim();
@@ -205,6 +210,23 @@ export const load: PageServerLoad = async ({ url }) => {
 			  OR vl_tapswap.category IS NOT NULL
 			  OR vl_fex.category IS NOT NULL)`
 		);
+	}
+	// Gini-tier filter: same five buckets the /stats histogram uses,
+	// keyed by their lowercase label so URLs are readable.
+	const giniTierRanges: Record<string, [number, number]> = {
+		excellent: [0.0, 0.4],
+		good: [0.4, 0.6],
+		fair: [0.6, 0.75],
+		poor: [0.75, 0.9],
+		whale: [0.9, 1.0001] // upper bound > 1.0 so a perfect-1 still matches
+	};
+	const giniRange = giniTierParam ? giniTierRanges[giniTierParam.toLowerCase()] : undefined;
+	if (giniRange) {
+		values.push(giniRange[0]);
+		const lo = `$${values.length}`;
+		values.push(giniRange[1]);
+		const hi = `$${values.length}`;
+		where.push(`s.gini_coefficient >= ${lo}::real AND s.gini_coefficient < ${hi}::real`);
 	}
 	if (crc20Param === 'true') {
 		where.push('c.category IS NOT NULL');
