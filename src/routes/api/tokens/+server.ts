@@ -4,7 +4,58 @@
 import { json, error, isHttpError } from '@sveltejs/kit';
 import { hexFromBytes, query } from '$lib/server/db';
 import { NOT_MODERATED_CLAUSE } from '$lib/moderation';
+import { clientIp } from '$lib/server/clientIp';
+import { csvExportRateLimiter } from '$lib/server/rateLimit';
 import type { RequestHandler } from './$types';
+
+/** Quote a CSV cell per RFC 4180: wrap in `"` if it contains `,`, `"`,
+ *  or a newline; double any embedded `"`. Numbers, booleans and null
+ *  are coerced to their JSON-ish text form. */
+function csvCell(v: unknown): string {
+	if (v == null) return '';
+	const s = typeof v === 'string' ? v : String(v);
+	return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/** CSV column order — stable so consumers can pin to it. Mirrors the
+ *  JSON shape, dropping fields that don't render usefully as a flat
+ *  cell (no nested objects today).
+ *
+ *  Typed as `ReadonlyArray<keyof TokenApiRow>` so a future field added
+ *  to the JSON shape but missed here surfaces as a *deliberate* gap
+ *  rather than a silent drift — and so `t[col]` below indexes the
+ *  TokenApiRow shape directly (no `as unknown` cast). */
+const CSV_COLUMNS: ReadonlyArray<keyof TokenApiRow> = [
+	'id',
+	'name',
+	'symbol',
+	'decimals',
+	'description',
+	'icon',
+	'iconClearedHash',
+	'tokenType',
+	'isVerifiedOnchain',
+	'isFullyBurned',
+	'currentSupply',
+	'liveUtxoCount',
+	'liveNftCount',
+	'holderCount',
+	'hasActiveMinting',
+	'firstSeenAt',
+	'genesisBlock',
+	'updatedAt',
+	'isCrc20',
+	'crc20Symbol',
+	'crc20SymbolIsHex',
+	'crc20IsCanonical',
+	'crc20Name'
+];
+
+function tokensToCsv(tokens: TokenApiRow[]): string {
+	const header = CSV_COLUMNS.join(',');
+	const rows = tokens.map((t) => CSV_COLUMNS.map((col) => csvCell(t[col])).join(','));
+	return [header, ...rows].join('\r\n') + '\r\n';
+}
 
 /** Escape `%` and `_` in a user-supplied ILIKE pattern. Without this,
  *  a query of `%%%%%%%%%%%%%%%%%` runs as a deliberately-pessimal
@@ -102,19 +153,60 @@ const VALID_SORTS: Record<string, string> = {
 	oldest: 't.genesis_block ASC, t.first_seen_at ASC'
 };
 
-export const GET: RequestHandler = async ({ url, setHeaders }) => {
-	// `private` rather than `public` because the response varies by every
-	// query parameter — `?sort=`, `?nameSearch=`, `?type=`, etc. A shared
-	// CDN keyed only on path would collapse distinct variants into one
-	// cache entry. The browser cache still serves repeat hits on the same
-	// URL within 60 s, which is what we want.
-	setHeaders({
-		'cache-control': 'private, max-age=60',
-		vary: 'Cookie'
-	});
+export const GET: RequestHandler = async ({ url, request, getClientAddress, setHeaders }) => {
+	const params = url.searchParams;
+	const isCsv = params.get('format') === 'csv';
+
+	// CSV-only: tighter rate limit + longer CDN-side cache. JSON path is
+	// already CDN-cacheable + 1000-row capped + same SQL query, so the
+	// JSON code path doesn't need extra defenses; the CSV branch's
+	// additional surface (much fatter response per row, much more
+	// attractive to scrapers) gets its own per-IP ceiling.
+	if (isCsv) {
+		const ip = clientIp({ request, getClientAddress });
+		const rl = csvExportRateLimiter.consume(ip);
+		if (!rl.allowed) {
+			const retryAfter = Math.max(1, Math.ceil((rl.retryAfterMs ?? 60_000) / 1000));
+			// Manual Response (not error()) so we can attach the
+			// Retry-After header per RFC 7231 §6.6.4 — well-behaved
+			// clients (curl --retry, automated SDKs) honour the
+			// header, not the message body.
+			return new Response(
+				JSON.stringify({ error: `rate limit exceeded; retry after ${retryAfter}s` }),
+				{
+					status: 429,
+					headers: {
+						'content-type': 'application/json',
+						'retry-after': String(retryAfter)
+					}
+				}
+			);
+		}
+	}
+
+	if (isCsv) {
+		// CSV is cookie-independent — there's no "show me my watchlist
+		// as CSV" mode. Drop the `vary: Cookie` the JSON branch carries
+		// for SSR's session-aware variants; without it the CDN keys
+		// purely on URL and the s-maxage actually absorbs scraper
+		// repeats (with `vary: Cookie`, every distinct cookie value
+		// instantiates its own cache entry, defeating the whole point).
+		setHeaders({
+			'cache-control': 'public, max-age=60, s-maxage=300'
+		});
+	} else {
+		// `private` rather than `public` because the response varies by
+		// every query parameter — `?sort=`, `?nameSearch=`, `?type=`, etc.
+		// A shared CDN keyed only on path would collapse distinct
+		// variants into one cache entry. The browser cache still serves
+		// repeat hits on the same URL within 60 s, which is what we want.
+		setHeaders({
+			'cache-control': 'private, max-age=60',
+			vary: 'Cookie'
+		});
+	}
 
 	try {
-		const params = url.searchParams;
 
 		const tokenType = params.get('type');
 		const verifiedOnly = params.get('verified') === 'true';
@@ -277,6 +369,23 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 				crc20Name: row.crc20_name ?? null
 			};
 		});
+
+		if (isCsv) {
+			// `attachment` so browsers save it instead of rendering as
+			// text. Filename is timestamped to avoid collisions across
+			// repeated exports. UTF-8 BOM prefix so Excel doesn't mangle
+			// non-ASCII names (most BCMR names are ASCII; emoji-bearing
+			// ones used to render as `Ã©` etc. without the BOM).
+			const date = new Date().toISOString().slice(0, 10);
+			const body = '﻿' + tokensToCsv(tokens);
+			return new Response(body, {
+				status: 200,
+				headers: {
+					'content-type': 'text/csv; charset=utf-8',
+					'content-disposition': `attachment; filename="tokenstork-${date}.csv"`
+				}
+			});
+		}
 
 		return json({
 			tokens,

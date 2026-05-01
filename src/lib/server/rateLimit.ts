@@ -81,3 +81,13 @@ export const challengeRateLimiter = createRateLimiter({
 	maxPerWindow: 10,
 	windowMs: 60_000
 });
+
+// /api/tokens?format=csv limiter: 30 CSV requests per minute per IP.
+// JSON GETs already have CDN caching + a 1000-row cap, but CSV is much
+// fatter per row + much more attractive to scrapers. Tighter ceiling
+// keeps a hostile scraper from chewing through bandwidth without
+// affecting normal "click export, save file" usage.
+export const csvExportRateLimiter = createRateLimiter({
+	maxPerWindow: 30,
+	windowMs: 60_000
+});
