@@ -1,6 +1,8 @@
 <script lang="ts">
 	import Movers24h from '$lib/components/Movers24h.svelte';
 	import { Tooltip, TooltipTrigger, TooltipContent } from '$lib/components/ui/tooltip';
+	import { iconHrefFor } from '$lib/icons';
+	import { stripEmoji } from '$lib/format';
 
 	let { data } = $props();
 
@@ -275,6 +277,39 @@
 			</a>
 		</div>
 	</section>
+
+	{#if data.tapswapTop.length > 0}
+		<section class="mb-8">
+			<div class="flex items-baseline justify-between mb-3">
+				<h2 class="text-xl font-semibold text-slate-900 dark:text-white">Most-listed on Tapswap</h2>
+				<a href="/?tapswap=1&sort=recent" class="text-xs text-violet-600 dark:text-violet-400 hover:underline">All Tapswap-listed →</a>
+			</div>
+			<p class="text-sm ts-text-muted mb-3">
+				Where Tapswap's P2P liquidity is concentrated. Counts open listings only — closed/taken
+				offers don't count. Reflects "this token is actively being offered" rather than "this
+				token has ever been on Tapswap."
+			</p>
+			<div class="rounded-xl border ts-border-subtle ts-surface-panel overflow-hidden">
+				<ol class="divide-y ts-border-subtle">
+					{#each data.tapswapTop as t, i (t.id)}
+						<li>
+							<a href={`/token/${t.id}`} class="flex items-center gap-3 px-4 py-2 hover:bg-slate-50 dark:hover:bg-zinc-800/50 transition-colors no-underline">
+								<span class="w-5 text-xs font-mono text-slate-400 tabular-nums">{i + 1}</span>
+								<img src={iconHrefFor(t.icon, t.iconClearedHash)} alt="" class="w-7 h-7 rounded-full bg-slate-100 dark:bg-zinc-800" loading="lazy" />
+								<span class="flex-1 min-w-0 truncate text-sm text-slate-900 dark:text-white">
+									{stripEmoji(t.name) || t.id.slice(0, 10) + '…'}
+									{#if t.symbol}<span class="ml-1 text-xs text-slate-500 font-mono">{stripEmoji(t.symbol)}</span>{/if}
+								</span>
+								<span class="text-xs font-mono tabular-nums shrink-0 text-emerald-700 dark:text-emerald-400">
+									{fmt(t.offerCount)} open
+								</span>
+							</a>
+						</li>
+					{/each}
+				</ol>
+			</div>
+		</section>
+	{/if}
 
 	<section class="mb-8">
 		<div class="flex items-baseline justify-between mb-3">

@@ -20,7 +20,7 @@
 // `newIn24h` is sourced from the parent layout load so /stats doesn't
 // re-run the same 24h count twice in one pageview.
 
-import { query } from '$lib/server/db';
+import { hexFromBytes, query } from '$lib/server/db';
 import { NOT_MODERATED_CLAUSE } from '$lib/moderation';
 import type { CauldronGlobalStats } from '$lib/server/external';
 import { getIconModerationStats } from '$lib/server/iconStats';
@@ -389,6 +389,40 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 				    AND ${NOT_MODERATED_CLAUSE}
 				  GROUP BY bucket
 				  ORDER BY bucket`
+			),
+			// Top-10 categories by open Tapswap listing count. Captures
+			// "where is the P2P liquidity concentrated?" — a different
+			// question to the on-Tapswap counter (which is "is this
+			// listed at all?"). Joins through tokens to pick up name +
+			// symbol + icon for the leaderboard, and through icon
+			// scans to honour the cleared-icon contract.
+			query<{
+				category: Buffer;
+				name: string | null;
+				symbol: string | null;
+				icon_uri: string | null;
+				icon_cleared_hash: string | null;
+				offer_count: string;
+			}>(
+				`SELECT t.category,
+				        m.name,
+				        m.symbol,
+				        m.icon_uri,
+				        encode(imo.content_hash, 'hex') AS icon_cleared_hash,
+				        COUNT(*)::bigint AS offer_count
+				   FROM tapswap_offers o
+				   JOIN tokens t ON t.category = o.has_category
+				   LEFT JOIN token_metadata m ON m.category = t.category
+				   LEFT JOIN icon_url_scan ius ON ius.icon_uri = m.icon_uri
+				   LEFT JOIN icon_moderation imo
+				          ON imo.content_hash = ius.content_hash
+				         AND imo.state = 'cleared'
+				  WHERE o.status = 'open'
+				    AND o.has_category IS NOT NULL
+				    AND ${NOT_MODERATED_CLAUSE}
+				  GROUP BY t.category, m.name, m.symbol, m.icon_uri, imo.content_hash
+				  ORDER BY offer_count DESC, t.category ASC
+				  LIMIT 10`
 			)
 		]),
 		bchPriceP,
@@ -417,7 +451,8 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		ecosystemTvl30dRes,
 		supplyBucketsRes,
 		giniMedianRes,
-		giniBucketsRes
+		giniBucketsRes,
+		tapswapTopRes
 	] = pageResults as [
 		PromiseSettledResult<{ rows: TypeCount[] }>,
 		PromiseSettledResult<{ rows: WindowCount[] }>,
@@ -435,7 +470,17 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		PromiseSettledResult<{ rows: { day: Date; tvl_sats: string }[] }>,
 		PromiseSettledResult<{ rows: { bucket: string; sort_order: number; n: string }[] }>,
 		PromiseSettledResult<{ rows: { median: number | null }[] }>,
-		PromiseSettledResult<{ rows: { bucket: number; total: string }[] }>
+		PromiseSettledResult<{ rows: { bucket: number; total: string }[] }>,
+		PromiseSettledResult<{
+			rows: Array<{
+				category: Buffer;
+				name: string | null;
+				symbol: string | null;
+				icon_uri: string | null;
+				icon_cleared_hash: string | null;
+				offer_count: string;
+			}>;
+		}>
 	];
 
 	// Cauldron stats — read the cached row, compute USD at render time
@@ -597,6 +642,18 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		}
 	}
 
+	const tapswapTop =
+		tapswapTopRes.status === 'fulfilled'
+			? tapswapTopRes.value.rows.map((r) => ({
+					id: hexFromBytes(r.category)!,
+					name: r.name,
+					symbol: r.symbol,
+					icon: r.icon_uri,
+					iconClearedHash: r.icon_cleared_hash,
+					offerCount: Number(r.offer_count)
+				}))
+			: [];
+
 	return {
 		byType,
 		newIn24h: parentData.newIn24h,
@@ -617,6 +674,7 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		supplyBuckets,
 		iconStats,
 		giniMedian,
-		giniBuckets
+		giniBuckets,
+		tapswapTop
 	};
 };
