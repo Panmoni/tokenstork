@@ -7,8 +7,8 @@
 </svelte:head>
 
 <script lang="ts">
-	// Roadmap items. `status` drives the icon + color. Last updated 2026-05-01
-	// (post-Gini ship) — if anything drifts by more than a quarter, come
+	// Roadmap items. `status` drives the icon + color. Last updated 2026-05-02
+	// (post-CSV-export + history-endpoint ship) — if anything drifts by more than a quarter, come
 	// back and groom. The original roadmap had a version-number scheme
 	// (0.0.3, 0.0.4, …) that turned out to be ambitious vaporware; we now
 	// group by theme + status.
@@ -169,6 +169,15 @@
 				'Per-day volume bars below the price line, derived from |Δ tvl_satoshis| between consecutive token_price_history snapshots.',
 				'Hover tooltip with per-bucket price + volume; lower-bound disclosure on the volume estimate matches the 4 h Cauldron sync cadence.'
 			]
+		},
+		{
+			title: 'CSV export + power-user APIs',
+			status: 'done',
+			bullets: [
+				'?format=csv on /api/tokens — RFC-4180 quoted, UTF-8 BOM-prefixed for Excel, same row cap (1000) and column set as the JSON form.',
+				'New /api/tokens/<cat>/history endpoint returning full price + TVL history for one category, with optional ?venue= and ?from=&to= time-window filters; CSV form too.',
+				'Per-IP rate limit (30 req/min) on the CSV branches, paired with a CDN-cacheable s-maxage so a hostile scraper bounces off Cloudflare. 429 responses carry an RFC 7231 Retry-After header.'
+			]
 		}
 	];
 
@@ -212,15 +221,6 @@
 				'Holder concentration: top-10 horizontal bar chart on the detail page (Gini already shipped).'
 			]
 		},
-		{
-			title: 'CSV export + power-user APIs',
-			status: 'planned',
-			bullets: [
-				'?format=csv on /api/tokens (directory rows with all the columns the UI renders).',
-				'New /api/tokens/<cat>/history endpoint returning full price + TVL history for one category.',
-				'Pairs naturally with the long-horizon chart — same data, two surfaces.'
-			]
-		}
 	];
 
 	const later: Item[] = [
@@ -371,7 +371,7 @@
 	</section>
 
 	<p class="text-xs mt-10 ts-text-muted">
-		Roadmap last refreshed 2026-05-01. If you'd like to see something on here
+		Roadmap last refreshed 2026-05-02. If you'd like to see something on here
 		that isn't yet — email <a href="mailto:hello@panmoni.com" class="text-violet-600 dark:text-violet-400 hover:underline">hello@panmoni.com</a>
 		or
 		<a

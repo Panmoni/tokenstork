@@ -51,7 +51,7 @@ src/                       SvelteKit app (Svelte 5 + Node adapter).
     moderated/             Public list of categories filtered out of the directory.
     stats/                 Ecosystem dashboard (counts, growth, venue overlap).
     learn/ faq/ roadmap/ about/ tos/   Static pages.
-    api/tokens/            Directory + per-category holders/nfts/report endpoints.
+    api/tokens/            Directory + per-category holders/nfts/history/report endpoints (JSON + CSV).
     api/bchPrice/          BCH spot price proxy (CryptoCompare).
   lib/
     components/            Svelte 5 components (TokenGrid, MetricsBar, Sparkline, …).
@@ -111,15 +111,18 @@ pnpm run db:init    # psql "$DATABASE_URL" -f db/schema.sql
 
 ## HTTP API
 
-All endpoints return JSON. Response shapes are stable.
+All endpoints return JSON by default. Response shapes are stable.
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /api/tokens` | Directory listing (paginated, search across name + symbol + description + category, venue filters). |
+| `GET /api/tokens` | Directory listing (paginated, search across name + symbol + description + category, venue filters). Add `?format=csv` for a spreadsheet-friendly export — RFC-4180 quoted, UTF-8 BOM-prefixed for Excel. Same row cap (1000) as the JSON form. |
 | `GET /api/tokens/[category]/holders` | Holders for a category, ordered by balance. |
 | `GET /api/tokens/[category]/nfts` | NFT instances in a category. |
+| `GET /api/tokens/[category]/history` | Per-category price + TVL history from `token_price_history`, oldest-first. Optional `?venue=cauldron\|fex` and `?from=<unix-seconds>&to=<unix-seconds>` filters. Add `?format=csv` for the CSV form. |
 | `POST /api/tokens/[category]/report` | Submit a user report for moderation review. Rate-limited; webhook-alerts the operator. |
 | `GET /api/bchPrice` | BCH spot price (CryptoCompare, cached). |
+
+CSV-emitting endpoints share a per-IP rate limit (30 requests / minute, in-memory, per process) and a CDN-cacheable response (`s-maxage=300`) so a hostile scraper bounces off Cloudflare instead of our origin. The 429 response carries an RFC 7231 `Retry-After` header.
 
 Page routes (`/`, `/token/[category]`, `/stats`, `/moderated`, `/learn`, `/faq`, `/roadmap`, `/about`, `/tos`) all render server-side from Postgres on every request — no client-side hydration of the data. The BCH price + theme switcher are the only client-state pieces.
 
