@@ -317,7 +317,10 @@
 					<span class="text-xs text-red-600">Fully burned</span>
 				{/if}
 				{#if token.hasActiveMinting}
-					<span class="text-xs text-amber-600">Minting open</span>
+					<span
+						class="text-xs text-amber-600 cursor-help"
+						title="At least one live UTXO of this category carries the `minting` NFT capability. Whoever holds that UTXO can mint additional NFTs of this category at any time. Supply is not capped at the level shown — treat the supply number as a snapshot rather than the maximum."
+					>Minting open</span>
 				{/if}
 				<FormatCategory category={token.id} />
 			</div>
