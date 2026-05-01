@@ -1,17 +1,19 @@
 // GET /api/bchPrice — BCH/USD aggregator. CryptoCompare primary, CoinGecko fallback.
 // Preserves the CORS allowlist from pages/api/bchPrice.ts.
 
+import { dev } from '$app/environment';
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { timedFetch } from '$lib/server/fetch';
 import type { RequestHandler } from './$types';
 
-const ALLOWED_ORIGINS = new Set([
-	'https://tokenstork.com',
-	'http://localhost:3000',
-	'http://localhost:5173',
-	'https://drop.tokenstork.com'
-]);
+// Production origins — every cookie-bearing endpoint that wants CORS
+// access lives at one of these. localhost entries are dev-only so a
+// local browser tab pointed at a public deployment can't proxy this
+// endpoint via a localhost-shaped Origin header.
+const PROD_ORIGINS = ['https://tokenstork.com', 'https://drop.tokenstork.com'];
+const DEV_ORIGINS = ['http://localhost:3000', 'http://localhost:5173'];
+const ALLOWED_ORIGINS = new Set(dev ? [...PROD_ORIGINS, ...DEV_ORIGINS] : PROD_ORIGINS);
 
 function corsHeaders(origin: string | null): Record<string, string> {
 	if (origin && ALLOWED_ORIGINS.has(origin)) {

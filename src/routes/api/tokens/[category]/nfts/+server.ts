@@ -34,7 +34,9 @@ export const GET: RequestHandler = async ({ params, url, setHeaders }) => {
 		0
 	);
 
-	setHeaders({ 'cache-control': 'public, max-age=60' });
+	// Response varies by ?capability / ?limit / ?offset; private to
+	// prevent a CDN keyed only on path from collapsing variants.
+	setHeaders({ 'cache-control': 'private, max-age=60', vary: 'Cookie' });
 
 	try {
 		const categoryBytes = bytesFromHex(category);

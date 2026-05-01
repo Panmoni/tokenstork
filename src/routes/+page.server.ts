@@ -136,8 +136,21 @@ export const load: PageServerLoad = async ({ url }) => {
 	const crc20Param = url.searchParams.get('crc20');
 	const offset = Math.max(Number(url.searchParams.get('offset') ?? 0) || 0, 0);
 
-	const search = (url.searchParams.get('search') ?? '').trim();
-	const searchLimited = search.slice(0, 128);
+	const rawSearch = (url.searchParams.get('search') ?? '').trim();
+	// Tighter cap than before (was 128). Real token names + searches all
+	// fit comfortably under this; longer queries are almost always
+	// probing for a worst-case ILIKE plan.
+	const SEARCH_MAX = 64;
+	const SEARCH_MIN = 2;
+	const searchLimited = rawSearch.slice(0, SEARCH_MAX);
+	// Sub-min-length searches behave like no search at all — better than
+	// running a worst-case scan for a single character.
+	const searchActive = searchLimited.length >= SEARCH_MIN;
+	// Escape ILIKE wildcards in the user-supplied portion so a literal
+	// `%`/`_` in their search doesn't expand into the canonical
+	// "match anything" pattern. Without this, a query of `%%%%%` runs
+	// as a deliberately-pessimal pattern that scans the whole table.
+	const escapeIlike = (s: string) => s.replace(/[\\%_]/g, '\\$&');
 
 	// Moderation filter is always on — categories in token_moderation are
 	// hidden from the directory, the public API, the stats counters, and
@@ -205,7 +218,7 @@ export const load: PageServerLoad = async ({ url }) => {
 	// selected sort breaks ties within each similarity tier. Stays empty
 	// for hex-paste queries (single-row result) and no-search queries.
 	let searchOrderPrefix = '';
-	if (searchLimited) {
+	if (searchActive) {
 		// A full 64-char hex query is almost always a paste of a category ID
 		// the user wants the exact page for — short-circuit to a direct BYTEA
 		// lookup instead of falling back to substring matching (which would
@@ -215,35 +228,47 @@ export const load: PageServerLoad = async ({ url }) => {
 			where.push(`t.category = $${values.length}`);
 		} else {
 			// Free-form query. Three bind values:
-			//   $q      — raw query for trigram similarity (m.name % $q +
-			//             ORDER BY similarity()). Uses the GIN
-			//             `token_metadata_name_trgm` index. Default 0.3
-			//             threshold means "grm" → "GRIM" (sim 0.375),
-			//             "suhi" → "sushi" (sim 0.44), but a much-typo'd
-			//             "stbl" → "stable" doesn't (sim 0.17, below
-			//             threshold) — acceptable.
-			//   pat     — %-wrapped pattern for ILIKE on symbol +
-			//             description (no trigram indexes on those, but at
-			//             10-20k rows the seq scan is sub-10ms).
+			//   $q       — raw query for trigram similarity (m.name % $q +
+			//              ORDER BY similarity()). Uses the GIN
+			//              `token_metadata_name_trgm` index. Default 0.3
+			//              threshold means "grm" → "GRIM" (sim 0.375),
+			//              "suhi" → "sushi" (sim 0.44), but a much-typo'd
+			//              "stbl" → "stable" doesn't (sim 0.17, below
+			//              threshold) — acceptable.
+			//   pat      — %-wrapped pattern for ILIKE on symbol +
+			//              description, with `\` escapes for any literal
+			//              %/_ in the user input so they can't expand into
+			//              full-table-scan patterns.
 			//   patLower — lowercased pattern for hex-substring match on
-			//             category (so a partial hex paste like "d29eb"
-			//             still matches).
+			//              category. We restrict this to inputs that are
+			//              already short hex (≤16 chars of [0-9a-f]) so an
+			//              arbitrary long string can't piggyback as a
+			//              category-table-scan trigger.
 			// OR'd together: typo-tolerant on name, exact-substring on the
 			// other fields. The trigram match also catches name typos that
 			// ILIKE would miss.
+			const escaped = escapeIlike(searchLimited);
 			values.push(searchLimited);
 			const qIdx = values.length;
-			values.push(`%${searchLimited}%`);
+			values.push(`%${escaped}%`);
 			const pat = `$${values.length}`;
-			values.push(`%${searchLimited.toLowerCase()}%`);
-			const patLower = `$${values.length}`;
-			where.push(
-				`(m.name ILIKE ${pat}
-				  OR m.symbol ILIKE ${pat}
-				  OR m.description ILIKE ${pat}
-				  OR encode(t.category, 'hex') LIKE ${patLower}
-				  OR m.name % $${qIdx})`
-			);
+
+			const branches: string[] = [
+				`m.name ILIKE ${pat} ESCAPE '\\'`,
+				`m.symbol ILIKE ${pat} ESCAPE '\\'`,
+				`m.description ILIKE ${pat} ESCAPE '\\'`,
+				`m.name % $${qIdx}`
+			];
+			// Only attach the category-hex branch when the input shape
+			// matches a partial hex paste — saves an unconditional LIKE
+			// against the full hex of every row when the user typed a
+			// regular word.
+			if (/^[0-9a-fA-F]{1,16}$/.test(searchLimited)) {
+				values.push(`%${searchLimited.toLowerCase()}%`);
+				const patLower = `$${values.length}`;
+				branches.push(`encode(t.category, 'hex') LIKE ${patLower}`);
+			}
+			where.push(`(${branches.join(' OR ')})`);
 			searchOrderPrefix = `similarity(m.name, $${qIdx}) DESC NULLS LAST, `;
 		}
 	}

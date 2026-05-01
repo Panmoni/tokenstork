@@ -6,6 +6,21 @@ import { hexFromBytes, query } from '$lib/server/db';
 import { NOT_MODERATED_CLAUSE } from '$lib/moderation';
 import type { RequestHandler } from './$types';
 
+/** Escape `%` and `_` in a user-supplied ILIKE pattern. Without this,
+ *  a query of `%%%%%%%%%%%%%%%%%` runs as a deliberately-pessimal
+ *  pattern that scans the whole table; `_` does the same on a single
+ *  character. The trailing `\` escape character is the standard
+ *  Postgres convention.  */
+function escapeIlikeLiteral(s: string): string {
+	return s.replace(/[\\%_]/g, '\\$&');
+}
+
+/** Maximum length for a name-search query. 64 chars is generous for any
+ *  real token name; longer values are almost always probing for a
+ *  worst-case ILIKE plan. */
+const MAX_NAME_SEARCH_LEN = 64;
+const MIN_NAME_SEARCH_LEN = 2;
+
 type TokenType = 'FT' | 'NFT' | 'FT+NFT';
 
 interface TokenApiRow {
@@ -88,7 +103,15 @@ const VALID_SORTS: Record<string, string> = {
 };
 
 export const GET: RequestHandler = async ({ url, setHeaders }) => {
-	setHeaders({ 'cache-control': 'public, max-age=60' });
+	// `private` rather than `public` because the response varies by every
+	// query parameter — `?sort=`, `?nameSearch=`, `?type=`, etc. A shared
+	// CDN keyed only on path would collapse distinct variants into one
+	// cache entry. The browser cache still serves repeat hits on the same
+	// URL within 60 s, which is what we want.
+	setHeaders({
+		'cache-control': 'private, max-age=60',
+		vary: 'Cookie'
+	});
 
 	try {
 		const params = url.searchParams;
@@ -139,7 +162,13 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 			where.push(`(LOWER(m.symbol) = LOWER($${idx}) OR LOWER(c.symbol) = LOWER($${idx}))`);
 		}
 		if (nameSearch) {
-			push('m.name ILIKE $$', `%${nameSearch}%`);
+			const trimmed = nameSearch.trim();
+			if (trimmed.length >= MIN_NAME_SEARCH_LEN) {
+				const bounded = trimmed.slice(0, MAX_NAME_SEARCH_LEN);
+				push("m.name ILIKE $$ ESCAPE '\\'", `%${escapeIlikeLiteral(bounded)}%`);
+			}
+			// Sub-min-length searches are silently dropped — better than
+			// returning the full table for a single-character query.
 		}
 		if (minSupplyRaw) {
 			push('s.current_supply >= $$', minSupplyRaw);
@@ -153,17 +182,6 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 		}
 
 		const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
-
-		const countSql = `
-			SELECT COUNT(*)::bigint AS total
-			FROM tokens t
-			LEFT JOIN token_metadata m ON m.category = t.category
-			LEFT JOIN token_state s    ON s.category = t.category
-			LEFT JOIN token_crc20 c    ON c.category = t.category
-			${whereClause}
-		`;
-		const countRes = await query<{ total: string }>(countSql, values);
-		const total = Number(countRes.rows[0]?.total ?? 0);
 
 		const dataSql = `
 			SELECT
@@ -202,6 +220,27 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 			LIMIT $${values.length + 1} OFFSET $${values.length + 2}
 		`;
 		const dataRes = await query<DbRow>(dataSql, [...values, limit, offset]);
+
+		// Skip the expensive COUNT(*) when the page wasn't filled — we
+		// already know the exact total in that case (it's offset + page
+		// length). Saves a full filtered-join scan on every page-1 request
+		// that returns < limit rows, which is the common case for
+		// narrowing filters / search queries.
+		let total: number;
+		if (dataRes.rowCount !== null && dataRes.rowCount < limit) {
+			total = offset + dataRes.rowCount;
+		} else {
+			const countSql = `
+				SELECT COUNT(*)::bigint AS total
+				FROM tokens t
+				LEFT JOIN token_metadata m ON m.category = t.category
+				LEFT JOIN token_state s    ON s.category = t.category
+				LEFT JOIN token_crc20 c    ON c.category = t.category
+				${whereClause}
+			`;
+			const countRes = await query<{ total: string }>(countSql, values);
+			total = Number(countRes.rows[0]?.total ?? 0);
+		}
 
 		const tokens: TokenApiRow[] = dataRes.rows.map((row) => {
 			const verifiedAt = row.verified_at?.getTime() ?? null;

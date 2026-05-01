@@ -24,7 +24,16 @@ interface RpcFailure {
 type RpcResponse<T> = RpcSuccess<T> | RpcFailure;
 
 function rpcUrl(): string {
-	return env.BCHN_RPC_URL || 'http://127.0.0.1:8332';
+	const url = env.BCHN_RPC_URL || 'http://127.0.0.1:8332';
+	// Refuse to use a URL with embedded user:pass@ — credentials should
+	// always come from BCHN_RPC_AUTH and travel in the Authorization
+	// header, never the URL. Without this check, a buggy operator config
+	// could leak the creds into any logged error message that includes
+	// the request URL (fetch errors, AbortError text, etc.).
+	if (/^[a-z]+:\/\/[^/@]+@/i.test(url)) {
+		throw new Error('BCHN_RPC_URL must not embed user:pass@; use BCHN_RPC_AUTH instead');
+	}
+	return url;
 }
 
 function rpcAuth(): string {
@@ -33,6 +42,14 @@ function rpcAuth(): string {
 		throw new Error('BCHN_RPC_AUTH not set (format: user:password)');
 	}
 	return Buffer.from(auth).toString('base64');
+}
+
+// Strip the userinfo segment (`user:pass@`) from a URL before logging.
+// Defense-in-depth: rpcUrl() rejects embedded creds at startup, but any
+// error message that ends up surfacing a different URL (redirect target,
+// proxy, etc.) gets sanitized here too.
+function redactUrl(url: string): string {
+	return url.replace(/(\w+:\/\/)[^/@]+@/, '$1[redacted]@');
 }
 
 async function rpcCall<T>(method: string, params: unknown[]): Promise<T> {
@@ -55,8 +72,9 @@ async function rpcCall<T>(method: string, params: unknown[]): Promise<T> {
 	if (!res.ok && res.status !== 500) {
 		// Anything OTHER than 500 (which BCHN uses for RPC-level errors
 		// with a JSON-shaped body) is something is wrong at the
-		// transport layer.
-		throw new Error(`BCHN HTTP ${res.status}`);
+		// transport layer. URL is sanitized in case a future operator
+		// mistakenly embeds creds in BCHN_RPC_URL.
+		throw new Error(`BCHN HTTP ${res.status} (${redactUrl(rpcUrl())})`);
 	}
 	const body: RpcResponse<T> = await res.json();
 	if (body.error) {
