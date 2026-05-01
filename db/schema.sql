@@ -67,6 +67,13 @@ CREATE TABLE IF NOT EXISTS token_state (
 CREATE INDEX IF NOT EXISTS token_state_burned_idx ON token_state (is_fully_burned);
 CREATE INDEX IF NOT EXISTS token_state_supply_idx ON token_state (current_supply DESC);
 
+-- Gini coefficient of the holder distribution. 0 = perfectly equal,
+-- 1 = one address owns everything. NULL when holder_count < 10
+-- (single-digit-holder NFT collections / brand-new tokens look
+-- meaninglessly extreme either way). Computed from token_holders by
+-- the enrichment worker; refreshed at the same 6h cadence.
+ALTER TABLE token_state ADD COLUMN IF NOT EXISTS gini_coefficient REAL;
+
 -- ============================================================================
 -- Holder snapshot: address -> balance per category. Rebuilt in full per
 -- category by the enrichment worker (delete all rows for category, re-insert).

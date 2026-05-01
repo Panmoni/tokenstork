@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Movers24h from '$lib/components/Movers24h.svelte';
+	import { Tooltip, TooltipTrigger, TooltipContent } from '$lib/components/ui/tooltip';
 
 	let { data } = $props();
 
@@ -57,6 +58,18 @@
 
 	// Decimals-histogram geometry. Simpler — 6 fixed buckets.
 	const decMax = $derived(Math.max(...data.decimalsBuckets.map((b) => b.count), 1));
+
+	// Gini histogram helpers. Bucket-tier colors mirror the per-token
+	// `giniTier` palette on the detail page so the visual story is the
+	// same in both places.
+	const giniBucketMax = $derived(Math.max(...data.giniBuckets.map((b) => b.count), 1));
+	const GINI_TIER_COLORS = [
+		'fill-green-500 dark:fill-green-400',
+		'fill-emerald-500 dark:fill-emerald-400',
+		'fill-amber-500 dark:fill-amber-400',
+		'fill-orange-500 dark:fill-orange-400',
+		'fill-rose-500 dark:fill-rose-400'
+	];
 
 	// Cauldron unique-addresses chart — cumulative running total per month
 	// from indexer.cauldron.quest. Reuses the same chart geometry as the
@@ -670,6 +683,44 @@
 							{/if}
 						</svg>
 						<div class="mt-2 text-xs font-mono text-slate-500 dark:text-slate-400">{bucket.label}</div>
+						<div class="text-sm font-semibold text-slate-900 dark:text-white">{fmt(bucket.count)}</div>
+					</div>
+				{/each}
+			</div>
+		</div>
+	</section>
+
+	<section class="mb-8">
+		<div class="flex items-baseline gap-3 mb-3">
+			<h2 class="text-xl font-semibold text-slate-900 dark:text-white">Holder distribution (Gini)</h2>
+			{#if data.giniMedian != null}
+				<Tooltip>
+					<TooltipTrigger class="text-sm text-slate-500 dark:text-slate-400 cursor-help">
+						median {data.giniMedian.toFixed(2)}
+					</TooltipTrigger>
+					<TooltipContent>
+						Median Gini across all tokens with at least 10 holders. Reported as median (not mean) because the directory's distribution is heavily right-skewed — a handful of single-whale categories pull the mean toward 1.0 and obscure the typical token's score.
+					</TooltipContent>
+				</Tooltip>
+			{/if}
+		</div>
+		<p class="text-sm text-slate-500 dark:text-slate-400 mb-3">
+			Gini coefficient measures how unequally a token's supply is split across its holders. 0 = perfectly equal; 1 = one address owns everything. Crypto distributions concentrate harder than country-income distributions — Bitcoin's holder-Gini is around 0.97 — so the tier cutoffs are calibrated for that reality. Excluded: tokens with fewer than 10 holders (where the math produces meaningless extremes).
+		</p>
+		<div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+			<div class="grid grid-cols-5 gap-3">
+				{#each data.giniBuckets as bucket, idx (bucket.bucket)}
+					{@const h = bucket.count > 0 ? Math.max(4, (bucket.count / giniBucketMax) * 100) : 0.5}
+					<div class="flex flex-col items-center">
+						<svg viewBox="0 0 10 100" preserveAspectRatio="none" class="h-24 w-full block" role="img" aria-label={`${bucket.label}: ${bucket.count} tokens`}>
+							<title>{bucket.label}: {bucket.count} tokens</title>
+							{#if bucket.count > 0}
+								<rect x="0" y={100 - h} width="10" height={h} rx="1" ry="1" class={`${GINI_TIER_COLORS[idx]} transition-all`} />
+							{:else}
+								<rect x="0" y={99.5} width="10" height={0.5} class="fill-slate-200 dark:fill-slate-700" />
+							{/if}
+						</svg>
+						<div class="mt-2 text-xs font-mono text-slate-500 dark:text-slate-400 text-center">{bucket.label}</div>
 						<div class="text-sm font-semibold text-slate-900 dark:text-white">{fmt(bucket.count)}</div>
 					</div>
 				{/each}

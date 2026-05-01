@@ -39,6 +39,7 @@ interface TokenRow {
 	holder_count: number | null;
 	has_active_minting: boolean | null;
 	is_fully_burned: boolean | null;
+	gini_coefficient: number | null;
 	verified_at: Date | null;
 	is_moderated: boolean;
 }
@@ -190,6 +191,7 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 			s.holder_count,
 			s.has_active_minting,
 			s.is_fully_burned,
+			s.gini_coefficient,
 			s.verified_at,
 			(mod.category IS NOT NULL) AS is_moderated
 		   FROM tokens t
@@ -728,7 +730,8 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 			isFullyBurned: row.is_fully_burned ?? false,
 			isVerifiedOnchain: row.verified_at !== null,
 			topHolderSharePct: topHolderShare,
-			top10HolderSharePct: top10HolderShare
+			top10HolderSharePct: top10HolderShare,
+			giniCoefficient: row.gini_coefficient
 		},
 		// Full BCMR dump — surfaced in a dedicated card on the detail page
 		// so users can see every metadata field the registry publishes

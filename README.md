@@ -12,7 +12,7 @@ The entire pipeline runs on a single VPS. There is no dependency on Chaingraph, 
 
 ## Status
 
-**v0.1.1**, in production. SvelteKit app, Postgres schema, HTTP API, and all ten Rust sync workers are live and feeding the directory, including the BlockBook-dependent enrichment pass — per-category holders, live UTXO counts, and fully-burned detection are populated from a paginated tx-history walk (the fork's `/api/v2/utxo/<category>` endpoint returns empty, so we reconstruct the live UTXO set from token-bearing vouts whose `spent` flag is not set). Holder counts surface on the directory grid and the per-category detail page now shows a top-holders table with %-of-supply.
+**v0.1.1**, in production. SvelteKit app, Postgres schema, HTTP API, and all ten Rust sync workers are live and feeding the directory, including the BlockBook-dependent enrichment pass — per-category holders, live UTXO counts, and fully-burned detection are populated from a paginated tx-history walk (the fork's `/api/v2/utxo/<category>` endpoint returns empty, so we reconstruct the live UTXO set from token-bearing vouts whose `spent` flag is not set). Holder counts surface on the directory grid; the per-category detail page shows a top-holders table with %-of-supply plus a **Gini distribution score** (5-tier badge from Excellent to Whale-controlled), and `/stats` aggregates a directory-wide median Gini + per-tier histogram.
 
 See [docs/cashtoken-index-plan.md](docs/cashtoken-index-plan.md) (gitignored — local copy) for the full rollout plan and progress log.
 
@@ -83,7 +83,7 @@ Core tables:
 
 - **`tokens`** — canonical category record keyed by `category BYTEA` (32-byte raw).
 - **`token_metadata`** — BCMR-derived name / symbol / decimals / description / icon, with a `pg_trgm` GIN index on `name` for cheap ILIKE search.
-- **`token_state`** — current supply (`NUMERIC(78,0)`), live UTXO count, NFT count, holder count, minting flag, burn flag.
+- **`token_state`** — current supply (`NUMERIC(78,0)`), live UTXO count, NFT count, holder count, minting flag, burn flag, `gini_coefficient REAL` (holder-distribution score, 0=equal / 1=whale, NULL when fewer than 10 holders).
 - **`token_holders`** — `(category, address)` with balance and NFT count.
 - **`nft_instances`** — `(category, commitment)` with capability and owner.
 - **`sync_state`** — singleton row tracking backfill / tail / enrich / verify / bcmr / cauldron / tapswap / fex run timestamps.
@@ -201,7 +201,7 @@ Ten cooperating workers, all in the Rust [workers/](workers/) crate. Each is ide
 | **fex** | every 4 h | One `scantxoutset raw(<asset_covenant_p2sh>)` against BCHN; decode each Fex pool UTXO; upsert with `venue='fex'`; prune; append history. |
 | **tapswap-backfill** | one-shot | Cold-walk blocks 794,520 → tip looking for MPSW OP_RETURN listings. Resumable via `sync_state.last_tapswap_backfill_through`; each block range checkpointed. |
 | **tapswap-spend-backfill** | one-shot | Cold-walk 794,520 → tip looking for spend events to retroactively close listings populated by the listing-backfill before the lifecycle walker shipped. Reuses `tapswap_walker::process_block_spends` — the same code the live tail walker uses, so historical and live processing are guaranteed to agree. |
-| **enrich** | every 6 h | For each known category, walk BlockBook's address history (`/api/v2/address/<category>?details=txs`, paginated, double-fetched to dodge truncated responses) and reconstruct the live token-bearing UTXO set. Refresh `token_state.holder_count`, `live_utxo_count`, `live_nft_count`, `is_fully_burned`, plus `token_holders` and `nft_instances`. OP_RETURN-locked vouts are skipped during holder aggregation. |
+| **enrich** | every 6 h | For each known category, walk BlockBook's address history (`/api/v2/address/<category>?details=txs`, paginated, double-fetched to dodge truncated responses) and reconstruct the live token-bearing UTXO set. Refresh `token_state.holder_count`, `live_utxo_count`, `live_nft_count`, `is_fully_burned`, `gini_coefficient` (sorted-balances form, BigInt-safe), plus `token_holders` and `nft_instances`. OP_RETURN-locked vouts are skipped during holder aggregation. |
 | **verify** | weekly | Sample reconciliation between BCHN and BlockBook (using the same tx-history walk path as enrich). Flags drift. |
 
 Current Postgres-resident state is tracked in the `sync_state` singleton row — every worker writes a `last_<phase>_run_at` timestamp at the end of each run, so a staleness watchdog can spot a silently-stuck worker independently of block cadence.
@@ -223,7 +223,7 @@ How quickly each kind of data on the site reflects on-chain reality. Same inform
 | **Tapswap listing transitions `open → taken / cancelled`** | `sync-tail` (ZMQ-driven, Pass 3) | sub-second | Detects the spending transaction's contract input + classifies by inspecting `vout[0]`'s recipient PKH. |
 | **Cross-venue spreads on `/arbitrage`** | derived from the above on every page render | matches whichever underlying source is freshest | Pure SQL CTE; no separate worker. |
 | **Sparkline + 1h / 24h / 7d % change columns** | `token_price_history` (one row per `sync-cauldron` fetch) | accumulates 6 points / day / token | Sparklines need ~7 days of history to fully populate; first hours after deploy show partial data. |
-| **Holders / NFT instances / fully-burned flag** | `sync-enrich` (6 h timer) | 0-6 h | Holder counts surface on the directory grid; the per-category detail page renders a top-holders table sorted numerically with a %-of-supply column. |
+| **Holders / NFT instances / fully-burned flag / Gini distribution score** | `sync-enrich` (6 h timer) | 0-6 h | Holder counts surface on the directory grid; the per-category detail page renders a top-holders table sorted numerically with a %-of-supply column, plus a Gini coefficient + 5-tier badge (Excellent / Good / Fair / Poor / Whale-controlled). `/stats` shows the directory-wide median Gini + a per-tier histogram. |
 
 **BCH spot price** (the `$X.XX` in the header) is fetched from CryptoCompare on each request, cached at the SvelteKit-app process level for ~60 seconds. Independent of the indexer pipeline.
 

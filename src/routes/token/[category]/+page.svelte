@@ -224,6 +224,19 @@
 		return `$${v.toFixed(6)}`;
 	}
 
+	// Gini coefficient → human-readable tier + Tailwind class set.
+	// Thresholds calibrated for crypto holder distributions (much more
+	// concentrated than country-income Gini): Bitcoin's holder-Gini sits
+	// around 0.97, average altcoins near 0.85. Below 0.20 essentially
+	// never happens outside fresh airdrop tokens.
+	function giniTier(g: number): { label: string; classes: string } {
+		if (g < 0.4) return { label: 'Excellent', classes: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' };
+		if (g < 0.6) return { label: 'Good', classes: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' };
+		if (g < 0.75) return { label: 'Fair', classes: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' };
+		if (g < 0.9) return { label: 'Poor', classes: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300' };
+		return { label: 'Whale-controlled', classes: 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300' };
+	}
+
 	// Top-5 standings across the three vote-leaderboard buckets, gating
 	// the inline badge strip near the page header. Filtered to currentRank
 	// ≤ 5 so the strip only fires for honestly-top-tier rankings; the
@@ -722,7 +735,7 @@
 		</div>
 	{/if}
 
-	<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+	<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-8">
 		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800">
 			<div class="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Supply</div>
 			<div class="text-xl font-mono">{decimalSupply}</div>
@@ -730,6 +743,25 @@
 		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800">
 			<div class="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Holders</div>
 			<div class="text-xl">{token.holderCount ?? '—'}</div>
+		</div>
+		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+			<Tooltip>
+				<TooltipTrigger class="block text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 cursor-help text-left">
+					Distribution
+				</TooltipTrigger>
+				<TooltipContent>
+					Gini coefficient of the holder fungible-balance distribution. 0 = perfectly equal; 1 = one address owns everything. Exchange covenants (Cauldron pool UTXOs, Tapswap escrow, Fex covenant) count as single 'holders' here, which artificially inflates the score for actively-traded tokens. Score is suppressed for tokens with fewer than 10 holders, and for pure-NFT collections that have no fungible supply.
+				</TooltipContent>
+			</Tooltip>
+			{#if token.giniCoefficient != null}
+				{@const tier = giniTier(token.giniCoefficient)}
+				<div class="flex items-baseline gap-2">
+					<span class="text-xl font-mono">{token.giniCoefficient.toFixed(2)}</span>
+					<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold {tier.classes}">{tier.label}</span>
+				</div>
+			{:else}
+				<div class="text-xl font-mono">—</div>
+			{/if}
 		</div>
 		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800">
 			<div class="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Price (USD)</div>

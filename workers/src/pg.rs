@@ -325,6 +325,10 @@ pub struct TokenStateWrite {
     pub holder_count: i32,
     pub has_active_minting: bool,
     pub is_fully_burned: bool,
+    /// Gini coefficient of the holder balance distribution. None when
+    /// the category has fewer than 10 holders (extreme-end values are
+    /// meaningless at that scale).
+    pub gini_coefficient: Option<f32>,
     pub holders: Vec<HolderWrite>,
     pub nfts: Vec<NftWrite>,
 }
@@ -354,8 +358,9 @@ pub async fn write_token_state(pool: &PgPool, w: &TokenStateWrite) -> Result<()>
         INSERT INTO token_state
             (category, current_supply, live_utxo_count, live_nft_count,
              holder_count, has_active_minting, is_fully_burned,
+             gini_coefficient,
              verified_source, verified_at)
-        VALUES ($1, $2::numeric, $3, $4, $5, $6, $7, 'blockbook', now())
+        VALUES ($1, $2::numeric, $3, $4, $5, $6, $7, $8, 'blockbook', now())
         ON CONFLICT (category) DO UPDATE SET
             current_supply      = EXCLUDED.current_supply,
             live_utxo_count     = EXCLUDED.live_utxo_count,
@@ -363,6 +368,7 @@ pub async fn write_token_state(pool: &PgPool, w: &TokenStateWrite) -> Result<()>
             holder_count        = EXCLUDED.holder_count,
             has_active_minting  = EXCLUDED.has_active_minting,
             is_fully_burned     = EXCLUDED.is_fully_burned,
+            gini_coefficient    = EXCLUDED.gini_coefficient,
             verified_source     = EXCLUDED.verified_source,
             verified_at         = EXCLUDED.verified_at
         "#,
@@ -374,6 +380,7 @@ pub async fn write_token_state(pool: &PgPool, w: &TokenStateWrite) -> Result<()>
     .bind(w.holder_count)
     .bind(w.has_active_minting)
     .bind(w.is_fully_burned)
+    .bind(w.gini_coefficient)
     .execute(&mut *tx)
     .await
     .with_context(|| format!("upsert token_state for {}", bytes_to_hex(&w.category)))?;

@@ -357,6 +357,38 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 				  ) bucketed
 				 GROUP BY bucket, sort_order
 				 ORDER BY sort_order`
+			),
+			// Directory-wide median Gini. Median (vs. mean) because the
+			// distribution is right-skewed — a handful of single-holder
+			// NFT-test categories pull the mean toward 1.0.
+			query<{ median: number | null }>(
+				`SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY s.gini_coefficient)
+				          ::double precision AS median
+				   FROM token_state s
+				   JOIN tokens t ON t.category = s.category
+				  WHERE s.gini_coefficient IS NOT NULL
+				    AND ${NOT_MODERATED_CLAUSE}`
+			),
+			// Histogram of categories per Gini tier. The leading 0.0 sentinel
+			// in the thresholds array shifts width_bucket's output up by one
+			// so the JS map can use 1-based labels. Per the Postgres docs,
+			// width_bucket returns 0 for values strictly below the first
+			// threshold; with 0.0 as that first threshold, every Gini in
+			// [0,1] falls into bucket 1..5:
+			//   1 → [0.00, 0.40) Excellent
+			//   2 → [0.40, 0.60) Good
+			//   3 → [0.60, 0.75) Fair
+			//   4 → [0.75, 0.90) Poor
+			//   5 → [0.90, 1.00] Whale-controlled
+			query<{ bucket: number; total: string }>(
+				`SELECT width_bucket(s.gini_coefficient::double precision, ARRAY[0.0, 0.40, 0.60, 0.75, 0.90]) AS bucket,
+				        COUNT(*)::bigint AS total
+				   FROM token_state s
+				   JOIN tokens t ON t.category = s.category
+				  WHERE s.gini_coefficient IS NOT NULL
+				    AND ${NOT_MODERATED_CLAUSE}
+				  GROUP BY bucket
+				  ORDER BY bucket`
 			)
 		]),
 		bchPriceP,
@@ -383,7 +415,9 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		moderatedRes,
 		cauldronStatsRes,
 		ecosystemTvl30dRes,
-		supplyBucketsRes
+		supplyBucketsRes,
+		giniMedianRes,
+		giniBucketsRes
 	] = pageResults as [
 		PromiseSettledResult<{ rows: TypeCount[] }>,
 		PromiseSettledResult<{ rows: WindowCount[] }>,
@@ -399,7 +433,9 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		PromiseSettledResult<{ rows: WindowCount[] }>,
 		PromiseSettledResult<{ rows: CauldronStatsRow[] }>,
 		PromiseSettledResult<{ rows: { day: Date; tvl_sats: string }[] }>,
-		PromiseSettledResult<{ rows: { bucket: string; sort_order: number; n: string }[] }>
+		PromiseSettledResult<{ rows: { bucket: string; sort_order: number; n: string }[] }>,
+		PromiseSettledResult<{ rows: { median: number | null }[] }>,
+		PromiseSettledResult<{ rows: { bucket: number; total: string }[] }>
 	];
 
 	// Cauldron stats — read the cached row, compute USD at render time
@@ -531,6 +567,36 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 				}))
 			: [];
 
+	// `percentile_cont` returns `double precision`; node-postgres parses
+	// float8 as a JS number by default. Coerce defensively in case the
+	// project ever installs a `pg-types` parser override that turns
+	// floats into strings — `.toFixed(2)` on a string would 500 the page.
+	const giniMedianRaw =
+		giniMedianRes.status === 'fulfilled' ? (giniMedianRes.value.rows[0]?.median ?? null) : null;
+	const giniMedian: number | null = giniMedianRaw != null ? Number(giniMedianRaw) : null;
+
+	// Map width_bucket output (1..5) to ordered tier rows the UI can
+	// render directly. width_bucket returns 0 for values below the
+	// first cutoff — that can't happen for [0,1] Gini scores against
+	// thresholds [0.40, 0.60, 0.75, 0.90], but be defensive: rows we
+	// don't recognise just stay at zero.
+	const GINI_TIER_LABELS: Record<number, string> = {
+		1: 'Excellent',
+		2: 'Good',
+		3: 'Fair',
+		4: 'Poor',
+		5: 'Whale-controlled'
+	};
+	const giniBuckets: Array<{ bucket: number; label: string; count: number }> = [1, 2, 3, 4, 5].map(
+		(b) => ({ bucket: b, label: GINI_TIER_LABELS[b], count: 0 })
+	);
+	if (giniBucketsRes.status === 'fulfilled') {
+		for (const r of giniBucketsRes.value.rows) {
+			const target = giniBuckets.find((g) => g.bucket === r.bucket);
+			if (target) target.count = Number(r.total);
+		}
+	}
+
 	return {
 		byType,
 		newIn24h: parentData.newIn24h,
@@ -549,6 +615,8 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		ecosystemTvl30d,
 		movers,
 		supplyBuckets,
-		iconStats
+		iconStats,
+		giniMedian,
+		giniBuckets
 	};
 };

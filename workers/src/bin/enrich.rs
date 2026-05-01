@@ -26,7 +26,7 @@ use std::time::Instant;
 
 use anyhow::{Context, Result};
 use num_bigint::BigInt;
-use num_traits::Zero;
+use num_traits::{ToPrimitive, Zero};
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
@@ -122,6 +122,115 @@ fn aggregate(utxos: &[Utxo]) -> Result<Aggregate> {
     Ok(agg)
 }
 
+/// Minimum holders required for a meaningful Gini score. Below this,
+/// the formula produces extreme values (a 3-holder split looks
+/// "Whale-controlled" no matter how the balances divide) that don't
+/// say anything useful about the token.
+const GINI_MIN_HOLDERS: usize = 10;
+
+/// Gini coefficient of the holder fungible-balance distribution.
+///
+/// Returns `None` when:
+/// - fewer than `GINI_MIN_HOLDERS` distinct holders (extreme-end values
+///   are meaningless at single-digit-holder scale);
+/// - total balance is zero (no fungible supply — pure-NFT collection
+///   or fully-burned category).
+///
+/// Math (sorted-balances form):
+///
+/// ```text
+/// gini = (2 · Σ(i · b_i for i=1..n) − (n+1) · Σ(b_i)) / (n · Σ(b_i))
+/// ```
+///
+/// Where `b_i` are sorted ascending and `n = holder_count`. We stay in
+/// `BigInt` for the numerator and denominator sums — for n=10k holders
+/// at NUMERIC(78,0) max, the intermediate `Σ(i · b_i)` can be hundreds
+/// of digits long. Only at the final ratio do we cast to `f64`. At that
+/// stage we lose precision past ~15 significant digits, which is
+/// harmless for a [0,1] ratio rendered as a percent or 2-decimal float.
+fn compute_gini(holders: &HashMap<String, HolderAcc>) -> Option<f32> {
+    let n = holders.len();
+    if n < GINI_MIN_HOLDERS {
+        return None;
+    }
+
+    let mut balances: Vec<&BigInt> = holders.values().map(|h| &h.balance).collect();
+    balances.sort();
+
+    let total: BigInt = balances.iter().copied().sum();
+    if total.is_zero() {
+        return None;
+    }
+
+    // Σ(i · b_i) for i = 1..=n (1-indexed per the formula).
+    let mut weighted_sum = BigInt::from(0);
+    for (idx, b) in balances.iter().enumerate() {
+        let i = BigInt::from((idx + 1) as i64);
+        weighted_sum += i * (*b);
+    }
+
+    let n_big = BigInt::from(n as i64);
+    let numerator: BigInt = BigInt::from(2) * weighted_sum - (&n_big + 1) * &total;
+    let denominator: BigInt = &n_big * &total;
+
+    // `BigInt::to_f64` is lossy, not failing — it returns `Some(±INFINITY)`
+    // for values past f64's range (~1.8e308). For extreme supplies × large
+    // holder counts both numerator and denominator can hit infinity and
+    // INF/INF = NaN. `clamp(0,1)` doesn't sanitise NaN ("If self is NaN,
+    // returns NaN") so we'd silently write NaN to the REAL column and
+    // break JSON serialisation downstream. Suppress to None when either
+    // intermediate or the final ratio is non-finite.
+    let num_f = numerator.to_f64()?;
+    let den_f = denominator.to_f64()?;
+    if !num_f.is_finite() || !den_f.is_finite() || den_f == 0.0 {
+        return None;
+    }
+    let ratio = num_f / den_f;
+    if !ratio.is_finite() {
+        return None;
+    }
+    let gini = ratio.clamp(0.0, 1.0) as f32;
+    Some(gini)
+}
+
+#[cfg(test)]
+mod gini_tests {
+    use super::*;
+
+    fn holders(balances: &[u64]) -> HashMap<String, HolderAcc> {
+        balances
+            .iter()
+            .enumerate()
+            .map(|(i, b)| (format!("addr{i}"), HolderAcc { balance: BigInt::from(*b), nft_count: 0 }))
+            .collect()
+    }
+
+    #[test]
+    fn gini_below_min_holders_is_none() {
+        assert!(compute_gini(&holders(&[1, 2, 3, 4, 5, 6, 7, 8, 9])).is_none());
+    }
+
+    #[test]
+    fn gini_zero_supply_is_none() {
+        assert!(compute_gini(&holders(&[0; 12])).is_none());
+    }
+
+    #[test]
+    fn gini_perfect_equality_is_zero() {
+        let g = compute_gini(&holders(&[100; 12])).expect("gini for 12 equal balances");
+        assert!(g.abs() < 0.001, "expected ~0 for equal split, got {g}");
+    }
+
+    #[test]
+    fn gini_extreme_inequality_approaches_one() {
+        // 1 whale, 11 dust. Should be very close to (n-1)/n = 11/12 ≈ 0.9167.
+        let mut balances = vec![1u64; 11];
+        balances.push(1_000_000_000);
+        let g = compute_gini(&holders(&balances)).expect("gini for whale-dominated split");
+        assert!(g > 0.9 && g < 1.0, "expected high Gini for whale split, got {g}");
+    }
+}
+
 async fn enrich_one(
     pool: &pg::PgPool,
     bb: &BlockbookClient,
@@ -159,6 +268,7 @@ async fn enrich_one(
 
     let is_fully_burned = agg.live_utxo_count == 0;
     let holder_count = agg.holders.len() as i32;
+    let gini_coefficient = compute_gini(&agg.holders);
 
     let w = TokenStateWrite {
         category: category.to_vec(),
@@ -168,6 +278,7 @@ async fn enrich_one(
         holder_count,
         has_active_minting: agg.has_active_minting,
         is_fully_burned,
+        gini_coefficient,
         holders,
         nfts: agg.nfts,
     };
