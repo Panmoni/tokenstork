@@ -239,8 +239,8 @@ CREATE TABLE IF NOT EXISTS token_reports (
   id               BIGSERIAL   PRIMARY KEY,
   category         BYTEA       NOT NULL REFERENCES tokens(category) ON DELETE CASCADE,
   reason           TEXT        NOT NULL CHECK (reason IN ('spam','phishing','offensive','fraud','illegal','other')),
-  details          TEXT,                                              -- reporter's free-form note, UI-limited to 2000 chars
-  reporter_email   TEXT,                                              -- optional; no SMTP validation beyond length cap
+  details          TEXT        CHECK (details IS NULL OR length(details) <= 2000),
+  reporter_email   TEXT        CHECK (reporter_email IS NULL OR length(reporter_email) <= 320),
   reporter_ip      INET,                                              -- for rate-limit debugging + abuse tracking; never rendered publicly
   status           TEXT        NOT NULL DEFAULT 'new'
                                 CHECK (status IN ('new','reviewed','actioned','dismissed')),
@@ -251,6 +251,40 @@ CREATE TABLE IF NOT EXISTS token_reports (
 
 CREATE INDEX IF NOT EXISTS token_reports_status_idx   ON token_reports (status, created_at DESC);
 CREATE INDEX IF NOT EXISTS token_reports_category_idx ON token_reports (category);
+
+-- Per-IP rate-limit support: lets the application throttle reports
+-- per source address efficiently via a (reporter_ip, created_at DESC)
+-- range scan. Partial-NULL friendly because INET indexes skip NULLs.
+CREATE INDEX IF NOT EXISTS token_reports_ip_recent_idx
+  ON token_reports (reporter_ip, created_at DESC)
+  WHERE reporter_ip IS NOT NULL;
+
+-- Idempotent additions for already-deployed databases. The CHECKs are
+-- attached as named constraints so a future migration can replace them
+-- without touching the original CREATE TABLE.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'token_reports'::regclass
+          AND conname = 'token_reports_details_len_chk'
+    ) THEN
+        ALTER TABLE token_reports
+          ADD CONSTRAINT token_reports_details_len_chk
+          CHECK (details IS NULL OR length(details) <= 2000) NOT VALID;
+        ALTER TABLE token_reports VALIDATE CONSTRAINT token_reports_details_len_chk;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'token_reports'::regclass
+          AND conname = 'token_reports_email_len_chk'
+    ) THEN
+        ALTER TABLE token_reports
+          ADD CONSTRAINT token_reports_email_len_chk
+          CHECK (reporter_email IS NULL OR length(reporter_email) <= 320) NOT VALID;
+        ALTER TABLE token_reports VALIDATE CONSTRAINT token_reports_email_len_chk;
+    END IF;
+END $$;
 
 -- ============================================================================
 -- Tapswap ("MPSW") P2P listings. Populated by `sync-tapswap-backfill` (cold
@@ -395,6 +429,13 @@ INSERT INTO sync_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS cauldron_global_stats (
   id                         SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  -- BIGINT for sat-denominated columns. BCH consensus caps total supply
+  -- at 21M (~ 2.1e15 sats) — 4 orders of magnitude under i64::MAX (~9.2e18).
+  -- Operator-controlled aggregates from a trusted internal indexer; no
+  -- need for the NUMERIC defense token_price_history uses against
+  -- third-party-supplied values. Keeping BIGINT also matches the
+  -- workers/src/pg.rs i64 sqlx binds — a NUMERIC widening here would
+  -- silently break the cauldron-stats writer on its next run.
   tvl_sats                   BIGINT      NOT NULL DEFAULT 0,
   volume_24h_sats            BIGINT      NOT NULL DEFAULT 0,
   volume_7d_sats             BIGINT      NOT NULL DEFAULT 0,
@@ -438,28 +479,125 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE TABLE IF NOT EXISTS auth_challenges (
-  nonce           TEXT        PRIMARY KEY,                       -- 256-bit random, base64url
-  cashaddr        TEXT        NOT NULL,                          -- the address the user committed to using
-  message         TEXT        NOT NULL,                          -- exact canonical text the user must sign
+  nonce           TEXT        PRIMARY KEY                        -- 256-bit random, base64url
+                              CHECK (length(nonce) BETWEEN 32 AND 128),
+  cashaddr        TEXT        NOT NULL                           -- the address the user committed to using
+                              CHECK (length(cashaddr) BETWEEN 42 AND 80),
+  message         TEXT        NOT NULL                           -- exact canonical text the user must sign
+                              CHECK (length(message) BETWEEN 32 AND 512),
+  -- IP address the challenge was issued to. Verification requires the
+  -- same IP — defense against a phished signature being submitted from
+  -- the attacker's network. NULL when extraction failed.
+  issued_ip       INET,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   expires_at      TIMESTAMPTZ NOT NULL,                          -- created_at + 5 min by default
   consumed_at     TIMESTAMPTZ                                    -- set when /api/auth/verify accepts the signature
 );
 
+ALTER TABLE auth_challenges ADD COLUMN IF NOT EXISTS issued_ip INET;
+
 CREATE INDEX IF NOT EXISTS auth_challenges_expires_idx ON auth_challenges (expires_at);
 
+-- Hot-path index for the unconsumed lookup. Without it, every auth
+-- verify scans the full table once the challenge corpus grows past a
+-- few hundred rows. Partial-on-NULL keeps it tiny — only live (not yet
+-- consumed) rows are indexed; the cleanup timer + the existing
+-- expires_at index handle the wider set.
+CREATE INDEX IF NOT EXISTS auth_challenges_unconsumed_idx
+  ON auth_challenges (expires_at)
+  WHERE consumed_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS sessions (
-  id              TEXT        PRIMARY KEY,                       -- 256-bit random, base64url; the cookie value
+  id              TEXT        PRIMARY KEY                        -- 256-bit random, base64url; the cookie value
+                              CHECK (length(id) BETWEEN 32 AND 128),
   cashaddr        TEXT        NOT NULL REFERENCES users(cashaddr) ON DELETE CASCADE,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   expires_at      TIMESTAMPTZ NOT NULL,                          -- 30 days from issue by default
-  last_used_at    TIMESTAMPTZ NOT NULL DEFAULT now(),             -- touched on every authenticated request
-  user_agent      TEXT,
-  ip              TEXT                                           -- record-only; consider hashing later for privacy
+  last_used_at    TIMESTAMPTZ NOT NULL DEFAULT now(),             -- updated lazily (only if > 5min stale)
+  user_agent      TEXT        CHECK (user_agent IS NULL OR length(user_agent) <= 512),
+  ip              INET                                            -- INET so a malformed value is rejected at the type level
 );
 
 CREATE INDEX IF NOT EXISTS sessions_cashaddr_idx ON sessions (cashaddr);
 CREATE INDEX IF NOT EXISTS sessions_expires_idx ON sessions (expires_at);
+
+-- Idempotent migration of the previous TEXT `ip` column to INET. Safe
+-- to re-run on already-migrated databases. The conversion is wrapped in
+-- a per-row plpgsql function with EXCEPTION handling: any value that
+-- doesn't parse as INET (including the literal 'unknown' sentinel from
+-- earlier deployments, partial IPv4, IPv6 zone-id forms like `fe80::1%eth0`,
+-- or any other garbage) is coerced to NULL instead of aborting the
+-- whole migration. A regex-based USING clause was the previous design;
+-- it failed because PG evaluates the THEN branch's `::inet` cast for
+-- every regex-matching value, and a regex-match-but-cast-fail aborts
+-- the entire DO block — blocking deployment on any pre-existing row
+-- with garbage like `'cafe'` or `'1.2'`.
+CREATE OR REPLACE FUNCTION pg_temp.try_inet(s TEXT) RETURNS INET AS $TRY$
+BEGIN
+    -- Strip an IPv6 zone id (`%eth0`) before casting — INET doesn't
+    -- accept zoned addresses but the un-zoned remainder is valid.
+    RETURN regexp_replace(s, '%[^/]*$', '')::inet;
+EXCEPTION
+    WHEN invalid_text_representation THEN RETURN NULL;
+    WHEN data_exception THEN RETURN NULL;
+END;
+$TRY$ LANGUAGE plpgsql IMMUTABLE;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'sessions' AND column_name = 'ip' AND data_type = 'text'
+    ) THEN
+        ALTER TABLE sessions
+          ALTER COLUMN ip TYPE INET USING pg_temp.try_inet(ip);
+    END IF;
+END $$;
+
+-- Length CHECKs as named constraints, idempotent for already-deployed DBs.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'sessions'::regclass
+          AND conname = 'sessions_id_len_chk'
+    ) THEN
+        ALTER TABLE sessions
+          ADD CONSTRAINT sessions_id_len_chk
+          CHECK (length(id) BETWEEN 32 AND 128) NOT VALID;
+        ALTER TABLE sessions VALIDATE CONSTRAINT sessions_id_len_chk;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'sessions'::regclass
+          AND conname = 'sessions_user_agent_len_chk'
+    ) THEN
+        ALTER TABLE sessions
+          ADD CONSTRAINT sessions_user_agent_len_chk
+          CHECK (user_agent IS NULL OR length(user_agent) <= 512) NOT VALID;
+        ALTER TABLE sessions VALIDATE CONSTRAINT sessions_user_agent_len_chk;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'auth_challenges'::regclass
+          AND conname = 'auth_challenges_nonce_len_chk'
+    ) THEN
+        ALTER TABLE auth_challenges
+          ADD CONSTRAINT auth_challenges_nonce_len_chk
+          CHECK (length(nonce) BETWEEN 32 AND 128) NOT VALID;
+        ALTER TABLE auth_challenges VALIDATE CONSTRAINT auth_challenges_nonce_len_chk;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'auth_challenges'::regclass
+          AND conname = 'auth_challenges_message_len_chk'
+    ) THEN
+        ALTER TABLE auth_challenges
+          ADD CONSTRAINT auth_challenges_message_len_chk
+          CHECK (length(message) BETWEEN 32 AND 512) NOT VALID;
+        ALTER TABLE auth_challenges VALIDATE CONSTRAINT auth_challenges_message_len_chk;
+    END IF;
+END $$;
 
 -- ============================================================================
 -- Wallet-tied watchlist. Composite-keyed (cashaddr, category) so a user's
@@ -645,6 +783,25 @@ CREATE TABLE IF NOT EXISTS user_vote_actions (
   day_utc    DATE        NOT NULL,
   count      INT         NOT NULL DEFAULT 0,
   PRIMARY KEY (cashaddr, day_utc)
+);
+
+-- ============================================================================
+-- Per-(wallet, category) last-action timestamp. Source of truth for the
+-- per-target cooldown enforced in setVote — kept SEPARATE from user_votes
+-- so a retract (DELETE FROM user_votes) cannot bypass the cooldown by
+-- erasing the last voted_at. Touched on every cast/change/retract; never
+-- deleted (cascading from users only).
+--
+-- One row per (cashaddr, category). Bounded by the user's lifetime
+-- engagement, which is bounded by the daily vote quota — at 20
+-- actions/day, even a long-tenured wallet caps in the low thousands of
+-- distinct categories.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS user_vote_action_times (
+  cashaddr        TEXT        NOT NULL REFERENCES users(cashaddr) ON DELETE CASCADE,
+  category        BYTEA       NOT NULL REFERENCES tokens(category) ON DELETE CASCADE,
+  last_action_at  TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (cashaddr, category)
 );
 
 -- ============================================================================
