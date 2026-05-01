@@ -19,11 +19,15 @@
 	// Footer's social-icon block so the brand marks stay consistent
 	// across the site. Anything not listed here renders with the generic
 	// link icon + the key name as a label.
-	type IconSpec = { viewBox: string; paths: string[]; label: string };
+	// `stroked` flips the SVG render to line-art mode (stroke + fill:none).
+	// Brand glyphs are filled silhouettes; the globe and the generic link
+	// icon are line-based and would render solid without it.
+	type IconSpec = { viewBox: string; paths: string[]; label: string; stroked?: boolean };
 	const URI_ICONS: Record<string, IconSpec> = {
 		web: {
 			viewBox: '0 0 24 24',
 			label: 'Website',
+			stroked: true,
 			paths: [
 				'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
 				'M3.6 9h16.8',
@@ -114,20 +118,52 @@
 	const GENERIC_LINK_ICON: IconSpec = {
 		viewBox: '0 0 24 24',
 		label: 'Link',
+		stroked: true,
 		paths: [
 			'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71',
 			'M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'
 		]
 	};
 
-	// Map a BCMR URI key to its icon + a human label. Case-insensitive
-	// match. "icon" and "image" are suppressed entirely — the token's
-	// hero image already uses them.
-	function uriSpec(key: string): IconSpec | null {
+	// URL-host fallback: when a BCMR URI is filed under a generic key
+	// (e.g. `chat`, `community`, `social`) but the value points at a
+	// known platform, prefer the brand icon over the generic link.
+	const HOST_BRANDS: Array<{ hosts: string[]; brand: string }> = [
+		{ hosts: ['t.me', 'telegram.me', 'telegram.org'], brand: 'telegram' },
+		{ hosts: ['twitter.com', 'x.com'], brand: 'x' },
+		{ hosts: ['github.com'], brand: 'github' },
+		{ hosts: ['youtube.com', 'youtu.be'], brand: 'youtube' },
+		{ hosts: ['instagram.com'], brand: 'instagram' },
+		{ hosts: ['reddit.com', 'redd.it'], brand: 'reddit' },
+		{ hosts: ['discord.gg', 'discord.com', 'discordapp.com'], brand: 'discord' }
+	];
+	function hostBrand(value: string): string | null {
+		let host: string;
+		try {
+			host = new URL(value).hostname.toLowerCase().replace(/^www\./, '');
+		} catch {
+			return null;
+		}
+		for (const { hosts, brand } of HOST_BRANDS) {
+			if (hosts.some((h) => host === h || host.endsWith('.' + h))) return brand;
+		}
+		return null;
+	}
+
+	// Map a BCMR URI key + value to its icon + a human label. Key wins
+	// when it names a known brand; otherwise the URL host gets a chance
+	// before we fall back to the generic link icon. "icon" and "image"
+	// are suppressed entirely — the token's hero image already uses them.
+	function uriSpec(key: string, value?: string): IconSpec | null {
 		const k = key.toLowerCase();
 		if (k === 'icon' || k === 'image') return null;
 		const canonical = URI_ALIASES[k] ?? k;
-		return URI_ICONS[canonical] ?? { ...GENERIC_LINK_ICON, label: key };
+		if (URI_ICONS[canonical]) return URI_ICONS[canonical];
+		if (value) {
+			const brand = hostBrand(value);
+			if (brand && URI_ICONS[brand]) return URI_ICONS[brand];
+		}
+		return { ...GENERIC_LINK_ICON, label: key };
 	}
 
 	// Only render URIs whose scheme is in the safelist. Same pattern the
@@ -350,7 +386,7 @@
 	{#if data.bcmr}
 		{@const bcmr = data.bcmr}
 		{@const uriEntries = bcmr.uris
-			? Object.entries(bcmr.uris).filter(([k, v]) => uriSpec(k) !== null && safeUri(v))
+			? Object.entries(bcmr.uris).filter(([k, v]) => uriSpec(k, v) !== null && safeUri(v))
 			: []}
 		{@const hasCompact =
 			bcmr.status ||
@@ -362,7 +398,7 @@
 				{#if uriEntries.length > 0}
 					<div class="flex flex-wrap items-center gap-2">
 						{#each uriEntries as [key, value] (key)}
-							{@const spec = uriSpec(key)}
+							{@const spec = uriSpec(key, value)}
 							{#if spec}
 								<a
 									href={value}
@@ -380,9 +416,9 @@
 										same direction as the body and the icon collapses to a
 										silhouette. Mirrors the Footer's social-icon block.
 									-->
-									<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox={spec.viewBox} fill="currentColor" stroke="currentColor" stroke-width={spec.viewBox === '0 0 24 24' && (key === 'web' || spec.label === 'Link') ? '2' : '0'} stroke-linecap="round" stroke-linejoin="round" fill-rule="evenodd" clip-rule="evenodd" aria-hidden="true">
+									<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox={spec.viewBox} fill="currentColor" stroke="currentColor" stroke-width={spec.stroked ? '2' : '0'} stroke-linecap="round" stroke-linejoin="round" fill-rule="evenodd" clip-rule="evenodd" aria-hidden="true">
 										{#each spec.paths as d (d)}
-											<path {d} fill={key === 'web' || spec.label === 'Link' ? 'none' : 'currentColor'} />
+											<path {d} fill={spec.stroked ? 'none' : 'currentColor'} />
 										{/each}
 									</svg>
 								</a>
