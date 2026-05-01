@@ -20,11 +20,33 @@
 				{ name: 'CRC-20', href: '/crc20', description: 'Tokens with on-chain symbol claims' }
 			]
 		},
-		{ name: 'Arbitrage', href: '/arbitrage' },
-		{ name: 'Mint', href: '/mint' },
-		{ name: 'Blocks', href: '/blocks' },
-		{ name: 'Mining', href: '/mining' },
-		{ name: 'Stats', href: '/stats' }
+		{
+			name: 'Stats',
+			href: '/stats',
+			children: [
+				{ name: 'Stats', href: '/stats', description: 'Network and token activity' },
+				{ name: 'Mining', href: '/mining', description: 'Recent blocks by miner' },
+				{ name: 'Blocks', href: '/blocks', description: 'Latest BCH blocks' }
+			]
+		},
+		{
+			name: 'Tools',
+			href: '/mint',
+			children: [
+				{ name: 'Mint', href: '/mint', description: 'Create a new CashTokens genesis' },
+				{ name: 'Arbitrage', href: '/arbitrage', description: 'Cross-venue price gaps' }
+			]
+		},
+		{
+			name: 'About',
+			href: '/about',
+			children: [
+				{ name: 'About', href: '/about', description: 'What TokenStork is for' },
+				{ name: 'FAQ', href: '/faq', description: 'Common questions' },
+				{ name: 'Learn', href: '/learn', description: 'CashTokens primer' },
+				{ name: 'Roadmap', href: '/roadmap', description: 'What we are building next' }
+			]
+		}
 	];
 
 	// Logged-in cashaddr (or null) comes through the layout server load
