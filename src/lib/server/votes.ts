@@ -129,13 +129,19 @@ export async function setVote(
 		// rows), so two concurrent first-votes both pass the cooldown
 		// check, both hit the INSERT, and the second's ON CONFLICT DO
 		// UPDATE bypasses the gate. An xact-scoped advisory lock keyed
-		// on (cashaddr, category) serializes every concurrent setVote
-		// for the same target without needing a pre-existing row to
-		// lock. Released on COMMIT/ROLLBACK automatically.
+		// on the combined (cashaddr || category) string serializes every
+		// concurrent setVote for the same target without needing a
+		// pre-existing row to lock. Released on COMMIT/ROLLBACK
+		// automatically.
+		//
+		// Single-arg `pg_advisory_xact_lock(bigint)` is used (not the
+		// two-arg `(int4, int4)` form) because hashtextextended returns
+		// bigint — passing two bigints into the two-arg form fails with
+		// "function pg_advisory_xact_lock(bigint, bigint) does not exist"
+		// since PG won't auto-narrow bigint→int4.
 		await client.query(
 			`SELECT pg_advisory_xact_lock(
-			   hashtextextended($1, 0),
-			   hashtextextended(encode($2, 'hex'), 0)
+			   hashtextextended($1 || '|' || encode($2, 'hex'), 0)
 			 )`,
 			[cashaddr, category]
 		);
