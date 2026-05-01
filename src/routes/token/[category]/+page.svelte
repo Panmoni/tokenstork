@@ -53,10 +53,10 @@
 			]
 		},
 		telegram: {
-			viewBox: '0 0 32 32',
+			viewBox: '0 0 24 24',
 			label: 'Telegram',
 			paths: [
-				'M22.122 10.040c0.006-0 0.014-0 0.022-0 0.209 0 0.403 0.065 0.562 0.177l-0.003-0.002c0.116 0.101 0.194 0.243 0.213 0.403l0 0.003c0.020 0.122 0.031 0.262 0.031 0.405 0 0.065-0.002 0.129-0.007 0.193l0-0.009c-0.225 2.369-1.201 8.114-1.697 10.766-0.21 1.123-0.623 1.499-1.023 1.535-0.869 0.081-1.529-0.574-2.371-1.126-1.318-0.865-2.063-1.403-3.342-2.246-1.479-0.973-0.52-1.51 0.322-2.384 0.221-0.23 4.052-3.715 4.127-4.031 0.004-0.019 0.006-0.040 0.006-0.062 0-0.078-0.029-0.149-0.076-0.203l0 0c-0.052-0.034-0.117-0.053-0.185-0.053-0.045 0-0.088 0.009-0.128 0.024l0.002-0.001q-0.198 0.045-6.316 4.174c-0.445 0.351-1.007 0.573-1.619 0.599l-0.006 0c-0.867-0.105-1.654-0.298-2.401-0.573l0.074 0.024c-0.938-0.306-1.683-0.467-1.619-0.985q0.051-0.404 1.114-0.827 6.548-2.853 8.733-3.761c1.607-0.853 3.47-1.555 5.429-2.010l0.157-0.031zM15.93 1.025c-8.302 0.020-15.025 6.755-15.025 15.060 0 8.317 6.742 15.060 15.060 15.060s15.060-6.742 15.060-15.060c0-8.305-6.723-15.040-15.023-15.060h-0.002q-0.035-0 -0.070 0z'
+				'M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z'
 			]
 		},
 		reddit: {
@@ -280,7 +280,7 @@
 
 <main class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 	<div class="flex items-start gap-4 mb-6">
-		<img src={iconHrefFor(token.icon, token.iconClearedHash)} alt={token.name ?? ''} class="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800" />
+		<img src={iconHrefFor(token.icon, token.iconClearedHash)} alt={token.name ?? ''} class="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-slate-100 dark:bg-slate-800" />
 		<div class="flex-1 min-w-0">
 			<h1 class="text-3xl font-bold text-slate-900 dark:text-white truncate flex items-center gap-2">
 				<StarButton categoryHex={token.id} size="md" />
@@ -359,7 +359,7 @@
 									href={value}
 									target="_blank"
 									rel="noopener noreferrer"
-									class="inline-flex items-center justify-center w-11 h-11 rounded-lg bg-slate-100 hover:bg-violet-100 dark:bg-slate-800 dark:hover:bg-violet-900/30 text-slate-600 hover:text-violet-700 dark:text-slate-300 dark:hover:text-violet-300 transition-colors"
+									class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 hover:bg-violet-100 dark:bg-slate-800 dark:hover:bg-violet-900/30 text-slate-600 hover:text-violet-700 dark:text-slate-300 dark:hover:text-violet-300 transition-colors"
 									title={`${spec.label}: ${value}`}
 									aria-label={spec.label}
 								>
@@ -371,7 +371,7 @@
 										same direction as the body and the icon collapses to a
 										silhouette. Mirrors the Footer's social-icon block.
 									-->
-									<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox={spec.viewBox} fill="currentColor" stroke="currentColor" stroke-width={spec.viewBox === '0 0 24 24' && (key === 'web' || spec.label === 'Link') ? '2' : '0'} stroke-linecap="round" stroke-linejoin="round" fill-rule="evenodd" clip-rule="evenodd" aria-hidden="true">
+									<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox={spec.viewBox} fill="currentColor" stroke="currentColor" stroke-width={spec.viewBox === '0 0 24 24' && (key === 'web' || spec.label === 'Link') ? '2' : '0'} stroke-linecap="round" stroke-linejoin="round" fill-rule="evenodd" clip-rule="evenodd" aria-hidden="true">
 										{#each spec.paths as d (d)}
 											<path {d} fill={key === 'web' || spec.label === 'Link' ? 'none' : 'currentColor'} />
 										{/each}
