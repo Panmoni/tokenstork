@@ -10,3 +10,27 @@
 .sk-body-wrap {
 	display: contents;
 }
+
+/* Semantic theme tokens. Light mode keeps slate (blue-tinted gray);
+   dark mode is on zinc (true gray) so body copy doesn't read as
+   "blue-on-blue" against dark surfaces. Use via
+   `text-[color:var(--text-primary)]` etc. or via Tailwind utilities
+   which mirror the same tiers. New surfaces should prefer the tokens
+   so the 0.5.0 theming work has a single knob to turn. */
+:root {
+	--text-primary: theme('colors.slate.900');
+	--text-muted: theme('colors.slate.700');
+	--text-faint: theme('colors.slate.500');
+	--surface: theme('colors.white');
+	--surface-elev: theme('colors.slate.50');
+	--border-subtle: theme('colors.slate.200');
+}
+
+.dark {
+	--text-primary: theme('colors.zinc.100');
+	--text-muted: theme('colors.zinc.300');
+	--text-faint: theme('colors.zinc.400');
+	--surface: theme('colors.zinc.950');
+	--surface-elev: theme('colors.zinc.900');
+	--border-subtle: theme('colors.zinc.800');
+}

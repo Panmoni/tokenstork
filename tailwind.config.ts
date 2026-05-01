@@ -23,6 +23,12 @@ const config: Config = {
       white: colors.white,
       gray: colors.gray,
       slate: colors.slate,
+      // zinc: dark-mode neutrals. Slate has a blue cast that, on the
+      // dark theme, made body copy read as "blue-on-blue" against
+      // dark:bg-slate-900/950 panels. We migrated dark: utilities off
+      // slate onto zinc (true gray) and bumped text tiers one step
+      // brighter for contrast. Light mode still uses slate.
+      zinc: colors.zinc,
       emerald: colors.emerald,
       indigo: colors.indigo,
       violet: colors.violet,
