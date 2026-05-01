@@ -11,6 +11,7 @@
 	import PriceChart from '$lib/components/PriceChart.svelte';
 	import StarButton from '$lib/components/StarButton.svelte';
 	import VoteButton from '$lib/components/VoteButton.svelte';
+	import { Tooltip, TooltipTrigger, TooltipContent } from '$lib/components/ui/tooltip';
 
 	let { data } = $props();
 
@@ -308,19 +309,27 @@
 					/>
 				{/if}
 				{#if token.isVerifiedOnchain}
-					<span
-						class="text-xs text-emerald-600 dark:text-emerald-400 cursor-help"
-						title="Confirmed on-chain via our local BCHN: this category id appears in a real CashTokens genesis transaction at the genesis block, and current supply / live UTXOs / holders are derived from the indexed UTXO set (not from a third-party indexer or self-reported metadata)."
-					>✓ Verified on-chain</span>
+					<Tooltip>
+						<TooltipTrigger class="text-xs text-emerald-600 dark:text-emerald-400 cursor-help">
+							✓ Verified on-chain
+						</TooltipTrigger>
+						<TooltipContent>
+							Confirmed on-chain via our local BCHN: this category id appears in a real CashTokens genesis transaction at the genesis block, and current supply / live UTXOs / holders are derived from the indexed UTXO set (not from a third-party indexer or self-reported metadata).
+						</TooltipContent>
+					</Tooltip>
 				{/if}
 				{#if token.isFullyBurned}
 					<span class="text-xs text-red-600">Fully burned</span>
 				{/if}
 				{#if token.hasActiveMinting}
-					<span
-						class="text-xs text-amber-600 cursor-help"
-						title="At least one live UTXO of this category carries the `minting` NFT capability. Whoever holds that UTXO can mint additional NFTs of this category at any time. Supply is not capped at the level shown — treat the supply number as a snapshot rather than the maximum."
-					>Minting open</span>
+					<Tooltip>
+						<TooltipTrigger class="text-xs text-amber-600 cursor-help">
+							Minting open
+						</TooltipTrigger>
+						<TooltipContent>
+							At least one live UTXO of this category carries the `minting` NFT capability. Whoever holds that UTXO can mint additional NFTs of this category at any time. Supply is not capped at the level shown — treat the supply number as a snapshot rather than the maximum.
+						</TooltipContent>
+					</Tooltip>
 				{/if}
 				<FormatCategory category={token.id} />
 			</div>
@@ -723,17 +732,25 @@
 			</div>
 		</div>
 		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800">
-			<div
-				class="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 cursor-help"
-				title="Number of currently-unspent on-chain outputs that carry this token category. CashTokens live in transaction outputs (UTXOs) the same way native BCH does — every transfer creates new UTXOs and consumes old ones. A higher count usually means more on-chain activity (frequent transfers, AMM pool slots, NFT instances). Counted by our local BlockBook indexer."
-			>Live UTXOs</div>
+			<Tooltip>
+				<TooltipTrigger class="block text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 cursor-help text-left">
+					Live UTXOs
+				</TooltipTrigger>
+				<TooltipContent>
+					Number of currently-unspent on-chain outputs that carry this token category. CashTokens live in transaction outputs (UTXOs) the same way native BCH does — every transfer creates new UTXOs and consumes old ones. A higher count usually means more on-chain activity (frequent transfers, AMM pool slots, NFT instances). Counted by our local BlockBook indexer.
+				</TooltipContent>
+			</Tooltip>
 			<div class="text-xl font-mono">{token.liveUtxoCount ?? '—'}</div>
 		</div>
 		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800">
-			<div
-				class="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 cursor-help"
-				title="Number of unspent NFT outputs of this category. Each NFT in CashTokens is a UTXO with non-empty `commitment` data; transferring an NFT spends the old UTXO and creates a new one with the same commitment. Pure-FT tokens have 0 NFTs."
-			>Live NFTs</div>
+			<Tooltip>
+				<TooltipTrigger class="block text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 cursor-help text-left">
+					Live NFTs
+				</TooltipTrigger>
+				<TooltipContent>
+					Number of unspent NFT outputs of this category. Each NFT in CashTokens is a UTXO with non-empty `commitment` data; transferring an NFT spends the old UTXO and creates a new one with the same commitment. Pure-FT tokens have 0 NFTs.
+				</TooltipContent>
+			</Tooltip>
 			<div class="text-xl font-mono">{token.liveNftCount ?? '—'}</div>
 		</div>
 	</div>
