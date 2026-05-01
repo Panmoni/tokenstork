@@ -13,6 +13,7 @@
 import { error, json } from '@sveltejs/kit';
 import {
 	setVote,
+	VoteCooldownError,
 	VoteRejectedError,
 	VoteQuotaError,
 	type VoteState
@@ -60,6 +61,16 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 		// that triggered this, so a 429 doesn't burn any more budget.
 		if (err instanceof VoteQuotaError) {
 			throw error(429, 'daily vote limit reached — try again tomorrow (UTC)');
+		}
+		// Per-(wallet, category) churn cooldown — same vote target was
+		// flipped within PER_TARGET_COOLDOWN_MS. Surfaces as 429 with the
+		// retry-after hint embedded in the message; the cooldown gate
+		// rolled back before any quota was consumed.
+		if (err instanceof VoteCooldownError) {
+			throw error(
+				429,
+				`please wait ${err.retryAfterSeconds}s before voting on this token again`
+			);
 		}
 		// setVote rejected the cast — token is missing from `tokens` or is
 		// moderation-hidden. 410 Gone matches the per-token detail page's

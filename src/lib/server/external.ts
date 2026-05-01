@@ -36,27 +36,71 @@ function assertValidCategory(category: string): void {
 	}
 }
 
+// Defense-in-depth caps on issuer-supplied BCMR strings. Svelte already
+// escapes everything we render, so the risk isn't XSS — it's
+// serving-bandwidth abuse: a single 100 KB tag value would bloat every
+// SSR response for that token. The caps below are generous for any
+// realistic metadata and aggressive against issuer-injected bloat.
+const MAX_TAG_LEN = 64;
+const MAX_TAGS = 20;
+const MAX_URI_KEY_LEN = 64;
+const MAX_URI_VAL_LEN = 1024;
+const MAX_URI_ENTRIES = 32;
+const MAX_NAME_LEN = 200;
+const MAX_SYMBOL_LEN = 32;
+const MAX_DESC_LEN = 4000;
+const MAX_NFT_DESC_LEN = 4000;
+const MAX_STATUS_LEN = 32;
+
+function clipString(v: unknown, max: number): string | null {
+	if (typeof v !== 'string') return null;
+	const t = v.trim();
+	if (t === '') return null;
+	return t.length > max ? t.slice(0, max) : t;
+}
+
 // A shallow object guard. BCMR JSON shapes can be null / string / array at
 // any of the nested keys; we want to preserve only plain objects so the UI
-// can iterate them safely.
+// can iterate them safely. Strips dangerous prototype-pollution keys
+// (`__proto__`, `constructor`, `prototype`) defensively even though the
+// downstream consumers go through `Object.entries` (which is safe).
+const POLLUTION_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 function pickObject(v: unknown): Record<string, unknown> | null {
 	if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
-	return v as Record<string, unknown>;
+	const out: Record<string, unknown> = Object.create(null);
+	for (const [k, val] of Object.entries(v)) {
+		if (POLLUTION_KEYS.has(k)) continue;
+		out[k] = val;
+	}
+	return out;
 }
 
 function pickStringDict(v: unknown): Record<string, string> | null {
 	const obj = pickObject(v);
 	if (!obj) return null;
 	const out: Record<string, string> = {};
+	let count = 0;
 	for (const [k, val] of Object.entries(obj)) {
-		if (typeof val === 'string' && val.trim() !== '') out[k] = val;
+		if (count >= MAX_URI_ENTRIES) break;
+		if (k.length > MAX_URI_KEY_LEN) continue;
+		const clipped = clipString(val, MAX_URI_VAL_LEN);
+		if (clipped !== null) {
+			out[k] = clipped;
+			count++;
+		}
 	}
 	return Object.keys(out).length ? out : null;
 }
 
 function pickStringArray(v: unknown): string[] | null {
 	if (!Array.isArray(v)) return null;
-	const out = v.filter((x): x is string => typeof x === 'string' && x.trim() !== '');
+	const out: string[] = [];
+	for (const x of v) {
+		if (out.length >= MAX_TAGS) break;
+		const clipped = clipString(x, MAX_TAG_LEN);
+		if (clipped !== null) out.push(clipped);
+	}
 	return out.length ? out : null;
 }
 
@@ -66,22 +110,26 @@ export async function fetchBcmr(category: string): Promise<BcmrMetadata | null> 
 		const res = await timedFetch(BCMR_ENDPOINT + category, { timeoutMs: 5000 });
 		if (!res.ok) return null;
 		const data = await res.json();
+		const rawSplitId = typeof data?.splitId === 'string' ? data.splitId : null;
+		// splitId is a 64-char hex category id by spec; refuse anything
+		// else so downstream UI / lookups can trust the shape.
+		const splitId =
+			rawSplitId && /^[0-9a-fA-F]{64}$/.test(rawSplitId)
+				? rawSplitId.toLowerCase()
+				: null;
 		return {
-			name: data?.name ?? null,
-			symbol: data?.token?.symbol ?? null,
+			name: clipString(data?.name, MAX_NAME_LEN),
+			symbol: clipString(data?.token?.symbol, MAX_SYMBOL_LEN),
 			decimals: validateDecimals(data?.token?.decimals),
-			description: data?.description ?? null,
-			iconUri: data?.uris?.icon ?? null,
-			status: typeof data?.status === 'string' ? data.status : null,
-			splitId: typeof data?.splitId === 'string' ? data.splitId : null,
+			description: clipString(data?.description, MAX_DESC_LEN),
+			iconUri: clipString(data?.uris?.icon, MAX_URI_VAL_LEN),
+			status: clipString(data?.status, MAX_STATUS_LEN),
+			splitId,
 			uris: pickStringDict(data?.uris),
 			tags: pickStringArray(data?.tags),
 			extensions: pickObject(data?.extensions),
 			nftTypes: pickObject(data?.token?.nfts?.types),
-			nftsDescription:
-				typeof data?.token?.nfts?.description === 'string'
-					? data.token.nfts.description
-					: null
+			nftsDescription: clipString(data?.token?.nfts?.description, MAX_NFT_DESC_LEN)
 		};
 	} catch (err) {
 		console.error('[external] BCMR fetch failed:', err);

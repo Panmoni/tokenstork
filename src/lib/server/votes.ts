@@ -45,6 +45,22 @@ export class VoteQuotaError extends Error {
  *  Tunable here without a schema change. */
 export const DAILY_VOTE_LIMIT = 20;
 
+/** Minimum interval between two vote actions on the same (cashaddr,
+ *  category) pair. Prevents a wallet from churning the same row up→down
+ *  →null→up in a fraction of a second to inflate write IO and confuse
+ *  downstream leaderboards. The daily cap above bounds the total volume;
+ *  this bounds the per-target velocity. */
+export const PER_TARGET_COOLDOWN_MS = 60_000;
+
+export class VoteCooldownError extends Error {
+	readonly retryAfterSeconds: number;
+	constructor(retryAfterSeconds: number) {
+		super(`vote on this token rate-limited; retry in ${retryAfterSeconds}s`);
+		this.name = 'VoteCooldownError';
+		this.retryAfterSeconds = retryAfterSeconds;
+	}
+}
+
 // =====================================================================
 // Shared SQL fragments for the tenure-weighted hot-ranking score.
 //
@@ -107,6 +123,47 @@ export async function setVote(
 	vote: VoteState
 ): Promise<VoteResult> {
 	return withTransaction(async (client) => {
+		// Per-(wallet, category) serialization. Without this every
+		// downstream gate races: SELECT FOR UPDATE on a non-existent
+		// user_votes row acquires no lock (PG only locks existing
+		// rows), so two concurrent first-votes both pass the cooldown
+		// check, both hit the INSERT, and the second's ON CONFLICT DO
+		// UPDATE bypasses the gate. An xact-scoped advisory lock keyed
+		// on (cashaddr, category) serializes every concurrent setVote
+		// for the same target without needing a pre-existing row to
+		// lock. Released on COMMIT/ROLLBACK automatically.
+		await client.query(
+			`SELECT pg_advisory_xact_lock(
+			   hashtextextended($1, 0),
+			   hashtextextended(encode($2, 'hex'), 0)
+			 )`,
+			[cashaddr, category]
+		);
+
+		// Per-(wallet, category) cooldown gate. With the advisory lock
+		// in place we can trust both the SELECT and the subsequent
+		// INSERT/UPDATE to see a serialized view of the row.
+		//
+		// Cooldown source-of-truth: the per-target row in
+		// user_vote_action_times (NOT user_votes), so a retract+revote
+		// sequence can't bypass the cooldown by deleting the last
+		// voted_at. user_votes only carries the *current* vote;
+		// user_vote_action_times remembers the *last action time*.
+		const lastRes = await client.query<{ last_action_at: Date }>(
+			`SELECT last_action_at FROM user_vote_action_times
+			  WHERE cashaddr = $1 AND category = $2`,
+			[cashaddr, category]
+		);
+		const last = lastRes.rows[0]?.last_action_at;
+		if (last) {
+			const ageMs = Date.now() - last.getTime();
+			if (ageMs < PER_TARGET_COOLDOWN_MS) {
+				throw new VoteCooldownError(
+					Math.ceil((PER_TARGET_COOLDOWN_MS - ageMs) / 1000)
+				);
+			}
+		}
+
 		// Daily-quota gate. Increment first; if the post-increment count
 		// exceeds the limit, throw — the transaction rollback then undoes
 		// this increment along with anything else, so a rejected action
@@ -124,6 +181,19 @@ export async function setVote(
 		if ((quota.rows[0]?.count ?? 0) > DAILY_VOTE_LIMIT) {
 			throw new VoteQuotaError();
 		}
+
+		// Record the action time BEFORE the actual vote write. The next
+		// setVote for the same target reads from this table — keeping
+		// the value durable across retracts (which DELETE the row in
+		// user_votes). The advisory lock above guarantees this UPSERT
+		// races safely.
+		await client.query(
+			`INSERT INTO user_vote_action_times (cashaddr, category, last_action_at)
+			 VALUES ($1, $2, now())
+			 ON CONFLICT (cashaddr, category) DO UPDATE
+			   SET last_action_at = EXCLUDED.last_action_at`,
+			[cashaddr, category]
+		);
 
 		if (vote === null) {
 			await client.query(

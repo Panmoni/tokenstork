@@ -8,14 +8,32 @@
 //         404 if the category doesn't exist in `tokens` (FK rejection).
 
 import { error, json } from '@sveltejs/kit';
-import { toggleWatchlist } from '$lib/server/watchlist';
+import { toggleWatchlist, WatchlistCapError, WATCHLIST_MAX_ENTRIES } from '$lib/server/watchlist';
+import { createRateLimiter } from '$lib/server/rateLimit';
 import type { RequestHandler } from './$types';
 
 const HEX_CATEGORY_RE = /^[0-9a-fA-F]{64}$/;
 
+// Per-wallet toggle limiter. 30/min covers any realistic UI usage
+// (one click per token); blocks scripts that try to mass-toggle the
+// directory. Per-IP would be wrong here — the watchlist is per-wallet
+// anyway and the auth gate already requires a verified session.
+const watchlistToggleLimiter = createRateLimiter({
+	maxPerWindow: 30,
+	windowMs: 60_000
+});
+
 export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!locals.user) {
 		throw error(401, 'sign in required');
+	}
+
+	const rl = watchlistToggleLimiter.consume(`wl:${locals.user.cashaddr}`);
+	if (!rl.allowed) {
+		throw error(
+			429,
+			`too many watchlist changes; try again in ${Math.ceil((rl.retryAfterMs ?? 0) / 1000)}s`
+		);
 	}
 
 	let body: unknown;
@@ -37,6 +55,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		const result = await toggleWatchlist(locals.user.cashaddr, categoryBytes);
 		return json(result);
 	} catch (err) {
+		if (err instanceof WatchlistCapError) {
+			throw error(
+				409,
+				`watchlist is full (${WATCHLIST_MAX_ENTRIES} entries); remove one first`
+			);
+		}
 		// Most likely cause of an error here is the FK violation when the
 		// category doesn't exist in `tokens`. Return 404 rather than 500
 		// so the client can render a sensible message.
