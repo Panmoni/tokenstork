@@ -37,6 +37,7 @@ use workers::pg::{
     self, find_pending_icon_urls, mark_icons_run, pool_from_env,
     seed_icon_url_scan_from_metadata, try_acquire_icons_lock,
 };
+use workers::safe_http::safe_client_builder;
 use workers::sync_icons::{Outcome, process_url};
 
 const DEFAULT_OUTPUT_DIR: &str = "/var/lib/tokenstork/icons";
@@ -111,14 +112,13 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    // SSRF defense: cap redirects to 2 hops so an issuer-controlled BCMR
-    // icon can't bounce us through 10 redirect-following hops to internal
-    // network targets. The Policy applies to the whole Client; per-request
-    // overrides aren't needed.
-    let http = reqwest::Client::builder()
-        .timeout(Duration::from_secs(30))
-        .redirect(reqwest::redirect::Policy::limited(2))
-        .build()?;
+    // SSRF defense layered: safe_client_builder installs the SafeResolver
+    // (drops every DNS answer in private/loopback/link-local space, re-
+    // validating per redirect hop), disables connection-pool keep-alive,
+    // and caps redirects at 2 hops. An issuer-controlled BCMR icon can
+    // neither bounce us through 10 redirect-following hops nor connect
+    // to internal network targets via a hostile DNS answer.
+    let http = safe_client_builder("tokenstork-workers/0.1", Duration::from_secs(30), 2).build()?;
 
     info!(
         block_threshold,

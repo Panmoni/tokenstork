@@ -12,6 +12,8 @@ use sha2::{Digest, Sha256};
 use std::io::Cursor;
 use std::time::Duration;
 
+use crate::safe_http::{read_body_capped, validate_url_scheme};
+
 /// Hard cap on icon bytes. Anything larger is presumed adversarial and
 /// short-circuits to a `blocked / oversize` decision before any CPU is
 /// spent decoding it.
@@ -61,9 +63,14 @@ pub enum FetchOutcome {
 /// for URIs we can't (or won't) fetch:
 ///
 /// - `ipfs://<cid>` → `https://ipfs.io/ipfs/<cid>` (canonical BCMR form)
-/// - `https://<cid>.ipfs.nftstorage.link/...` → unchanged (already a
-///   resolved CID-on-subdomain URL — pass through)
-/// - `https://<cid>.ipfs.nftstorage.link/` (no path) → `https://ipfs.io/ipfs/<cid>`
+/// - `https://<cid>.ipfs.<gateway>/<path>` (any *.ipfs.* subdomain shape)
+///   → `https://ipfs.io/ipfs/<cid>/<path>`. This pins every IPFS fetch
+///   to the operator-controlled canonical gateway. Without this, an
+///   attacker who acquires a discontinued gateway's domain (NftStorage
+///   shut down in 2024; its old `nftstorage.link` URLs litter on-chain
+///   BCMR records) would get to serve attacker-chosen bytes for any
+///   record using it. CID-content-addressing is preserved: the canonical
+///   gateway returns the same content the URL committed to.
 /// - `https://...` → unchanged
 /// - `http://...` → **rejected** (we don't fetch insecure schemes; an
 ///   on-chain BCMR pointing at `http://` is either user error or attacker
@@ -76,7 +83,8 @@ pub enum FetchOutcome {
 ///   1. Without resolution, ~80% of BCMR icons (which use `ipfs://`) would
 ///      fail to fetch via reqwest (which doesn't speak `ipfs://`).
 ///   2. The `https://`-only floor is an SSRF guard against issuer-controlled
-///      `http://127.0.0.1:5432/`, `file:///etc/passwd`, etc.
+///      `http://127.0.0.1:5432/`, `file:///etc/passwd`, etc. The actual
+///      DNS-resolved-IP allowlist runs at fetch time in `safe_http`.
 pub fn resolve_icon_url(uri: &str) -> Option<String> {
     // Strip whitespace; some BCMR docs include accidental leading/trailing
     // newlines in JSON string fields.
@@ -93,21 +101,27 @@ pub fn resolve_icon_url(uri: &str) -> Option<String> {
         return Some(format!("{}{}", IPFS_GATEWAY, rest));
     }
 
-    // Already-https NFT.Storage CID-on-subdomain. Two shapes:
-    //   https://<cid>.ipfs.nftstorage.link/<path>   ← pass through, has content
-    //   https://<cid>.ipfs.nftstorage.link/         ← rewrite to gateway form
-    // (The TS helper does the same dance.)
-    if let Some(rest) = uri.strip_prefix("https://")
-        && let Some(dot_idx) = rest.find(".ipfs.nftstorage.link")
-    {
-        let cid = &rest[..dot_idx];
-        let after = &rest[dot_idx + ".ipfs.nftstorage.link".len()..];
-        if after.is_empty() || after == "/" {
-            // Bare subdomain — rewrite to gateway form.
-            return Some(format!("{}{}", IPFS_GATEWAY, cid));
+    // Any `https://<cid>.ipfs.<host>[/path]` form — rewrite to the canonical
+    // pinned gateway. Catches nftstorage.link, w3s.link, dweb.link,
+    // gateway.pinata.cloud subdomain shape, etc. The CID is the
+    // first hostname label; any subsequent .ipfs.<host> means the path
+    // following <host> is the in-CID path.
+    if let Some(rest) = uri.strip_prefix("https://") {
+        // Split host from path: the first `/` after the authority delimits.
+        let (authority, path) = match rest.find('/') {
+            Some(slash) => (&rest[..slash], &rest[slash..]),
+            None => (rest, ""),
+        };
+        // Look for the `.ipfs.` infix in the authority portion only.
+        if let Some(dot_idx) = authority.find(".ipfs.") {
+            let cid = &authority[..dot_idx];
+            // CIDs are alphanumeric (base32 / base58); require a sane
+            // shape so we don't rewrite arbitrary non-CID subdomains.
+            if !cid.is_empty() && cid.chars().all(|c| c.is_ascii_alphanumeric()) {
+                let path_clean = if path.is_empty() || path == "/" { "" } else { path };
+                return Some(format!("{}{}{}", IPFS_GATEWAY, cid, path_clean));
+            }
         }
-        // Has a content path — pass the original URI through.
-        return Some(uri.to_string());
     }
 
     // Plain `https://`. Pass-through, but reject `http://` (no-`s`).
@@ -126,24 +140,36 @@ pub fn resolve_icon_url(uri: &str) -> Option<String> {
 /// URI that doesn't resolve to a safe `https://` URL returns
 /// [`FetchOutcome::NetworkError`] with a descriptive message.
 ///
+/// SSRF defenses, in layers:
+///   1. [`resolve_icon_url`] rejects `http:`, `file:`, `data:`, etc. at
+///      the scheme gate.
+///   2. [`validate_url_scheme`] catches `https://127.0.0.1` literals.
+///   3. The shared client is built via [`crate::safe_http::safe_client_builder`]
+///      which installs a custom DNS resolver that drops every answer in
+///      private / loopback / link-local space. The resolver runs on every
+///      connect — including per-redirect re-resolution — so a hostile
+///      302 to an internal host is refused at the connector layer.
+///
 /// We DO NOT trust the server's `Content-Length` — we apply the cap to the
-/// actually-received bytes. That way an attacker that lies in the header
-/// (e.g. claims 1 KB then streams a 1 GB blob) can't bypass the cap.
+/// actually-received bytes via streaming. That way an attacker that lies
+/// in the header (claims 1 KB then streams a 1 GB blob) can't bypass it.
 pub async fn fetch_and_hash(client: &reqwest::Client, uri: &str) -> FetchOutcome {
-    // 1. Resolve the URI to a safe https:// URL. This is also the point at
-    //    which `ipfs://` becomes fetchable and `http://` / `file://` /
-    //    `data:` are refused.
+    // 1. Scheme + IPFS rewrite. Returns None for any URI we won't fetch.
     let url = match resolve_icon_url(uri) {
         Some(u) => u,
         None => {
             return FetchOutcome::NetworkError(format!("unresolvable URI scheme: {}", uri));
         }
     };
+    // 2. Pre-flight literal-IP check. Cheap; saves a round-trip when
+    //    a BCMR record points at an IP that's already disallowed.
+    if let Err(e) = validate_url_scheme(&url, false) {
+        return FetchOutcome::NetworkError(format!("refused: {}", e));
+    }
 
-    // Caller's reqwest client should already restrict redirects (the
-    // bootstrap binary sets Policy::limited(2)). The .timeout() here
-    // belt-and-braces the per-request limit even if a future caller
-    // forgets to set a client-level timeout.
+    // Caller's reqwest client must be built via safe_client_builder so
+    // the SSRF resolver applies. The .timeout() here belt-and-braces
+    // the per-request limit.
     let resp = match client.get(&url).timeout(FETCH_TIMEOUT).send().await {
         Ok(r) => r,
         Err(e) => return FetchOutcome::NetworkError(format!("send: {}", e)),
@@ -155,27 +181,32 @@ pub async fn fetch_and_hash(client: &reqwest::Client, uri: &str) -> FetchOutcome
 
     // Defensive content-length precheck. If the server declares more than
     // the cap upfront, bail before reading the body. Doesn't replace the
-    // post-read check below.
+    // streaming check below.
     if let Some(cl) = resp.content_length()
-        && cl as usize > ICON_SIZE_CAP_BYTES
+        && cl > ICON_SIZE_CAP_BYTES as u64
     {
         return FetchOutcome::Oversize { observed_bytes: cl as usize };
     }
 
-    let bytes = match resp.bytes().await {
+    // Streamed body read with a hard cap. read_body_capped returns Err
+    // if the stream exceeds the cap; map that into Oversize so the
+    // upstream policy is consistent with the content-length precheck.
+    let bytes = match read_body_capped(resp, ICON_SIZE_CAP_BYTES).await {
         Ok(b) => b,
-        Err(e) => return FetchOutcome::NetworkError(format!("body: {}", e)),
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.contains("exceeds") {
+                return FetchOutcome::Oversize { observed_bytes: ICON_SIZE_CAP_BYTES + 1 };
+            }
+            return FetchOutcome::NetworkError(format!("body: {}", msg));
+        }
     };
-
-    if bytes.len() > ICON_SIZE_CAP_BYTES {
-        return FetchOutcome::Oversize { observed_bytes: bytes.len() };
-    }
 
     let mut hasher = Sha256::new();
     hasher.update(&bytes);
     let sha256: [u8; 32] = hasher.finalize().into();
 
-    FetchOutcome::Ok { bytes: bytes.to_vec(), sha256 }
+    FetchOutcome::Ok { bytes, sha256 }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -560,16 +591,28 @@ mod tests {
     }
 
     #[test]
-    fn resolver_rewrites_nftstorage_subdomain() {
+    fn resolver_rewrites_any_ipfs_subdomain_to_canonical_gateway() {
         // Bare subdomain → rewrite to gateway form.
         assert_eq!(
             resolve_icon_url("https://bafybeihash.ipfs.nftstorage.link/").as_deref(),
             Some("https://ipfs.io/ipfs/bafybeihash")
         );
-        // With path → pass through unchanged (already a usable URL).
+        // Subdomain with path → pin to canonical gateway, preserve path.
+        // Without this, an attacker who acquires a discontinued gateway
+        // domain (e.g. nftstorage.link, shut down 2024) gets to serve
+        // arbitrary bytes for any record using it.
         assert_eq!(
             resolve_icon_url("https://bafybeihash.ipfs.nftstorage.link/icon.png").as_deref(),
-            Some("https://bafybeihash.ipfs.nftstorage.link/icon.png")
+            Some("https://ipfs.io/ipfs/bafybeihash/icon.png")
+        );
+        // Same handling for any other subdomain gateway.
+        assert_eq!(
+            resolve_icon_url("https://bafybeihash.ipfs.dweb.link/icon.png").as_deref(),
+            Some("https://ipfs.io/ipfs/bafybeihash/icon.png")
+        );
+        assert_eq!(
+            resolve_icon_url("https://bafybeihash.ipfs.w3s.link/").as_deref(),
+            Some("https://ipfs.io/ipfs/bafybeihash")
         );
     }
 

@@ -21,9 +21,16 @@ use serde::Deserialize;
 use tokio::sync::Mutex;
 use tracing::warn;
 
+use crate::safe_http::{read_body_capped, safe_client_builder};
+
 const USER_AGENT: &str = "tokenstork-workers/0.1";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 const RETRY_ATTEMPTS: usize = 3;
+/// Hard cap on the BCMR response body. A real Paytaca record is well
+/// under 64 KiB; 8 MiB is two orders of magnitude headroom and stops a
+/// hostile / compromised host from streaming gigabytes through
+/// `serde_json::from_slice`.
+const BCMR_BODY_CAP: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, thiserror::Error)]
 pub enum BcmrError {
@@ -56,9 +63,12 @@ impl BcmrClient {
     }
 
     pub fn new(base_url: &str, max_rps: u32) -> Result<Self> {
-        let http = Client::builder()
-            .timeout(REQUEST_TIMEOUT)
-            .user_agent(USER_AGENT)
+        // safe_client_builder installs the SSRF-aware DNS resolver +
+        // disables connection-pool keep-alive, just like the icon
+        // pipeline. Same exit risk: BCMR is a third-party HTTP service
+        // and any future malicious response should not be able to
+        // exfiltrate data via DNS-rebound private-IP redirects.
+        let http = safe_client_builder(USER_AGENT, REQUEST_TIMEOUT, 2)
             .build()
             .context("building reqwest client")?;
         let min_gap = if max_rps == 0 {
@@ -143,8 +153,15 @@ impl BcmrClient {
                 .into());
             }
 
+            // Stream-read with a hard cap before deserializing.
+            // resp.json() has no size limit; a hostile / compromised
+            // BCMR host could otherwise stream gigabytes through
+            // serde_json.
+            let raw = read_body_capped(resp, BCMR_BODY_CAP)
+                .await
+                .context("reading BCMR body")?;
             let body: BcmrToken =
-                resp.json().await.context("parsing BCMR JSON")?;
+                serde_json::from_slice(&raw).context("parsing BCMR JSON")?;
             return Ok(Some(body));
         }
 
@@ -207,30 +224,42 @@ impl BcmrToken {
         // NULLIF(BTRIM(name), '') etc. — those defenses stay in place
         // (idempotent), but new code can rely on Option semantics.
         BcmrFlat {
-            name: nonempty(self.name),
-            symbol: nonempty(symbol),
+            name: nonempty_capped(self.name, MAX_NAME_LEN),
+            symbol: nonempty_capped(symbol, MAX_SYMBOL_LEN),
             decimals: validate_decimals(decimals_raw, category_hex),
-            description: nonempty(self.description),
-            icon_uri: nonempty(icon_uri),
+            description: nonempty_capped(self.description, MAX_DESC_LEN),
+            icon_uri: nonempty_capped(icon_uri, MAX_ICON_URI_LEN),
         }
     }
 }
 
-/// Trim whitespace and collapse empty results to None. `Some("")`,
-/// `Some("   ")`, `Some("\t\n")` all become `None`. Anything with at
-/// least one non-whitespace character is preserved as `Some(trimmed)`.
-fn nonempty(s: Option<String>) -> Option<String> {
+/// Trim whitespace, cap length, and collapse empty results to None.
+/// `Some("")`, `Some("   ")`, `Some("\t\n")` all become `None`. Strings
+/// that exceed `max` chars (UTF-8 char count, not bytes) are truncated
+/// at a char boundary so we never cut mid-codepoint.
+fn nonempty_capped(s: Option<String>, max: usize) -> Option<String> {
     s.and_then(|v| {
         let t = v.trim();
         if t.is_empty() {
-            None
-        } else if t.len() == v.len() {
-            Some(v)
-        } else {
-            Some(t.to_string())
+            return None;
         }
+        if t.chars().count() <= max {
+            return if t.len() == v.len() { Some(v) } else { Some(t.to_string()) };
+        }
+        // Truncate at the char boundary nearest `max` codepoints.
+        let cut: String = t.chars().take(max).collect();
+        Some(cut)
     })
 }
+
+// Defense-in-depth caps. BCMR is third-party-sourced; an issuer can
+// publish a 100 KB name / description and the worker would dutifully
+// store it, after which every SSR for that token bloats. Same caps
+// the SvelteKit side applies in `external.ts`.
+const MAX_NAME_LEN: usize = 200;
+const MAX_SYMBOL_LEN: usize = 32;
+const MAX_DESC_LEN: usize = 4000;
+const MAX_ICON_URI_LEN: usize = 1024;
 
 #[derive(Debug, Clone)]
 pub struct BcmrFlat {

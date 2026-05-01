@@ -16,6 +16,7 @@ pub mod fex;
 pub mod google_vision;
 pub mod icons;
 pub mod pg;
+pub mod safe_http;
 pub mod sync_icons;
 pub mod tapswap;
 pub mod tapswap_walker;

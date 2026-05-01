@@ -22,9 +22,15 @@ use serde::Deserialize;
 use tokio::sync::Mutex;
 use tracing::warn;
 
+use crate::safe_http::{read_body_capped, safe_client_builder};
+
 const USER_AGENT: &str = "tokenstork-workers/0.1";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 const RETRY_ATTEMPTS: usize = 3;
+/// Hard cap on Cauldron response bodies. Same rationale as `BCMR_BODY_CAP`
+/// — protects against a hostile / compromised indexer streaming
+/// gigabytes through `serde_json::from_slice`.
+const CAULDRON_BODY_CAP: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CauldronError {
@@ -57,9 +63,10 @@ impl CauldronClient {
 	}
 
 	pub fn new(base_url: &str, max_rps: u32) -> Result<Self> {
-		let http = Client::builder()
-			.timeout(REQUEST_TIMEOUT)
-			.user_agent(USER_AGENT)
+		// safe_client_builder installs the SSRF-aware DNS resolver +
+		// disables connection-pool keep-alive. Cauldron is a third-party
+		// indexer; consistent posture across every outbound HTTP client.
+		let http = safe_client_builder(USER_AGENT, REQUEST_TIMEOUT, 2)
 			.build()
 			.context("building reqwest client")?;
 		let min_gap = if max_rps == 0 {
@@ -201,7 +208,13 @@ impl CauldronClient {
 				.into());
 			}
 
-			let body: T = resp.json().await.context("parsing Cauldron JSON")?;
+			// Cap the body before serde sees it. resp.json() has no size
+			// limit by default — see CAULDRON_BODY_CAP for the rationale.
+			let raw = read_body_capped(resp, CAULDRON_BODY_CAP)
+				.await
+				.context("reading Cauldron body")?;
+			let body: T =
+				serde_json::from_slice(&raw).context("parsing Cauldron JSON")?;
 			return Ok(Some(body));
 		}
 

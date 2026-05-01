@@ -44,6 +44,7 @@ use workers::pg::{
     self, find_oldest_scanned_icon_urls, find_pending_icon_urls, mark_icons_run, pool_from_env,
     try_acquire_icons_lock,
 };
+use workers::safe_http::safe_client_builder;
 use workers::sync_icons::{Outcome, RescanOutcome, process_url, rescan_url};
 
 const DEFAULT_OUTPUT_DIR: &str = "/var/lib/tokenstork/icons";
@@ -52,6 +53,12 @@ const DEFAULT_REVIEW_THRESHOLD: f32 = 0.6;
 const DEFAULT_BATCH: usize = 200;
 const DEFAULT_RESCAN_BATCH: usize = 500;
 const PER_REQUEST_DELAY: Duration = Duration::from_millis(35);
+/// Per-tick wallclock budget. A hostile gateway that hangs just under
+/// the per-request timeout could otherwise stall a tick for
+/// (200 batch × 20 s timeout) ≈ 67 minutes — masking pending-queue
+/// growth and starving the next tick. 10 minutes leaves slack for a
+/// large healthy batch while bounding the worst-case run.
+const TICK_DEADLINE: Duration = Duration::from_secs(600);
 
 #[derive(Debug, Clone, Copy)]
 enum Mode {
@@ -119,10 +126,14 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    let http = reqwest::Client::builder()
-        .timeout(Duration::from_secs(30))
-        .redirect(reqwest::redirect::Policy::limited(2))
-        .build()?;
+    // SSRF defense: this client is built via safe_client_builder, which
+    //   - installs the SafeResolver (drops every DNS answer in
+    //     private/loopback/link-local/etc. space), re-validating per
+    //     redirect hop
+    //   - disables connection-pool keep-alive so a hostile gateway
+    //     can't replay another request on the same TLS session
+    //   - caps redirects at 2 hops
+    let http = safe_client_builder("tokenstork-workers/0.1", Duration::from_secs(30), 2).build()?;
 
     match mode {
         Mode::Pending => run_pending(&pool, &http).await?,
@@ -169,9 +180,18 @@ async fn run_pending(pool: &pg::PgPool, http: &reqwest::Client) -> Result<()> {
     info!(n = pending.len(), batch, "sync-icons tick — processing pending queue");
 
     let started = Instant::now();
+    let deadline = started + TICK_DEADLINE;
     let mut summary = TickSummary::default();
 
     for uri in &pending {
+        if Instant::now() >= deadline {
+            warn!(
+                processed = summary.scanned,
+                of = pending.len(),
+                "tick wallclock budget exhausted; deferring remainder to next run"
+            );
+            break;
+        }
         match process_url(
             pool,
             http,
@@ -223,9 +243,18 @@ async fn run_rescan(pool: &pg::PgPool, http: &reqwest::Client) -> Result<()> {
     info!(n = candidates.len(), batch, "sync-icons rescan — re-fetching oldest scanned URLs");
 
     let started = Instant::now();
+    let deadline = started + TICK_DEADLINE;
     let mut summary = RescanSummary::default();
 
     for (uri, expected) in &candidates {
+        if Instant::now() >= deadline {
+            warn!(
+                processed = summary.scanned,
+                of = candidates.len(),
+                "rescan wallclock budget exhausted; deferring remainder to next run"
+            );
+            break;
+        }
         match rescan_url(pool, http, uri, expected).await {
             Ok(RescanOutcome::Unchanged) => summary.unchanged += 1,
             Ok(RescanOutcome::Drifted) => summary.drifted += 1,

@@ -46,10 +46,17 @@ async fn main() -> Result<()> {
     // freshly-expired row stays visible in journalctl-correlated
     // debugging for ~25h post-expiry — useful when reviewing failure
     // patterns. After that, gone.
+    // Defensive `expires_at IS NOT NULL` even though the schema declares
+    // the column NOT NULL — if a future migration loosens that, this
+    // binary won't silently delete every row in the table because
+    // `NULL < now() - INTERVAL '1 day'` evaluates to NULL (falsy in a
+    // WHERE), but the readability cost of an extra clause is zero and
+    // the cost of getting it wrong is "delete all sessions".
     let challenges_deleted: i64 = match sqlx::query_scalar(
         r#"WITH deleted AS (
               DELETE FROM auth_challenges
-               WHERE expires_at < now() - INTERVAL '1 day'
+               WHERE expires_at IS NOT NULL
+                 AND expires_at < now() - INTERVAL '1 day'
            RETURNING 1
            )
            SELECT COUNT(*)::bigint FROM deleted"#,
@@ -67,7 +74,8 @@ async fn main() -> Result<()> {
     let sessions_deleted: i64 = match sqlx::query_scalar(
         r#"WITH deleted AS (
               DELETE FROM sessions
-               WHERE expires_at < now() - INTERVAL '1 day'
+               WHERE expires_at IS NOT NULL
+                 AND expires_at < now() - INTERVAL '1 day'
            RETURNING 1
            )
            SELECT COUNT(*)::bigint FROM deleted"#,

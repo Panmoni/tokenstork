@@ -35,10 +35,17 @@ use tokio::sync::Mutex;
 use tracing::warn;
 
 use crate::bchn::NftCapability;
+use crate::safe_http::read_body_capped;
 
 const USER_AGENT: &str = "tokenstork-workers/0.1";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const RETRY_ATTEMPTS: usize = 3;
+/// Hard cap on a single Blockbook response. Address-tx pages can be
+/// large (multi-MiB at PAGE_SIZE=1000 for hot categories), so the cap
+/// is more generous than for BCMR / Cauldron. 64 MiB still bounds the
+/// pathological case where a buggy Blockbook streams an unending
+/// response into `serde_json::from_str`.
+const BLOCKBOOK_BODY_CAP: usize = 64 * 1024 * 1024;
 
 #[derive(Debug, thiserror::Error)]
 pub enum BlockbookError {
@@ -156,23 +163,26 @@ impl BlockbookClient {
                 .into());
             }
 
-            // Read body as raw text. There is a known bug where the first
-            // HTTP request issued from this process after the sqlx
-            // Postgres pool initialises returns a truncated body — the
-            // response stream closes mid-payload, leaving the JSON cut
-            // off. The truncated body still parses (because every late
-            // field is wrapped in Option<T> with serde defaults), so the
-            // upstream parser silently produces a struct missing every
-            // late field — including every `tokenData`. Reproduces 100%
-            // when the call sequence is: pool_from_env → SQL query →
-            // HTTP get; second-and-later HTTP calls are fine.
+            // Read body with a hard size cap (defense-in-depth — Blockbook
+            // is local on 127.0.0.1 and trusted, but the cap stops a
+            // runaway / buggy response from OOM'ing the worker).
             //
-            // We don't have an OS-level fix, but BlockBook's response
-            // always ends with `}` (or `]`) followed by no whitespace.
-            // If the last meaningful byte isn't a closing brace/bracket,
-            // it's truncated — retry the request.
-            let raw = resp.text().await.context("reading BlockBook body")?;
-            let body: T = serde_json::from_str(&raw)
+            // Historical note: there is a reproducible bug where the
+            // first HTTP request issued from this process after the
+            // sqlx Postgres pool initialises returns a truncated body
+            // — the response stream closes mid-payload, leaving the
+            // JSON cut off. The truncated body still parses (because
+            // every late field is wrapped in Option<T> with serde
+            // defaults), so the upstream parser silently produces a
+            // struct missing every late field — including every
+            // `tokenData`. Reproduces 100% when the call sequence is:
+            // pool_from_env → SQL query → HTTP get; second-and-later
+            // HTTP calls are fine. The walker workaround (double-fetch
+            // per page) handles this; nothing here changes that.
+            let raw = read_body_capped(resp, BLOCKBOOK_BODY_CAP)
+                .await
+                .context("reading BlockBook body")?;
+            let body: T = serde_json::from_slice(&raw)
                 .with_context(|| format!("parsing BlockBook JSON ({})", path))?;
             return Ok(body);
         }

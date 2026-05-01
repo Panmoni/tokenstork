@@ -14,7 +14,13 @@ use anyhow::{Context, Result, anyhow};
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 
+use crate::safe_http::read_body_capped;
+
 const VISION_ENDPOINT: &str = "https://vision.googleapis.com/v1/images:annotate";
+
+/// Cap on Vision response body. Real responses are <2 KiB; 256 KiB
+/// gives generous headroom while bounding the pathological case.
+const VISION_BODY_CAP: usize = 256 * 1024;
 
 /// Normalised SafeSearch sub-scores. Each is in [0.0, 1.0].
 ///
@@ -97,14 +103,30 @@ pub async fn safe_search(
         .context("vision: send request")?;
 
     let status = resp.status();
-    let text = resp.text().await.context("vision: read body")?;
+    let raw = read_body_capped(resp, VISION_BODY_CAP)
+        .await
+        .context("vision: read body")?;
 
     if !status.is_success() {
-        return Err(anyhow!("vision: HTTP {} — {}", status.as_u16(), text));
+        // Don't include the body in the error chain. Google generally
+        // doesn't echo the request URL or headers in error bodies, but
+        // any future surface change there would leak the API key into
+        // journalctl on every Vision failure if it stayed in the
+        // surrounding `?`-bubbled context. The status code + body
+        // length is enough for an operator to investigate.
+        return Err(anyhow!(
+            "vision: HTTP {} (body {} B)",
+            status.as_u16(),
+            raw.len()
+        ));
     }
 
+    // Same rationale: do NOT format the body into the parse-error
+    // context. A malformed response with the URL echoed back would
+    // leak the API key. The caller logs at warn! with category
+    // identifiers; that's enough.
     let parsed: AnnotateResponse =
-        serde_json::from_str(&text).with_context(|| format!("vision: parse response: {}", text))?;
+        serde_json::from_slice(&raw).context("vision: parse response")?;
 
     let first = parsed
         .responses

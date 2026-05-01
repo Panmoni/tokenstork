@@ -18,8 +18,11 @@ strip = "symbols"
 # Async runtime.
 tokio = { version = "1", features = ["full"] }
 
-# HTTP client for BCHN RPC (+ later BlockBook). rustls avoids OpenSSL linkage hassle.
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip", "deflate"] }
+# HTTP client for BCHN RPC (+ BlockBook + BCMR + Cauldron + icons).
+# rustls avoids OpenSSL linkage hassle. `stream` is required by
+# safe_http::read_body_capped which uses bytes_stream() to enforce a
+# size cap before serde_json sees the payload.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip", "deflate", "stream"] }
 
 # JSON (de)serialization.
 serde = { version = "1", features = ["derive"] }
@@ -90,3 +93,12 @@ usvg = { version = "0.45", default-features = false }
 
 # Base64 of image bytes for the Google Vision REST API request body.
 # (`base64` crate already in scope above for BCHN auth.)
+
+# Streaming HTTP body reads (size-capped JSON / icon fetches).
+futures-util = { version = "0.3", default-features = false }
+
+# DNS resolver used by the SSRF-safe HTTP client. We resolve hostnames
+# ourselves, refuse any answer in private/loopback/link-local space,
+# pin the resolved IP for the actual connection, and re-validate on
+# every redirect target.
+hickory-resolver = { version = "0.24", default-features = false, features = ["tokio-runtime", "system-config"] }
