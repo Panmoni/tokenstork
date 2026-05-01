@@ -70,17 +70,6 @@
 			]
 		},
 		{
-			title: 'Ecosystem dashboard at /stats',
-			status: 'done',
-			bullets: [
-				'Cards for new categories in 24h / 7d / 30d, all linkable to the matching directory filter.',
-				'By-type counters with FT / NFT / FT+NFT split.',
-				'Tradeable counters per venue (Cauldron / Tapswap / Fex), each linking to the filtered directory.',
-				'Three-venue overlap Venn — cauldron-only / fex-only / tapswap-only / pair intersections / all-three (the arb universe).',
-				'Genesis-by-month growth chart, decimals histogram, BCMR metadata completeness, and live Cauldron AMM aggregates from indexer.cauldron.quest.'
-			]
-		},
-		{
 			title: 'Front-page market data',
 			status: 'done',
 			bullets: [
