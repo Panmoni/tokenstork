@@ -47,16 +47,16 @@
 	<h1 class="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent mb-4">
 		{headline}
 	</h1>
-	<p class="text-slate-700 dark:text-slate-300 mb-6 max-w-2xl">
+	<p class="text-slate-700 dark:text-zinc-200 mb-6 max-w-2xl">
 		{subline}
 	</p>
 
 	{#if page.error?.message && page.error.message !== headline}
-		<pre class="text-xs font-mono text-slate-500 dark:text-slate-500 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 mb-8 overflow-x-auto">{page.error.message}</pre>
+		<pre class="text-xs font-mono text-slate-500 dark:text-zinc-400 bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg px-3 py-2 mb-8 overflow-x-auto">{page.error.message}</pre>
 	{/if}
 
 	<div class="mb-8">
-		<h2 class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3 font-semibold">
+		<h2 class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300 mb-3 font-semibold">
 			Try one of these
 		</h2>
 		<ul class="grid sm:grid-cols-2 gap-2">
@@ -64,10 +64,10 @@
 				<li>
 					<a
 						href={s.href}
-						class="block p-3 rounded-lg border border-slate-200 dark:border-slate-800 hover:border-violet-400 dark:hover:border-violet-600 hover:bg-violet-50/40 dark:hover:bg-violet-950/20 transition-colors no-underline"
+						class="block p-3 rounded-lg border border-slate-200 dark:border-zinc-800 hover:border-violet-400 dark:hover:border-violet-600 hover:bg-violet-50/40 dark:hover:bg-violet-950/20 transition-colors no-underline"
 					>
 						<div class="font-semibold text-slate-900 dark:text-white">{s.label}</div>
-						<div class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{s.kind}</div>
+						<div class="text-xs text-slate-500 dark:text-zinc-300 mt-0.5">{s.kind}</div>
 					</a>
 				</li>
 			{/each}
@@ -75,7 +75,7 @@
 	</div>
 
 	{#if page.status === 410}
-		<p class="text-sm text-slate-600 dark:text-slate-400">
+		<p class="text-sm text-slate-600 dark:text-zinc-300">
 			See <a href="/moderated" class="text-violet-600 dark:text-violet-400 hover:underline">/moderated</a>
 			for the full list of hidden categories with reason and date.
 		</p>

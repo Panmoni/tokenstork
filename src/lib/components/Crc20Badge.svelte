@@ -33,7 +33,7 @@
 	const colorClass = $derived(
 		isCanonical
 			? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 ring-1 ring-amber-300/50 dark:ring-amber-700/40'
-			: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 ring-1 ring-slate-300/50 dark:ring-slate-700/40'
+			: 'bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-zinc-300 ring-1 ring-slate-300/50 dark:ring-zinc-700/40'
 	);
 </script>
 

@@ -13,7 +13,7 @@
 {#if mounted}
 	<button
 		onclick={theme.toggle}
-		class="p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800 transition-all duration-200"
+		class="p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-zinc-200 dark:hover:text-white dark:hover:bg-zinc-800 transition-all duration-200"
 		aria-label="Toggle theme"
 	>
 		{#if $theme === 'dark'}

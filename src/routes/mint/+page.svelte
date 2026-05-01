@@ -393,7 +393,7 @@
 		<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent">
 			Mint a CashToken
 		</h1>
-		<p class="text-slate-600 dark:text-slate-400 mt-2 max-w-2xl">
+		<p class="text-slate-600 dark:text-zinc-300 mt-2 max-w-2xl">
 			Create your own fungible token, NFT, or hybrid on the Bitcoin Cash chain. Walk through the
 			six-step wizard, sign the genesis transaction with your wallet, and your category appears
 			on the directory within minutes.
@@ -401,12 +401,12 @@
 	</div>
 
 	{#if data.unauthenticated}
-		<div class="p-8 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-center max-w-xl mx-auto">
+		<div class="p-8 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-center max-w-xl mx-auto">
 			<div class="text-5xl mb-3">🔒</div>
 			<h2 class="text-xl font-semibold text-slate-900 dark:text-white mb-2">
 				Wallet sign-in required
 			</h2>
-			<p class="text-sm text-slate-600 dark:text-slate-400 mb-5">
+			<p class="text-sm text-slate-600 dark:text-zinc-300 mb-5">
 				Minting a CashToken means signing an on-chain transaction with the BCH address that owns
 				the funding UTXO. We don't store your private key, we don't email you, and we don't ask
 				for any other identity — your wallet IS the account.
@@ -417,7 +417,7 @@
 			>
 				Sign in with your wallet
 			</a>
-			<p class="mt-3 text-xs text-slate-500 dark:text-slate-400">
+			<p class="mt-3 text-xs text-slate-500 dark:text-zinc-300">
 				Lost key = lost account. That's an intended property; not a bug.
 			</p>
 		</div>
@@ -434,25 +434,25 @@
 								? 'bg-violet-600 text-white'
 								: isComplete
 									? 'bg-emerald-500 text-white'
-									: 'bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}"
+									: 'bg-slate-200 text-slate-500 dark:bg-zinc-800 dark:text-zinc-300'}"
 						>
 							{isComplete ? '✓' : idx}
 						</span>
-						<span class="hidden sm:inline {isActive ? 'font-semibold text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}">
+						<span class="hidden sm:inline {isActive ? 'font-semibold text-slate-900 dark:text-white' : 'text-slate-500 dark:text-zinc-300'}">
 							{label}
 						</span>
 					</button>
 					{#if i < stepLabels.length - 1}
-						<div class="flex-1 h-px mx-1 sm:mx-3 {isComplete ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-800'}"></div>
+						<div class="flex-1 h-px mx-1 sm:mx-3 {isComplete ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-zinc-800'}"></div>
 					{/if}
 				</li>
 			{/each}
 		</ol>
 
-		<div class="p-6 sm:p-8 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+		<div class="p-6 sm:p-8 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
 			{#if step === 1}
 				<h2 class="text-xl font-semibold text-slate-900 dark:text-white mb-2">1. Pick a token type</h2>
-				<p class="text-sm text-slate-600 dark:text-slate-400 mb-5">
+				<p class="text-sm text-slate-600 dark:text-zinc-300 mb-5">
 					CashTokens has three flavors. The type is part of the genesis transaction and can't be
 					changed once minted.
 				</p>
@@ -467,46 +467,46 @@
 							onclick={() => (tokenType = opt.id as TokenType)}
 							class="p-4 rounded-xl border-2 text-left transition-colors {tokenType === opt.id
 								? 'border-violet-600 bg-violet-50 dark:bg-violet-950/30'
-								: 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'}"
+								: 'border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700'}"
 						>
 							<div class="font-semibold text-slate-900 dark:text-white">{opt.label}</div>
-							<div class="mt-1 text-xs text-slate-600 dark:text-slate-400">{opt.desc}</div>
+							<div class="mt-1 text-xs text-slate-600 dark:text-zinc-300">{opt.desc}</div>
 						</button>
 					{/each}
 				</div>
 			{:else if step === 2}
 				<h2 class="text-xl font-semibold text-slate-900 dark:text-white mb-2">2. Identity</h2>
-				<p class="text-sm text-slate-600 dark:text-slate-400 mb-5">
+				<p class="text-sm text-slate-600 dark:text-zinc-300 mb-5">
 					What this token is called and what it looks like. Will be published as BCMR metadata
 					so wallets and explorers display it consistently.
 				</p>
 				<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
 					<label class="block">
-						<span class="text-sm font-medium text-slate-700 dark:text-slate-300">Name</span>
-						<input type="text" bind:value={name} maxlength="80" placeholder="e.g. Wonderland Token" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm" />
+						<span class="text-sm font-medium text-slate-700 dark:text-zinc-200">Name</span>
+						<input type="text" bind:value={name} maxlength="80" placeholder="e.g. Wonderland Token" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm" />
 					</label>
 					<label class="block">
-						<span class="text-sm font-medium text-slate-700 dark:text-slate-300">Ticker</span>
-						<input type="text" bind:value={ticker} maxlength="12" placeholder="e.g. WLT" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm font-mono uppercase" />
+						<span class="text-sm font-medium text-slate-700 dark:text-zinc-200">Ticker</span>
+						<input type="text" bind:value={ticker} maxlength="12" placeholder="e.g. WLT" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm font-mono uppercase" />
 					</label>
 					{#if tokenType !== 'NFT'}
 						<label class="block">
-							<span class="text-sm font-medium text-slate-700 dark:text-slate-300">Decimals (0–8)</span>
-							<input type="number" min="0" max="8" bind:value={decimals} class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm font-mono" />
+							<span class="text-sm font-medium text-slate-700 dark:text-zinc-200">Decimals (0–8)</span>
+							<input type="number" min="0" max="8" bind:value={decimals} class="mt-1 w-full rounded-lg border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm font-mono" />
 						</label>
 					{/if}
 					<label class="block sm:col-span-2">
-						<span class="text-sm font-medium text-slate-700 dark:text-slate-300">Description (optional)</span>
-						<textarea bind:value={description} maxlength="500" rows="3" placeholder="A sentence or two for the BCMR metadata." class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm"></textarea>
+						<span class="text-sm font-medium text-slate-700 dark:text-zinc-200">Description (optional)</span>
+						<textarea bind:value={description} maxlength="500" rows="3" placeholder="A sentence or two for the BCMR metadata." class="mt-1 w-full rounded-lg border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm"></textarea>
 					</label>
 					<label class="block sm:col-span-2">
-						<span class="text-sm font-medium text-slate-700 dark:text-slate-300">Icon URI (optional)</span>
-						<input type="text" bind:value={iconUri} placeholder="https://… or ipfs://… — leave empty to publish without an icon" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm font-mono" />
+						<span class="text-sm font-medium text-slate-700 dark:text-zinc-200">Icon URI (optional)</span>
+						<input type="text" bind:value={iconUri} placeholder="https://… or ipfs://… — leave empty to publish without an icon" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm font-mono" />
 					</label>
 				</div>
-				<details class="mt-4 p-4 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs">
-					<summary class="cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-300">Pin an icon file to IPFS</summary>
-					<p class="mt-3 text-slate-600 dark:text-slate-400">
+				<details class="mt-4 p-4 rounded-lg border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950 text-xs">
+					<summary class="cursor-pointer text-sm font-medium text-slate-700 dark:text-zinc-200">Pin an icon file to IPFS</summary>
+					<p class="mt-3 text-slate-600 dark:text-zinc-300">
 						Upload a static raster (PNG / JPEG / WebP, ≤ 2 MiB) directly from your browser to
 						<strong>web3.storage</strong> or <strong>Pinata</strong> using your own API key.
 						The file never reaches Token Stork's server. Once pinned, the resulting
@@ -514,18 +514,18 @@
 					</p>
 					<div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
 						<label class="block">
-							<span class="font-medium text-slate-700 dark:text-slate-300">Provider</span>
-							<select bind:value={ipfsProvider} class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-1.5 text-xs">
+							<span class="font-medium text-slate-700 dark:text-zinc-200">Provider</span>
+							<select bind:value={ipfsProvider} class="mt-1 w-full rounded-lg border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2 py-1.5 text-xs">
 								<option value="web3.storage">web3.storage</option>
 								<option value="pinata">Pinata</option>
 							</select>
 						</label>
 						<label class="block sm:col-span-2">
-							<span class="font-medium text-slate-700 dark:text-slate-300">API key</span>
-							<input type="password" bind:value={ipfsApiKey} placeholder="your bearer token (cleared after upload)" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-1.5 text-xs font-mono" />
+							<span class="font-medium text-slate-700 dark:text-zinc-200">API key</span>
+							<input type="password" bind:value={ipfsApiKey} placeholder="your bearer token (cleared after upload)" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2 py-1.5 text-xs font-mono" />
 						</label>
 						<label class="block sm:col-span-2">
-							<span class="font-medium text-slate-700 dark:text-slate-300">Icon file</span>
+							<span class="font-medium text-slate-700 dark:text-zinc-200">Icon file</span>
 							<input type="file" accept="image/png,image/jpeg,image/webp" onchange={(e) => (iconFile = (e.currentTarget as HTMLInputElement).files?.[0] ?? null)} class="mt-1 w-full text-xs" />
 						</label>
 						<button type="button" onclick={uploadIconToIpfs} disabled={iconUploading || !iconFile || !ipfsApiKey.trim()} class="mt-5 px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-white text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed">
@@ -539,24 +539,24 @@
 			{:else if step === 3}
 				<h2 class="text-xl font-semibold text-slate-900 dark:text-white mb-2">3. Supply</h2>
 				{#if tokenType === 'FT' || tokenType === 'FT+NFT'}
-					<p class="text-sm text-slate-600 dark:text-slate-400 mb-5">
+					<p class="text-sm text-slate-600 dark:text-zinc-300 mb-5">
 						The total supply minted at genesis. This is the only mint event unless you keep
 						the minting NFT (FT+NFT hybrid). Up to 2<sup>63</sup>−1 per CHIP-2022-02.
 					</p>
 					<label class="block max-w-md">
-						<span class="text-sm font-medium text-slate-700 dark:text-slate-300">Total supply (smallest unit)</span>
-						<input type="text" inputmode="numeric" bind:value={totalSupply} placeholder="e.g. 100000000" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm font-mono" />
+						<span class="text-sm font-medium text-slate-700 dark:text-zinc-200">Total supply (smallest unit)</span>
+						<input type="text" inputmode="numeric" bind:value={totalSupply} placeholder="e.g. 100000000" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm font-mono" />
 					</label>
 				{/if}
 				{#if tokenType === 'NFT' || tokenType === 'FT+NFT'}
 					<div class="mt-6">
 						<label class="block max-w-md">
-							<span class="text-sm font-medium text-slate-700 dark:text-slate-300">NFT commitment (hex, ≤ 40 bytes)</span>
-							<input type="text" bind:value={nftCommitmentHex} placeholder="optional — leave empty for none" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm font-mono" />
+							<span class="text-sm font-medium text-slate-700 dark:text-zinc-200">NFT commitment (hex, ≤ 40 bytes)</span>
+							<input type="text" bind:value={nftCommitmentHex} placeholder="optional — leave empty for none" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm font-mono" />
 						</label>
 						<label class="block mt-3 max-w-md">
-							<span class="text-sm font-medium text-slate-700 dark:text-slate-300">NFT capability</span>
-							<select bind:value={nftCapability} class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm">
+							<span class="text-sm font-medium text-slate-700 dark:text-zinc-200">NFT capability</span>
+							<select bind:value={nftCapability} class="mt-1 w-full rounded-lg border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm">
 								<option value="none">None — pure NFT, can't mint or mutate</option>
 								<option value="mutable">Mutable — commitment can change</option>
 								<option value="minting">Minting — controls future FT issuance</option>
@@ -566,22 +566,22 @@
 				{/if}
 			{:else if step === 4}
 				<h2 class="text-xl font-semibold text-slate-900 dark:text-white mb-2">4. Review</h2>
-				<p class="text-sm text-slate-600 dark:text-slate-400 mb-5">
+				<p class="text-sm text-slate-600 dark:text-zinc-300 mb-5">
 					Provide a funding outpoint from your wallet — a UTXO at <strong>vout=0</strong> of any
 					transaction. The CashTokens spec uses that outpoint's txid as the new category id.
 					Recipient is automatically set to your authenticated address.
 				</p>
 				<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
 					<label class="block sm:col-span-2">
-						<span class="text-sm font-medium text-slate-700 dark:text-slate-300">Funding outpoint txid (vout=0)</span>
-						<input type="text" bind:value={outpointTxid} placeholder="64-char hex" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm font-mono" />
+						<span class="text-sm font-medium text-slate-700 dark:text-zinc-200">Funding outpoint txid (vout=0)</span>
+						<input type="text" bind:value={outpointTxid} placeholder="64-char hex" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm font-mono" />
 					</label>
 					<label class="block">
-						<span class="text-sm font-medium text-slate-700 dark:text-slate-300">UTXO value (sats)</span>
-						<input type="number" min="2000" bind:value={outpointSatoshis} class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm font-mono" />
+						<span class="text-sm font-medium text-slate-700 dark:text-zinc-200">UTXO value (sats)</span>
+						<input type="number" min="2000" bind:value={outpointSatoshis} class="mt-1 w-full rounded-lg border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm font-mono" />
 					</label>
 				</div>
-				<details class="text-xs text-slate-500 dark:text-slate-400 mb-4">
+				<details class="text-xs text-slate-500 dark:text-zinc-300 mb-4">
 					<summary class="cursor-pointer">How to create a vout=0 funding UTXO</summary>
 					<p class="mt-2">
 						In your wallet, send any small amount of BCH (e.g. 0.00002 BCH = 2000 sats) to your
@@ -595,42 +595,42 @@
 				{#if genesisBuild}
 					<dl class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
 						<div>
-							<dt class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Type</dt>
+							<dt class="text-xs uppercase tracking-wide text-slate-500 dark:text-zinc-300">Type</dt>
 							<dd class="mt-1 font-mono text-slate-900 dark:text-white">{tokenType}</dd>
 						</div>
 						<div>
-							<dt class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Name / Ticker</dt>
+							<dt class="text-xs uppercase tracking-wide text-slate-500 dark:text-zinc-300">Name / Ticker</dt>
 							<dd class="mt-1 text-slate-900 dark:text-white">{name} <span class="font-mono text-xs">({ticker})</span></dd>
 						</div>
 						<div class="sm:col-span-2">
-							<dt class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Resulting category id</dt>
+							<dt class="text-xs uppercase tracking-wide text-slate-500 dark:text-zinc-300">Resulting category id</dt>
 							<dd class="mt-1 font-mono text-xs break-all text-slate-900 dark:text-white">{genesisBuild.categoryHex}</dd>
 						</div>
 						<div>
-							<dt class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Estimated tx size</dt>
+							<dt class="text-xs uppercase tracking-wide text-slate-500 dark:text-zinc-300">Estimated tx size</dt>
 							<dd class="mt-1 font-mono text-slate-900 dark:text-white">{genesisBuild.estimatedTxBytes} bytes</dd>
 						</div>
 						<div>
-							<dt class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Fee</dt>
+							<dt class="text-xs uppercase tracking-wide text-slate-500 dark:text-zinc-300">Fee</dt>
 							<dd class="mt-1 font-mono text-slate-900 dark:text-white">{genesisBuild.feeSats} sats</dd>
 						</div>
 						<div>
-							<dt class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Change back to you</dt>
+							<dt class="text-xs uppercase tracking-wide text-slate-500 dark:text-zinc-300">Change back to you</dt>
 							<dd class="mt-1 font-mono text-slate-900 dark:text-white">{genesisBuild.changeSats} sats</dd>
 						</div>
 					</dl>
-					<details class="mt-4 text-xs text-slate-500 dark:text-slate-400">
+					<details class="mt-4 text-xs text-slate-500 dark:text-zinc-300">
 						<summary class="cursor-pointer">Show unsigned tx hex</summary>
-						<pre class="mt-2 p-3 rounded bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 break-all whitespace-pre-wrap text-[10px]">{genesisBuild.unsignedTxHex}</pre>
+						<pre class="mt-2 p-3 rounded bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 break-all whitespace-pre-wrap text-[10px]">{genesisBuild.unsignedTxHex}</pre>
 					</details>
 				{/if}
 			{:else if step === 5}
 				<h2 class="text-xl font-semibold text-slate-900 dark:text-white mb-2">5. Sign & broadcast</h2>
-				<p class="text-sm text-slate-600 dark:text-slate-400 mb-3">
+				<p class="text-sm text-slate-600 dark:text-zinc-300 mb-3">
 					Take the unsigned tx hex from step 4, sign it in your wallet, and paste the signed
 					hex back here. We'll broadcast it via the Token Stork BCHN node.
 				</p>
-				<details class="text-xs text-slate-500 dark:text-slate-400 mb-4 p-3 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900">
+				<details class="text-xs text-slate-500 dark:text-zinc-300 mb-4 p-3 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900">
 					<summary class="cursor-pointer text-amber-900 dark:text-amber-200 font-medium">Wallet integration status</summary>
 					<p class="mt-2 text-amber-900 dark:text-amber-200">
 						Direct WalletConnect <code>bch_signTransaction</code> handoff is a follow-up.
@@ -640,8 +640,8 @@
 					</p>
 				</details>
 				<label class="block">
-					<span class="text-sm font-medium text-slate-700 dark:text-slate-300">Signed tx (hex)</span>
-					<textarea bind:value={signedTxHex} rows="4" placeholder="0200000001..." class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-xs font-mono break-all"></textarea>
+					<span class="text-sm font-medium text-slate-700 dark:text-zinc-200">Signed tx (hex)</span>
+					<textarea bind:value={signedTxHex} rows="4" placeholder="0200000001..." class="mt-1 w-full rounded-lg border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-xs font-mono break-all"></textarea>
 				</label>
 				{#if broadcastError}
 					<p class="mt-3 text-sm text-rose-600 dark:text-rose-400">{broadcastError}</p>
@@ -663,7 +663,7 @@
 						explorers know its identity.
 					</p>
 				</div>
-				<p class="text-sm text-slate-600 dark:text-slate-400 mb-3">
+				<p class="text-sm text-slate-600 dark:text-zinc-300 mb-3">
 					Download the BCMR JSON below, host it at any HTTPS URL you control (or pin it to IPFS
 					and use the <code>ipfs://&lt;cid&gt;</code> form), then submit it to BCMR registries
 					so wallets pick up your token's identity.
@@ -672,9 +672,9 @@
 					Download BCMR JSON
 				</button>
 
-				<div class="mt-8 p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
+				<div class="mt-8 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950">
 					<h3 class="text-sm font-semibold text-slate-900 dark:text-white mb-2">Or pin directly to IPFS</h3>
-					<p class="text-xs text-slate-600 dark:text-slate-400 mb-3">
+					<p class="text-xs text-slate-600 dark:text-zinc-300 mb-3">
 						Paste your own <strong>Pinata</strong> JWT or <strong>web3.storage</strong> API
 						key. The upload runs <em>directly</em> from your browser to the IPFS provider —
 						your key never reaches Token Stork's server, and we clear it from memory after
@@ -695,15 +695,15 @@
 					</p>
 					<div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
 						<label class="block">
-							<span class="text-xs font-medium text-slate-700 dark:text-slate-300">Provider</span>
-							<select bind:value={ipfsProvider} class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm">
+							<span class="text-xs font-medium text-slate-700 dark:text-zinc-200">Provider</span>
+							<select bind:value={ipfsProvider} class="mt-1 w-full rounded-lg border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm">
 								<option value="web3.storage">web3.storage</option>
 								<option value="pinata">Pinata (JWT)</option>
 							</select>
 						</label>
 						<label class="block sm:col-span-2">
-							<span class="text-xs font-medium text-slate-700 dark:text-slate-300">API key (Bearer token)</span>
-							<input type="password" bind:value={ipfsApiKey} placeholder="never sent to Token Stork — browser → IPFS provider directly" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm font-mono" />
+							<span class="text-xs font-medium text-slate-700 dark:text-zinc-200">API key (Bearer token)</span>
+							<input type="password" bind:value={ipfsApiKey} placeholder="never sent to Token Stork — browser → IPFS provider directly" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm font-mono" />
 						</label>
 					</div>
 					{#if ipfsError}
@@ -721,7 +721,7 @@
 					</button>
 				</div>
 
-				<p class="mt-4 text-xs text-slate-500 dark:text-slate-400">
+				<p class="mt-4 text-xs text-slate-500 dark:text-zinc-300">
 					Optional final step:
 					<a class="text-violet-600 dark:text-violet-400 hover:underline" href="https://github.com/Paytaca/BCMR-v2-registry" target="_blank" rel="noopener noreferrer">submit your BCMR to Paytaca's public registry</a>
 					so most BCH wallets discover your token automatically.
@@ -736,7 +736,7 @@
 
 			{#if step !== 5 && step !== 6}
 				<div class="mt-8 flex items-center justify-between">
-					<button type="button" onclick={back} disabled={step === 1} class="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed">
+					<button type="button" onclick={back} disabled={step === 1} class="px-4 py-2 rounded-lg border border-slate-300 dark:border-zinc-700 text-sm font-medium text-slate-700 dark:text-zinc-200 hover:bg-slate-50 dark:hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed">
 						Back
 					</button>
 					<button type="button" onclick={next} disabled={(step === 1 && !!step1Error) || (step === 2 && !!step2Error) || (step === 3 && !!step3Error) || (step === 4 && !genesisBuild)} class="px-5 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">
@@ -746,7 +746,7 @@
 			{/if}
 		</div>
 
-		<p class="mt-6 text-xs text-slate-500 dark:text-slate-400 max-w-2xl">
+		<p class="mt-6 text-xs text-slate-500 dark:text-zinc-300 max-w-2xl">
 			Mint as <span class="font-mono">{data.cashaddr}</span>. The genesis tx will be signed by
 			that address; it must hold a UTXO with enough BCH to cover the genesis output + fees
 			(typically 2000-3000 sats).

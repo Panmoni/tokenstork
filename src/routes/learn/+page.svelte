@@ -12,13 +12,13 @@
 	</h1>
 
 	<div class="prose prose-slate dark:prose-invert max-w-none">
-		<p class="text-slate-600 dark:text-slate-300 mb-6">
+		<p class="text-slate-600 dark:text-zinc-200 mb-6">
 			To get started, here are foundational CashTokens tutorials. We'll be adding more resources to
 			this page over time.
 		</p>
 
 		<h2 class="text-2xl font-bold text-slate-900 dark:text-white mt-8 mb-4">Start here</h2>
-		<ul class="list-disc list-inside ml-5 text-slate-600 dark:text-slate-300 space-y-2">
+		<ul class="list-disc list-inside ml-5 text-slate-600 dark:text-zinc-200 space-y-2">
 			<li>
 				<a
 					href="https://cashscript.org/docs/basics/about-bch/"
@@ -40,10 +40,10 @@
 		</ul>
 
 		<h2 class="text-2xl font-bold text-slate-900 dark:text-white mt-10 mb-4">Token Pioneers series</h2>
-		<p class="text-slate-600 dark:text-slate-300 mb-3">
+		<p class="text-slate-600 dark:text-zinc-200 mb-3">
 			Hands-on tutorials for minting and working with CashTokens end-to-end.
 		</p>
-		<ul class="list-disc list-inside ml-5 text-slate-600 dark:text-slate-300 space-y-2">
+		<ul class="list-disc list-inside ml-5 text-slate-600 dark:text-zinc-200 space-y-2">
 			<li>
 				<a
 					href="https://www.bchworks.com/blog/token-pioneers-cashtokens-tutorial-1"
@@ -83,11 +83,11 @@
 		</ul>
 
 		<h2 class="text-2xl font-bold text-slate-900 dark:text-white mt-10 mb-4">Smart contracts with CashScript</h2>
-		<p class="text-slate-600 dark:text-slate-300 mb-3">
+		<p class="text-slate-600 dark:text-zinc-200 mb-3">
 			CashScript is the high-level language most CashTokens projects use to write BCH smart contracts
 			and covenants.
 		</p>
-		<ul class="list-disc list-inside ml-5 text-slate-600 dark:text-slate-300 space-y-2">
+		<ul class="list-disc list-inside ml-5 text-slate-600 dark:text-zinc-200 space-y-2">
 			<li>
 				<a href="https://cashscript.org/" target="_blank" rel="noopener noreferrer">
 					cashscript.org
@@ -105,7 +105,7 @@
 		</ul>
 
 		<h2 class="text-2xl font-bold text-slate-900 dark:text-white mt-10 mb-4">Video</h2>
-		<ul class="list-disc list-inside ml-5 text-slate-600 dark:text-slate-300 space-y-2">
+		<ul class="list-disc list-inside ml-5 text-slate-600 dark:text-zinc-200 space-y-2">
 			<li>
 				<a
 					href="https://www.youtube.com/watch?v=_X70ld0MJJ0"
@@ -127,7 +127,7 @@
 		</ul>
 
 		<h2 class="text-2xl font-bold text-slate-900 dark:text-white mt-10 mb-4">Reference</h2>
-		<ul class="list-disc list-inside ml-5 text-slate-600 dark:text-slate-300 space-y-2">
+		<ul class="list-disc list-inside ml-5 text-slate-600 dark:text-zinc-200 space-y-2">
 			<li>
 				<a href="https://cashtokens.org/" target="_blank" rel="noopener noreferrer">
 					cashtokens.org
@@ -149,7 +149,7 @@
 			</li>
 		</ul>
 
-		<p class="text-slate-500 dark:text-slate-400 mt-10 text-sm">
+		<p class="text-slate-500 dark:text-zinc-300 mt-10 text-sm">
 			Have a tutorial or resource to suggest? Email
 			<a href="mailto:hello@panmoni.com">hello@panmoni.com</a>.
 		</p>

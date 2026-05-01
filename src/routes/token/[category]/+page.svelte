@@ -330,7 +330,7 @@
 
 <main class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 	<div class="flex items-start gap-4 mb-6">
-		<img src={iconHrefFor(token.icon, token.iconClearedHash)} alt={token.name ?? ''} class="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-slate-100 dark:bg-slate-800" />
+		<img src={iconHrefFor(token.icon, token.iconClearedHash)} alt={token.name ?? ''} class="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-slate-100 dark:bg-zinc-800" />
 		<div class="flex-1 min-w-0">
 			<h1 class="text-3xl font-bold text-slate-900 dark:text-white truncate flex items-center gap-2">
 				<StarButton categoryHex={token.id} size="md" />
@@ -386,7 +386,7 @@
 	</div>
 
 	{#if token.description}
-		<p class="text-slate-600 dark:text-slate-300 mb-6">{stripEmoji(token.description)}</p>
+		<p class="text-slate-600 dark:text-zinc-200 mb-6">{stripEmoji(token.description)}</p>
 	{/if}
 
 	<!--
@@ -407,7 +407,7 @@
 			uriEntries.length > 0 ||
 			(bcmr.tags && bcmr.tags.length > 0)}
 		{#if hasCompact}
-			<div class="mb-8 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-wrap items-center gap-x-5 gap-y-3">
+			<div class="mb-8 p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-wrap items-center gap-x-5 gap-y-3">
 				{#if uriEntries.length > 0}
 					<div class="flex flex-wrap items-center gap-2">
 						{#each uriEntries as [key, value] (key)}
@@ -417,7 +417,7 @@
 									href={value}
 									target="_blank"
 									rel="noopener noreferrer"
-									class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 hover:bg-violet-100 dark:bg-slate-800 dark:hover:bg-violet-900/30 text-slate-600 hover:text-violet-700 dark:text-slate-300 dark:hover:text-violet-300 transition-colors"
+									class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 hover:bg-violet-100 dark:bg-zinc-800 dark:hover:bg-violet-900/30 text-slate-600 hover:text-violet-700 dark:text-zinc-200 dark:hover:text-violet-300 transition-colors"
 									title={`${spec.label}: ${value}`}
 									aria-label={spec.label}
 								>
@@ -452,15 +452,15 @@
 
 				{#if bcmr.status}
 					<div class="flex items-center gap-1.5 text-xs">
-						<span class="text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</span>
-						<span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium">{bcmr.status}</span>
+						<span class="text-slate-500 dark:text-zinc-300 uppercase tracking-wider">Status</span>
+						<span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 font-medium">{bcmr.status}</span>
 					</div>
 				{/if}
 
 				{#if bcmr.splitId}
 					{@const validSplitId = /^[0-9a-f]{64}$/i.test(bcmr.splitId)}
 					<div class="flex items-center gap-1.5 text-xs min-w-0">
-						<span class="text-slate-500 dark:text-slate-400 uppercase tracking-wider flex-shrink-0">Split from</span>
+						<span class="text-slate-500 dark:text-zinc-300 uppercase tracking-wider flex-shrink-0">Split from</span>
 						{#if validSplitId}
 							<a
 								href={`/token/${bcmr.splitId.toLowerCase()}`}
@@ -470,7 +470,7 @@
 								{bcmr.splitId.slice(0, 10)}…{bcmr.splitId.slice(-6)}
 							</a>
 						{:else}
-							<span class="font-mono text-slate-500 dark:text-slate-400 truncate" title="Invalid hex splitId — not rendered as link">
+							<span class="font-mono text-slate-500 dark:text-zinc-300 truncate" title="Invalid hex splitId — not rendered as link">
 								{bcmr.splitId.slice(0, 10)}… <em class="not-italic">(invalid)</em>
 							</span>
 						{/if}
@@ -524,7 +524,7 @@
 								</svg>
 							</a>
 						</h2>
-						<p class="text-xs text-slate-500 dark:text-slate-400">
+						<p class="text-xs text-slate-500 dark:text-zinc-300">
 							On-chain naming claim via covenant in genesis transaction.
 							<a href="https://crc20.cash/" target="_blank" rel="noopener noreferrer" class="text-amber-700 dark:text-amber-400 hover:underline">Learn more →</a>
 						</p>
@@ -535,7 +535,7 @@
 						🏆 Canonical winner for "{crc20.symbol || '<empty>'}"
 					</span>
 				{:else}
-					<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold" title="This category claims the same symbol but lost the per-symbol canonical sort to an earlier genesis.">
+					<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 text-xs font-semibold" title="This category claims the same symbol but lost the per-symbol canonical sort to an earlier genesis.">
 						Non-canonical contender for "{crc20.symbol || '<empty>'}"
 					</span>
 				{/if}
@@ -543,21 +543,21 @@
 
 			<dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
 				<div>
-					<dt class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-0.5">On-chain symbol</dt>
+					<dt class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300 mb-0.5">On-chain symbol</dt>
 					<dd class="font-mono text-slate-900 dark:text-white break-all">
 						{crc20.symbol || '<empty>'}
 						{#if crc20.symbolIsHex}
 							<span class="ml-2 text-[10px] uppercase tracking-wider text-amber-700 dark:text-amber-400" title="Symbol bytes are not valid UTF-8; rendered as hex.">non-UTF-8</span>
 						{/if}
 					</dd>
-					<dd class="text-xs text-slate-500 dark:text-slate-400 font-mono mt-1">bytes: 0x{crc20.symbolBytesHex || '(empty)'}</dd>
+					<dd class="text-xs text-slate-500 dark:text-zinc-300 font-mono mt-1">bytes: 0x{crc20.symbolBytesHex || '(empty)'}</dd>
 				</div>
 				<div>
-					<dt class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-0.5">On-chain decimals</dt>
+					<dt class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300 mb-0.5">On-chain decimals</dt>
 					<dd class="font-mono text-slate-900 dark:text-white">{crc20.decimals}</dd>
 				</div>
 				<div class="sm:col-span-2">
-					<dt class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-0.5">On-chain name</dt>
+					<dt class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300 mb-0.5">On-chain name</dt>
 					<dd class="font-mono text-slate-900 dark:text-white break-all">{crc20.name ?? '<non-UTF-8 bytes>'}</dd>
 					{#if token.name && crc20.name && token.name !== crc20.name}
 						<dd class="text-xs text-amber-700 dark:text-amber-400 mt-1">
@@ -566,23 +566,23 @@
 					{/if}
 				</div>
 				<div>
-					<dt class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-0.5">Genesis provenance</dt>
-					<dd class="text-slate-700 dark:text-slate-300 text-xs">
+					<dt class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300 mb-0.5">Genesis provenance</dt>
+					<dd class="text-slate-700 dark:text-zinc-200 text-xs">
 						Commit block <span class="font-mono">{crc20.commitBlock.toLocaleString()}</span><br />
 						Reveal block <span class="font-mono">{crc20.revealBlock.toLocaleString()}</span><br />
 						Fair genesis height <span class="font-mono">{crc20.fairGenesisHeight.toLocaleString()}</span>
-						<span class="text-slate-500 dark:text-slate-500" title="max(commit_block, reveal_block - 20). Drives the per-symbol canonical sort.">ⓘ</span>
+						<span class="text-slate-500 dark:text-zinc-400" title="max(commit_block, reveal_block - 20). Drives the per-symbol canonical sort.">ⓘ</span>
 					</dd>
 				</div>
 				<div>
-					<dt class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-0.5">Recipient pubkey</dt>
-					<dd class="font-mono text-xs text-slate-700 dark:text-slate-300 break-all">{crc20.recipientPubkeyHex.slice(0, 16)}…{crc20.recipientPubkeyHex.slice(-8)}</dd>
+					<dt class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300 mb-0.5">Recipient pubkey</dt>
+					<dd class="font-mono text-xs text-slate-700 dark:text-zinc-200 break-all">{crc20.recipientPubkeyHex.slice(0, 16)}…{crc20.recipientPubkeyHex.slice(-8)}</dd>
 				</div>
 			</dl>
 
 			{#if crc20.contenders.length > 1}
 				<details class="group mt-5 pt-4 border-t border-amber-200 dark:border-amber-900/40">
-					<summary class="cursor-pointer flex items-center gap-2 text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 list-none select-none">
+					<summary class="cursor-pointer flex items-center gap-2 text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300 hover:text-slate-700 dark:hover:text-zinc-200 list-none select-none">
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							viewBox="0 0 20 20"
@@ -600,17 +600,17 @@
 								{#if cont.isCanonical}
 									<span class="px-1.5 py-0.5 rounded bg-amber-600 text-white text-[10px] font-semibold">winner</span>
 								{:else}
-									<span class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px]">n.c.</span>
+									<span class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 text-[10px]">n.c.</span>
 								{/if}
 								{#if cont.categoryHex === token.id}
-									<span class="font-mono text-slate-700 dark:text-slate-300">{cont.categoryHex.slice(0, 12)}…{cont.categoryHex.slice(-6)}</span>
+									<span class="font-mono text-slate-700 dark:text-zinc-200">{cont.categoryHex.slice(0, 12)}…{cont.categoryHex.slice(-6)}</span>
 									<span class="text-amber-700 dark:text-amber-400 font-medium">(this token)</span>
 								{:else}
 									<a href={`/token/${cont.categoryHex}`} class="font-mono text-violet-600 dark:text-violet-400 hover:underline">
 										{cont.categoryHex.slice(0, 12)}…{cont.categoryHex.slice(-6)}
 									</a>
 								{/if}
-								<span class="text-slate-500 dark:text-slate-500 ml-auto">fair height {cont.fairGenesisHeight.toLocaleString()}</span>
+								<span class="text-slate-500 dark:text-zinc-400 ml-auto">fair height {cont.fairGenesisHeight.toLocaleString()}</span>
 							</li>
 						{/each}
 					</ul>
@@ -708,7 +708,7 @@
 			{/if}
 			{#if data.watchlistCount > 0}
 				<span
-					class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium"
+					class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 text-xs font-medium"
 					title="Number of distinct wallets that have added this token to their watchlist"
 				>
 					⭐ On {data.watchlistCount} watchlist{data.watchlistCount === 1 ? '' : 's'}
@@ -728,7 +728,7 @@
 			token.iconStatus.status === 'blocked'
 				? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900/40 text-red-800 dark:text-red-200'
 				: token.iconStatus.status === 'no_uri'
-					? 'bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'
+					? 'bg-slate-50 dark:bg-zinc-900/40 border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-200'
 					: 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-amber-200'}
 		<div class={`mb-6 px-3 py-2 rounded-lg border text-xs ${tone}`} role="note">
 			<span class="font-medium">Icon:</span> {token.iconStatus.label}
@@ -736,17 +736,17 @@
 	{/if}
 
 	<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-8">
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800">
-			<div class="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Supply</div>
+		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800">
+			<div class="text-xs text-slate-500 dark:text-zinc-300 uppercase tracking-wider mb-1">Supply</div>
 			<div class="text-xl font-mono">{decimalSupply}</div>
 		</div>
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800">
-			<div class="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Holders</div>
+		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800">
+			<div class="text-xs text-slate-500 dark:text-zinc-300 uppercase tracking-wider mb-1">Holders</div>
 			<div class="text-xl">{token.holderCount ?? '—'}</div>
 		</div>
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800">
 			<Tooltip>
-				<TooltipTrigger class="block text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 cursor-help text-left">
+				<TooltipTrigger class="block text-xs text-slate-500 dark:text-zinc-300 uppercase tracking-wider mb-1 cursor-help text-left">
 					Distribution
 				</TooltipTrigger>
 				<TooltipContent>
@@ -763,8 +763,8 @@
 				<div class="text-xl font-mono">—</div>
 			{/if}
 		</div>
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800">
-			<div class="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Price (USD)</div>
+		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800">
+			<div class="text-xs text-slate-500 dark:text-zinc-300 uppercase tracking-wider mb-1">Price (USD)</div>
 			<div class="text-xl font-mono">
 				{#if data.priceUSD > 0}
 					${data.priceUSD >= 1 ? data.priceUSD.toFixed(2) : data.priceUSD.toFixed(6)}
@@ -773,20 +773,20 @@
 				{/if}
 			</div>
 		</div>
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800">
-			<div class="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">TVL (USD)</div>
+		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800">
+			<div class="text-xs text-slate-500 dark:text-zinc-300 uppercase tracking-wider mb-1">TVL (USD)</div>
 			<div class="text-xl font-mono">
 				{data.tvlUSD > 0 ? formatMarketCap(data.tvlUSD.toString()) : '—'}
 			</div>
 		</div>
 		{#if marketCapUSD > 0 && data.tvlUSD >= data.mcapTvlThresholdUSD}
-			<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 col-span-2 md:col-span-1">
-				<div class="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1" title="Hidden for tokens whose Cauldron TVL is below the average TVL of the top half of listed tokens — caps derived from negligible liquidity would skew rankings.">Market cap</div>
+			<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 col-span-2 md:col-span-1">
+				<div class="text-xs text-slate-500 dark:text-zinc-300 uppercase tracking-wider mb-1" title="Hidden for tokens whose Cauldron TVL is below the average TVL of the top half of listed tokens — caps derived from negligible liquidity would skew rankings.">Market cap</div>
 				<div class="text-xl font-mono">{formatMarketCap(marketCapUSD.toString())}</div>
 			</div>
 		{/if}
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800">
-			<div class="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Genesis block</div>
+		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800">
+			<div class="text-xs text-slate-500 dark:text-zinc-300 uppercase tracking-wider mb-1">Genesis block</div>
 			<div class="text-xl font-mono">
 				<a
 					href={`https://explorer.salemkode.com/block/${token.genesisBlock}`}
@@ -799,9 +799,9 @@
 				</a>
 			</div>
 		</div>
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800">
 			<Tooltip>
-				<TooltipTrigger class="block text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 cursor-help text-left">
+				<TooltipTrigger class="block text-xs text-slate-500 dark:text-zinc-300 uppercase tracking-wider mb-1 cursor-help text-left">
 					Live UTXOs
 				</TooltipTrigger>
 				<TooltipContent>
@@ -810,9 +810,9 @@
 			</Tooltip>
 			<div class="text-xl font-mono">{token.liveUtxoCount ?? '—'}</div>
 		</div>
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800">
 			<Tooltip>
-				<TooltipTrigger class="block text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 cursor-help text-left">
+				<TooltipTrigger class="block text-xs text-slate-500 dark:text-zinc-300 uppercase tracking-wider mb-1 cursor-help text-left">
 					Live NFTs
 				</TooltipTrigger>
 				<TooltipContent>
@@ -830,66 +830,66 @@
 		Each row only renders when its underlying data is meaningful.
 	-->
 	<section class="mb-8 grid grid-cols-1 md:grid-cols-2 gap-3">
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-			<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Profile</div>
+		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+			<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300 mb-3">Profile</div>
 			<dl class="space-y-2 text-sm">
 				<div class="flex justify-between gap-3">
-					<dt class="text-slate-500 dark:text-slate-400">Age</dt>
-					<dd class="font-mono text-slate-900 dark:text-slate-100" title={new Date(token.genesisTime * 1000).toISOString()}>
+					<dt class="text-slate-500 dark:text-zinc-300">Age</dt>
+					<dd class="font-mono text-slate-900 dark:text-zinc-100" title={new Date(token.genesisTime * 1000).toISOString()}>
 						{formatAge(ageDays)} <span class="text-slate-500 ml-1">({ageDays.toLocaleString()}d)</span>
 					</dd>
 				</div>
 				{#if token.topHolderSharePct != null}
 					<div class="flex justify-between gap-3">
-						<dt class="text-slate-500 dark:text-slate-400">Top holder controls</dt>
-						<dd class="font-mono {token.topHolderSharePct >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-slate-100'}" title="Largest single holder's balance ÷ current supply">
+						<dt class="text-slate-500 dark:text-zinc-300">Top holder controls</dt>
+						<dd class="font-mono {token.topHolderSharePct >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-zinc-100'}" title="Largest single holder's balance ÷ current supply">
 							{token.topHolderSharePct.toFixed(token.topHolderSharePct >= 10 ? 1 : 2)}%
 						</dd>
 					</div>
 				{/if}
 				{#if token.top10HolderSharePct != null && data.holders.length >= 5}
 					<div class="flex justify-between gap-3">
-						<dt class="text-slate-500 dark:text-slate-400">Top {data.holders.length} hold</dt>
-						<dd class="font-mono text-slate-900 dark:text-slate-100">
+						<dt class="text-slate-500 dark:text-zinc-300">Top {data.holders.length} hold</dt>
+						<dd class="font-mono text-slate-900 dark:text-zinc-100">
 							{token.top10HolderSharePct.toFixed(token.top10HolderSharePct >= 10 ? 1 : 2)}%
 						</dd>
 					</div>
 				{/if}
 				{#if showHybridComposition}
 					<div class="flex justify-between gap-3">
-						<dt class="text-slate-500 dark:text-slate-400">Composition</dt>
-						<dd class="font-mono text-slate-900 dark:text-slate-100">
+						<dt class="text-slate-500 dark:text-zinc-300">Composition</dt>
+						<dd class="font-mono text-slate-900 dark:text-zinc-100">
 							{ftCount.toLocaleString()} FT UTXOs · {(token.liveNftCount ?? 0).toLocaleString()} NFTs
 						</dd>
 					</div>
 				{/if}
 				{#if data.venueListings.cauldronFirstListedAt}
 					<div class="flex justify-between gap-3">
-						<dt class="text-slate-500 dark:text-slate-400">Listed on Cauldron</dt>
-						<dd class="font-mono text-slate-900 dark:text-slate-100" title={`First seen on Cauldron at ${formatAbsoluteDate(data.venueListings.cauldronFirstListedAt)}`}>
+						<dt class="text-slate-500 dark:text-zinc-300">Listed on Cauldron</dt>
+						<dd class="font-mono text-slate-900 dark:text-zinc-100" title={`First seen on Cauldron at ${formatAbsoluteDate(data.venueListings.cauldronFirstListedAt)}`}>
 							{formatAbsoluteDate(data.venueListings.cauldronFirstListedAt)}
 						</dd>
 					</div>
 				{/if}
 				{#if data.venueListings.fexFirstListedAt}
 					<div class="flex justify-between gap-3">
-						<dt class="text-slate-500 dark:text-slate-400">Listed on Fex</dt>
-						<dd class="font-mono text-slate-900 dark:text-slate-100">
+						<dt class="text-slate-500 dark:text-zinc-300">Listed on Fex</dt>
+						<dd class="font-mono text-slate-900 dark:text-zinc-100">
 							{formatAbsoluteDate(data.venueListings.fexFirstListedAt)}
 						</dd>
 					</div>
 				{/if}
 				{#if token.bcmrFetchedAt}
 					<div class="flex justify-between gap-3">
-						<dt class="text-slate-500 dark:text-slate-400">BCMR refreshed</dt>
-						<dd class="font-mono text-slate-900 dark:text-slate-100" title={new Date(token.bcmrFetchedAt * 1000).toISOString()}>
+						<dt class="text-slate-500 dark:text-zinc-300">BCMR refreshed</dt>
+						<dd class="font-mono text-slate-900 dark:text-zinc-100" title={new Date(token.bcmrFetchedAt * 1000).toISOString()}>
 							{formatRelative(token.bcmrFetchedAt)}
 						</dd>
 					</div>
 				{/if}
 				{#if data.reportCount > 0}
 					<div class="flex justify-between gap-3">
-						<dt class="text-slate-500 dark:text-slate-400">Open reports</dt>
+						<dt class="text-slate-500 dark:text-zinc-300">Open reports</dt>
 						<dd class="font-mono text-amber-600 dark:text-amber-400" title="Number of unactioned user reports against this token">
 							{data.reportCount}
 						</dd>
@@ -899,13 +899,13 @@
 		</div>
 
 		{#if hasExtremes || data.recentActivity.recentTradeBuckets > 0}
-			<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-				<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Trading</div>
+			<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+				<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300 mb-3">Trading</div>
 				<dl class="space-y-2 text-sm">
 					{#if data.recentActivity.recentTradeBuckets > 0}
 						<div class="flex justify-between gap-3">
-							<dt class="text-slate-500 dark:text-slate-400" title="Number of price-history buckets in the last 24h with non-zero TVL delta — proxy for trade activity">24h activity</dt>
-							<dd class="font-mono text-slate-900 dark:text-slate-100">
+							<dt class="text-slate-500 dark:text-zinc-300" title="Number of price-history buckets in the last 24h with non-zero TVL delta — proxy for trade activity">24h activity</dt>
+							<dd class="font-mono text-slate-900 dark:text-zinc-100">
 								{data.recentActivity.recentTradeBuckets} active bucket{data.recentActivity.recentTradeBuckets === 1 ? '' : 's'}
 								{#if data.recentActivity.recentVolumeUSD > 0}
 									<span class="text-slate-500 ml-1">· ~${data.recentActivity.recentVolumeUSD.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
@@ -917,15 +917,15 @@
 						{@const ext = data.priceExtremes[windowKey]}
 						{#if ext.min != null && ext.max != null}
 							<div class="flex justify-between gap-3">
-								<dt class="text-slate-500 dark:text-slate-400">{windowKey} range</dt>
-								<dd class="font-mono text-slate-900 dark:text-slate-100">
+								<dt class="text-slate-500 dark:text-zinc-300">{windowKey} range</dt>
+								<dd class="font-mono text-slate-900 dark:text-zinc-100">
 									{fmtUsd(ext.min)} – {fmtUsd(ext.max)}
 								</dd>
 							</div>
 						{/if}
 					{/each}
 				</dl>
-				<p class="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
+				<p class="mt-3 text-[11px] text-slate-500 dark:text-zinc-300">
 					Volume is a lower-bound estimate from |TVL deltas|; price extremes are sampled at our 4 h Cauldron sync cadence.
 				</p>
 			</div>
@@ -952,7 +952,7 @@
 		<section class="mb-8">
 			<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-3">AMM venues</h2>
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-				<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 {cauldronPx > 0 ? '' : 'opacity-60'}">
+				<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 {cauldronPx > 0 ? '' : 'opacity-60'}">
 					<div class="flex items-center justify-between mb-2">
 						<div class="flex items-center gap-2">
 							<img src="/cauldron-logo.png" alt="" class="h-5 w-5 rounded-full bg-slate-900 p-0.5" />
@@ -985,7 +985,7 @@
 						</div>
 					</div>
 				</div>
-				<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 {fexPx > 0 ? '' : 'opacity-60'}">
+				<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 {fexPx > 0 ? '' : 'opacity-60'}">
 					<div class="flex items-center justify-between mb-2">
 						<div class="flex items-center gap-2">
 							<img src="/fex-logo.png" alt="" class="h-5 w-5 rounded-full" />
@@ -1037,7 +1037,7 @@
 						class={`px-2.5 py-1 rounded-md font-medium transition-colors ${
 							active
 								? 'bg-violet-600 text-white'
-								: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+								: 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-200 hover:bg-slate-200 dark:hover:bg-zinc-700'
 						}`}
 						aria-current={active ? 'page' : undefined}
 					>
@@ -1046,7 +1046,7 @@
 				{/each}
 			</div>
 		</div>
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
 			<PriceChart
 				buckets={data.priceChart.buckets}
 				decimals={data.token.decimals}
@@ -1054,7 +1054,7 @@
 				rangeLabel={data.priceChart.rangeLabel}
 			/>
 		</div>
-		<p class="mt-2 text-xs text-slate-500 dark:text-slate-400">
+		<p class="mt-2 text-xs text-slate-500 dark:text-zinc-300">
 			Volume is a lower-bound estimate from |TVL deltas| between consecutive snapshots —
 			within-bucket round-trip activity isn't visible at our 4 h sync cadence (10 min fast-pass
 			for already-listed tokens). Price is the per-bucket mean.
@@ -1077,9 +1077,9 @@
 					View on Tapswap →
 				</a>
 			</div>
-			<div class="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
+			<div class="overflow-hidden rounded-xl border border-slate-200 dark:border-zinc-800">
 				<table class="w-full text-sm">
-					<thead class="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+					<thead class="bg-slate-50 dark:bg-zinc-900/50 border-b border-slate-200 dark:border-zinc-800 text-xs font-semibold text-slate-500 dark:text-zinc-300 uppercase tracking-wider">
 						<tr>
 							<th class="text-left px-4 py-3">Offering</th>
 							<th class="text-right px-4 py-3">Asking</th>
@@ -1092,7 +1092,7 @@
 							{@const wantSatsNum = Number(offer.wantSats)}
 							{@const wantBch = Number.isFinite(wantSatsNum) ? wantSatsNum / 1e8 : 0}
 							{@const wantUsd = wantBch * (data.bchPriceUSD ?? 0)}
-							<tr class="border-b border-slate-100 dark:border-slate-800/50">
+							<tr class="border-b border-slate-100 dark:border-zinc-800/50">
 								<td class="px-4 py-3 font-mono text-xs">
 									{#if offer.hasCommitment}
 										NFT <span class="text-slate-500">{offer.hasCommitment.slice(0, 16)}…</span>
@@ -1110,7 +1110,7 @@
 										{wantSatsNum.toLocaleString()} sats
 									{/if}
 								</td>
-								<td class="px-4 py-3 text-right font-mono text-slate-700 dark:text-slate-300">
+								<td class="px-4 py-3 text-right font-mono text-slate-700 dark:text-zinc-200">
 									{wantUsd > 0 ? `$${wantUsd < 1 ? wantUsd.toFixed(4) : wantUsd.toFixed(2)}` : '—'}
 								</td>
 								<td class="px-4 py-3 font-mono text-xs text-slate-500" title="Maker public-key hash (raw bytes; cashaddr rendering deferred)">
@@ -1121,7 +1121,7 @@
 					</tbody>
 				</table>
 			</div>
-			<p class="mt-2 text-xs text-slate-500 dark:text-slate-400">
+			<p class="mt-2 text-xs text-slate-500 dark:text-zinc-300">
 				Listings aggregated from on-chain MPSW OP_RETURNs via our own BCHN —
 				not from Tapswap's API. Close events (sale / cancellation) are not
 				tracked yet; a stale listing that's already been taken will drop off
@@ -1146,19 +1146,19 @@
 					BCMR technical
 					<span class="ml-2 text-sm font-normal text-slate-500">NFT schema + extensions</span>
 				</h2>
-				<div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 divide-y divide-slate-200 dark:divide-slate-800">
+				<div class="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-slate-200 dark:divide-zinc-800">
 					{#if bcmr.nftsDescription || nftEntries.length > 0}
 						<div class="p-5">
-							<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">NFTs</div>
+							<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300 mb-2">NFTs</div>
 							{#if bcmr.nftsDescription}
-								<p class="text-sm text-slate-700 dark:text-slate-300 mb-3">{bcmr.nftsDescription}</p>
+								<p class="text-sm text-slate-700 dark:text-zinc-200 mb-3">{bcmr.nftsDescription}</p>
 							{/if}
 							{#if nftEntries.length > 0}
 								<details class="text-sm">
 									<summary class="cursor-pointer text-violet-600 dark:text-violet-400 hover:underline select-none">
 										{nftEntries.length} NFT type{nftEntries.length === 1 ? '' : 's'} defined — show raw
 									</summary>
-									<pre class="mt-3 p-3 rounded bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono overflow-auto max-h-96">{JSON.stringify(bcmr.nftTypes, null, 2)}</pre>
+									<pre class="mt-3 p-3 rounded bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs font-mono overflow-auto max-h-96">{JSON.stringify(bcmr.nftTypes, null, 2)}</pre>
 								</details>
 							{/if}
 						</div>
@@ -1166,12 +1166,12 @@
 
 					{#if extEntries.length > 0}
 						<div class="p-5">
-							<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Extensions</div>
+							<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300 mb-2">Extensions</div>
 							<details class="text-sm">
 								<summary class="cursor-pointer text-violet-600 dark:text-violet-400 hover:underline select-none">
 									{extEntries.length} extension{extEntries.length === 1 ? '' : 's'} — show raw
 								</summary>
-								<pre class="mt-3 p-3 rounded bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono overflow-auto max-h-96">{JSON.stringify(bcmr.extensions, null, 2)}</pre>
+								<pre class="mt-3 p-3 rounded bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs font-mono overflow-auto max-h-96">{JSON.stringify(bcmr.extensions, null, 2)}</pre>
 							</details>
 						</div>
 					{/if}
@@ -1198,9 +1198,9 @@
 				clips correctly because the wrapper itself has no inner content
 				beyond the table.
 			-->
-			<div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+			<div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-zinc-800">
 				<table class="w-full text-sm">
-					<thead class="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+					<thead class="bg-slate-50 dark:bg-zinc-900/50 border-b border-slate-200 dark:border-zinc-800 text-xs font-semibold text-slate-500 dark:text-zinc-300 uppercase tracking-wider">
 						<tr>
 							<th class="text-left px-4 py-3">Address</th>
 							<th class="text-right px-4 py-3">Balance</th>
@@ -1225,7 +1225,7 @@
 									return null;
 								}
 							})()}
-							<tr class="border-b border-slate-100 dark:border-slate-800/50">
+							<tr class="border-b border-slate-100 dark:border-zinc-800/50">
 								<td class="px-4 py-3 font-mono text-xs truncate max-w-xs">
 									<span class="text-slate-400 mr-2">{i + 1}.</span>{holder.address}
 								</td>
@@ -1251,7 +1251,7 @@
 			affordances so visitors who want the raw registry payload can grab
 			it without crowding the BCMR compact bar near the top.
 		-->
-		<div class="mt-8 text-sm text-slate-500 dark:text-slate-400">
+		<div class="mt-8 text-sm text-slate-500 dark:text-zinc-300">
 			<span class="uppercase tracking-wider text-xs mr-2">BCMR JSON</span>
 			<a
 				href={`https://bcmr.paytaca.com/api/tokens/${token.id}`}
@@ -1265,13 +1265,13 @@
 		</div>
 	{/if}
 
-	<div class="flex items-center justify-between text-sm mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
+	<div class="flex items-center justify-between text-sm mt-8 pt-6 border-t border-slate-100 dark:border-zinc-800">
 		<a href="/" class="text-violet-600 hover:underline">← All tokens</a>
 		{#if !showReport && reportStatus !== 'ok'}
 			<button
 				type="button"
 				onclick={() => (showReport = true)}
-				class="text-xs text-slate-500 hover:text-violet-600 dark:text-slate-400 dark:hover:text-violet-400"
+				class="text-xs text-slate-500 hover:text-violet-600 dark:text-zinc-300 dark:hover:text-violet-400"
 			>
 				Report this token
 			</button>
@@ -1280,35 +1280,35 @@
 
 	{#if showReport || reportStatus === 'ok'}
 		<section
-			class="mt-6 p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30"
+			class="mt-6 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/30"
 			aria-label="Report this token"
 		>
 			{#if reportStatus === 'ok'}
 				<h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-2">
 					Thanks — we'll review it.
 				</h2>
-				<p class="text-sm text-slate-600 dark:text-slate-400">
+				<p class="text-sm text-slate-600 dark:text-zinc-300">
 					Your report has been recorded. The operator will triage it shortly.
 				</p>
 			{:else}
 				<h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-1">
 					Report this token
 				</h2>
-				<p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
+				<p class="text-xs text-slate-500 dark:text-zinc-300 mb-4">
 					Flag content you believe violates good-faith use of the directory.
 					Your report is anonymous by default; leave an email only if you'd
 					like a follow-up.
 				</p>
 				<form onsubmit={submitReport} class="space-y-3">
 					<div>
-						<label for="report-reason" class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+						<label for="report-reason" class="block text-xs font-medium text-slate-700 dark:text-zinc-200 mb-1">
 							Reason
 						</label>
 						<select
 							id="report-reason"
 							bind:value={reportReason}
 							disabled={reportStatus === 'submitting'}
-							class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+							class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
 						>
 							{#each REPORT_REASONS as r (r)}
 								<option value={r}>{REPORT_REASON_LABELS[r]}</option>
@@ -1316,7 +1316,7 @@
 						</select>
 					</div>
 					<div>
-						<label for="report-details" class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+						<label for="report-details" class="block text-xs font-medium text-slate-700 dark:text-zinc-200 mb-1">
 							Details <span class="text-slate-400 font-normal">(optional)</span>
 						</label>
 						<textarea
@@ -1326,11 +1326,11 @@
 							maxlength={2000}
 							rows={4}
 							placeholder="Why is this token problematic? Any context you can share helps us triage."
-							class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 resize-y"
+							class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 resize-y"
 						></textarea>
 					</div>
 					<div>
-						<label for="report-email" class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+						<label for="report-email" class="block text-xs font-medium text-slate-700 dark:text-zinc-200 mb-1">
 							Your email <span class="text-slate-400 font-normal">(optional; for follow-up only)</span>
 						</label>
 						<input
@@ -1340,7 +1340,7 @@
 							disabled={reportStatus === 'submitting'}
 							maxlength={200}
 							placeholder="you@example.com"
-							class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
+							class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
 						/>
 					</div>
 					{#if reportStatus === 'ratelimited'}
@@ -1367,7 +1367,7 @@
 								reportStatus = 'idle';
 							}}
 							disabled={reportStatus === 'submitting'}
-							class="text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 disabled:opacity-50"
+							class="text-sm text-slate-500 hover:text-slate-700 dark:text-zinc-300 dark:hover:text-zinc-100 disabled:opacity-50"
 						>
 							Cancel
 						</button>

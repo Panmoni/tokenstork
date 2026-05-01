@@ -29,13 +29,13 @@
 	});
 </script>
 
-<div class="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 border-b border-slate-200 dark:border-slate-700">
+<div class="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-zinc-900 dark:to-zinc-800 border-b border-slate-200 dark:border-zinc-700">
 	<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-3">
 		<div class="hidden md:flex items-center justify-between">
 			<div class="flex items-center gap-8">
 				<Tooltip>
 					<TooltipTrigger class="flex items-center gap-2 cursor-default">
-						<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+						<span class="text-xs font-medium text-slate-500 dark:text-zinc-300 uppercase tracking-wider">
 							Tracked
 						</span>
 						<span class="px-3 py-1 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 font-semibold text-sm">
@@ -49,7 +49,7 @@
 
 				<Tooltip>
 					<TooltipTrigger class="flex items-center gap-2 cursor-default">
-						<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+						<span class="text-xs font-medium text-slate-500 dark:text-zinc-300 uppercase tracking-wider">
 							Listed
 						</span>
 						<a
@@ -66,7 +66,7 @@
 
 				<Tooltip>
 					<TooltipTrigger class="flex items-center gap-2 cursor-default">
-						<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+						<span class="text-xs font-medium text-slate-500 dark:text-zinc-300 uppercase tracking-wider">
 							Total TVL
 						</span>
 						{#if tvlUSD !== null}
@@ -74,7 +74,7 @@
 								{compactUSD(tvlUSD)}
 							</span>
 						{:else}
-							<span class="inline-block w-14 h-4 bg-slate-200 dark:bg-slate-700 rounded animate-pulse"></span>
+							<span class="inline-block w-14 h-4 bg-slate-200 dark:bg-zinc-700 rounded animate-pulse"></span>
 						{/if}
 					</TooltipTrigger>
 					<TooltipContent>
@@ -87,7 +87,7 @@
 					class="flex items-center gap-2 hover:opacity-80 transition-opacity"
 					title="Categories whose genesis transaction was mined in the last 24 hours. Click to view them."
 				>
-					<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+					<span class="text-xs font-medium text-slate-500 dark:text-zinc-300 uppercase tracking-wider">
 						New 24h
 					</span>
 					<span class="font-semibold text-violet-600 dark:text-violet-400 text-sm underline-offset-4 hover:underline">
@@ -98,7 +98,7 @@
 				{#if tailLastBlock !== null}
 					<Tooltip>
 						<TooltipTrigger class="flex items-center gap-2 cursor-default">
-							<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+							<span class="text-xs font-medium text-slate-500 dark:text-zinc-300 uppercase tracking-wider">
 								Block
 							</span>
 							<a
@@ -116,7 +116,7 @@
 
 				<Tooltip>
 					<TooltipTrigger class="flex items-center gap-2 cursor-default">
-						<span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+						<span class="text-xs font-medium text-slate-500 dark:text-zinc-300 uppercase tracking-wider">
 							BCH
 						</span>
 						{#if $bchPrice.bchPrice}
@@ -124,7 +124,7 @@
 								${$bchPrice.bchPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
 							</span>
 						{:else}
-							<span class="inline-block w-16 h-4 bg-slate-200 dark:bg-slate-700 rounded animate-pulse"></span>
+							<span class="inline-block w-16 h-4 bg-slate-200 dark:bg-zinc-700 rounded animate-pulse"></span>
 						{/if}
 					</TooltipTrigger>
 					<TooltipContent>
@@ -135,50 +135,50 @@
 		</div>
 
 		<div class="md:hidden grid grid-cols-2 gap-2 py-1">
-			<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-slate-800 shadow-sm">
-				<span class="text-xs text-slate-500 dark:text-slate-400">Tokens</span>
+			<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 shadow-sm">
+				<span class="text-xs text-slate-500 dark:text-zinc-300">Tokens</span>
 				<span class="font-semibold text-violet-600 dark:text-violet-400 text-sm">{fmt(tokensTracked)}</span>
 			</div>
 			<a
 				href="/?listed=1&sort=tvl"
-				class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-slate-800 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+				class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 shadow-sm hover:bg-slate-50 dark:hover:bg-zinc-700 transition-colors"
 				title="Tokens with an active Cauldron / Fex AMM price or an open Tapswap P2P listing"
 			>
-				<span class="text-xs text-slate-500 dark:text-slate-400">Listed</span>
+				<span class="text-xs text-slate-500 dark:text-zinc-300">Listed</span>
 				<span class="font-semibold text-violet-600 dark:text-violet-400 text-sm">{fmt(listedCount)}</span>
 			</a>
-			<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-slate-800 shadow-sm">
-				<span class="text-xs text-slate-500 dark:text-slate-400">Total TVL</span>
+			<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 shadow-sm">
+				<span class="text-xs text-slate-500 dark:text-zinc-300">Total TVL</span>
 				{#if tvlUSD !== null}
 					<span class="font-mono font-semibold text-sm">{compactUSD(tvlUSD)}</span>
 				{:else}
-					<span class="inline-block w-12 h-4 bg-slate-200 dark:bg-slate-700 rounded animate-pulse"></span>
+					<span class="inline-block w-12 h-4 bg-slate-200 dark:bg-zinc-700 rounded animate-pulse"></span>
 				{/if}
 			</div>
 			<a
 				href="/?new24h=1&sort=recent"
-				class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-slate-800 shadow-sm no-underline"
+				class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 shadow-sm no-underline"
 				title="Tokens minted in the last 24 hours"
 			>
-				<span class="text-xs text-slate-500 dark:text-slate-400">New 24h</span>
+				<span class="text-xs text-slate-500 dark:text-zinc-300">New 24h</span>
 				<span class="font-semibold text-sm text-violet-600 dark:text-violet-400">{fmt(newIn24h)}</span>
 			</a>
 			{#if tailLastBlock !== null}
 				<a
 					href="/blocks"
-					class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-slate-800 shadow-sm no-underline hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+					class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 shadow-sm no-underline hover:bg-slate-50 dark:hover:bg-zinc-700 transition-colors"
 					title="Per-block economics dashboard"
 				>
-					<span class="text-xs text-slate-500 dark:text-slate-400">Block</span>
+					<span class="text-xs text-slate-500 dark:text-zinc-300">Block</span>
 					<span class="font-mono text-sm text-violet-600 dark:text-violet-400">{fmt(tailLastBlock)}</span>
 				</a>
 			{/if}
-			<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-slate-800 shadow-sm">
-				<span class="text-xs text-slate-500 dark:text-slate-400">BCH</span>
+			<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 shadow-sm">
+				<span class="text-xs text-slate-500 dark:text-zinc-300">BCH</span>
 				{#if $bchPrice.bchPrice}
 					<span class="font-mono font-semibold text-sm">${$bchPrice.bchPrice.toFixed(2)}</span>
 				{:else}
-					<span class="w-12 h-4 bg-slate-200 dark:bg-slate-700 rounded animate-pulse"></span>
+					<span class="w-12 h-4 bg-slate-200 dark:bg-zinc-700 rounded animate-pulse"></span>
 				{/if}
 			</div>
 		</div>

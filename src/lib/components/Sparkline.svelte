@@ -62,7 +62,7 @@
 			? 'stroke-emerald-500 dark:stroke-emerald-400'
 			: trend === 'down'
 				? 'stroke-rose-500 dark:stroke-rose-400'
-				: 'stroke-slate-400 dark:stroke-slate-500'
+				: 'stroke-slate-400 dark:stroke-zinc-500'
 	);
 </script>
 
@@ -86,5 +86,5 @@
 		/>
 	</svg>
 {:else}
-	<span class="text-slate-300 dark:text-slate-600 text-xs">—</span>
+	<span class="text-slate-300 dark:text-zinc-500 text-xs">—</span>
 {/if}

@@ -277,7 +277,7 @@
 	>
 		Terms of Service
 	</h1>
-	<p class="text-slate-500 dark:text-slate-400 mb-8">
+	<p class="text-slate-500 dark:text-zinc-300 mb-8">
 		Last updated: {lastUpdated}. See also our <a
 			href="/privacy"
 			class="text-violet-600 hover:underline">Privacy Policy</a
@@ -286,9 +286,9 @@
 
 	<nav
 		aria-label="Table of contents"
-		class="mb-10 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900"
+		class="mb-10 p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900"
 	>
-		<h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3">
+		<h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-300 mb-3">
 			On this page
 		</h2>
 		<ol class="grid gap-1 sm:grid-cols-2 list-none p-0 m-0">

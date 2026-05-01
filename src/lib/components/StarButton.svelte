@@ -88,7 +88,7 @@
 	disabled={busy}
 	class="inline-flex items-center justify-center p-1 rounded transition-colors {watching
 		? 'text-emerald-500 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-300'
-		: 'text-slate-400 hover:text-amber-500 dark:text-slate-500 dark:hover:text-amber-400'} disabled:opacity-50"
+		: 'text-slate-400 hover:text-amber-500 dark:text-zinc-400 dark:hover:text-amber-400'} disabled:opacity-50"
 	aria-label={watching ? 'Remove from watchlist' : 'Add to watchlist'}
 	aria-pressed={watching}
 	title={user

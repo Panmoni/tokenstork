@@ -12,7 +12,7 @@
 	</h1>
 
 	<div class="prose prose-slate dark:prose-invert max-w-none">
-		<p class="text-slate-600 dark:text-slate-300">
+		<p class="text-slate-600 dark:text-zinc-200">
 			TokenStork.com is a market-cap site for
 			<a href="https://bchworks.com/" target="_blank" rel="noopener noreferrer">BCH</a>
 			<a href="https://cashtokens.org/" target="_blank" rel="noopener noreferrer">CashTokens</a>
@@ -23,36 +23,36 @@
 			<a href="https://github.com/Panmoni/tokenstork/issues" target="_blank" rel="noopener noreferrer">issues</a>
 			or the <a href="/roadmap">roadmap</a>.
 		</p>
-		<p class="text-slate-600 dark:text-slate-300 mt-4">
+		<p class="text-slate-600 dark:text-zinc-200 mt-4">
 			I welcome your suggestions, criticisms, bug reports and general feedback any time. Let me know
 			what functionality would be of assistance to you, and I will probably add it!
 		</p>
 	</div>
 
 	<div class="grid gap-5 md:grid-cols-2 mt-10">
-		<section class="p-6 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+		<section class="p-6 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
 			<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-3">Need help building?</h2>
-			<p class="text-slate-600 dark:text-slate-300">
+			<p class="text-slate-600 dark:text-zinc-200">
 				Want to build a dapp on BCH but need some technical help? <strong>Hire me!</strong> Email
 				<a href="mailto:george@panmoni.com" class="text-violet-600 dark:text-violet-400 hover:underline">george@panmoni.com</a>
 				and I'll build what you need.
 			</p>
 		</section>
 
-		<section class="p-6 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+		<section class="p-6 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
 			<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-3">Get the latest BCH news</h2>
-			<p class="text-slate-600 dark:text-slate-300">
+			<p class="text-slate-600 dark:text-zinc-200">
 				Join
 				<a href="https://www.reddit.com/r/BCHCashTokens/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">r/BCHCashTokens</a>,
 				the only remaining censorship-free BCH subreddit where everything related to BCH is on-topic.
 			</p>
 		</section>
 
-		<section class="p-6 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 md:col-span-2">
+		<section class="p-6 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 md:col-span-2">
 			<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-3">
 				TokenStork BCH Metadata Registry
 			</h2>
-			<p class="text-slate-600 dark:text-slate-300">
+			<p class="text-slate-600 dark:text-zinc-200">
 				TokenStork also hosts
 				<a
 					href="https://tokenstork.com/.well-known/bitcoin-cash-metadata-registry.json"
@@ -73,23 +73,23 @@
 
 		<section class="p-6 rounded-xl border border-violet-200 dark:border-violet-900/50 bg-violet-50/40 dark:bg-violet-950/20 md:col-span-2">
 			<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-3">Support this project</h2>
-			<p class="text-slate-600 dark:text-slate-300 mb-4">
+			<p class="text-slate-600 dark:text-zinc-200 mb-4">
 				TokenStork is self-funded. Ongoing costs include a ~$50/month VPS bill (where the archival BCH node, Postgres, indexer workers, and web app all live), domain
 				registration, and my time. If the site is useful to you, please consider chipping in by
 				donating to the address below. Thank you!
 			</p>
-			<p class="font-mono text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded px-3 py-2 inline-block select-all break-all">
+			<p class="font-mono text-sm bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 border border-slate-200 dark:border-zinc-700 rounded px-3 py-2 inline-block select-all break-all">
 				bitcoincash:qz3pxmwda8gd42wa8k9yfxcwhcaapeuhygjc8mc4m8
 			</p>
 		</section>
 
-		<section class="p-6 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 md:col-span-2">
+		<section class="p-6 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 md:col-span-2">
 			<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-3">Acknowledgments</h2>
-			<p class="text-slate-600 dark:text-slate-300 mb-4">
+			<p class="text-slate-600 dark:text-zinc-200 mb-4">
 				TokenStork is made possible through the open-source projects and APIs below. Thank you
 				for your collaboration!
 			</p>
-			<ul class="list-disc list-inside ml-2 text-slate-600 dark:text-slate-300 space-y-1.5">
+			<ul class="list-disc list-inside ml-2 text-slate-600 dark:text-zinc-200 space-y-1.5">
 				<li>
 					<a href="https://www.paytaca.com/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Paytaca</a>
 					— public BCMR metadata API powering every token's name, symbol, icon, and description
@@ -127,9 +127,9 @@
 			</ul>
 		</section>
 
-		<section class="p-6 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 md:col-span-2">
+		<section class="p-6 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 md:col-span-2">
 			<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-3">Contact</h2>
-			<p class="text-slate-600 dark:text-slate-300">
+			<p class="text-slate-600 dark:text-zinc-200">
 				Please email
 				<a href="mailto:hello@panmoni.com" class="text-violet-600 dark:text-violet-400 hover:underline">hello@panmoni.com</a>
 				and we'll be thrilled to assist you.

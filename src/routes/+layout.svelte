@@ -58,7 +58,7 @@
 </svelte:head>
 
 <TooltipProvider>
-	<div class="bg-white dark:bg-slate-950 min-h-screen">
+	<div class="bg-white dark:bg-zinc-950 min-h-screen">
 		<MetricsBar
 			tokensTracked={data.tokensTracked}
 			tailLastBlock={data.tailLastBlock}

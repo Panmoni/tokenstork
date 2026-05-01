@@ -34,10 +34,10 @@
 		return `${sign}${n.toFixed(2)}%`;
 	}
 	function pctColor(n: number | null): string {
-		if (n == null || !Number.isFinite(n)) return 'text-slate-400 dark:text-slate-500';
+		if (n == null || !Number.isFinite(n)) return 'text-slate-400 dark:text-zinc-400';
 		if (n > 0) return 'text-emerald-600 dark:text-emerald-400';
 		if (n < 0) return 'text-rose-600 dark:text-rose-400';
-		return 'text-slate-500 dark:text-slate-400';
+		return 'text-slate-500 dark:text-zinc-300';
 	}
 
 // Local input value, bound to the search box; URL is the source of truth.
@@ -119,7 +119,7 @@
 				placeholder="Search name, symbol, description, or category..."
 				bind:value={searchInput}
 				oninput={onSearchInput}
-				class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all"
+				class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all"
 				aria-label="Search tokens"
 			/>
 			<svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -129,7 +129,7 @@
 		<select
 			value={typeFilter}
 			onchange={(e) => setType((e.currentTarget as HTMLSelectElement).value)}
-			class="px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+			class="px-4 py-3 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
 			aria-label="Filter by type"
 		>
 			<option value="all">All types</option>
@@ -138,7 +138,7 @@
 			<option value="FT+NFT">FT + NFT</option>
 		</select>
 		<label
-			class="flex items-center gap-2 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-700 dark:text-slate-300 cursor-pointer select-none hover:border-violet-500 transition-colors"
+			class="flex items-center gap-2 px-4 py-3 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm text-slate-700 dark:text-zinc-200 cursor-pointer select-none hover:border-violet-500 transition-colors"
 			title="Only show tokens currently listed on the Cauldron DEX"
 		>
 			<input
@@ -151,7 +151,7 @@
 			<span>Cauldron</span>
 		</label>
 		<label
-			class="flex items-center gap-2 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-700 dark:text-slate-300 cursor-pointer select-none hover:border-emerald-500 transition-colors"
+			class="flex items-center gap-2 px-4 py-3 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm text-slate-700 dark:text-zinc-200 cursor-pointer select-none hover:border-emerald-500 transition-colors"
 			title="Only show tokens with open P2P listings on Tapswap"
 		>
 			<input
@@ -164,7 +164,7 @@
 			<span>Tapswap</span>
 		</label>
 		<label
-			class="flex items-center gap-2 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-700 dark:text-slate-300 cursor-pointer select-none hover:border-sky-500 transition-colors"
+			class="flex items-center gap-2 px-4 py-3 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm text-slate-700 dark:text-zinc-200 cursor-pointer select-none hover:border-sky-500 transition-colors"
 			title="Only show tokens currently listed on Fex.cash (AMM)"
 		>
 			<input
@@ -187,9 +187,9 @@
 		Token cell alongside name+symbol; holder count, NFT count, and
 		truncated category stay on the token detail page.
 	-->
-	<div class="hidden md:block overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
+	<div class="hidden md:block overflow-hidden rounded-xl border border-slate-200 dark:border-zinc-800">
 		<div
-			class="grid grid-cols-[4.5fr_1.2fr_0.8fr_0.8fr_0.8fr_1.2fr_1.2fr_1fr_1.2fr] gap-2 px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider items-center"
+			class="grid grid-cols-[4.5fr_1.2fr_0.8fr_0.8fr_0.8fr_1.2fr_1.2fr_1fr_1.2fr] gap-2 px-4 py-3 bg-slate-50 dark:bg-zinc-900/50 border-b border-slate-200 dark:border-zinc-800 text-xs font-semibold text-slate-500 dark:text-zinc-300 uppercase tracking-wider items-center"
 		>
 			<button type="button" class="text-left cursor-pointer hover:text-violet-600 dark:hover:text-violet-400" onclick={() => setSort('name')}>
 				Token {sort === 'name' ? '↕' : ''}
@@ -210,18 +210,18 @@
 
 		{#each tokens as token (token.id)}
 			<div
-				class="grid grid-cols-[4.5fr_1.2fr_0.8fr_0.8fr_0.8fr_1.2fr_1.2fr_1fr_1.2fr] gap-2 px-4 py-4 items-center border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors"
+				class="grid grid-cols-[4.5fr_1.2fr_0.8fr_0.8fr_0.8fr_1.2fr_1.2fr_1fr_1.2fr] gap-2 px-4 py-4 items-center border-b border-slate-100 dark:border-zinc-800/50 hover:bg-slate-50 dark:hover:bg-zinc-900/50 transition-colors"
 			>
 				<div class="flex items-center gap-2 min-w-0">
 					<StarButton categoryHex={token.id} />
 					<VoteButton categoryHex={token.id} upCount={token.upCount} downCount={token.downCount} />
 					<a href={`/token/${token.id}`} class="flex items-center gap-3 min-w-0 no-underline group flex-1">
-					<img src={iconHrefFor(token.icon, token.iconClearedHash)} alt="" class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800" loading="lazy" />
+					<img src={iconHrefFor(token.icon, token.iconClearedHash)} alt="" class="w-8 h-8 rounded-full bg-slate-100 dark:bg-zinc-800" loading="lazy" />
 					<div class="min-w-0">
 						<div class="font-semibold text-slate-900 dark:text-white truncate group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
 							{stripEmoji(token.name) || stripEmoji(token.crc20Name) || '—'}
 							{#if token.symbol}<span class="ml-2 text-xs text-slate-500 font-mono">{stripEmoji(token.symbol)}</span>{:else if token.crc20Symbol}<span class="ml-2 text-xs text-slate-500 font-mono" title="On-chain CRC-20 symbol (no BCMR symbol published)">{token.crc20Symbol}</span>{/if}
-							<span class="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" title="Token type">{token.tokenType}</span>
+							<span class="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 dark:bg-zinc-800 dark:text-zinc-200" title="Token type">{token.tokenType}</span>
 							{#if token.isCrc20}
 								<span class="ml-2 inline-flex"><Crc20Badge isCanonical={token.crc20IsCanonical} symbol={token.crc20Symbol} symbolIsHex={token.crc20SymbolIsHex} /></span>
 							{/if}
@@ -236,12 +236,12 @@
 							{/if}
 						</div>
 						{#if token.description}
-							<div class="text-xs text-slate-500 dark:text-slate-400 truncate">{stripEmoji(token.description).slice(0, 80)}</div>
+							<div class="text-xs text-slate-500 dark:text-zinc-300 truncate">{stripEmoji(token.description).slice(0, 80)}</div>
 						{/if}
 					</div>
 					</a>
 				</div>
-				<div class="text-right font-mono text-sm text-slate-700 dark:text-slate-300">
+				<div class="text-right font-mono text-sm text-slate-700 dark:text-zinc-200">
 					{formatVenuePriceUSD(token.cauldronPriceSats, token.decimals, $bchPrice.bchPrice)}
 				</div>
 				<div class={`text-right font-mono text-xs ${pctColor(token.priceChange1hPct)}`}>
@@ -253,13 +253,13 @@
 				<div class={`text-right font-mono text-xs ${pctColor(token.priceChange7dPct)}`}>
 					{fmtPct(token.priceChange7dPct)}
 				</div>
-				<div class="text-right font-mono text-sm text-slate-700 dark:text-slate-300">
+				<div class="text-right font-mono text-sm text-slate-700 dark:text-zinc-200">
 					{token.holderCount ?? '—'}
 				</div>
-				<div class="text-right font-mono text-sm text-slate-700 dark:text-slate-300">
+				<div class="text-right font-mono text-sm text-slate-700 dark:text-zinc-200">
 					{formatVenueTvlUSD(token.cauldronTvlSatoshis, $bchPrice.bchPrice)}
 				</div>
-				<div class="text-right font-mono text-xs text-slate-700 dark:text-slate-300">
+				<div class="text-right font-mono text-xs text-slate-700 dark:text-zinc-200">
 					{humanizeNumericSupply(token.currentSupply, token.decimals)}
 				</div>
 				<div class="text-right">
@@ -272,7 +272,7 @@
 	<!-- Mobile card layout — Price + TVL shown only when relevant (listed). -->
 	<div class="md:hidden grid gap-3">
 		{#each tokens as token (token.id)}
-			<div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 hover:shadow-lg hover:border-violet-200 dark:hover:border-violet-800 transition-all relative">
+			<div class="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 p-4 hover:shadow-lg hover:border-violet-200 dark:hover:border-violet-800 transition-all relative">
 				<div class="absolute top-3 right-3 z-10 flex items-center gap-2">
 					<VoteButton categoryHex={token.id} upCount={token.upCount} downCount={token.downCount} size="md" />
 					<StarButton categoryHex={token.id} size="md" />
@@ -280,7 +280,7 @@
 				<a href={`/token/${token.id}`} class="block no-underline">
 					<div class="flex items-start justify-between mb-3 pr-8">
 						<div class="flex items-center gap-3 min-w-0">
-							<img src={iconHrefFor(token.icon, token.iconClearedHash)} alt="" class="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800" />
+							<img src={iconHrefFor(token.icon, token.iconClearedHash)} alt="" class="w-10 h-10 rounded-full bg-slate-100 dark:bg-zinc-800" />
 							<div class="min-w-0">
 								<div class="font-semibold text-slate-900 dark:text-white truncate">{stripEmoji(token.name) || stripEmoji(token.crc20Name) || '—'}</div>
 								<div class="text-sm text-slate-500 font-mono">{stripEmoji(token.symbol) || (token.crc20Symbol ?? '')}</div>
@@ -322,7 +322,7 @@
 						</div>
 					</div>
 				</a>
-				<div class="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+				<div class="mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800 flex justify-end">
 					<FormatCategory category={token.id} />
 				</div>
 			</div>
@@ -331,22 +331,22 @@
 
 	{#if tokens.length === 0}
 		<div class="text-center py-12">
-			<div class="text-slate-400 dark:text-slate-500 text-lg mb-2">No tokens found</div>
-			<div class="text-slate-500 dark:text-slate-400 text-sm">
+			<div class="text-slate-400 dark:text-zinc-400 text-lg mb-2">No tokens found</div>
+			<div class="text-slate-500 dark:text-zinc-300 text-sm">
 				Try a different search or filter.
 			</div>
 		</div>
 	{/if}
 
 	{#if total > limit}
-		<div class="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400">
+		<div class="flex items-center justify-between text-sm text-slate-500 dark:text-zinc-300">
 			<div>
 				Showing {offset + 1}&ndash;{Math.min(offset + limit, total)} of {total}
 			</div>
 			<div class="flex gap-2">
 				<button
 					type="button"
-					class="px-3 py-1 rounded border border-slate-200 dark:border-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+					class="px-3 py-1 rounded border border-slate-200 dark:border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
 					disabled={!hasPrev}
 					onclick={() => setPage(Math.max(0, offset - limit))}
 				>
@@ -354,7 +354,7 @@
 				</button>
 				<button
 					type="button"
-					class="px-3 py-1 rounded border border-slate-200 dark:border-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+					class="px-3 py-1 rounded border border-slate-200 dark:border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
 					disabled={!hasNext}
 					onclick={() => setPage(offset + limit)}
 				>

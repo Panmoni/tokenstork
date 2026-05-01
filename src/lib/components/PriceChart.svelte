@@ -130,12 +130,12 @@
 
 	// Trend color: emerald if last > first, rose if less, slate if flat.
 	const trendColor = $derived.by(() => {
-		if (validPoints.length < 2) return 'stroke-slate-400 dark:stroke-slate-500';
+		if (validPoints.length < 2) return 'stroke-slate-400 dark:stroke-zinc-500';
 		const first = validPoints[0].price;
 		const last = validPoints[validPoints.length - 1].price;
 		if (last > first) return 'stroke-emerald-500 dark:stroke-emerald-400';
 		if (last < first) return 'stroke-rose-500 dark:stroke-rose-400';
-		return 'stroke-slate-400 dark:stroke-slate-500';
+		return 'stroke-slate-400 dark:stroke-zinc-500';
 	});
 
 	// Y-axis price ticks: 4 evenly-spaced labels between bound min/max.
@@ -245,7 +245,7 @@
 
 <div class="w-full">
 	{#if !hasPoints}
-		<div class="flex items-center justify-center h-64 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 text-sm text-slate-500 dark:text-slate-400 px-4 text-center">
+		<div class="flex items-center justify-center h-64 rounded-lg border border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/30 text-sm text-slate-500 dark:text-zinc-300 px-4 text-center">
 			Not enough history yet for the {rangeLabel} window. Cauldron snapshots accrue every 4 h
 			(plus a 10 min fast-pass for already-listed tokens) — try a shorter range or check back
 			in a day.
@@ -268,7 +268,7 @@
 					y1={tick.y}
 					x2={W - PAD_R}
 					y2={tick.y}
-					class="stroke-slate-200 dark:stroke-slate-800"
+					class="stroke-slate-200 dark:stroke-zinc-800"
 					stroke-width="0.5"
 					stroke-dasharray="2 3"
 				/>
@@ -276,7 +276,7 @@
 					x={PAD_L - 6}
 					y={tick.y + 3}
 					text-anchor="end"
-					class="fill-slate-500 dark:fill-slate-400 font-mono"
+					class="fill-slate-500 dark:fill-zinc-400 font-mono"
 					font-size="9"
 				>
 					{tick.label}
@@ -289,7 +289,7 @@
 				y1={DIVIDER_Y}
 				x2={W - PAD_R}
 				y2={DIVIDER_Y}
-				class="stroke-slate-300 dark:stroke-slate-700"
+				class="stroke-slate-300 dark:stroke-zinc-700"
 				stroke-width="0.5"
 			/>
 
@@ -330,7 +330,7 @@
 					x={tick.x}
 					y={H - 6}
 					text-anchor={i === 0 ? 'start' : i === xTicks.length - 1 ? 'end' : 'middle'}
-					class="fill-slate-500 dark:fill-slate-400 font-mono"
+					class="fill-slate-500 dark:fill-zinc-400 font-mono"
 					font-size="9"
 				>
 					{tick.label}
@@ -344,7 +344,7 @@
 					y1={PRICE_PANE_TOP}
 					x2={xScale(hoverPoint.ts)}
 					y2={VOLUME_PANE_BOTTOM}
-					class="stroke-slate-400 dark:stroke-slate-500"
+					class="stroke-slate-400 dark:stroke-zinc-500"
 					stroke-width="0.5"
 					stroke-dasharray="3 3"
 				/>
@@ -358,7 +358,7 @@
 		</svg>
 
 		{#if hoverPoint}
-			<div class="mt-2 text-xs font-mono text-slate-600 dark:text-slate-400 flex flex-wrap gap-x-6 gap-y-1">
+			<div class="mt-2 text-xs font-mono text-slate-600 dark:text-zinc-300 flex flex-wrap gap-x-6 gap-y-1">
 				<span>
 					{new Date(hoverPoint.ts * 1000).toISOString().slice(0, 16).replace('T', ' ')}Z
 				</span>
@@ -370,7 +370,7 @@
 				</span>
 			</div>
 		{:else}
-			<div class="mt-2 text-xs text-slate-500 dark:text-slate-400">
+			<div class="mt-2 text-xs text-slate-500 dark:text-zinc-300">
 				{validPoints.length} {validPoints.length === 1 ? 'point' : 'points'} · hover for details
 			</div>
 		{/if}

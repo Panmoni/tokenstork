@@ -304,7 +304,7 @@
 	<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent mb-3">
 		Sign in with your BCH wallet
 	</h1>
-	<p class="text-slate-600 dark:text-slate-400 mb-8 max-w-prose">
+	<p class="text-slate-600 dark:text-zinc-300 mb-8 max-w-prose">
 		No email, no password. Connect via WalletConnect — your wallet handles
 		the cryptography; we just verify the signature and issue a session.
 	</p>
@@ -323,7 +323,7 @@
 				</svg>
 				Connect Wallet
 			</button>
-			<p class="text-xs text-slate-500 dark:text-slate-400">
+			<p class="text-xs text-slate-500 dark:text-zinc-300">
 				Works with Cashonize, Paytaca, Zapit, and any other wallet that supports the
 				<a class="text-violet-600 dark:text-violet-400 hover:underline" href="https://github.com/mainnet-pat/wc2-bch-bcr" target="_blank" rel="noopener noreferrer">BCH WalletConnect v2 namespace</a>.
 			</p>
@@ -331,38 +331,38 @@
 				<button
 					type="button"
 					onclick={startManual}
-					class="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white underline-offset-4 hover:underline"
+					class="text-sm text-slate-500 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white underline-offset-4 hover:underline"
 				>
 					Sign manually instead →
 				</button>
-				<p class="text-xs text-slate-400 dark:text-slate-500 mt-1">
+				<p class="text-xs text-slate-400 dark:text-zinc-400 mt-1">
 					For users without a WalletConnect-aware wallet — paste your cashaddr and a signed-message signature.
 				</p>
 			</div>
 		</div>
 	{:else if stage.kind === 'wc-connecting'}
-		<p class="text-slate-600 dark:text-slate-400">Initializing WalletConnect…</p>
+		<p class="text-slate-600 dark:text-zinc-300">Initializing WalletConnect…</p>
 	{:else if stage.kind === 'wc-awaiting-approval'}
-		<p class="text-slate-600 dark:text-slate-400">
+		<p class="text-slate-600 dark:text-zinc-300">
 			Approve the connection in your wallet. The QR code modal should be open above this page.
 		</p>
 		<button
 			type="button"
 			onclick={reset}
-			class="mt-4 text-sm text-slate-500 dark:text-slate-400 hover:underline"
+			class="mt-4 text-sm text-slate-500 dark:text-zinc-300 hover:underline"
 		>
 			Cancel
 		</button>
 	{:else if stage.kind === 'wc-signing'}
-		<p class="text-slate-600 dark:text-slate-400">
+		<p class="text-slate-600 dark:text-zinc-300">
 			Approve the message signature in your wallet…
 		</p>
 	{:else if stage.kind === 'verifying'}
-		<p class="text-slate-600 dark:text-slate-400">Verifying signature…</p>
+		<p class="text-slate-600 dark:text-zinc-300">Verifying signature…</p>
 	{:else if stage.kind === 'enter-address'}
 		<form onsubmit={requestChallengeManual} class="space-y-4">
 			<label class="block">
-				<span class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+				<span class="block text-sm font-medium text-slate-700 dark:text-zinc-200 mb-2">
 					Your BCH cashaddr
 				</span>
 				<input
@@ -372,9 +372,9 @@
 					autocomplete="off"
 					autocapitalize="off"
 					spellcheck="false"
-					class="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+					class="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
 				/>
-				<p class="text-xs text-slate-500 dark:text-slate-400 mt-2">
+				<p class="text-xs text-slate-500 dark:text-zinc-300 mt-2">
 					Mainnet P2PKH only. The cashaddr you enter must match the address whose private key you'll sign with.
 				</p>
 			</label>
@@ -388,7 +388,7 @@
 				<button
 					type="button"
 					onclick={reset}
-					class="px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium text-sm hover:bg-slate-300 dark:hover:bg-slate-600"
+					class="px-4 py-2 rounded-lg bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-zinc-100 font-medium text-sm hover:bg-slate-300 dark:hover:bg-zinc-600"
 				>
 					← Back to WalletConnect
 				</button>
@@ -397,20 +397,20 @@
 	{:else if stage.kind === 'sign'}
 		<div class="space-y-6">
 			<section>
-				<h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+				<h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-300 mb-2">
 					Step 1 — Sign this message in your wallet
 				</h2>
 				<div class="relative">
-					<pre class="text-xs sm:text-sm font-mono whitespace-pre-wrap break-all rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-4">{stage.message}</pre>
+					<pre class="text-xs sm:text-sm font-mono whitespace-pre-wrap break-all rounded-lg border border-slate-300 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-900 p-4">{stage.message}</pre>
 					<button
 						type="button"
 						onclick={copyMessage}
-						class="absolute top-2 right-2 px-2 py-1 rounded text-xs font-medium bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200"
+						class="absolute top-2 right-2 px-2 py-1 rounded text-xs font-medium bg-slate-200 dark:bg-zinc-700 hover:bg-slate-300 dark:hover:bg-zinc-600 text-slate-700 dark:text-zinc-100"
 					>
 						{copied ? 'Copied' : 'Copy'}
 					</button>
 				</div>
-				<details class="mt-3 text-sm text-slate-600 dark:text-slate-400">
+				<details class="mt-3 text-sm text-slate-600 dark:text-zinc-300">
 					<summary class="cursor-pointer text-violet-600 dark:text-violet-400 hover:underline">
 						How to sign in popular wallets
 					</summary>
@@ -425,7 +425,7 @@
 
 			<form onsubmit={submitSignatureManual} class="space-y-4">
 				<label class="block">
-					<span class="block text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+					<span class="block text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-300 mb-2">
 						Step 2 — Paste the signature
 					</span>
 					<textarea
@@ -434,7 +434,7 @@
 						rows="3"
 						autocomplete="off"
 						spellcheck="false"
-						class="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-violet-500"
+						class="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-violet-500"
 					></textarea>
 				</label>
 				<div class="flex gap-2">
@@ -447,12 +447,12 @@
 					<button
 						type="button"
 						onclick={reset}
-						class="px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium text-sm hover:bg-slate-300 dark:hover:bg-slate-600"
+						class="px-4 py-2 rounded-lg bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-zinc-100 font-medium text-sm hover:bg-slate-300 dark:hover:bg-zinc-600"
 					>
 						Start over
 					</button>
 				</div>
-				<p class="text-xs text-slate-500 dark:text-slate-400">
+				<p class="text-xs text-slate-500 dark:text-zinc-300">
 					Challenge expires {new Date(stage.expiresAt).toLocaleTimeString()}.
 				</p>
 			</form>
@@ -464,14 +464,14 @@
 		<button
 			type="button"
 			onclick={reset}
-			class="mt-4 px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium text-sm hover:bg-slate-300 dark:hover:bg-slate-600"
+			class="mt-4 px-4 py-2 rounded-lg bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-zinc-100 font-medium text-sm hover:bg-slate-300 dark:hover:bg-zinc-600"
 		>
 			Start over
 		</button>
 	{/if}
 
-	<section class="mt-12 text-sm text-slate-600 dark:text-slate-400 space-y-2">
-		<h2 class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+	<section class="mt-12 text-sm text-slate-600 dark:text-zinc-300 space-y-2">
+		<h2 class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-300">
 			Why wallet login?
 		</h2>
 		<p>
