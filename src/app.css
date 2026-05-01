@@ -2,6 +2,20 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Default text color for the document. Tailwind's preflight does not
+   set a base color; previously every visible element relied on its
+   own `text-slate-X dark:text-zinc-Y` pair, and orphans (e.g. stat
+   card values with only `text-xl font-mono`) silently inherited the
+   browser default — black, which is invisible against `dark:bg-zinc-950`.
+   Anchoring `body` to `--text-primary` makes orphans inherit the
+   theme-aware primary color; explicit `text-*` utilities still win
+   via Tailwind's utility-layer precedence. */
+@layer base {
+	body {
+		color: var(--text-primary);
+	}
+}
+
 /* Container for SvelteKit's body-injection point. `display: contents`
    makes the wrapper div invisible to layout — the children participate
    directly in the body's flex/grid context. Lives in CSS instead of an
