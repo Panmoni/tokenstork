@@ -15,10 +15,12 @@ import { error, json } from '@sveltejs/kit';
 import { SESSION_COOKIE_NAME, verifySignedMessage } from '$lib/server/auth';
 import {
 	consumeChallenge,
-	createSession,
 	findOpenChallenge,
+	rotateSession,
 	upsertUser
 } from '$lib/server/auth-db';
+import { clientIp } from '$lib/server/clientIp';
+import { hashForLog } from '$lib/server/logRedact';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request, cookies, getClientAddress }) => {
@@ -37,34 +39,42 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
 	}
 
 	// Diagnostic logging on every failure path — the response body
-	// stays generic to avoid timing/oracle leakage to clients, but the
-	// server log gets the specific failure mode so the operator can
+	// stays generic to avoid oracle leakage to clients, but the
+	// server log gets the specific failure mode so an operator can
 	// debug "wallet signed but verification failed" cases via
-	// `journalctl -u tokenstork.service`. Logs include enough context
-	// (truncated nonce, expected vs recovered cashaddr, libauth error
-	// detail, signature-byte preview) to identify wallet quirks
-	// without dumping the whole signature.
-	const sigPreview =
-		signature.length > 24 ? `${signature.slice(0, 12)}…${signature.slice(-8)}` : signature;
-	const noncePreview = `${nonce.slice(0, 8)}…`;
+	// `journalctl -u tokenstork.service`. Identifiers are HMAC-hashed
+	// before logging — the tag is enough to correlate log lines from
+	// the same auth attempt without exposing nonce / signature / raw
+	// cashaddr to anyone with read access to the log destination.
+	const tag = hashForLog(nonce);
 
 	const challenge = await findOpenChallenge(nonce);
 	if (!challenge) {
-		console.error('[auth/verify] challenge not found or expired', {
-			nonce: noncePreview
-		});
+		console.error(`[auth/verify] challenge not found or expired tag=${tag}`);
+		return json({ ok: false, error: 'invalid or expired challenge' }, { status: 401 });
+	}
+
+	// Defense against phished signatures: a challenge issued to one IP
+	// may not be redeemed from another. Skip the check when either IP is
+	// unknown — better to authenticate a legitimate user behind a
+	// changing carrier-grade NAT than fail closed when extraction failed.
+	const verifyIp = clientIp({ request, getClientAddress });
+	if (
+		challenge.issuedIp !== null &&
+		verifyIp !== 'unknown' &&
+		challenge.issuedIp !== verifyIp
+	) {
+		console.error(
+			`[auth/verify] cross-IP redemption tag=${tag} addr=${hashForLog(challenge.cashaddr)}`
+		);
 		return json({ ok: false, error: 'invalid or expired challenge' }, { status: 401 });
 	}
 
 	const verified = verifySignedMessage(challenge.message, signature);
 	if (!verified.ok) {
-		console.error('[auth/verify] signature decode/recovery failed', {
-			nonce: noncePreview,
-			challengeCashaddr: challenge.cashaddr,
-			signatureLength: signature.length,
-			signaturePreview: sigPreview,
-			error: verified.error
-		});
+		console.error(
+			`[auth/verify] signature decode/recovery failed tag=${tag} addr=${hashForLog(challenge.cashaddr)} err=${verified.error}`
+		);
 		return json({ ok: false, error: 'signature verification failed' }, { status: 401 });
 	}
 	if (verified.cashaddr !== challenge.cashaddr) {
@@ -72,12 +82,9 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
 		// challenge was issued for. Most common cause: the wallet's
 		// CAIP-10 advertised account differs from the key it actually
 		// signed with.
-		console.error('[auth/verify] cashaddr mismatch', {
-			nonce: noncePreview,
-			expected: challenge.cashaddr,
-			recovered: verified.cashaddr,
-			signaturePreview: sigPreview
-		});
+		console.error(
+			`[auth/verify] cashaddr mismatch tag=${tag} expected=${hashForLog(challenge.cashaddr)} recovered=${hashForLog(verified.cashaddr)}`
+		);
 		return json({ ok: false, error: 'signature verification failed' }, { status: 401 });
 	}
 
@@ -86,25 +93,23 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
 	// valid, replay protection demands single-use semantics.
 	const consumed = await consumeChallenge(nonce);
 	if (!consumed) {
-		console.error('[auth/verify] consume race (challenge already used)', {
-			nonce: noncePreview
-		});
+		console.error(`[auth/verify] consume race (challenge already used) tag=${tag}`);
 		return json({ ok: false, error: 'invalid or expired challenge' }, { status: 401 });
 	}
 
 	await upsertUser(verified.cashaddr);
 
 	const userAgent = request.headers.get('user-agent');
-	let ip: string | null = null;
-	try {
-		ip = getClientAddress();
-	} catch {
-		// SvelteKit throws if it can't determine — record null and move on.
-	}
-	const session = await createSession({
+	const ip = clientIp({ request, getClientAddress });
+	// Atomic create-and-rotate inside one transaction with a per-cashaddr
+	// advisory lock. Two concurrent /verify calls for the same wallet
+	// queue rather than racing — fixes the prior bug where each call's
+	// cleanup-after-create would delete the OTHER call's just-issued
+	// session, leaving both clients with dead cookies.
+	const session = await rotateSession({
 		cashaddr: verified.cashaddr,
 		userAgent,
-		ip
+		ip: ip === 'unknown' ? null : ip
 	});
 
 	cookies.set(SESSION_COOKIE_NAME, session.id, {

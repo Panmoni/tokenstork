@@ -12,6 +12,7 @@ import { error, json } from '@sveltejs/kit';
 import { normalizeCashaddr } from '$lib/server/auth';
 import { persistChallenge } from '$lib/server/auth-db';
 import { challengeRateLimiter } from '$lib/server/rateLimit';
+import { clientIp } from '$lib/server/clientIp';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request, getClientAddress }) => {
@@ -19,27 +20,13 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 	// challenges and fill the auth_challenges table with unused rows.
 	// 10/min/IP is generous for human retry; tight enough to deny abuse.
 	//
-	// IP source priority (most-trusted first):
-	//   1. `cf-connecting-ip` — set by Cloudflare from the real visitor.
-	//      We deploy behind CF (orange-cloud), so this is canonical when
-	//      present. Spoofing it past CF requires bypassing CF's edge
-	//      entirely, which is a different security problem.
-	//   2. `getClientAddress()` — adapter-node's resolved address.
-	//      Returns the connection IP (i.e., 127.0.0.1 / Caddy) unless
-	//      ADDRESS_HEADER env var is configured. Useful for dev (no proxy).
-	//   3. 'unknown' sentinel — keeps un-attributable traffic from
-	//      bypassing the cap entirely; effectively a global bucket for
-	//      mystery callers.
-	const cfIp = request.headers.get('cf-connecting-ip');
-	let clientIp = cfIp ?? 'unknown';
-	if (!cfIp) {
-		try {
-			clientIp = getClientAddress();
-		} catch {
-			// fall through to 'unknown'
-		}
-	}
-	const rl = challengeRateLimiter.consume(clientIp);
+	// `clientIp` only honors forwarded-for headers when
+	// TRUST_PROXY_HEADERS=true AND the immediate peer IP is in the
+	// trusted-proxy CIDR allowlist. Otherwise it falls back to the
+	// socket peer address — so any direct hit to the origin can't
+	// spoof a per-IP bucket.
+	const ip = clientIp({ request, getClientAddress });
+	const rl = challengeRateLimiter.consume(ip);
 	if (!rl.allowed) {
 		const retryAfterSec = Math.ceil((rl.retryAfterMs ?? 0) / 1000);
 		return new Response(
@@ -78,7 +65,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		);
 	}
 
-	const challenge = await persistChallenge(cashaddr);
+	const challenge = await persistChallenge(cashaddr, ip === 'unknown' ? null : ip);
 	return json({
 		nonce: challenge.nonce,
 		message: challenge.message,
