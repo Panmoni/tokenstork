@@ -133,7 +133,7 @@
 		<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent">
 			Blocks
 		</h1>
-		<p class="text-slate-600 dark:text-zinc-300 mt-2 max-w-3xl">
+		<p class="mt-2 max-w-3xl ts-text-muted">
 			Per-block economics for Bitcoin Cash from CashTokens activation (block 792,772) onward.
 			Each row summarizes a single block: how many transactions it contains, what the miner
 			collected, how much of that was fees vs. the protocol subsidy, and the total economic
@@ -147,29 +147,29 @@
 		a tiny sparkline from the daily bucket series.
 	-->
 	<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-			<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">
+		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
+			<div class="text-xs uppercase tracking-wider ts-text-muted">
 				Blocks indexed
 			</div>
 			<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
 				{fmtCount(data.summaryAll.blockCount)}
 			</div>
-			<div class="mt-1 text-xs text-slate-500 dark:text-zinc-300">
+			<div class="mt-1 text-xs ts-text-muted">
 				since {data.summaryAll.minHeight ?? '—'}
 				{#if data.summaryAll.maxHeight !== null}· tip {data.summaryAll.maxHeight}{/if}
 			</div>
 		</div>
 
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
 			<div class="flex items-start justify-between">
 				<div>
-					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">
+					<div class="text-xs uppercase tracking-wider ts-text-muted">
 						Tx — last 7d
 					</div>
 					<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
 						{fmtCount(data.summary7d.totalTxCount)}
 					</div>
-					<div class="mt-1 text-xs text-slate-500 dark:text-zinc-300">
+					<div class="mt-1 text-xs ts-text-muted">
 						avg {data.summary7d.blockCount > 0 ? Math.round(data.summary7d.totalTxCount / data.summary7d.blockCount) : 0}/block
 					</div>
 				</div>
@@ -177,16 +177,16 @@
 			</div>
 		</div>
 
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
 			<div class="flex items-start justify-between">
 				<div>
-					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">
+					<div class="text-xs uppercase tracking-wider ts-text-muted">
 						Fees — last 7d
 					</div>
 					<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
 						{fmtBch(data.summary7d.totalFeesSats)}
 					</div>
-					<div class="mt-1 text-xs text-slate-500 dark:text-zinc-300">
+					<div class="mt-1 text-xs ts-text-muted">
 						{fmtUsd(data.summary7d.totalFeesSats, data.bchPriceUSD)}
 					</div>
 				</div>
@@ -194,16 +194,16 @@
 			</div>
 		</div>
 
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
 			<div class="flex items-start justify-between">
 				<div>
-					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">
+					<div class="text-xs uppercase tracking-wider ts-text-muted">
 						Economic value — 7d
 					</div>
 					<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
 						{fmtBch(data.summary7d.totalEconomicSats)}
 					</div>
-					<div class="mt-1 text-xs text-slate-500 dark:text-zinc-300">
+					<div class="mt-1 text-xs ts-text-muted">
 						{fmtUsd(data.summary7d.totalEconomicSats, data.bchPriceUSD)}
 					</div>
 				</div>
@@ -219,36 +219,36 @@
 		default at-target.
 	-->
 	<div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-			<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">
+		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
+			<div class="text-xs uppercase tracking-wider ts-text-muted">
 				Avg block time — 24h
 			</div>
 			<div class="mt-2 text-3xl font-semibold {blockTimeColor(data.blockTime.w24h.avgSeconds)}">
 				{fmtBlockTime(data.blockTime.w24h.avgSeconds)}
 			</div>
-			<div class="mt-1 text-xs text-slate-500 dark:text-zinc-300">
+			<div class="mt-1 text-xs ts-text-muted">
 				{fmtCount(data.blockTime.w24h.blocks)} {data.blockTime.w24h.blocks === 1 ? 'block' : 'blocks'} · target 10m 00s
 			</div>
 		</div>
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-			<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">
+		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
+			<div class="text-xs uppercase tracking-wider ts-text-muted">
 				Avg block time — 7d
 			</div>
 			<div class="mt-2 text-3xl font-semibold {blockTimeColor(data.blockTime.w7d.avgSeconds)}">
 				{fmtBlockTime(data.blockTime.w7d.avgSeconds)}
 			</div>
-			<div class="mt-1 text-xs text-slate-500 dark:text-zinc-300">
+			<div class="mt-1 text-xs ts-text-muted">
 				{fmtCount(data.blockTime.w7d.blocks)} blocks
 			</div>
 		</div>
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-			<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">
+		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
+			<div class="text-xs uppercase tracking-wider ts-text-muted">
 				Avg block time — 30d
 			</div>
 			<div class="mt-2 text-3xl font-semibold {blockTimeColor(data.blockTime.w30d.avgSeconds)}">
 				{fmtBlockTime(data.blockTime.w30d.avgSeconds)}
 			</div>
-			<div class="mt-1 text-xs text-slate-500 dark:text-zinc-300">
+			<div class="mt-1 text-xs ts-text-muted">
 				{fmtCount(data.blockTime.w30d.blocks)} blocks
 			</div>
 		</div>
@@ -259,8 +259,8 @@
 		windows. Helps grok whether the 7d numbers are typical or anomalous.
 	-->
 	<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/50">
-			<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300 mb-2">
+		<div class="p-4 rounded-xl border bg-slate-50/50 dark:bg-zinc-900/50 ts-border-subtle">
+			<div class="text-xs uppercase tracking-wider mb-2 ts-text-muted">
 				Last 30 days
 			</div>
 			<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-sm">
@@ -286,8 +286,8 @@
 				</div>
 			</div>
 		</div>
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/50">
-			<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300 mb-2">
+		<div class="p-4 rounded-xl border bg-slate-50/50 dark:bg-zinc-900/50 ts-border-subtle">
+			<div class="text-xs uppercase tracking-wider mb-2 ts-text-muted">
 				All time (since CashTokens activation)
 			</div>
 			<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-sm">
@@ -316,16 +316,16 @@
 	</div>
 
 	{#if data.rows.length === 0}
-		<div class="p-8 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900/50 text-center">
-			<p class="text-slate-600 dark:text-zinc-300">
+		<div class="p-8 rounded-xl border bg-slate-50 dark:bg-zinc-900/50 text-center ts-border-subtle">
+			<p class="ts-text-muted">
 				No blocks indexed yet. The backfill will populate this page in ~30 minutes; the live
 				tail walker keeps it current from there.
 			</p>
 		</div>
 	{:else}
 		<!-- Desktop table -->
-		<div class="hidden md:block overflow-hidden rounded-xl border border-slate-200 dark:border-zinc-800">
-			<div class="grid grid-cols-[0.8fr_1.4fr_0.7fr_0.6fr_0.9fr_0.8fr_0.9fr_0.6fr] gap-2 px-4 py-3 bg-slate-50 dark:bg-zinc-900/50 border-b border-slate-200 dark:border-zinc-800 text-xs font-semibold text-slate-500 dark:text-zinc-300 uppercase tracking-wider items-center">
+		<div class="hidden md:block overflow-hidden rounded-xl border ts-border-subtle">
+			<div class="grid grid-cols-[0.8fr_1.4fr_0.7fr_0.6fr_0.9fr_0.8fr_0.9fr_0.6fr] gap-2 px-4 py-3 bg-slate-50 dark:bg-zinc-900/50 border-b text-xs font-semibold uppercase tracking-wider items-center ts-text-muted ts-border-subtle">
 				<div>Height</div>
 				<div>Time</div>
 				<div class="text-right">Hash</div>
@@ -336,13 +336,13 @@
 				<div class="text-right">Size</div>
 			</div>
 			{#each data.rows as r (r.height)}
-				<div class="grid grid-cols-[0.8fr_1.4fr_0.7fr_0.6fr_0.9fr_0.8fr_0.9fr_0.6fr] gap-2 px-4 py-3 border-b border-slate-100 dark:border-zinc-800 last:border-b-0 items-center hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors text-sm">
+				<div class="grid grid-cols-[0.8fr_1.4fr_0.7fr_0.6fr_0.9fr_0.8fr_0.9fr_0.6fr] gap-2 px-4 py-3 border-b last:border-b-0 items-center hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors text-sm ts-border-subtle">
 					<div class="font-mono font-semibold text-slate-900 dark:text-white">
 						{r.height.toLocaleString('en-US')}
 					</div>
-					<div class="text-slate-600 dark:text-zinc-300">
+					<div class="ts-text-muted">
 						<div>{fmtRelative(r.time)}</div>
-						<div class="text-xs text-slate-400 dark:text-zinc-400">
+						<div class="text-xs ts-text-faint">
 							{new Date(r.time).toISOString().slice(0, 19).replace('T', ' ')}
 						</div>
 					</div>
@@ -369,7 +369,7 @@
 						<div>{fmtBch(r.totalOutputSats)}</div>
 						<div class="text-xs text-slate-400">{fmtUsd(r.totalOutputSats, data.bchPriceUSD)}</div>
 					</div>
-					<div class="text-right font-mono text-slate-600 dark:text-zinc-300">
+					<div class="text-right font-mono ts-text-muted">
 						{fmtBytes(r.sizeBytes)}
 					</div>
 				</div>
@@ -379,7 +379,7 @@
 		<!-- Mobile: stacked cards. The desktop grid would crush at <md. -->
 		<div class="md:hidden space-y-3">
 			{#each data.rows as r (r.height)}
-				<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+				<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
 					<div class="flex items-baseline justify-between mb-2">
 						<div class="font-mono text-lg font-semibold text-slate-900 dark:text-white">
 							{r.height.toLocaleString('en-US')}
@@ -393,7 +393,7 @@
 							{shortHash(r.hashHex)} ↗
 						</a>
 					</div>
-					<div class="text-xs text-slate-500 dark:text-zinc-300 mb-3">
+					<div class="text-xs mb-3 ts-text-muted">
 						{fmtRelative(r.time)} ·
 						{new Date(r.time).toISOString().slice(0, 19).replace('T', ' ')}
 					</div>
@@ -427,14 +427,14 @@
 
 		<!-- Pagination -->
 		<div class="mt-6 flex items-center justify-between text-sm">
-			<div class="text-slate-500 dark:text-zinc-300">
+			<div class="ts-text-muted">
 				Page {data.page} · {data.pageSize} per page
 			</div>
 			<div class="flex gap-2">
 				{#if showPrev}
 					<a
 						href={`/blocks${prevPage === 1 ? '' : `?page=${prevPage}`}`}
-						class="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 hover:bg-slate-200 dark:hover:bg-zinc-700"
+						class="px-3 py-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-700 ts-text-strong ts-surface-chip"
 					>
 						← Newer
 					</a>
@@ -442,7 +442,7 @@
 				{#if showNext}
 					<a
 						href={`/blocks?page=${nextPage}`}
-						class="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 hover:bg-slate-200 dark:hover:bg-zinc-700"
+						class="px-3 py-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-700 ts-text-strong ts-surface-chip"
 					>
 						Older →
 					</a>
@@ -451,16 +451,16 @@
 		</div>
 	{/if}
 
-	<section class="mt-10 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/30">
+	<section class="mt-10 p-5 rounded-xl border bg-slate-50/50 dark:bg-zinc-900/30 ts-border-subtle">
 		<h2 class="text-base font-semibold text-slate-900 dark:text-white mb-2">Notes</h2>
-		<ul class="text-sm text-slate-600 dark:text-zinc-300 space-y-1.5 list-disc list-inside">
+		<ul class="text-sm space-y-1.5 list-disc list-inside ts-text-muted">
 			<li>
 				<strong>Miner take</strong> is the sum of the coinbase transaction's outputs — what the
 				block's miner actually claimed. It equals the protocol <em>subsidy</em> plus all
 				transaction fees, and a miner can legally claim less (any unclaimed sats are burned).
 			</li>
 			<li>
-				<strong>Fees</strong> are derived as <code class="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 font-mono">miner_take − subsidy_at_height</code>, where the subsidy follows the BCH halving schedule (50 BCH from genesis, halving every 210,000 blocks). At the current era subsidy is 6.25 BCH per block.
+				<strong>Fees</strong> are derived as <code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">miner_take − subsidy_at_height</code>, where the subsidy follows the BCH halving schedule (50 BCH from genesis, halving every 210,000 blocks). At the current era subsidy is 6.25 BCH per block.
 			</li>
 			<li>
 				<strong>Economic value</strong> is the sum of every output across the block's

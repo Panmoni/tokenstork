@@ -259,7 +259,7 @@
 	>
 		Privacy Policy
 	</h1>
-	<p class="text-slate-500 dark:text-zinc-300 mb-8">
+	<p class="mb-8 ts-text-muted">
 		Last updated: {lastUpdated}. See also our <a
 			href="/terms"
 			class="text-violet-600 hover:underline">Terms of Service</a
@@ -268,9 +268,9 @@
 
 	<nav
 		aria-label="Table of contents"
-		class="mb-10 p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900"
+		class="mb-10 p-4 rounded-xl border ts-border-subtle ts-surface-soft"
 	>
-		<h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-300 mb-3">
+		<h2 class="text-sm font-semibold uppercase tracking-wide mb-3 ts-text-muted">
 			On this page
 		</h2>
 		<ol class="grid gap-1 sm:grid-cols-2 list-none p-0 m-0">

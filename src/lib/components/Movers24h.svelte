@@ -53,12 +53,12 @@
 	</div>
 	<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 		<!-- Top gainers -->
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
 			<h3 class="text-sm font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400 mb-3">
 				Top gainers
 			</h3>
 			{#if movers.topGainers24h.length === 0}
-				<p class="text-xs text-slate-500 dark:text-zinc-300">
+				<p class="text-xs ts-text-muted">
 					{#if movers.has24hHistory}
 						No tokens up in the last 24h.
 					{:else}
@@ -87,12 +87,12 @@
 		</div>
 
 		<!-- Top losers -->
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
 			<h3 class="text-sm font-semibold uppercase tracking-wide text-rose-700 dark:text-rose-400 mb-3">
 				Top losers
 			</h3>
 			{#if movers.topLosers24h.length === 0}
-				<p class="text-xs text-slate-500 dark:text-zinc-300">
+				<p class="text-xs ts-text-muted">
 					{#if movers.has24hHistory}
 						No tokens down in the last 24h.
 					{:else}
@@ -121,12 +121,12 @@
 		</div>
 
 		<!-- TVL movers (signed; biggest absolute % move) -->
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
 			<h3 class="text-sm font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-400 mb-3">
 				TVL movers
 			</h3>
 			{#if movers.topTvlMovers24h.length === 0}
-				<p class="text-xs text-slate-500 dark:text-zinc-300">
+				<p class="text-xs ts-text-muted">
 					{#if movers.has24hHistory}
 						No measurable TVL changes in the last 24h.
 					{:else}

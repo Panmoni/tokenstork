@@ -13,24 +13,62 @@
 
 /* Semantic theme tokens. Light mode keeps slate (blue-tinted gray);
    dark mode is on zinc (true gray) so body copy doesn't read as
-   "blue-on-blue" against dark surfaces. Use via
-   `text-[color:var(--text-primary)]` etc. or via Tailwind utilities
-   which mirror the same tiers. New surfaces should prefer the tokens
-   so the 0.5.0 theming work has a single knob to turn. */
+   "blue-on-blue" against dark surfaces. Tier names map to the
+   dominant paired utility usage in the codebase as of the migration:
+     primary  — headings (slate-900 / zinc-100)
+     strong   — prominent body (slate-700 / zinc-200)
+     body     — normal body  (slate-600 / zinc-200)
+     muted    — secondary    (slate-500 / zinc-300)
+     faint    — tertiary     (slate-400 / zinc-400)
+   Surfaces / borders likewise mirror real usage. */
 :root {
 	--text-primary: theme('colors.slate.900');
-	--text-muted: theme('colors.slate.700');
-	--text-faint: theme('colors.slate.500');
-	--surface: theme('colors.white');
-	--surface-elev: theme('colors.slate.50');
+	--text-strong: theme('colors.slate.700');
+	--text-body: theme('colors.slate.600');
+	--text-muted: theme('colors.slate.500');
+	--text-faint: theme('colors.slate.400');
+
+	--surface-page: theme('colors.white');
+	--surface-panel: theme('colors.white');
+	--surface-chip: theme('colors.slate.100');
+	--surface-soft: theme('colors.slate.50');
+
 	--border-subtle: theme('colors.slate.200');
+	--border-strong: theme('colors.slate.300');
 }
 
 .dark {
 	--text-primary: theme('colors.zinc.100');
+	--text-strong: theme('colors.zinc.200');
+	--text-body: theme('colors.zinc.200');
 	--text-muted: theme('colors.zinc.300');
 	--text-faint: theme('colors.zinc.400');
-	--surface: theme('colors.zinc.950');
-	--surface-elev: theme('colors.zinc.900');
+
+	--surface-page: theme('colors.zinc.950');
+	--surface-panel: theme('colors.zinc.900');
+	--surface-chip: theme('colors.zinc.800');
+	--surface-soft: theme('colors.zinc.900');
+
 	--border-subtle: theme('colors.zinc.800');
+	--border-strong: theme('colors.zinc.700');
+}
+
+/* Component utility classes that consume the variables above. The
+   `ts-` prefix avoids collision with Tailwind's own utilities and
+   makes greppable. Use these instead of paired light/dark utility
+   classes so future theme work edits the variables, not 600+ sites. */
+@layer components {
+	.ts-text-primary { color: var(--text-primary); }
+	.ts-text-strong  { color: var(--text-strong); }
+	.ts-text-body    { color: var(--text-body); }
+	.ts-text-muted   { color: var(--text-muted); }
+	.ts-text-faint   { color: var(--text-faint); }
+
+	.ts-surface-page  { background-color: var(--surface-page); }
+	.ts-surface-panel { background-color: var(--surface-panel); }
+	.ts-surface-chip  { background-color: var(--surface-chip); }
+	.ts-surface-soft  { background-color: var(--surface-soft); }
+
+	.ts-border-subtle { border-color: var(--border-subtle); }
+	.ts-border-strong { border-color: var(--border-strong); }
 }

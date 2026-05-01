@@ -245,7 +245,7 @@
 
 <div class="w-full">
 	{#if !hasPoints}
-		<div class="flex items-center justify-center h-64 rounded-lg border border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/30 text-sm text-slate-500 dark:text-zinc-300 px-4 text-center">
+		<div class="flex items-center justify-center h-64 rounded-lg border bg-slate-50/50 dark:bg-zinc-900/30 text-sm px-4 text-center ts-text-muted ts-border-subtle">
 			Not enough history yet for the {rangeLabel} window. Cauldron snapshots accrue every 4 h
 			(plus a 10 min fast-pass for already-listed tokens) — try a shorter range or check back
 			in a day.
@@ -358,7 +358,7 @@
 		</svg>
 
 		{#if hoverPoint}
-			<div class="mt-2 text-xs font-mono text-slate-600 dark:text-zinc-300 flex flex-wrap gap-x-6 gap-y-1">
+			<div class="mt-2 text-xs font-mono flex flex-wrap gap-x-6 gap-y-1 ts-text-muted">
 				<span>
 					{new Date(hoverPoint.ts * 1000).toISOString().slice(0, 16).replace('T', ' ')}Z
 				</span>
@@ -370,7 +370,7 @@
 				</span>
 			</div>
 		{:else}
-			<div class="mt-2 text-xs text-slate-500 dark:text-zinc-300">
+			<div class="mt-2 text-xs ts-text-muted">
 				{validPoints.length} {validPoints.length === 1 ? 'point' : 'points'} · hover for details
 			</div>
 		{/if}

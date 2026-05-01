@@ -62,7 +62,7 @@
 		<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent">
 			Arbitrage
 		</h1>
-		<p class="text-slate-600 dark:text-zinc-300 mt-2 max-w-3xl">
+		<p class="mt-2 max-w-3xl ts-text-muted">
 			Tokens listed on at least two of three venues — Cauldron AMM, Fex AMM, and Tapswap P2P —
 			with a meaningful price gap between them. The "net" column deducts a per-row fee specific
 			to the cheapest-vs-most-expensive venue pair (see notes). Slippage, mining cost, and the
@@ -76,40 +76,34 @@
 		sub-1% spreads.
 	-->
 	<div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-			<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">Tokens on ≥ 2 venues</div>
+		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
+			<div class="text-xs uppercase tracking-wider ts-text-muted">Tokens on ≥ 2 venues</div>
 			<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{data.totalRows}</div>
-			<div class="mt-1 text-xs text-slate-500 dark:text-zinc-300">Cauldron / Fex / Tapswap</div>
+			<div class="mt-1 text-xs ts-text-muted">Cauldron / Fex / Tapswap</div>
 		</div>
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-			<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">Filter</div>
+		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
+			<div class="text-xs uppercase tracking-wider ts-text-muted">Filter</div>
 			<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">≥ {data.minSpreadPct}%</div>
-			<div class="mt-1 text-xs text-slate-500 dark:text-zinc-300">{data.rows.length} matching</div>
+			<div class="mt-1 text-xs ts-text-muted">{data.rows.length} matching</div>
 		</div>
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col justify-between">
-			<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">View</div>
+		<div class="p-4 rounded-xl border flex flex-col justify-between ts-border-subtle ts-surface-panel">
+			<div class="text-xs uppercase tracking-wider ts-text-muted">View</div>
 			<div class="mt-2 flex flex-wrap gap-2">
 				<a
 					href="/arbitrage"
-					class="px-3 py-1 rounded-lg text-xs font-medium {data.minSpreadPct === 1 && !data.showAll
-						? 'bg-violet-600 text-white'
-						: 'bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 hover:bg-slate-200 dark:hover:bg-zinc-700'}"
+					class="px-3 py-1 rounded-lg text-xs font-medium {data.minSpreadPct === 1 && !data.showAll ? 'bg-violet-600 text-white' : 'bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700'} ts-text-strong"
 				>
 					≥ 1% (default)
 				</a>
 				<a
 					href="/arbitrage?min=5"
-					class="px-3 py-1 rounded-lg text-xs font-medium {data.minSpreadPct === 5
-						? 'bg-violet-600 text-white'
-						: 'bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 hover:bg-slate-200 dark:hover:bg-zinc-700'}"
+					class="px-3 py-1 rounded-lg text-xs font-medium {data.minSpreadPct === 5 ? 'bg-violet-600 text-white' : 'bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700'} ts-text-strong"
 				>
 					≥ 5%
 				</a>
 				<a
 					href="/arbitrage?showAll=1"
-					class="px-3 py-1 rounded-lg text-xs font-medium {data.showAll
-						? 'bg-violet-600 text-white'
-						: 'bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 hover:bg-slate-200 dark:hover:bg-zinc-700'}"
+					class="px-3 py-1 rounded-lg text-xs font-medium {data.showAll ? 'bg-violet-600 text-white' : 'bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700'} ts-text-strong"
 				>
 					Show all
 				</a>
@@ -125,11 +119,11 @@
 	{/if}
 
 	{#if data.rows.length === 0}
-		<div class="p-8 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900/50 text-center">
-			<p class="text-slate-600 dark:text-zinc-300">
+		<div class="p-8 rounded-xl border bg-slate-50 dark:bg-zinc-900/50 text-center ts-border-subtle">
+			<p class="ts-text-muted">
 				No tokens currently meet the {data.minSpreadPct}% spread filter.
 			</p>
-			<p class="text-sm text-slate-500 dark:text-zinc-400 mt-2">
+			<p class="text-sm mt-2 ts-text-faint">
 				{data.totalRows} tokens are listed on at least two venues. Try the
 				<a href="/arbitrage?showAll=1" class="text-violet-600 hover:underline">show-all view</a>
 				to inspect them.
@@ -137,8 +131,8 @@
 		</div>
 	{:else}
 		<!-- Desktop table -->
-		<div class="hidden md:block overflow-hidden rounded-xl border border-slate-200 dark:border-zinc-800">
-			<div class="grid grid-cols-[2.4fr_0.9fr_0.9fr_0.9fr_0.7fr_0.8fr_1.4fr] gap-2 px-4 py-3 bg-slate-50 dark:bg-zinc-900/50 border-b border-slate-200 dark:border-zinc-800 text-xs font-semibold text-slate-500 dark:text-zinc-300 uppercase tracking-wider items-center">
+		<div class="hidden md:block overflow-hidden rounded-xl border ts-border-subtle">
+			<div class="grid grid-cols-[2.4fr_0.9fr_0.9fr_0.9fr_0.7fr_0.8fr_1.4fr] gap-2 px-4 py-3 bg-slate-50 dark:bg-zinc-900/50 border-b text-xs font-semibold uppercase tracking-wider items-center ts-text-muted ts-border-subtle">
 				<div>Token</div>
 				<div class="text-right">Cauldron</div>
 				<div class="text-right">Fex</div>
@@ -148,15 +142,15 @@
 				<div class="text-right">Action</div>
 			</div>
 			{#each data.rows as r (r.id)}
-				<div class="grid grid-cols-[2.4fr_0.9fr_0.9fr_0.9fr_0.7fr_0.8fr_1.4fr] gap-2 px-4 py-3 border-b border-slate-100 dark:border-zinc-800 last:border-b-0 items-center hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors">
+				<div class="grid grid-cols-[2.4fr_0.9fr_0.9fr_0.9fr_0.7fr_0.8fr_1.4fr] gap-2 px-4 py-3 border-b last:border-b-0 items-center hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors ts-border-subtle">
 					<a href={`/token/${r.id}`} class="flex items-center gap-3 min-w-0 no-underline group">
-						<img src={iconHrefFor(r.icon, r.iconClearedHash)} alt="" class="w-8 h-8 rounded-full bg-slate-100 dark:bg-zinc-800 shrink-0" loading="lazy" />
+						<img src={iconHrefFor(r.icon, r.iconClearedHash)} alt="" class="w-8 h-8 rounded-full shrink-0 ts-surface-chip" loading="lazy" />
 						<div class="min-w-0">
 							<div class="font-semibold text-slate-900 dark:text-white truncate group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
 								{stripEmoji(r.name) || '—'}
 								{#if r.symbol}<span class="ml-2 text-xs text-slate-500 font-mono">{stripEmoji(r.symbol)}</span>{/if}
 							</div>
-							<div class="text-xs text-slate-500 dark:text-zinc-300 truncate">
+							<div class="text-xs truncate ts-text-muted">
 								{#if r.cauldronPresent}Cauldron TVL {fmtTvl(r.cauldronTvlUSD)}{/if}
 								{#if r.cauldronPresent && r.fexPresent} · {/if}
 								{#if r.fexPresent}Fex TVL {fmtTvl(r.fexTvlUSD)}{/if}
@@ -213,9 +207,9 @@
 		<!-- Mobile: stacked cards. The desktop grid would crush at <md. -->
 		<div class="md:hidden space-y-3">
 			{#each data.rows as r (r.id)}
-				<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+				<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
 					<a href={`/token/${r.id}`} class="flex items-center gap-3 mb-3 no-underline">
-						<img src={iconHrefFor(r.icon, r.iconClearedHash)} alt="" class="w-10 h-10 rounded-full bg-slate-100 dark:bg-zinc-800" />
+						<img src={iconHrefFor(r.icon, r.iconClearedHash)} alt="" class="w-10 h-10 rounded-full ts-surface-chip" />
 						<div class="min-w-0 flex-1">
 							<div class="font-semibold text-slate-900 dark:text-white truncate">
 								{stripEmoji(r.name) || '—'}
@@ -271,14 +265,14 @@
 		</div>
 	{/if}
 
-	<section class="mt-10 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/30">
+	<section class="mt-10 p-5 rounded-xl border bg-slate-50/50 dark:bg-zinc-900/30 ts-border-subtle">
 		<h2 class="text-base font-semibold text-slate-900 dark:text-white mb-2">Notes</h2>
-		<ul class="text-sm text-slate-600 dark:text-zinc-300 space-y-1.5 list-disc list-inside">
+		<ul class="text-sm space-y-1.5 list-disc list-inside ts-text-muted">
 			<li>
-				Cauldron / Fex prices come from <code class="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 font-mono">token_venue_listings</code>; Tapswap price is the lowest <code class="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 font-mono">want_sats / has_amount</code> across open FT-only listings (NFTs are excluded — different price semantics). Refresh cadence: Cauldron 4 h discovery + 10 min fast-pass; Fex 4 h; Tapswap is event-driven, near real-time.
+				Cauldron / Fex prices come from <code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">token_venue_listings</code>; Tapswap price is the lowest <code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">want_sats / has_amount</code> across open FT-only listings (NFTs are excluded — different price semantics). Refresh cadence: Cauldron 4 h discovery + 10 min fast-pass; Fex 4 h; Tapswap is event-driven, near real-time.
 			</li>
 			<li>
-				<strong>Per-venue taker fees</strong> — buy leg (when you fill): Cauldron {data.buyFeePct.cauldron}% / Fex {data.buyFeePct.fex}% / Tapswap {data.buyFeePct.tapswap}% (the 3% Tapswap platform fee is paid by the maker out of <code class="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 font-mono">want_sats</code>, not the taker). Sell leg (when you create the listing): Cauldron {data.sellFeePct.cauldron}% / Fex {data.sellFeePct.fex}% / Tapswap {data.sellFeePct.tapswap}%. The Net column subtracts whichever pair this row's cheapest-vs-most-expensive venues actually use.
+				<strong>Per-venue taker fees</strong> — buy leg (when you fill): Cauldron {data.buyFeePct.cauldron}% / Fex {data.buyFeePct.fex}% / Tapswap {data.buyFeePct.tapswap}% (the 3% Tapswap platform fee is paid by the maker out of <code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">want_sats</code>, not the taker). Sell leg (when you create the listing): Cauldron {data.sellFeePct.cauldron}% / Fex {data.sellFeePct.fex}% / Tapswap {data.sellFeePct.tapswap}%. The Net column subtracts whichever pair this row's cheapest-vs-most-expensive venues actually use.
 			</li>
 			<li>Slippage on thin pools (or absorbing all listings on Tapswap) eats the spread before you do. Always sanity-check against the live venue UI before committing funds.</li>
 			<li>Tapswap NFT listings are tracked but not surfaced here — each NFT is unique by commitment and "lowest ask" doesn't aggregate cleanly across them. Day-1 is FT-only; NFT-specific arbitrage is a tracked follow-up.</li>

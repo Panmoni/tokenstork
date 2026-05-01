@@ -119,7 +119,7 @@
 
 <svelte:window onclick={onWindowClick} onkeydown={onWindowKeydown} />
 
-<header class="sticky top-0 z-50 backdrop-blur-xl bg-white/80 dark:bg-zinc-950/80 border-b border-slate-200 dark:border-zinc-800">
+<header class="sticky top-0 z-50 backdrop-blur-xl bg-white/80 dark:bg-zinc-950/80 border-b ts-border-subtle">
 	<nav class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
 		<div class="flex h-16 items-center justify-between">
 			<div class="flex-shrink-0">
@@ -140,18 +140,14 @@
 								onclick={() => (openNavMenu = openNavMenu === item.name ? null : item.name)}
 								aria-haspopup="menu"
 								aria-expanded={openNavMenu === item.name}
-								class="relative inline-flex items-center gap-1 text-sm font-medium transition-colors duration-200 {active
-									? 'text-violet-600 dark:text-violet-400'
-									: 'text-slate-600 hover:text-slate-900 dark:text-zinc-200 dark:hover:text-white'}"
+								class="relative inline-flex items-center gap-1 text-sm font-medium transition-colors duration-200 {active ? 'text-violet-600 dark:text-violet-400' : 'text-slate-600 hover:text-slate-900 dark:text-zinc-200 dark:hover:text-white'}"
 							>
 								{item.name}
 								<svg
 									xmlns="http://www.w3.org/2000/svg"
 									viewBox="0 0 20 20"
 									fill="currentColor"
-									class="w-4 h-4 transition-transform {openNavMenu === item.name
-										? 'rotate-180'
-										: ''}"
+									class="w-4 h-4 transition-transform {openNavMenu === item.name ? 'rotate-180' : ''}"
 									aria-hidden="true"
 								>
 									<path
@@ -166,7 +162,7 @@
 							</button>
 							{#if openNavMenu === item.name}
 								<div
-									class="absolute left-0 mt-3 w-56 rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg py-1 z-50"
+									class="absolute left-0 mt-3 w-56 rounded-lg border shadow-lg py-1 z-50 ts-border-subtle ts-surface-panel"
 									role="menu"
 								>
 									{#each item.children as child (child.href)}
@@ -175,17 +171,13 @@
 											href={child.href}
 											onclick={() => (openNavMenu = null)}
 											role="menuitem"
-											class="block px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-zinc-800 {childActive
-												? 'bg-violet-50 dark:bg-violet-900/20'
-												: ''}"
+											class="block px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-zinc-800 {childActive ? 'bg-violet-50 dark:bg-violet-900/20' : ''}"
 										>
-											<div class="text-sm font-medium {childActive
-												? 'text-violet-600 dark:text-violet-400'
-												: 'text-slate-900 dark:text-white'}">
+											<div class="text-sm font-medium {childActive ? 'text-violet-600 dark:text-violet-400' : 'text-slate-900 dark:text-white'}">
 												{child.name}
 											</div>
 											{#if child.description}
-												<div class="text-xs text-slate-500 dark:text-zinc-300 mt-0.5">
+												<div class="text-xs mt-0.5 ts-text-muted">
 													{child.description}
 												</div>
 											{/if}
@@ -197,9 +189,7 @@
 					{:else}
 						<a
 							href={item.href}
-							class="relative text-sm font-medium transition-colors duration-200 {active
-								? 'text-violet-600 dark:text-violet-400'
-								: 'text-slate-600 hover:text-slate-900 dark:text-zinc-200 dark:hover:text-white'}"
+							class="relative text-sm font-medium transition-colors duration-200 {active ? 'text-violet-600 dark:text-violet-400' : 'text-slate-600 hover:text-slate-900 dark:text-zinc-200 dark:hover:text-white'}"
 						>
 							{item.name}
 							{#if active}
@@ -216,7 +206,7 @@
 						{#if watchlistCount > 0}
 							<a
 								href="/watchlist"
-								class="text-sm font-medium text-slate-600 dark:text-zinc-200 hover:text-slate-900 dark:hover:text-white inline-flex items-center gap-1"
+								class="text-sm font-medium hover:text-slate-900 dark:hover:text-white inline-flex items-center gap-1 ts-text-body"
 								title="Your tracked tokens"
 							>
 								Watchlist
@@ -229,7 +219,7 @@
 							<button
 								type="button"
 								onclick={() => (userMenuOpen = !userMenuOpen)}
-								class="p-1.5 rounded-full text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-zinc-200 dark:hover:text-white dark:hover:bg-zinc-800 transition-colors"
+								class="p-1.5 rounded-full hover:text-slate-900 hover:bg-slate-100 dark:hover:text-white dark:hover:bg-zinc-800 transition-colors ts-text-body"
 								aria-label="Account menu"
 								aria-haspopup="menu"
 								aria-expanded={userMenuOpen}
@@ -242,11 +232,11 @@
 							</button>
 							{#if userMenuOpen}
 								<div
-									class="absolute right-0 mt-2 w-56 rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg py-1 z-50"
+									class="absolute right-0 mt-2 w-56 rounded-lg border shadow-lg py-1 z-50 ts-border-subtle ts-surface-panel"
 									role="menu"
 								>
-									<div class="px-3 py-2 border-b border-slate-100 dark:border-zinc-800">
-										<div class="text-[10px] uppercase tracking-wider text-slate-400 dark:text-zinc-400">Signed in as</div>
+									<div class="px-3 py-2 border-b ts-border-subtle">
+										<div class="text-[10px] uppercase tracking-wider ts-text-faint">Signed in as</div>
 										<div class="font-mono text-xs text-emerald-700 dark:text-emerald-300 mt-1 truncate" title={user.cashaddr}>
 											{truncatedCashaddr}
 										</div>
@@ -257,7 +247,7 @@
 											userMenuOpen = false;
 											logout();
 										}}
-										class="w-full text-left px-3 py-2 text-sm text-slate-600 dark:text-zinc-200 hover:bg-slate-50 dark:hover:bg-zinc-800"
+										class="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-zinc-800 ts-text-body"
 										role="menuitem"
 									>
 										Sign out
@@ -269,7 +259,7 @@
 				{:else}
 					<a
 						href={`/login${pathname !== '/' ? `?return=${encodeURIComponent(pathname)}` : ''}`}
-						class="text-sm font-medium text-slate-600 dark:text-zinc-200 hover:text-slate-900 dark:hover:text-white"
+						class="text-sm font-medium hover:text-slate-900 dark:hover:text-white ts-text-body"
 					>
 						Sign in
 					</a>
@@ -287,7 +277,7 @@
 							placeholder="Search tokens…"
 							bind:value={headerSearch}
 							maxlength="128"
-							class="w-56 pl-9 pr-3 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+							class="w-56 pl-9 pr-3 py-1.5 rounded-lg border text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent ts-border-strong ts-surface-panel"
 							aria-label="Search tokens"
 						/>
 						<svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -302,7 +292,7 @@
 				<ThemeSwitcher />
 				<button
 					onclick={() => (mobileMenuOpen = !mobileMenuOpen)}
-					class="p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-zinc-200 dark:hover:text-white dark:hover:bg-zinc-800"
+					class="p-2 rounded-lg hover:text-slate-900 hover:bg-slate-100 dark:hover:text-white dark:hover:bg-zinc-800 ts-text-body"
 					aria-label="Toggle menu"
 				>
 					{#if mobileMenuOpen}
@@ -319,7 +309,7 @@
 		</div>
 
 		<div class="md:hidden overflow-hidden transition-all duration-300 {mobileMenuOpen ? 'max-h-[32rem] opacity-100' : 'max-h-0 opacity-0'}">
-			<div class="py-4 space-y-1 border-t border-slate-200 dark:border-zinc-800">
+			<div class="py-4 space-y-1 border-t ts-border-subtle">
 				{#if showSearch}
 					<form onsubmit={submitHeaderSearch} class="relative mb-2 px-2">
 						<input
@@ -327,7 +317,7 @@
 							placeholder="Search tokens…"
 							bind:value={headerSearch}
 							maxlength="128"
-							class="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+							class="w-full pl-9 pr-3 py-2 rounded-lg border text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent ts-border-strong ts-surface-panel"
 							aria-label="Search tokens"
 						/>
 						<svg class="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -340,9 +330,7 @@
 					<a
 						href={item.href}
 						onclick={() => (mobileMenuOpen = false)}
-						class="block px-4 py-3 rounded-lg text-base font-medium transition-colors duration-200 {active
-							? 'bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400'
-							: 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-white'}"
+						class="block px-4 py-3 rounded-lg text-base font-medium transition-colors duration-200 {active ? 'bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-white'}"
 					>
 						{item.name}
 					</a>
@@ -353,9 +341,7 @@
 								<a
 									href={child.href}
 									onclick={() => (mobileMenuOpen = false)}
-									class="block px-4 py-2 rounded-lg text-sm transition-colors duration-200 {childActive
-										? 'bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400'
-										: 'text-slate-500 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800'}"
+									class="block px-4 py-2 rounded-lg text-sm transition-colors duration-200 {childActive ? 'bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400' : 'text-slate-500 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800'}"
 								>
 									{child.name}
 								</a>
@@ -363,9 +349,9 @@
 						</div>
 					{/if}
 				{/each}
-				<div class="border-t border-slate-200 dark:border-zinc-800 mt-2 pt-2">
+				<div class="border-t mt-2 pt-2 ts-border-subtle">
 					{#if user && truncatedCashaddr}
-						<div class="px-4 py-2 text-xs text-slate-500 dark:text-zinc-300">
+						<div class="px-4 py-2 text-xs ts-text-muted">
 							Signed in as
 							<span class="font-mono text-emerald-700 dark:text-emerald-300" title={user.cashaddr}>
 								{truncatedCashaddr}
@@ -377,7 +363,7 @@
 								mobileMenuOpen = false;
 								logout();
 							}}
-							class="w-full text-left block px-4 py-3 rounded-lg text-base font-medium text-slate-600 dark:text-zinc-200 hover:bg-slate-50 dark:hover:bg-zinc-800"
+							class="w-full text-left block px-4 py-3 rounded-lg text-base font-medium hover:bg-slate-50 dark:hover:bg-zinc-800 ts-text-body"
 						>
 							Sign out
 						</button>
@@ -385,7 +371,7 @@
 						<a
 							href={`/login${pathname !== '/' ? `?return=${encodeURIComponent(pathname)}` : ''}`}
 							onclick={() => (mobileMenuOpen = false)}
-							class="block px-4 py-3 rounded-lg text-base font-medium text-slate-600 dark:text-zinc-200 hover:bg-slate-50 dark:hover:bg-zinc-800"
+							class="block px-4 py-3 rounded-lg text-base font-medium hover:bg-slate-50 dark:hover:bg-zinc-800 ts-text-body"
 						>
 							Sign in
 						</a>

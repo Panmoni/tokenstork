@@ -29,13 +29,13 @@
 	});
 </script>
 
-<div class="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-zinc-900 dark:to-zinc-800 border-b border-slate-200 dark:border-zinc-700">
+<div class="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-zinc-900 dark:to-zinc-800 border-b ts-border-strong">
 	<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-3">
 		<div class="hidden md:flex items-center justify-between">
 			<div class="flex items-center gap-8">
 				<Tooltip>
 					<TooltipTrigger class="flex items-center gap-2 cursor-default">
-						<span class="text-xs font-medium text-slate-500 dark:text-zinc-300 uppercase tracking-wider">
+						<span class="text-xs font-medium uppercase tracking-wider ts-text-muted">
 							Tracked
 						</span>
 						<span class="px-3 py-1 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 font-semibold text-sm">
@@ -49,7 +49,7 @@
 
 				<Tooltip>
 					<TooltipTrigger class="flex items-center gap-2 cursor-default">
-						<span class="text-xs font-medium text-slate-500 dark:text-zinc-300 uppercase tracking-wider">
+						<span class="text-xs font-medium uppercase tracking-wider ts-text-muted">
 							Listed
 						</span>
 						<a
@@ -66,7 +66,7 @@
 
 				<Tooltip>
 					<TooltipTrigger class="flex items-center gap-2 cursor-default">
-						<span class="text-xs font-medium text-slate-500 dark:text-zinc-300 uppercase tracking-wider">
+						<span class="text-xs font-medium uppercase tracking-wider ts-text-muted">
 							Total TVL
 						</span>
 						{#if tvlUSD !== null}
@@ -87,7 +87,7 @@
 					class="flex items-center gap-2 hover:opacity-80 transition-opacity"
 					title="Categories whose genesis transaction was mined in the last 24 hours. Click to view them."
 				>
-					<span class="text-xs font-medium text-slate-500 dark:text-zinc-300 uppercase tracking-wider">
+					<span class="text-xs font-medium uppercase tracking-wider ts-text-muted">
 						New 24h
 					</span>
 					<span class="font-semibold text-violet-600 dark:text-violet-400 text-sm underline-offset-4 hover:underline">
@@ -98,7 +98,7 @@
 				{#if tailLastBlock !== null}
 					<Tooltip>
 						<TooltipTrigger class="flex items-center gap-2 cursor-default">
-							<span class="text-xs font-medium text-slate-500 dark:text-zinc-300 uppercase tracking-wider">
+							<span class="text-xs font-medium uppercase tracking-wider ts-text-muted">
 								Block
 							</span>
 							<a
@@ -116,7 +116,7 @@
 
 				<Tooltip>
 					<TooltipTrigger class="flex items-center gap-2 cursor-default">
-						<span class="text-xs font-medium text-slate-500 dark:text-zinc-300 uppercase tracking-wider">
+						<span class="text-xs font-medium uppercase tracking-wider ts-text-muted">
 							BCH
 						</span>
 						{#if $bchPrice.bchPrice}
@@ -136,7 +136,7 @@
 
 		<div class="md:hidden grid grid-cols-2 gap-2 py-1">
 			<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 shadow-sm">
-				<span class="text-xs text-slate-500 dark:text-zinc-300">Tokens</span>
+				<span class="text-xs ts-text-muted">Tokens</span>
 				<span class="font-semibold text-violet-600 dark:text-violet-400 text-sm">{fmt(tokensTracked)}</span>
 			</div>
 			<a
@@ -144,11 +144,11 @@
 				class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 shadow-sm hover:bg-slate-50 dark:hover:bg-zinc-700 transition-colors"
 				title="Tokens with an active Cauldron / Fex AMM price or an open Tapswap P2P listing"
 			>
-				<span class="text-xs text-slate-500 dark:text-zinc-300">Listed</span>
+				<span class="text-xs ts-text-muted">Listed</span>
 				<span class="font-semibold text-violet-600 dark:text-violet-400 text-sm">{fmt(listedCount)}</span>
 			</a>
 			<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 shadow-sm">
-				<span class="text-xs text-slate-500 dark:text-zinc-300">Total TVL</span>
+				<span class="text-xs ts-text-muted">Total TVL</span>
 				{#if tvlUSD !== null}
 					<span class="font-mono font-semibold text-sm">{compactUSD(tvlUSD)}</span>
 				{:else}
@@ -160,7 +160,7 @@
 				class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 shadow-sm no-underline"
 				title="Tokens minted in the last 24 hours"
 			>
-				<span class="text-xs text-slate-500 dark:text-zinc-300">New 24h</span>
+				<span class="text-xs ts-text-muted">New 24h</span>
 				<span class="font-semibold text-sm text-violet-600 dark:text-violet-400">{fmt(newIn24h)}</span>
 			</a>
 			{#if tailLastBlock !== null}
@@ -169,12 +169,12 @@
 					class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 shadow-sm no-underline hover:bg-slate-50 dark:hover:bg-zinc-700 transition-colors"
 					title="Per-block economics dashboard"
 				>
-					<span class="text-xs text-slate-500 dark:text-zinc-300">Block</span>
+					<span class="text-xs ts-text-muted">Block</span>
 					<span class="font-mono text-sm text-violet-600 dark:text-violet-400">{fmt(tailLastBlock)}</span>
 				</a>
 			{/if}
 			<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 shadow-sm">
-				<span class="text-xs text-slate-500 dark:text-zinc-300">BCH</span>
+				<span class="text-xs ts-text-muted">BCH</span>
 				{#if $bchPrice.bchPrice}
 					<span class="font-mono font-semibold text-sm">${$bchPrice.bchPrice.toFixed(2)}</span>
 				{:else}

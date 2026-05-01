@@ -4,7 +4,7 @@
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 	<section
-		class="mt-8 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-gradient-to-br from-violet-600 via-indigo-600 to-violet-700 dark:from-violet-700 dark:via-indigo-800 dark:to-violet-900 shadow-lg overflow-hidden relative"
+		class="mt-8 rounded-2xl border bg-gradient-to-br from-violet-600 via-indigo-600 to-violet-700 dark:from-violet-700 dark:via-indigo-800 dark:to-violet-900 shadow-lg overflow-hidden relative ts-border-subtle"
 	>
 		<div class="absolute inset-0 opacity-20 pointer-events-none" aria-hidden="true">
 			<div class="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-white/40 blur-3xl"></div>

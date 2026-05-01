@@ -118,7 +118,7 @@
 		<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent">
 			Stats
 		</h1>
-		<p class="text-slate-600 dark:text-zinc-300 mt-2">
+		<p class="mt-2 ts-text-muted">
 			Headline numbers for the BCH CashTokens ecosystem, computed directly from the tokens we've
 			indexed.
 		</p>
@@ -138,10 +138,10 @@
 		] as card (card.label)}
 			<a
 				href={card.href}
-				class="group p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-violet-400 dark:hover:border-violet-600 transition-colors no-underline"
+				class="group p-5 rounded-xl border hover:border-violet-400 dark:hover:border-violet-600 transition-colors no-underline ts-border-subtle ts-surface-panel"
 			>
 				<div class="flex items-center justify-between">
-					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">{card.label}</div>
+					<div class="text-xs uppercase tracking-wider ts-text-muted">{card.label}</div>
 					<span class="text-violet-500 opacity-0 group-hover:opacity-100 transition-opacity text-sm" aria-hidden="true">→</span>
 				</div>
 				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">{fmt(card.count)}</div>
@@ -167,7 +167,7 @@
 			-->
 			<a
 				href="/?type=FT&sort=tvl"
-				class="group p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-violet-400 dark:hover:border-violet-600 transition-colors no-underline"
+				class="group p-5 rounded-xl border hover:border-violet-400 dark:hover:border-violet-600 transition-colors no-underline ts-border-subtle ts-surface-panel"
 			>
 				<div class="flex items-center justify-between">
 					<div class="flex items-center gap-3">
@@ -181,15 +181,15 @@
 						</span>
 						<span class="font-semibold text-slate-900 dark:text-white">FT</span>
 					</div>
-					<span class="text-xs text-slate-500 dark:text-zinc-300">{pct(data.byType.FT)}%</span>
+					<span class="text-xs ts-text-muted">{pct(data.byType.FT)}%</span>
 				</div>
 				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">{fmt(data.byType.FT)}</div>
-				<div class="mt-1 text-xs text-slate-500 dark:text-zinc-300">fungible only</div>
+				<div class="mt-1 text-xs ts-text-muted">fungible only</div>
 			</a>
 
 			<a
 				href="/?type=NFT&sort=tvl"
-				class="group p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-fuchsia-400 dark:hover:border-fuchsia-600 transition-colors no-underline"
+				class="group p-5 rounded-xl border hover:border-fuchsia-400 dark:hover:border-fuchsia-600 transition-colors no-underline ts-border-subtle ts-surface-panel"
 			>
 				<div class="flex items-center justify-between">
 					<div class="flex items-center gap-3">
@@ -202,15 +202,15 @@
 						</span>
 						<span class="font-semibold text-slate-900 dark:text-white">NFT</span>
 					</div>
-					<span class="text-xs text-slate-500 dark:text-zinc-300">{pct(data.byType.NFT)}%</span>
+					<span class="text-xs ts-text-muted">{pct(data.byType.NFT)}%</span>
 				</div>
 				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white group-hover:text-fuchsia-600 dark:group-hover:text-fuchsia-400 transition-colors">{fmt(data.byType.NFT)}</div>
-				<div class="mt-1 text-xs text-slate-500 dark:text-zinc-300">non-fungible only</div>
+				<div class="mt-1 text-xs ts-text-muted">non-fungible only</div>
 			</a>
 
 			<a
 				href="/?type=FT%2BNFT&sort=tvl"
-				class="group p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-indigo-400 dark:hover:border-indigo-600 transition-colors no-underline"
+				class="group p-5 rounded-xl border hover:border-indigo-400 dark:hover:border-indigo-600 transition-colors no-underline ts-border-subtle ts-surface-panel"
 			>
 				<div class="flex items-center justify-between">
 					<div class="flex items-center gap-3">
@@ -223,10 +223,10 @@
 						</span>
 						<span class="font-semibold text-slate-900 dark:text-white">FT+NFT</span>
 					</div>
-					<span class="text-xs text-slate-500 dark:text-zinc-300">{pct(data.byType['FT+NFT'])}%</span>
+					<span class="text-xs ts-text-muted">{pct(data.byType['FT+NFT'])}%</span>
 				</div>
 				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{fmt(data.byType['FT+NFT'])}</div>
-				<div class="mt-1 text-xs text-slate-500 dark:text-zinc-300">hybrid (fungible + non-fungible)</div>
+				<div class="mt-1 text-xs ts-text-muted">hybrid (fungible + non-fungible)</div>
 			</a>
 		</div>
 	</section>
@@ -236,40 +236,40 @@
 		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 			<a
 				href="/?cauldron=1&sort=tvl"
-				class="group p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-violet-400 dark:hover:border-violet-600 transition-colors no-underline"
+				class="group p-5 rounded-xl border hover:border-violet-400 dark:hover:border-violet-600 transition-colors no-underline ts-border-subtle ts-surface-panel"
 			>
 				<div class="flex items-center gap-3">
 					<img src="/cauldron-logo.png" alt="" class="w-7 h-7 rounded-full bg-slate-900 p-0.5" aria-hidden="true" />
-					<span class="font-semibold text-slate-900 dark:text-white">Cauldron <span class="text-xs text-slate-500 dark:text-zinc-300 font-normal">(AMM)</span></span>
+					<span class="font-semibold text-slate-900 dark:text-white">Cauldron <span class="text-xs font-normal ts-text-muted">(AMM)</span></span>
 				</div>
 				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">{fmt(data.cauldronListedCategories)}</div>
-				<div class="mt-1 text-xs text-slate-500 dark:text-zinc-300">
+				<div class="mt-1 text-xs ts-text-muted">
 					distinct tokens with an active pool price
 				</div>
 			</a>
 			<a
 				href="/?tapswap=1&sort=recent"
-				class="group p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-emerald-400 dark:hover:border-emerald-600 transition-colors no-underline"
+				class="group p-5 rounded-xl border hover:border-emerald-400 dark:hover:border-emerald-600 transition-colors no-underline ts-border-subtle ts-surface-panel"
 			>
 				<div class="flex items-center gap-3">
 					<img src="/tapswap-logo.png" alt="" class="w-7 h-7 rounded" aria-hidden="true" />
-					<span class="font-semibold text-slate-900 dark:text-white">Tapswap <span class="text-xs text-slate-500 dark:text-zinc-300 font-normal">(P2P)</span></span>
+					<span class="font-semibold text-slate-900 dark:text-white">Tapswap <span class="text-xs font-normal ts-text-muted">(P2P)</span></span>
 				</div>
 				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{fmt(data.tapswapListedCategories)}</div>
-				<div class="mt-1 text-xs text-slate-500 dark:text-zinc-300">
+				<div class="mt-1 text-xs ts-text-muted">
 					distinct tokens with open listings
 				</div>
 			</a>
 			<a
 				href="/?fex=1&sort=tvl"
-				class="group p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-sky-400 dark:hover:border-sky-600 transition-colors no-underline"
+				class="group p-5 rounded-xl border hover:border-sky-400 dark:hover:border-sky-600 transition-colors no-underline ts-border-subtle ts-surface-panel"
 			>
 				<div class="flex items-center gap-3">
 					<img src="/fex-logo.png" alt="" class="w-7 h-7 rounded-full" aria-hidden="true" />
-					<span class="font-semibold text-slate-900 dark:text-white">Fex <span class="text-xs text-slate-500 dark:text-zinc-300 font-normal">(AMM)</span></span>
+					<span class="font-semibold text-slate-900 dark:text-white">Fex <span class="text-xs font-normal ts-text-muted">(AMM)</span></span>
 				</div>
 				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white group-hover:text-sky-600 dark:group-hover:text-sky-400 transition-colors">{fmt(data.fexListedCategories)}</div>
-				<div class="mt-1 text-xs text-slate-500 dark:text-zinc-300">
+				<div class="mt-1 text-xs ts-text-muted">
 					distinct tokens with an active pool price
 				</div>
 			</a>
@@ -288,75 +288,75 @@
 				View on Cauldron →
 			</a>
 		</div>
-		<p class="text-sm text-slate-500 dark:text-zinc-300 mb-3">
+		<p class="text-sm mb-3 ts-text-muted">
 			Live aggregates from <span class="font-mono">indexer.cauldron.quest</span>. TVL is the
 			BCH-side reserve only — conservative (industry convention doubles this to count the token
 			side too). Volumes are sampled at page render.
 		</p>
 		<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-			<div class="p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-				<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">TVL</div>
+			<div class="p-5 rounded-xl border ts-border-subtle ts-surface-panel">
+				<div class="text-xs uppercase tracking-wider ts-text-muted">TVL</div>
 				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
 					{fmtUsd(data.cauldronStats.tvlUSD)}
 				</div>
-				<div class="mt-1 text-xs font-mono text-slate-500 dark:text-zinc-300">
+				<div class="mt-1 text-xs font-mono ts-text-muted">
 					{fmtBch(data.cauldronStats.tvlSats)} BCH
 				</div>
 			</div>
-			<div class="p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-				<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">
+			<div class="p-5 rounded-xl border ts-border-subtle ts-surface-panel">
+				<div class="text-xs uppercase tracking-wider ts-text-muted">
 					Volume — 24h
 				</div>
 				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
 					{fmtUsd(data.cauldronStats.volume24hUSD)}
 				</div>
-				<div class="mt-1 text-xs font-mono text-slate-500 dark:text-zinc-300">
+				<div class="mt-1 text-xs font-mono ts-text-muted">
 					{fmtBch(data.cauldronStats.volume24hSats)} BCH
 				</div>
 			</div>
-			<div class="p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-				<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">
+			<div class="p-5 rounded-xl border ts-border-subtle ts-surface-panel">
+				<div class="text-xs uppercase tracking-wider ts-text-muted">
 					Volume — 7d
 				</div>
 				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
 					{fmtUsd(data.cauldronStats.volume7dUSD)}
 				</div>
-				<div class="mt-1 text-xs font-mono text-slate-500 dark:text-zinc-300">
+				<div class="mt-1 text-xs font-mono ts-text-muted">
 					{fmtBch(data.cauldronStats.volume7dSats)} BCH
 				</div>
 			</div>
-			<div class="p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-				<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">
+			<div class="p-5 rounded-xl border ts-border-subtle ts-surface-panel">
+				<div class="text-xs uppercase tracking-wider ts-text-muted">
 					Volume — 30d
 				</div>
 				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
 					{fmtUsd(data.cauldronStats.volume30dUSD)}
 				</div>
-				<div class="mt-1 text-xs font-mono text-slate-500 dark:text-zinc-300">
+				<div class="mt-1 text-xs font-mono ts-text-muted">
 					{fmtBch(data.cauldronStats.volume30dSats)} BCH
 				</div>
 			</div>
 		</div>
 		<div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-			<div class="p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-				<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">
+			<div class="p-5 rounded-xl border ts-border-subtle ts-surface-panel">
+				<div class="text-xs uppercase tracking-wider ts-text-muted">
 					Active pools
 				</div>
 				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
 					{fmt(data.cauldronStats.pools.active)}
 				</div>
 			</div>
-			<div class="p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-				<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">
+			<div class="p-5 rounded-xl border ts-border-subtle ts-surface-panel">
+				<div class="text-xs uppercase tracking-wider ts-text-muted">
 					Ended pools
 				</div>
 				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
 					{fmt(data.cauldronStats.pools.ended)}
 				</div>
-				<div class="mt-1 text-xs text-slate-500 dark:text-zinc-300">lifetime, swept or closed</div>
+				<div class="mt-1 text-xs ts-text-muted">lifetime, swept or closed</div>
 			</div>
-			<div class="p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-				<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">
+			<div class="p-5 rounded-xl border ts-border-subtle ts-surface-panel">
+				<div class="text-xs uppercase tracking-wider ts-text-muted">
 					Lifetime swap interactions
 				</div>
 				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
@@ -365,12 +365,12 @@
 			</div>
 		</div>
 		{#if uniqueBars.length > 0}
-			<div class="p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-x-auto">
+			<div class="p-5 rounded-xl border overflow-x-auto ts-border-subtle ts-surface-panel">
 				<div class="flex items-baseline justify-between mb-2">
-					<h3 class="text-sm font-semibold text-slate-700 dark:text-zinc-200">
+					<h3 class="text-sm font-semibold ts-text-strong">
 						Cumulative unique addresses by month
 					</h3>
-					<span class="text-xs text-slate-500 dark:text-zinc-300 font-mono">
+					<span class="text-xs font-mono ts-text-muted">
 						{fmt(data.cauldronStats.uniqueAddressesByMonth[data.cauldronStats.uniqueAddressesByMonth.length - 1].count)}
 						total
 					</span>
@@ -423,13 +423,13 @@
 
 	<section class="mb-8">
 		<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">Growth by month</h2>
-		<p class="text-sm text-slate-500 dark:text-zinc-300 mb-3">
+		<p class="text-sm mb-3 ts-text-muted">
 			New categories minted each month since CashTokens activation. Bucketed by on-chain genesis block
 			timestamp — {fmt(growthTotal)} tokens across the full history.
 		</p>
-		<div class="p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-x-auto">
+		<div class="p-5 rounded-xl border overflow-x-auto ts-border-subtle ts-surface-panel">
 			{#if growthBars.length === 0}
-				<p class="text-sm text-slate-500 dark:text-zinc-300">No data yet.</p>
+				<p class="text-sm ts-text-muted">No data yet.</p>
 			{:else}
 				<svg viewBox={`0 0 ${chartW} ${chartH}`} class="w-full h-auto" role="img" aria-label="Monthly token genesis count">
 					<!-- y-axis ticks: 0, max/2, max -->
@@ -487,25 +487,25 @@
 
 	<section class="mb-8">
 		<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">Venue overlap</h2>
-		<p class="text-sm text-slate-500 dark:text-zinc-300 mb-3">
+		<p class="text-sm mb-3 ts-text-muted">
 			How the indexed tokens distribute across our three trading venues. The pair / triple
 			intersections are the natural targets for cross-venue arbitrage — same token, different
 			prices on each.
 		</p>
 		<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-			<div class="p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+			<div class="p-5 rounded-xl border ts-border-subtle ts-surface-panel">
 				<span class="px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-sm font-medium">
 					Cauldron only
 				</span>
 				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{fmt(data.venueOverlap.cauldronOnly)}</div>
 			</div>
-			<div class="p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+			<div class="p-5 rounded-xl border ts-border-subtle ts-surface-panel">
 				<span class="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-sm font-medium">
 					Tapswap only
 				</span>
 				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{fmt(data.venueOverlap.tapswapOnly)}</div>
 			</div>
-			<div class="p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+			<div class="p-5 rounded-xl border ts-border-subtle ts-surface-panel">
 				<span class="px-2 py-0.5 rounded bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 text-sm font-medium">
 					Fex only
 				</span>
@@ -517,14 +517,14 @@
 				</span>
 				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white" title="AMM-vs-AMM arbitrage candidates">{fmt(data.venueOverlap.cauldronAndFex)}</div>
 			</div>
-			<div class="p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-				<span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-200 text-sm font-medium">
+			<div class="p-5 rounded-xl border ts-border-subtle ts-surface-panel">
+				<span class="px-2 py-0.5 rounded text-sm font-medium ts-text-body ts-surface-chip">
 					Cauldron + Tapswap
 				</span>
 				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{fmt(data.venueOverlap.cauldronAndTapswap)}</div>
 			</div>
-			<div class="p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-				<span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-200 text-sm font-medium">
+			<div class="p-5 rounded-xl border ts-border-subtle ts-surface-panel">
+				<span class="px-2 py-0.5 rounded text-sm font-medium ts-text-body ts-surface-chip">
 					Tapswap + Fex
 				</span>
 				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{fmt(data.venueOverlap.tapswapAndFex)}</div>
@@ -540,22 +540,22 @@
 
 	<section class="mb-8">
 		<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">Metadata completeness</h2>
-		<p class="text-sm text-slate-500 dark:text-zinc-300 mb-3">
+		<p class="text-sm mb-3 ts-text-muted">
 			What fraction of the {fmt(data.metadata.total)} indexed tokens publish each BCMR field. Empty
 			strings count as missing — the directory treats them that way for display.
 		</p>
 		{#if data.metadata.total === 0}
-			<div class="p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900/50 text-sm text-slate-600 dark:text-zinc-300">
+			<div class="p-5 rounded-xl border bg-slate-50 dark:bg-zinc-900/50 text-sm ts-text-muted ts-border-subtle">
 				No tokens indexed yet.
 			</div>
 		{:else}
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 				{#each [['Name', data.metadata.hasName], ['Symbol', data.metadata.hasSymbol], ['Icon', data.metadata.hasIcon], ['Description', data.metadata.hasDescription]] as [label, count] (label)}
 					{@const p = metaPct(count as number)}
-					<div class="p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+					<div class="p-5 rounded-xl border ts-border-subtle ts-surface-panel">
 						<div class="flex items-baseline justify-between mb-2">
-							<span class="text-sm font-medium text-slate-700 dark:text-zinc-200">{label}</span>
-							<span class="text-xs text-slate-500 dark:text-zinc-300 font-mono">{fmt(count as number)} / {fmt(data.metadata.total)}</span>
+							<span class="text-sm font-medium ts-text-strong">{label}</span>
+							<span class="text-xs font-mono ts-text-muted">{fmt(count as number)} / {fmt(data.metadata.total)}</span>
 						</div>
 						<!--
 							SVG progress bar (was a `<div style:width=...>` overlay
@@ -563,10 +563,10 @@
 							`style-src 'unsafe-inline'` from the CSP). 100×8
 							viewBox stretched horizontally; rect width = pct.
 						-->
-						<svg viewBox="0 0 100 8" preserveAspectRatio="none" class="block w-full h-2 rounded-full overflow-hidden bg-slate-100 dark:bg-zinc-800" role="progressbar" aria-valuenow={p} aria-valuemin="0" aria-valuemax="100">
+						<svg viewBox="0 0 100 8" preserveAspectRatio="none" class="block w-full h-2 rounded-full overflow-hidden ts-surface-chip" role="progressbar" aria-valuenow={p} aria-valuemin="0" aria-valuemax="100">
 							<rect x="0" y="0" width={p} height="8" class="fill-violet-500 dark:fill-violet-400" />
 						</svg>
-						<div class="mt-1 text-xs text-slate-500 dark:text-zinc-300 font-mono">{p.toFixed(1)}%</div>
+						<div class="mt-1 text-xs font-mono ts-text-muted">{p.toFixed(1)}%</div>
 					</div>
 				{/each}
 			</div>
@@ -575,15 +575,15 @@
 
 	<section class="mb-8">
 		<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">Ecosystem TVL — last 30 days</h2>
-		<p class="text-sm text-slate-500 dark:text-zinc-300 mb-3">
+		<p class="text-sm mb-3 ts-text-muted">
 			Daily mean BCH-side reserve summed across every Cauldron + Fex pool we index. Lines move
 			with both pool inflows/outflows AND BCH-price-driven token-side rebalancing — this is
 			conservative single-side TVL, not the doubled industry convention. Tapswap (P2P) is
 			deliberately excluded.
 		</p>
-		<div class="p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+		<div class="p-5 rounded-xl border ts-border-subtle ts-surface-panel">
 			{#if data.ecosystemTvl30d.length === 0}
-				<p class="text-sm text-slate-500 dark:text-zinc-300">
+				<p class="text-sm ts-text-muted">
 					No history yet — the price-history table is still accumulating points.
 				</p>
 			{:else}
@@ -609,7 +609,7 @@
 						/>
 					{/if}
 				</svg>
-				<div class="mt-2 flex justify-between text-xs text-slate-500 dark:text-zinc-300 font-mono">
+				<div class="mt-2 flex justify-between text-xs font-mono ts-text-muted">
 					<span>{data.ecosystemTvl30d[0]?.day}</span>
 					<span>{(maxTvl / 1e8).toFixed(2)} BCH (max)</span>
 					<span>{data.ecosystemTvl30d[data.ecosystemTvl30d.length - 1]?.day}</span>
@@ -620,13 +620,13 @@
 
 	<section class="mb-8">
 		<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">FT supply distribution</h2>
-		<p class="text-sm text-slate-500 dark:text-zinc-300 mb-3">
+		<p class="text-sm mb-3 ts-text-muted">
 			How fungible (FT and FT+NFT) tokens distribute by displayable supply (current_supply ÷
 			10^decimals). Buckets are powers of ten; "zero / unknown" includes tokens we haven't
 			enriched yet.
 		</p>
 		{#if data.supplyBuckets.length === 0}
-			<div class="p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm text-slate-500 dark:text-zinc-300">
+			<div class="p-5 rounded-xl border text-sm ts-text-muted ts-border-subtle ts-surface-panel">
 				No data yet.
 			</div>
 		{:else}
@@ -639,7 +639,7 @@
 				Bar height = max(4, (count / max) * 100) — matches the prior
 				CSS-percentage idiom exactly.
 			-->
-			<div class="p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+			<div class="p-5 rounded-xl border ts-border-subtle ts-surface-panel">
 				<div class="grid grid-cols-3 sm:grid-cols-9 gap-3">
 					{#each data.supplyBuckets as bucket (bucket.label)}
 						{@const h = Math.max(4, (bucket.count / supplyMax) * 100)}
@@ -648,7 +648,7 @@
 								<title>{bucket.count} tokens</title>
 								<rect x="0" y={100 - h} width="10" height={h} rx="1" ry="1" class="fill-violet-500 dark:fill-violet-400 transition-all" />
 							</svg>
-							<div class="mt-2 text-[10px] font-mono text-slate-500 dark:text-zinc-300 text-center">{bucket.label}</div>
+							<div class="mt-2 text-[10px] font-mono text-center ts-text-muted">{bucket.label}</div>
 							<div class="text-sm font-semibold text-slate-900 dark:text-white">{fmt(bucket.count)}</div>
 						</div>
 					{/each}
@@ -659,11 +659,11 @@
 
 	<section class="mb-8">
 		<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">Decimals distribution</h2>
-		<p class="text-sm text-slate-500 dark:text-zinc-300 mb-3">
+		<p class="text-sm mb-3 ts-text-muted">
 			How FT and FT+NFT tokens choose their decimals. Most cash-token communities settle on a small
 			set of canonical values; deviations often signal copy-paste configs.
 		</p>
-		<div class="p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+		<div class="p-5 rounded-xl border ts-border-subtle ts-surface-panel">
 			<div class="grid grid-cols-6 gap-3">
 				{#each data.decimalsBuckets as bucket (bucket.label)}
 					{@const h = bucket.count > 0 ? Math.max(4, (bucket.count / decMax) * 100) : 0.5}
@@ -682,7 +682,7 @@
 								<rect x="0" y={99.5} width="10" height={0.5} class="fill-slate-200 dark:fill-zinc-700" />
 							{/if}
 						</svg>
-						<div class="mt-2 text-xs font-mono text-slate-500 dark:text-zinc-300">{bucket.label}</div>
+						<div class="mt-2 text-xs font-mono ts-text-muted">{bucket.label}</div>
 						<div class="text-sm font-semibold text-slate-900 dark:text-white">{fmt(bucket.count)}</div>
 					</div>
 				{/each}
@@ -695,7 +695,7 @@
 			<h2 class="text-xl font-semibold text-slate-900 dark:text-white">Holder distribution (Gini)</h2>
 			{#if data.giniMedian != null}
 				<Tooltip>
-					<TooltipTrigger class="text-sm text-slate-500 dark:text-zinc-300 cursor-help">
+					<TooltipTrigger class="text-sm cursor-help ts-text-muted">
 						median {data.giniMedian.toFixed(2)}
 					</TooltipTrigger>
 					<TooltipContent>
@@ -704,10 +704,10 @@
 				</Tooltip>
 			{/if}
 		</div>
-		<p class="text-sm text-slate-500 dark:text-zinc-300 mb-3">
+		<p class="text-sm mb-3 ts-text-muted">
 			Gini coefficient measures how unequally a token's supply is split across its holders. 0 = perfectly equal; 1 = one address owns everything. Crypto distributions concentrate harder than country-income distributions — Bitcoin's holder-Gini is around 0.97 — so the tier cutoffs are calibrated for that reality. Excluded: tokens with fewer than 10 holders (where the math produces meaningless extremes).
 		</p>
-		<div class="p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+		<div class="p-5 rounded-xl border ts-border-subtle ts-surface-panel">
 			<!--
 				Each tier links into the directory filtered by ?gini_tier=<slug>.
 				Slugs are the lowercase label, with `whale-controlled` shortened
@@ -731,7 +731,7 @@
 								<rect x="0" y={99.5} width="10" height={0.5} class="fill-slate-200 dark:fill-zinc-700" />
 							{/if}
 						</svg>
-						<div class="mt-2 text-xs font-mono text-slate-500 dark:text-zinc-300 text-center group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">{bucket.label}</div>
+						<div class="mt-2 text-xs font-mono text-center group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors ts-text-muted">{bucket.label}</div>
 						<div class="text-sm font-semibold text-slate-900 dark:text-white">{fmt(bucket.count)}</div>
 					</a>
 				{/each}
@@ -742,13 +742,13 @@
 	<section class="mb-8">
 		<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">Burn status</h2>
 		{#if data.burned === null}
-			<div class="p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900/50 text-sm text-slate-600 dark:text-zinc-300">
+			<div class="p-5 rounded-xl border bg-slate-50 dark:bg-zinc-900/50 text-sm ts-text-muted ts-border-subtle">
 				Burn status is enriched from live UTXO counts — this requires our BlockBook indexer, which
 				is not yet deployed. Numbers will appear here once the enrichment worker has run.
 			</div>
 		{:else}
-			<div class="p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-				<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">
+			<div class="p-5 rounded-xl border ts-border-subtle ts-surface-panel">
+				<div class="text-xs uppercase tracking-wider ts-text-muted">
 					Fully burned
 				</div>
 				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{fmt(data.burned)}</div>
@@ -758,23 +758,23 @@
 
 	<section class="mb-8">
 		<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">Moderation</h2>
-		<p class="text-sm text-slate-500 dark:text-zinc-300 mb-3">
+		<p class="text-sm mb-3 ts-text-muted">
 			Categories filtered out of every other counter on this page. Hidden from the directory and the
 			public API; we publish the list for transparency.
 		</p>
 		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 			<a
 				href="/moderated"
-				class="group p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-rose-400 dark:hover:border-rose-600 transition-colors no-underline"
+				class="group p-5 rounded-xl border hover:border-rose-400 dark:hover:border-rose-600 transition-colors no-underline ts-border-subtle ts-surface-panel"
 			>
 				<div class="flex items-center justify-between">
-					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">
+					<div class="text-xs uppercase tracking-wider ts-text-muted">
 						Moderated tokens
 					</div>
 					<span class="text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity text-sm" aria-hidden="true">→</span>
 				</div>
 				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">{fmt(data.moderated)}</div>
-				<div class="mt-1 text-xs text-slate-500 dark:text-zinc-300">
+				<div class="mt-1 text-xs ts-text-muted">
 					see the list with reason and date
 				</div>
 			</a>
@@ -791,7 +791,7 @@
 	{#if data.iconStats && data.iconStats.totalUrls > 0}
 		<section class="mb-8">
 			<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">Icon safety</h2>
-			<p class="text-sm text-slate-500 dark:text-zinc-300 mb-3">
+			<p class="text-sm mb-3 ts-text-muted">
 				Every BCMR-supplied token icon is scanned for adult content + CSAM, capped at 2 MiB,
 				transcoded to static WebP, and served from our origin (never hot-linked). Counts below
 				are per unique image hash — a single hash can back many tokens.
@@ -800,17 +800,17 @@
 				</a>.
 			</p>
 			<div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-				<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">Cleared</div>
+				<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
+					<div class="text-xs uppercase tracking-wider ts-text-muted">Cleared</div>
 					<div class="mt-1 text-2xl font-bold text-emerald-600 dark:text-emerald-400">
 						{fmt(data.iconStats.cleared)}
 					</div>
-					<div class="text-xs text-slate-500 dark:text-zinc-300 mt-1">
+					<div class="text-xs mt-1 ts-text-muted">
 						{fmt(data.iconStats.tokensWithClearedIcon)} tokens use these
 					</div>
 				</div>
-				<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">Blocked</div>
+				<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
+					<div class="text-xs uppercase tracking-wider ts-text-muted">Blocked</div>
 					<div class="mt-1 text-2xl font-bold text-rose-600 dark:text-rose-400">
 						{fmt(
 							data.iconStats.blockedAdult +
@@ -819,23 +819,23 @@
 								data.iconStats.blockedCsam
 						)}
 					</div>
-					<div class="text-xs text-slate-500 dark:text-zinc-300 mt-1">
+					<div class="text-xs mt-1 ts-text-muted">
 						adult / oversize / format
 					</div>
 				</div>
-				<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">In review</div>
+				<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
+					<div class="text-xs uppercase tracking-wider ts-text-muted">In review</div>
 					<div class="mt-1 text-2xl font-bold text-violet-600 dark:text-violet-400">
 						{fmt(data.iconStats.review)}
 					</div>
-					<div class="text-xs text-slate-500 dark:text-zinc-300 mt-1">operator decides</div>
+					<div class="text-xs mt-1 ts-text-muted">operator decides</div>
 				</div>
-				<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">Pending</div>
-					<div class="mt-1 text-2xl font-bold text-slate-600 dark:text-zinc-300">
+				<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
+					<div class="text-xs uppercase tracking-wider ts-text-muted">Pending</div>
+					<div class="mt-1 text-2xl font-bold ts-text-muted">
 						{fmt(data.iconStats.pendingUrls)}
 					</div>
-					<div class="text-xs text-slate-500 dark:text-zinc-300 mt-1">
+					<div class="text-xs mt-1 ts-text-muted">
 						awaiting fetch / retry
 					</div>
 				</div>
@@ -843,7 +843,7 @@
 		</section>
 	{/if}
 
-	<p class="text-xs text-slate-500 dark:text-zinc-300 mt-10">
+	<p class="text-xs mt-10 ts-text-muted">
 		Counts reflect what our indexer has seen since CashTokens activation at block 792,772 (May
 		2023). Metadata comes from the BCMR registry via Paytaca's public indexer, refreshed every 4
 		hours.

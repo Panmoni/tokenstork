@@ -27,7 +27,7 @@
 	<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent mb-6">
 		Frequently asked questions
 	</h1>
-	<p class="text-slate-600 dark:text-zinc-300 mb-10">
+	<p class="mb-10 ts-text-muted">
 		Quick answers to the things readers most often want to know about TokenStork and the CashTokens
 		ecosystem. Click any question to expand. If something's missing here, email
 		<a href="mailto:hello@panmoni.com" class="text-violet-600 dark:text-violet-400 hover:underline">hello@panmoni.com</a>
@@ -40,12 +40,12 @@
 			without JS and stays keyboard-accessible. Styling-only shell.
 		-->
 
-		<details class="group p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+		<details class="group p-5 rounded-xl border ts-border-subtle ts-surface-panel">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
 				<span>What is TokenStork?</span>
 				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
 			</summary>
-			<div class="mt-3 text-slate-600 dark:text-zinc-200 space-y-2">
+			<div class="mt-3 space-y-2 ts-text-body">
 				<p>
 					TokenStork is a market-cap and directory site for
 					<a href="https://cashtokens.org/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">BCH CashTokens</a>. We index every category ever minted since the CashTokens upgrade
@@ -59,12 +59,12 @@
 			</div>
 		</details>
 
-		<details class="group p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+		<details class="group p-5 rounded-xl border ts-border-subtle ts-surface-panel">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
 				<span>What is a CashToken?</span>
 				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
 			</summary>
-			<div class="mt-3 text-slate-600 dark:text-zinc-200 space-y-2">
+			<div class="mt-3 space-y-2 ts-text-body">
 				<p>
 					CashTokens is Bitcoin Cash's native token standard, activated in May 2023. It lets any
 					BCH transaction create fungible tokens (like stablecoins or meme coins) or non-fungible
@@ -83,12 +83,12 @@
 			</div>
 		</details>
 
-		<details id="faq-crc20-vs-bcmr" class="group p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 scroll-mt-20">
+		<details id="faq-crc20-vs-bcmr" class="group p-5 rounded-xl border scroll-mt-20 ts-border-subtle ts-surface-panel">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
 				<span>What's the difference between <strong>CRC-20</strong> and <strong>BCMR</strong>?</span>
 				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
 			</summary>
-			<div class="mt-3 text-slate-600 dark:text-zinc-200 space-y-3">
+			<div class="mt-3 space-y-3 ts-text-body">
 				<p>
 					Both are ways to attach a name, symbol, and decimals to a CashTokens category. They
 					answer different questions and use very different mechanisms:
@@ -114,7 +114,7 @@
 					declare any symbol they like in their JSON), while CRC-20 is
 					<strong>first-come-first-served on chain</strong>, with one canonical winner per symbol
 					determined by a deterministic sort
-					(<code class="px-1 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 font-mono text-xs">max(commit_block, reveal_block − 20)</code>,
+					(<code class="px-1 py-0.5 rounded font-mono text-xs ts-surface-chip">max(commit_block, reveal_block − 20)</code>,
 					ties broken by category id). A token can have BCMR alone, CRC-20 alone, both, or
 					neither. When both exist, the on-chain CRC-20 bytes win on authenticity (you can verify
 					them against the genesis tx); BCMR wins on richness (icons, descriptions, social
@@ -128,19 +128,19 @@
 			</div>
 		</details>
 
-		<details id="faq-ft-nft" class="group p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 scroll-mt-20">
+		<details id="faq-ft-nft" class="group p-5 rounded-xl border scroll-mt-20 ts-border-subtle ts-surface-panel">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
-				<span>What does <code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 font-mono text-sm">FT+NFT</code> mean?</span>
+				<span>What does <code class="px-1.5 py-0.5 rounded font-mono text-sm ts-surface-chip">FT+NFT</code> mean?</span>
 				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
 			</summary>
-			<div class="mt-3 text-slate-600 dark:text-zinc-200 space-y-3">
+			<div class="mt-3 space-y-3 ts-text-body">
 				<p>
 					CashToken categories come in three shapes based on the kinds of outputs the token
 					appears on:
 				</p>
 				<ul class="list-disc list-inside ml-2 space-y-2">
 					<li>
-						<strong>FT</strong> — fungible only. Every output has an <code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 font-mono text-xs">amount</code> but no NFT commitment. Tokens you count — balances are interchangeable.
+						<strong>FT</strong> — fungible only. Every output has an <code class="px-1.5 py-0.5 rounded font-mono text-xs ts-surface-chip">amount</code> but no NFT commitment. Tokens you count — balances are interchangeable.
 						Example: a BCH-denominated stablecoin.
 					</li>
 					<li>
@@ -162,12 +162,12 @@
 			</div>
 		</details>
 
-		<details class="group p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+		<details class="group p-5 rounded-xl border ts-border-subtle ts-surface-panel">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
 				<span>What's the difference between Cauldron and Tapswap?</span>
 				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
 			</summary>
-			<div class="mt-3 text-slate-600 dark:text-zinc-200 space-y-2">
+			<div class="mt-3 space-y-2 ts-text-body">
 				<p>
 					Both are places you can trade CashTokens, but they work very differently:
 				</p>
@@ -194,20 +194,20 @@
 			</div>
 		</details>
 
-		<details class="group p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+		<details class="group p-5 rounded-xl border ts-border-subtle ts-surface-panel">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
 				<span>What are the small icons next to each token's name?</span>
 				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
 			</summary>
-			<div class="mt-3 text-slate-600 dark:text-zinc-200 space-y-2">
+			<div class="mt-3 space-y-2 ts-text-body">
 				<p>Each token in the directory shows a few compact signals next to its name:</p>
 				<ul class="list-disc list-inside ml-2 space-y-1.5">
 					<li>
-						<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 dark:bg-zinc-800 dark:text-zinc-200 align-middle">FT</span>
+						<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold align-middle ts-text-body ts-surface-chip">FT</span>
 						/
-						<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 dark:bg-zinc-800 dark:text-zinc-200 align-middle">NFT</span>
+						<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold align-middle ts-text-body ts-surface-chip">NFT</span>
 						/
-						<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 dark:bg-zinc-800 dark:text-zinc-200 align-middle">FT+NFT</span>
+						<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold align-middle ts-text-body ts-surface-chip">FT+NFT</span>
 						— token-type badge (<a href="#faq-ft-nft" class="underline hover:text-violet-600 dark:hover:text-violet-400">what these mean</a>).
 					</li>
 					<li>
@@ -226,12 +226,12 @@
 			</div>
 		</details>
 
-		<details class="group p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+		<details class="group p-5 rounded-xl border ts-border-subtle ts-surface-panel">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
 				<span>What's the difference between "Tracked" and "Listed" in the header?</span>
 				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
 			</summary>
-			<div class="mt-3 text-slate-600 dark:text-zinc-200 space-y-2">
+			<div class="mt-3 space-y-2 ts-text-body">
 				<p>
 					<strong>Tracked</strong> is every CashToken category our indexer has ever seen, going
 					back to activation block 792,772 in May 2023 — fungible and NFT, active or long-dead.
@@ -246,12 +246,12 @@
 			</div>
 		</details>
 
-		<details class="group p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+		<details class="group p-5 rounded-xl border ts-border-subtle ts-surface-panel">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
-				<span>Why does my token show <code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 font-mono text-sm">—</code> for Holders, UTXOs, or NFTs?</span>
+				<span>Why does my token show <code class="px-1.5 py-0.5 rounded font-mono text-sm ts-surface-chip">—</code> for Holders, UTXOs, or NFTs?</span>
 				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
 			</summary>
-			<div class="mt-3 text-slate-600 dark:text-zinc-200 space-y-2">
+			<div class="mt-3 space-y-2 ts-text-body">
 				<p>
 					Those fields come from a per-category enrichment index that joins what's unspent on
 					chain to category membership. We're deploying it as part of the BlockBook rollout;
@@ -264,12 +264,12 @@
 			</div>
 		</details>
 
-		<details class="group p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+		<details class="group p-5 rounded-xl border ts-border-subtle ts-surface-panel">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
 				<span>How often does the data refresh?</span>
 				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
 			</summary>
-			<div class="mt-3 text-slate-600 dark:text-zinc-200 space-y-2">
+			<div class="mt-3 space-y-2 ts-text-body">
 				<p>
 					Different sources update at different cadences:
 				</p>
@@ -283,12 +283,12 @@
 			</div>
 		</details>
 
-		<details class="group p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+		<details class="group p-5 rounded-xl border ts-border-subtle ts-surface-panel">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
 				<span>What are sparklines?</span>
 				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
 			</summary>
-			<div class="mt-3 text-slate-600 dark:text-zinc-200 space-y-2">
+			<div class="mt-3 space-y-2 ts-text-body">
 				<p>
 					The tiny inline chart at the right end of each directory row — it plots the token's
 					<strong>Cauldron price over the last 7 days</strong> as a single-line graph. Green
@@ -308,12 +308,12 @@
 			</div>
 		</details>
 
-		<details id="faq-mcap-hidden" class="group p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 scroll-mt-20">
+		<details id="faq-mcap-hidden" class="group p-5 rounded-xl border scroll-mt-20 ts-border-subtle ts-surface-panel">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
 				<span>Why is the Market cap blank for some tokens?</span>
 				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
 			</summary>
-			<div class="mt-3 text-slate-600 dark:text-zinc-200 space-y-2">
+			<div class="mt-3 space-y-2 ts-text-body">
 				<p>
 					A token's market cap is <em>price × circulating supply</em>, and the price
 					we have comes from its Cauldron AMM pool. When a pool holds only a few
@@ -338,12 +338,12 @@
 			</div>
 		</details>
 
-		<details class="group p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+		<details class="group p-5 rounded-xl border ts-border-subtle ts-surface-panel">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
 				<span>Where do token names, symbols, and icons come from?</span>
 				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
 			</summary>
-			<div class="mt-3 text-slate-600 dark:text-zinc-200 space-y-2">
+			<div class="mt-3 space-y-2 ts-text-body">
 				<p>
 					From <a href="https://cashtokens.org/docs/bcmr/chip/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">BCMR</a>
 					(the Bitcoin Cash Metadata Registries CHIP). Token creators publish metadata at a URI
@@ -360,12 +360,12 @@
 			</div>
 		</details>
 
-		<details id="faq-emoji" class="group p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 scroll-mt-20">
+		<details id="faq-emoji" class="group p-5 rounded-xl border scroll-mt-20 ts-border-subtle ts-surface-panel">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
 				<span>Why don't I see emojis in token names?</span>
 				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
 			</summary>
-			<div class="mt-3 text-slate-600 dark:text-zinc-200 space-y-2">
+			<div class="mt-3 space-y-2 ts-text-body">
 				<p>
 					We strip emoji from token names, symbols, and descriptions at display time. In a dense
 					directory full of rows, emoji turn into visual noise — they compete with the real name,
@@ -376,27 +376,27 @@
 					The on-chain data isn't touched. BCMR metadata is stored exactly as the issuer published
 					it; the emoji filter runs only in the browser-facing render path. If you need the raw
 					string, the
-					<code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 font-mono text-xs">/api/tokens</code>
+					<code class="px-1.5 py-0.5 rounded font-mono text-xs ts-surface-chip">/api/tokens</code>
 					endpoint returns it unmodified.
 				</p>
 			</div>
 		</details>
 
-		<details id="faq-icons" class="group p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 scroll-mt-20">
+		<details id="faq-icons" class="group p-5 rounded-xl border scroll-mt-20 ts-border-subtle ts-surface-panel">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
 				<span>How does TokenStork filter token icons?</span>
 				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
 			</summary>
-			<div class="mt-3 text-slate-600 dark:text-zinc-200 space-y-2">
+			<div class="mt-3 space-y-2 ts-text-body">
 				<p>
 					Token icons come from BCMR metadata that issuers publish themselves — typically as
-					<code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 font-mono text-xs">ipfs://</code>
+					<code class="px-1.5 py-0.5 rounded font-mono text-xs ts-surface-chip">ipfs://</code>
 					URIs anyone on the network can fill with anything. We don't render those URLs directly
 					in your browser; instead, every icon goes through a small safety pipeline before it's
 					served, and only icons that clear every gate end up visible on the site.
 				</p>
 
-				<p class="font-semibold text-slate-700 dark:text-zinc-100">What we check</p>
+				<p class="font-semibold ts-text-strong">What we check</p>
 				<ul class="list-disc pl-5 space-y-1">
 					<li>
 						<strong>Size.</strong> Anything larger than 2 MiB is rejected outright — both
@@ -404,9 +404,9 @@
 					</li>
 					<li>
 						<strong>Format.</strong> PNG, JPEG, WebP, and GIF first-frame are supported as
-						static rasters. SVG is rasterized server-side via <code class="px-1 rounded bg-slate-100 dark:bg-zinc-800 font-mono text-xs">resvg</code>
+						static rasters. SVG is rasterized server-side via <code class="px-1 rounded font-mono text-xs ts-surface-chip">resvg</code>
 						before serving — your browser never sees the SVG XML, so embedded scripts,
-						event handlers, and external <code class="px-1 rounded bg-slate-100 dark:bg-zinc-800 font-mono text-xs">href</code>
+						event handlers, and external <code class="px-1 rounded font-mono text-xs ts-surface-chip">href</code>
 						references can't reach you. Animated GIF/APNG render their first frame only.
 					</li>
 					<li>
@@ -422,16 +422,16 @@
 					</li>
 				</ul>
 
-				<p class="font-semibold text-slate-700 dark:text-zinc-100">How we serve them</p>
+				<p class="font-semibold ts-text-strong">How we serve them</p>
 				<p>
 					Icons that pass every gate are transcoded to a static WebP, content-addressed by their
 					SHA-256 hash, and served from
-					<code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 font-mono text-xs">/icons/&lt;hash&gt;.webp</code>
+					<code class="px-1.5 py-0.5 rounded font-mono text-xs ts-surface-chip">/icons/&lt;hash&gt;.webp</code>
 					behind a long cache. We never hot-link to the issuer's IPFS gateway from your browser —
 					all bytes go through our origin, scanned and cached.
 				</p>
 
-				<p class="font-semibold text-slate-700 dark:text-zinc-100">Why some tokens show a grey placeholder</p>
+				<p class="font-semibold ts-text-strong">Why some tokens show a grey placeholder</p>
 				<p>
 					Default-deny: until an icon is scanned <em>and</em> cleared, you see the placeholder.
 					Reasons a token might still show grey:
@@ -443,7 +443,7 @@
 					<li>The token has no BCMR icon at all — the issuer never published one.</li>
 				</ul>
 
-				<p class="font-semibold text-slate-700 dark:text-zinc-100">Privacy</p>
+				<p class="font-semibold ts-text-strong">Privacy</p>
 				<p>
 					The classifier sees only the icon bytes — anonymous, no user identifier, no IP, no
 					session. Bytes are processed in transit and not retained by Google for SafeSearch
@@ -451,7 +451,7 @@
 					they're either cleared (transcoded copy on disk) or blocked (deleted).
 				</p>
 
-				<p class="text-xs text-slate-500 dark:text-zinc-300">
+				<p class="text-xs ts-text-muted">
 					Spotted an icon that looks wrong (false-blocked legitimate art, or a harmful image
 					that slipped through)? Email
 					<a href="mailto:hello@panmoni.com" class="text-violet-600 dark:text-violet-400 hover:underline">hello@panmoni.com</a>
@@ -460,12 +460,12 @@
 			</div>
 		</details>
 
-		<details id="faq-tvl" class="group p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 scroll-mt-20">
+		<details id="faq-tvl" class="group p-5 rounded-xl border scroll-mt-20 ts-border-subtle ts-surface-panel">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
 				<span>How is the headline Total TVL computed?</span>
 				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
 			</summary>
-			<div class="mt-3 text-slate-600 dark:text-zinc-200 space-y-2">
+			<div class="mt-3 space-y-2 ts-text-body">
 				<p>
 					The <strong>Total TVL</strong> pill in the header sums BCH-side reserve across
 					every pool on every AMM venue we index — Cauldron plus Fex.cash. The number is
@@ -473,16 +473,16 @@
 				</p>
 				<p>
 					The Cauldron portion comes from
-					<code class="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 font-mono">indexer.cauldron.quest</code>'s
+					<code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">indexer.cauldron.quest</code>'s
 					canonical ecosystem TVL — the same number the
 					<a href="/stats" class="text-violet-600 dark:text-violet-400 hover:underline">/stats</a> page
 					shows on its "Cauldron AMM" card. We cache it for 30 minutes via our
-					<code class="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 font-mono">sync-cauldron-stats</code>
+					<code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">sync-cauldron-stats</code>
 					worker so the homepage doesn't pay a network round-trip on every render.
 				</p>
 				<p>
 					The Fex portion is summed locally: our Fex worker enumerates every pool on the BCH
-					chain via a <code class="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 font-mono">scantxoutset</code> against the AssetCovenant P2SH and stores both the
+					chain via a <code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">scantxoutset</code> against the AssetCovenant P2SH and stores both the
 					per-category canonical pool (for directory price + spread display) and the
 					sum across all pools per category (for the headline TVL).
 				</p>
@@ -495,12 +495,12 @@
 			</div>
 		</details>
 
-		<details class="group p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+		<details class="group p-5 rounded-xl border ts-border-subtle ts-surface-panel">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
 				<span>How do I add a token? How do I report one?</span>
 				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
 			</summary>
-			<div class="mt-3 text-slate-600 dark:text-zinc-200 space-y-2">
+			<div class="mt-3 space-y-2 ts-text-body">
 				<p>
 					<strong>Add:</strong> nothing to do! We index every CashToken category automatically.
 					Once you mint a token it appears on tokenstork within seconds. To show a name and icon,
@@ -515,19 +515,19 @@
 			</div>
 		</details>
 
-		<details id="faq-vote-ranking" class="group p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 scroll-mt-20">
+		<details id="faq-vote-ranking" class="group p-5 rounded-xl border scroll-mt-20 ts-border-subtle ts-surface-panel">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
 				<span>How are tokens ranked on the up/down vote leaderboards?</span>
 				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
 			</summary>
-			<div class="mt-3 text-slate-600 dark:text-zinc-200 space-y-3">
+			<div class="mt-3 space-y-3 ts-text-body">
 				<p>
 					The "Most upvoted / downvoted / controversial" leaderboards on the homepage don't
 					just count raw <span class="font-mono">↑</span> and <span class="font-mono">↓</span>
 					clicks. Each vote contributes a <em>weighted</em> score, and the leaderboard sorts on
-					the sum of those weights. The directory's <code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 font-mono text-xs">?sort=upvoted</code> /
-					<code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 font-mono text-xs">downvoted</code> /
-					<code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 font-mono text-xs">controversial</code> options use the same weights.
+					the sum of those weights. The directory's <code class="px-1.5 py-0.5 rounded font-mono text-xs ts-surface-chip">?sort=upvoted</code> /
+					<code class="px-1.5 py-0.5 rounded font-mono text-xs ts-surface-chip">downvoted</code> /
+					<code class="px-1.5 py-0.5 rounded font-mono text-xs ts-surface-chip">controversial</code> options use the same weights.
 				</p>
 				<p>Two things shape a single vote's weight:</p>
 				<ol class="list-decimal list-inside ml-2 space-y-2">
@@ -565,12 +565,12 @@
 			</div>
 		</details>
 
-		<details class="group p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+		<details class="group p-5 rounded-xl border ts-border-subtle ts-surface-panel">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
 				<span>Is TokenStork open source?</span>
 				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
 			</summary>
-			<div class="mt-3 text-slate-600 dark:text-zinc-200 space-y-2">
+			<div class="mt-3 space-y-2 ts-text-body">
 				<p>
 					Yes. Code is at
 					<a href="https://github.com/Panmoni/tokenstork" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">github.com/Panmoni/tokenstork</a>.
@@ -580,7 +580,7 @@
 		</details>
 	</div>
 
-	<p class="text-sm text-slate-500 dark:text-zinc-300 mt-10">
+	<p class="text-sm mt-10 ts-text-muted">
 		Didn't find what you were looking for? Email
 		<a href="mailto:hello@panmoni.com" class="text-violet-600 dark:text-violet-400 hover:underline">hello@panmoni.com</a>
 		and I'll add the answer.

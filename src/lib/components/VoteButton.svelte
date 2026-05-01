@@ -142,9 +142,7 @@
 			castVote('up');
 		}}
 		disabled={busy}
-		class="inline-flex items-center justify-center p-0.5 rounded transition-colors {upActive
-			? 'text-emerald-500 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-300'
-			: 'text-slate-400 hover:text-emerald-500 dark:text-zinc-400 dark:hover:text-emerald-400'} disabled:opacity-50"
+		class="inline-flex items-center justify-center p-0.5 rounded transition-colors {upActive ? 'text-emerald-500 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-300' : 'text-slate-400 hover:text-emerald-500 dark:text-zinc-400 dark:hover:text-emerald-400'} disabled:opacity-50"
 		aria-label={upActive ? 'Retract upvote' : 'Upvote'}
 		aria-pressed={upActive}
 		title={user
@@ -180,9 +178,7 @@
 			castVote('down');
 		}}
 		disabled={busy}
-		class="inline-flex items-center justify-center p-0.5 rounded transition-colors {downActive
-			? 'text-rose-500 hover:text-rose-600 dark:text-rose-400 dark:hover:text-rose-300'
-			: 'text-slate-400 hover:text-rose-500 dark:text-zinc-400 dark:hover:text-rose-400'} disabled:opacity-50"
+		class="inline-flex items-center justify-center p-0.5 rounded transition-colors {downActive ? 'text-rose-500 hover:text-rose-600 dark:text-rose-400 dark:hover:text-rose-300' : 'text-slate-400 hover:text-rose-500 dark:text-zinc-400 dark:hover:text-rose-400'} disabled:opacity-50"
 		aria-label={downActive ? 'Retract downvote' : 'Downvote'}
 		aria-pressed={downActive}
 		title={user

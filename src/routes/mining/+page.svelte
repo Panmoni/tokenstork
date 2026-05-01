@@ -60,7 +60,7 @@
 		<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent">
 			Mining
 		</h1>
-		<p class="text-slate-600 dark:text-zinc-300 mt-2 max-w-3xl">
+		<p class="mt-2 max-w-3xl ts-text-muted">
 			Mining-pool attribution + fee market dynamics for Bitcoin Cash since CashTokens
 			activation (block 792,772). Pool identity is decoded from each block's coinbase
 			scriptSig — the same byte-pattern matching every BCH explorer does.
@@ -69,16 +69,16 @@
 
 	<!-- 30-day headline strip -->
 	<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
 			<div class="flex items-start justify-between">
 				<div>
-					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">
+					<div class="text-xs uppercase tracking-wider ts-text-muted">
 						Blocks — last 30d
 					</div>
 					<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
 						{fmtCount(totalBlocks30d)}
 					</div>
-					<div class="mt-1 text-xs text-slate-500 dark:text-zinc-300">
+					<div class="mt-1 text-xs ts-text-muted">
 						across {data.pool30d.length} {data.pool30d.length === 1 ? 'pool' : 'pools'}
 					</div>
 				</div>
@@ -86,32 +86,32 @@
 			</div>
 		</div>
 
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
 			<div class="flex items-start justify-between">
 				<div>
-					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">
+					<div class="text-xs uppercase tracking-wider ts-text-muted">
 						Tx — last 30d
 					</div>
 					<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
 						{fmtCount(totalTxs30d)}
 					</div>
-					<div class="mt-1 text-xs text-slate-500 dark:text-zinc-300">
+					<div class="mt-1 text-xs ts-text-muted">
 						avg {totalBlocks30d > 0 ? Math.round(totalTxs30d / totalBlocks30d) : 0}/block
 					</div>
 				</div>
 			</div>
 		</div>
 
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
 			<div class="flex items-start justify-between">
 				<div>
-					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">
+					<div class="text-xs uppercase tracking-wider ts-text-muted">
 						Fees — last 30d
 					</div>
 					<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
 						{fmtBch(totalFees30dSats)}
 					</div>
-					<div class="mt-1 text-xs text-slate-500 dark:text-zinc-300">
+					<div class="mt-1 text-xs ts-text-muted">
 						miner take above subsidy
 					</div>
 				</div>
@@ -119,16 +119,16 @@
 			</div>
 		</div>
 
-		<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
 			<div class="flex items-start justify-between">
 				<div>
-					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">
+					<div class="text-xs uppercase tracking-wider ts-text-muted">
 						Fee rate — 30d avg
 					</div>
 					<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
 						{avgFeeRate30d.toFixed(2)}
 					</div>
-					<div class="mt-1 text-xs text-slate-500 dark:text-zinc-300">
+					<div class="mt-1 text-xs ts-text-muted">
 						sats per byte (proxy)
 					</div>
 				</div>
@@ -148,24 +148,24 @@
 				{ label: '30 days', stats: data.pool30d, total: totalBlocks30d },
 				{ label: 'All time', stats: data.poolAll, total: totalBlocksAll }
 			] as window (window.label)}
-				<div class="rounded-xl border border-slate-200 dark:border-zinc-800 overflow-hidden">
-					<div class="px-4 py-3 bg-slate-50 dark:bg-zinc-900/50 border-b border-slate-200 dark:border-zinc-800 text-xs font-semibold text-slate-500 dark:text-zinc-300 uppercase tracking-wider">
+				<div class="rounded-xl border overflow-hidden ts-border-subtle">
+					<div class="px-4 py-3 bg-slate-50 dark:bg-zinc-900/50 border-b text-xs font-semibold uppercase tracking-wider ts-text-muted ts-border-subtle">
 						{window.label} · {fmtCount(window.total)} blocks
 					</div>
 					{#if window.stats.length === 0}
-						<div class="px-4 py-6 text-sm text-slate-500 dark:text-zinc-300 text-center">
+						<div class="px-4 py-6 text-sm text-center ts-text-muted">
 							No blocks in this window yet.
 						</div>
 					{:else}
 						{#each window.stats as p (p.pool)}
-							<div class="grid grid-cols-[1.4fr_0.6fr_0.8fr] gap-2 px-4 py-2 border-b border-slate-100 dark:border-zinc-800 last:border-b-0 items-center text-sm">
+							<div class="grid grid-cols-[1.4fr_0.6fr_0.8fr] gap-2 px-4 py-2 border-b last:border-b-0 items-center text-sm ts-border-subtle">
 								<div class="font-medium text-slate-900 dark:text-white truncate">
 									{p.pool}
 								</div>
-								<div class="text-right font-mono text-xs text-slate-700 dark:text-zinc-200">
+								<div class="text-right font-mono text-xs ts-text-strong">
 									{fmtCount(p.blocks)}
 								</div>
-								<div class="text-right font-mono text-xs text-slate-500 dark:text-zinc-300">
+								<div class="text-right font-mono text-xs ts-text-muted">
 									{poolShare(p.blocks, window.total)}
 								</div>
 							</div>
@@ -176,15 +176,15 @@
 		</div>
 	</section>
 
-	<section class="mt-10 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/30">
+	<section class="mt-10 p-5 rounded-xl border bg-slate-50/50 dark:bg-zinc-900/30 ts-border-subtle">
 		<h2 class="text-base font-semibold text-slate-900 dark:text-white mb-2">Notes</h2>
-		<ul class="text-sm text-slate-600 dark:text-zinc-300 space-y-1.5 list-disc list-inside">
+		<ul class="text-sm space-y-1.5 list-disc list-inside ts-text-muted">
 			<li>
 				<strong>Pool attribution</strong> is decoded from each block's coinbase scriptSig
 				via byte-substring matching against a hand-curated list of pool tags
-				(<code class="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 font-mono">/ViaBTC/</code>,
-				<code class="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 font-mono">/AntPool/</code>,
-				<code class="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 font-mono">Foundry USA Pool</code>, etc.). Solo miners and
+				(<code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">/ViaBTC/</code>,
+				<code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">/AntPool/</code>,
+				<code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">Foundry USA Pool</code>, etc.). Solo miners and
 				unrecognized tags bucket as <em>Unknown</em>.
 			</li>
 			<li>

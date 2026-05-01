@@ -48,7 +48,7 @@
 	];
 </script>
 
-<footer class="mt-12 bg-slate-50 dark:bg-zinc-900 border-t border-slate-200 dark:border-zinc-800">
+<footer class="mt-12 border-t ts-border-subtle ts-surface-soft">
 	<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
 		<div class="grid gap-8 md:grid-cols-5">
 			<div class="md:col-span-2">
@@ -56,7 +56,7 @@
 					<img src="/TokenStorkRegistry-icon.png" alt="" class="h-8 w-8" />
 					<span>TokenStork</span>
 				</div>
-				<p class="mt-3 text-sm text-slate-600 dark:text-zinc-200 max-w-sm">
+				<p class="mt-3 text-sm max-w-sm ts-text-body">
 					A market-cap &amp; analytics site for BCH CashTokens. Visit
 					<a
 						href="https://bchworks.com/"
@@ -68,7 +68,7 @@
 				</p>
 				<a
 					href="mailto:hello@panmoni.com"
-					class="mt-3 inline-block text-sm text-slate-700 dark:text-zinc-100 hover:text-violet-600 dark:hover:text-violet-400"
+					class="mt-3 inline-block text-sm hover:text-violet-600 dark:hover:text-violet-400 ts-text-strong"
 				>
 					hello@panmoni.com
 				</a>
@@ -79,13 +79,13 @@
 					Site
 				</h3>
 				<ul class="mt-4 space-y-2 text-sm">
-					<li><a href="/" class="text-slate-600 dark:text-zinc-200 hover:text-violet-600 dark:hover:text-violet-400">Tokens</a></li>
-					<li><a href="/crc20" class="text-slate-600 dark:text-zinc-200 hover:text-violet-600 dark:hover:text-violet-400">CRC-20</a></li>
-					<li><a href="/arbitrage" class="text-slate-600 dark:text-zinc-200 hover:text-violet-600 dark:hover:text-violet-400">Arbitrage</a></li>
-					<li><a href="/blocks" class="text-slate-600 dark:text-zinc-200 hover:text-violet-600 dark:hover:text-violet-400">Blocks</a></li>
-					<li><a href="/mining" class="text-slate-600 dark:text-zinc-200 hover:text-violet-600 dark:hover:text-violet-400">Mining</a></li>
-					<li><a href="/mint" class="text-slate-600 dark:text-zinc-200 hover:text-violet-600 dark:hover:text-violet-400">Mint</a></li>
-					<li><a href="/stats" class="text-slate-600 dark:text-zinc-200 hover:text-violet-600 dark:hover:text-violet-400">Stats</a></li>
+					<li><a href="/" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Tokens</a></li>
+					<li><a href="/crc20" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">CRC-20</a></li>
+					<li><a href="/arbitrage" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Arbitrage</a></li>
+					<li><a href="/blocks" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Blocks</a></li>
+					<li><a href="/mining" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Mining</a></li>
+					<li><a href="/mint" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Mint</a></li>
+					<li><a href="/stats" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Stats</a></li>
 				</ul>
 			</div>
 
@@ -94,10 +94,10 @@
 					Resources
 				</h3>
 				<ul class="mt-4 space-y-2 text-sm">
-					<li><a href="/learn" class="text-slate-600 dark:text-zinc-200 hover:text-violet-600 dark:hover:text-violet-400">Learn</a></li>
-					<li><a href="/faq" class="text-slate-600 dark:text-zinc-200 hover:text-violet-600 dark:hover:text-violet-400">FAQ</a></li>
-					<li><a href="/roadmap" class="text-slate-600 dark:text-zinc-200 hover:text-violet-600 dark:hover:text-violet-400">Roadmap</a></li>
-					<li><a href="/about" class="text-slate-600 dark:text-zinc-200 hover:text-violet-600 dark:hover:text-violet-400">About</a></li>
+					<li><a href="/learn" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Learn</a></li>
+					<li><a href="/faq" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">FAQ</a></li>
+					<li><a href="/roadmap" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Roadmap</a></li>
+					<li><a href="/about" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">About</a></li>
 				</ul>
 			</div>
 
@@ -106,8 +106,8 @@
 					Legal
 				</h3>
 				<ul class="mt-4 space-y-2 text-sm">
-					<li><a href="/terms" class="text-slate-600 dark:text-zinc-200 hover:text-violet-600 dark:hover:text-violet-400">Terms</a></li>
-					<li><a href="/privacy" class="text-slate-600 dark:text-zinc-200 hover:text-violet-600 dark:hover:text-violet-400">Privacy</a></li>
+					<li><a href="/terms" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Terms</a></li>
+					<li><a href="/privacy" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Privacy</a></li>
 				</ul>
 			</div>
 		</div>
@@ -121,7 +121,7 @@
 						href={s.href}
 						target="_blank"
 						rel="noopener noreferrer"
-						class="text-slate-500 dark:text-zinc-300 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
+						class="hover:text-violet-600 dark:hover:text-violet-400 transition-colors ts-text-muted"
 					>
 						<span class="sr-only">{s.name}</span>
 						<svg class="w-5 h-5" aria-hidden="true" fill="currentColor" viewBox={s.viewBox} xmlns="http://www.w3.org/2000/svg">
@@ -131,7 +131,7 @@
 				{/each}
 			</div>
 
-			<p class="text-sm text-slate-600 dark:text-zinc-200 text-center sm:text-right">
+			<p class="text-sm text-center sm:text-right ts-text-body">
 				A
 				<img src="/panmoni.svg" alt="" class="inline h-[1em] w-[1em] align-[-0.15em] mx-0.5" aria-hidden="true" />
 				<a
@@ -147,8 +147,8 @@
 
 		<Separator class="my-8 bg-slate-200 dark:bg-zinc-800" />
 
-		<p class="text-xs text-slate-500 dark:text-zinc-300 leading-relaxed">
-			<strong class="text-slate-700 dark:text-zinc-200">Disclaimer:</strong>
+		<p class="text-xs leading-relaxed ts-text-muted">
+			<strong class="ts-text-strong">Disclaimer:</strong>
 			Cryptocurrency investments carry a high degree of risk, and may not be suitable for all
 			investors. Before deciding to trade cryptocurrencies, you should carefully consider your
 			investment objectives, level of experience, and risk appetite. The possibility exists that

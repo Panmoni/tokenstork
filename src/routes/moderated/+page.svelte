@@ -49,7 +49,7 @@
 		<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent">
 			Moderated tokens
 		</h1>
-		<p class="text-slate-600 dark:text-zinc-300 mt-2 max-w-3xl">
+		<p class="mt-2 max-w-3xl ts-text-muted">
 			These categories are hidden from the directory, the public API, and the stats counters.
 			Direct URLs return <span class="font-mono text-xs">410 Gone</span>. We list them here so you
 			can see what we filter and why. To report a token, use the report link on its detail page.
@@ -66,7 +66,7 @@
 		-->
 		<section id="image-safety" class="mb-8 scroll-mt-20">
 			<h2 class="text-2xl font-bold text-slate-900 dark:text-white">Image safety</h2>
-			<p class="text-slate-600 dark:text-zinc-300 mt-2 mb-4 max-w-3xl text-sm">
+			<p class="mt-2 mb-4 max-w-3xl text-sm ts-text-muted">
 				Every token icon is fetched, hashed, and scanned before it's served. We block adult
 				content and CSAM (the latter via Cloudflare's edge-resident NCMEC/IWF hash matcher),
 				reject oversize files (&gt; 2 MiB) and non-raster formats (SVG, AVIF, ICO, …), and route
@@ -77,50 +77,50 @@
 				> for the full pipeline.
 			</p>
 			<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-				<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">Cleared</div>
+				<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
+					<div class="text-xs uppercase tracking-wider ts-text-muted">Cleared</div>
 					<div class="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
 						{fmt(data.iconStats.cleared)}
 					</div>
-					<div class="text-xs text-slate-500 dark:text-zinc-300 mt-1">unique images on disk</div>
+					<div class="text-xs mt-1 ts-text-muted">unique images on disk</div>
 				</div>
-				<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">Blocked: adult</div>
+				<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
+					<div class="text-xs uppercase tracking-wider ts-text-muted">Blocked: adult</div>
 					<div class="text-2xl font-bold text-rose-600 dark:text-rose-400">
 						{fmt(data.iconStats.blockedAdult)}
 					</div>
-					<div class="text-xs text-slate-500 dark:text-zinc-300 mt-1">NSFW score &ge; 0.9</div>
+					<div class="text-xs mt-1 ts-text-muted">NSFW score &ge; 0.9</div>
 				</div>
-				<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">Blocked: CSAM</div>
+				<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
+					<div class="text-xs uppercase tracking-wider ts-text-muted">Blocked: CSAM</div>
 					<div class="text-2xl font-bold text-rose-600 dark:text-rose-400">
 						{fmt(data.iconStats.blockedCsam)}
 					</div>
-					<div class="text-xs text-slate-500 dark:text-zinc-300 mt-1">edge-detected by Cloudflare</div>
+					<div class="text-xs mt-1 ts-text-muted">edge-detected by Cloudflare</div>
 				</div>
-				<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">Blocked: oversize</div>
+				<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
+					<div class="text-xs uppercase tracking-wider ts-text-muted">Blocked: oversize</div>
 					<div class="text-2xl font-bold text-amber-600 dark:text-amber-400">
 						{fmt(data.iconStats.blockedOversize)}
 					</div>
-					<div class="text-xs text-slate-500 dark:text-zinc-300 mt-1">over 2 MiB cap</div>
+					<div class="text-xs mt-1 ts-text-muted">over 2 MiB cap</div>
 				</div>
-				<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">Blocked: format</div>
+				<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
+					<div class="text-xs uppercase tracking-wider ts-text-muted">Blocked: format</div>
 					<div class="text-2xl font-bold text-amber-600 dark:text-amber-400">
 						{fmt(data.iconStats.blockedUnsupported)}
 					</div>
-					<div class="text-xs text-slate-500 dark:text-zinc-300 mt-1">SVG / AVIF / ICO / corrupt</div>
+					<div class="text-xs mt-1 ts-text-muted">SVG / AVIF / ICO / corrupt</div>
 				</div>
-				<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-					<div class="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">In review</div>
+				<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
+					<div class="text-xs uppercase tracking-wider ts-text-muted">In review</div>
 					<div class="text-2xl font-bold text-violet-600 dark:text-violet-400">
 						{fmt(data.iconStats.review)}
 					</div>
-					<div class="text-xs text-slate-500 dark:text-zinc-300 mt-1">awaiting operator decision</div>
+					<div class="text-xs mt-1 ts-text-muted">awaiting operator decision</div>
 				</div>
 			</div>
-			<p class="text-xs text-slate-500 dark:text-zinc-300 mt-3">
+			<p class="text-xs mt-3 ts-text-muted">
 				{fmt(data.iconStats.tokensWithClearedIcon)} tokens render a real WebP in the directory
 				today; {fmt(totalIconBlocked)} unique images blocked total ({fmt(
 					data.iconStats.pendingUrls
@@ -132,22 +132,22 @@
 	{#if data.error}
 		<div class="text-center py-12">
 			<div class="text-red-500 text-lg mb-2">{data.error}</div>
-			<div class="text-slate-500 dark:text-zinc-300">Please try again in a moment.</div>
+			<div class="ts-text-muted">Please try again in a moment.</div>
 		</div>
 	{:else if data.rows.length === 0}
-		<div class="p-8 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-center">
-			<div class="text-lg text-slate-700 dark:text-zinc-200">No tokens are currently moderated.</div>
-			<div class="mt-1 text-sm text-slate-500 dark:text-zinc-300">
+		<div class="p-8 rounded-xl border text-center ts-border-subtle ts-surface-panel">
+			<div class="text-lg ts-text-strong">No tokens are currently moderated.</div>
+			<div class="mt-1 text-sm ts-text-muted">
 				Spot something that should be? Use the report link on any token detail page.
 			</div>
 		</div>
 	{:else}
-		<p class="text-sm text-slate-500 dark:text-zinc-300 mb-3">
+		<p class="text-sm mb-3 ts-text-muted">
 			{fmt(data.rows.length)} {data.rows.length === 1 ? 'token' : 'tokens'} hidden, newest first.
 		</p>
-		<div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+		<div class="overflow-x-auto rounded-xl border ts-border-subtle ts-surface-panel">
 			<table class="min-w-full text-sm">
-				<thead class="bg-slate-50 dark:bg-zinc-900/60 text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-300">
+				<thead class="bg-slate-50 dark:bg-zinc-900/60 text-xs uppercase tracking-wider ts-text-muted">
 					<tr>
 						<th class="text-left font-medium px-4 py-3">Name</th>
 						<th class="text-left font-medium px-4 py-3">Symbol</th>
@@ -160,13 +160,13 @@
 				<tbody class="divide-y divide-slate-200 dark:divide-zinc-800">
 					{#each data.rows as row (row.id)}
 						<tr>
-							<td class="px-4 py-3 text-slate-900 dark:text-zinc-100">
+							<td class="px-4 py-3 ts-text-primary">
 								{row.name ?? '—'}
 							</td>
-							<td class="px-4 py-3 font-mono text-xs text-slate-700 dark:text-zinc-200">
+							<td class="px-4 py-3 font-mono text-xs ts-text-strong">
 								{row.symbol ?? '—'}
 							</td>
-							<td class="px-4 py-3 text-xs text-slate-500 dark:text-zinc-300">
+							<td class="px-4 py-3 text-xs ts-text-muted">
 								{row.tokenType}
 							</td>
 							<td class="px-4 py-3">
@@ -174,10 +174,10 @@
 									{REPORT_REASON_LABELS[row.reason]}
 								</span>
 							</td>
-							<td class="px-4 py-3 font-mono text-xs text-slate-500 dark:text-zinc-300">
+							<td class="px-4 py-3 font-mono text-xs ts-text-muted">
 								{fmtDate(row.hiddenAt)}
 							</td>
-							<td class="px-4 py-3 font-mono text-xs text-slate-500 dark:text-zinc-300" title={row.id}>
+							<td class="px-4 py-3 font-mono text-xs ts-text-muted" title={row.id}>
 								{shortId(row.id)}
 							</td>
 						</tr>

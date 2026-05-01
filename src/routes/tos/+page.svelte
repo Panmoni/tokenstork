@@ -20,7 +20,7 @@
 </svelte:head>
 
 <main class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
-	<p class="text-slate-600 dark:text-zinc-200">
+	<p class="ts-text-body">
 		This page has moved. Continue to the <a href="/terms" class="text-violet-600 hover:underline"
 			>Terms of Service</a
 		>

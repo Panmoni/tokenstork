@@ -239,7 +239,7 @@
 	<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent mb-4">
 		Roadmap
 	</h1>
-	<p class="text-slate-600 dark:text-zinc-300 mb-10">
+	<p class="mb-10 ts-text-muted">
 		TokenStork.com aims to be a market-cap site for BCH CashTokens and a
 		comprehensive service provider for on-chain CashTokens operations and data.
 		Working with CashTokens should be smooth and easy, and TokenStork.com aims
@@ -257,7 +257,7 @@
 			{#each shipped as item (item.title)}
 				<article class="p-5 rounded-xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/40 dark:bg-emerald-950/20">
 					<h3 class="text-lg font-semibold text-slate-900 dark:text-white">{item.title}</h3>
-					<ul class="list-disc list-inside ml-2 mt-2 text-sm text-slate-600 dark:text-zinc-200 space-y-1">
+					<ul class="list-disc list-inside ml-2 mt-2 text-sm space-y-1 ts-text-body">
 						{#each item.bullets as b (b)}
 							<li>{b}</li>
 						{/each}
@@ -279,7 +279,7 @@
 			{#each planned as item (item.title)}
 				<article class="p-5 rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/40 dark:bg-amber-950/20">
 					<h3 class="text-lg font-semibold text-slate-900 dark:text-white">{item.title}</h3>
-					<ul class="list-disc list-inside ml-2 mt-2 text-sm text-slate-600 dark:text-zinc-200 space-y-1">
+					<ul class="list-disc list-inside ml-2 mt-2 text-sm space-y-1 ts-text-body">
 						{#each item.bullets as b (b)}
 							<li>{b}</li>
 						{/each}
@@ -290,7 +290,7 @@
 	</section>
 
 	<section class="mb-12">
-		<h2 class="text-2xl font-bold text-slate-500 dark:text-zinc-300 mb-6 flex items-center gap-2">
+		<h2 class="text-2xl font-bold mb-6 flex items-center gap-2 ts-text-muted">
 			<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 				<circle cx="12" cy="12" r="10" />
 				<polyline points="12 6 12 12 16 14" />
@@ -299,9 +299,9 @@
 		</h2>
 		<div class="grid gap-5">
 			{#each later as item (item.title)}
-				<article class="p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+				<article class="p-5 rounded-xl border ts-border-subtle ts-surface-panel">
 					<h3 class="text-lg font-semibold text-slate-900 dark:text-white">{item.title}</h3>
-					<ul class="list-disc list-inside ml-2 mt-2 text-sm text-slate-600 dark:text-zinc-200 space-y-1">
+					<ul class="list-disc list-inside ml-2 mt-2 text-sm space-y-1 ts-text-body">
 						{#each item.bullets as b (b)}
 							<li>{b}</li>
 						{/each}
@@ -311,7 +311,7 @@
 		</div>
 	</section>
 
-	<p class="text-xs text-slate-500 dark:text-zinc-300 mt-10">
+	<p class="text-xs mt-10 ts-text-muted">
 		Roadmap last refreshed 2026-04-25. If you'd like to see something on here
 		that isn't yet — email <a href="mailto:hello@panmoni.com" class="text-violet-600 dark:text-violet-400 hover:underline">hello@panmoni.com</a>
 		or
