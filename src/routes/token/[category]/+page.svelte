@@ -723,11 +723,17 @@
 			</div>
 		</div>
 		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800">
-			<div class="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Live UTXOs</div>
+			<div
+				class="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 cursor-help"
+				title="Number of currently-unspent on-chain outputs that carry this token category. CashTokens live in transaction outputs (UTXOs) the same way native BCH does — every transfer creates new UTXOs and consumes old ones. A higher count usually means more on-chain activity (frequent transfers, AMM pool slots, NFT instances). Counted by our local BlockBook indexer."
+			>Live UTXOs</div>
 			<div class="text-xl font-mono">{token.liveUtxoCount ?? '—'}</div>
 		</div>
 		<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800">
-			<div class="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Live NFTs</div>
+			<div
+				class="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 cursor-help"
+				title="Number of unspent NFT outputs of this category. Each NFT in CashTokens is a UTXO with non-empty `commitment` data; transferring an NFT spends the old UTXO and creates a new one with the same commitment. Pure-FT tokens have 0 NFTs."
+			>Live NFTs</div>
 			<div class="text-xl font-mono">{token.liveNftCount ?? '—'}</div>
 		</div>
 	</div>
