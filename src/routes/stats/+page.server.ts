@@ -453,6 +453,19 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 				  GROUP BY th.address
 				  ORDER BY categories_held DESC, th.address ASC
 				  LIMIT 10`
+			),
+			// Active-minting count — categories with at least one live
+			// minting NFT, meaning the issuer can still mint more supply.
+			// Critical supply-inflation indicator: a token whose total
+			// supply can grow tomorrow has very different semantics from
+			// a token whose supply is permanently fixed. Populated by
+			// `sync-enrich` from `token_state.has_active_minting`.
+			query<WindowCount>(
+				`SELECT COUNT(*)::bigint AS total
+				   FROM tokens t
+				   JOIN token_state s ON s.category = t.category
+				  WHERE s.has_active_minting = true
+				    AND ${NOT_MODERATED_CLAUSE}`
 			)
 		]),
 		bchPriceP,
@@ -484,7 +497,8 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		giniBucketsRes,
 		tapswapTopRes,
 		uniqueHoldersRes,
-		topCollectorsRes
+		topCollectorsRes,
+		activeMintingRes
 	] = pageResults as [
 		PromiseSettledResult<{ rows: TypeCount[] }>,
 		PromiseSettledResult<{ rows: WindowCount[] }>,
@@ -514,7 +528,8 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 			}>;
 		}>,
 		PromiseSettledResult<{ rows: Array<{ n: string }> }>,
-		PromiseSettledResult<{ rows: Array<{ address: string; categories_held: string }> }>
+		PromiseSettledResult<{ rows: Array<{ address: string; categories_held: string }> }>,
+		PromiseSettledResult<{ rows: WindowCount[] }>
 	];
 
 	// Cauldron stats — read the cached row, compute USD at render time
@@ -700,12 +715,15 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 				}))
 			: [];
 
+	const activeMinting = pickNumber(activeMintingRes);
+
 	return {
 		byType,
 		newIn24h: parentData.newIn24h,
 		newIn7d: pickNumber(d7Res),
 		newIn30d: pickNumber(d30Res),
 		burned: enrichmentReady ? pickNumber(burnedRes) : null,
+		activeMinting,
 		tapswapListedCategories: pickNumber(tapswapCatsRes),
 		cauldronListedCategories: pickNumber(cauldronCatsRes),
 		fexListedCategories: pickNumber(fexCatsRes),

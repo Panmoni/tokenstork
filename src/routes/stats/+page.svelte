@@ -151,6 +151,16 @@
 		{/each}
 	</div>
 
+	<!--
+		24h gainers / losers / TVL movers. Same component used on the
+		homepage so the two surfaces stay in lockstep — gainer leaderboard
+		on /stats and on / cannot disagree. Pre-loaded once via
+		`getMovers24h()` in the page-load Promise.all.
+	-->
+	<section class="mb-8">
+		<Movers24h movers={data.movers} />
+	</section>
+
 	<section class="mb-8">
 		<div class="flex items-baseline justify-between mb-3">
 			<h2 class="text-xl font-semibold text-slate-900 dark:text-white">By type</h2>
@@ -822,20 +832,36 @@
 	{/if}
 
 	<section class="mb-8">
-		<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">Burn status</h2>
-		{#if data.burned === null}
-			<div class="p-5 rounded-xl border bg-slate-50 dark:bg-zinc-900/50 text-sm ts-text-muted ts-border-subtle">
-				Burn status is enriched from live UTXO counts — this requires our BlockBook indexer, which
-				is not yet deployed. Numbers will appear here once the enrichment worker has run.
-			</div>
-		{:else}
-			<div class="p-5 rounded-xl border ts-border-subtle ts-surface-panel">
-				<div class="text-xs uppercase tracking-wider ts-text-muted">
-					Fully burned
+		<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">Supply dynamics</h2>
+		<p class="text-sm mb-3 ts-text-muted">
+			Two ends of the supply-mutability spectrum. Fully-burned categories are permanently
+			frozen at zero circulating supply. Active-minting categories still hold a live minting
+			NFT and the issuer can mint more tomorrow — relevant to anyone weighing whether a
+			"capped supply" claim is real.
+		</p>
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+			{#if data.burned === null}
+				<div class="p-5 rounded-xl border bg-slate-50 dark:bg-zinc-900/50 text-sm ts-text-muted ts-border-subtle md:col-span-2">
+					Supply dynamics are enriched from live UTXO counts — this requires our BlockBook
+					indexer, which is not yet deployed. Numbers will appear here once the enrichment
+					worker has run.
 				</div>
-				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{fmt(data.burned)}</div>
-			</div>
-		{/if}
+			{:else}
+				<div class="block p-5 rounded-xl border ts-border-subtle ts-surface-panel">
+					<div class="text-xs uppercase tracking-wider ts-text-muted">Fully burned</div>
+					<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{fmt(data.burned)}</div>
+					<div class="mt-1 text-xs ts-text-muted">Supply locked at zero, no UTXOs left</div>
+				</div>
+				<div
+					class="block p-5 rounded-xl border ts-border-subtle ts-surface-panel"
+					title="Categories with at least one live minting NFT — issuer can still mint additional supply."
+				>
+					<div class="text-xs uppercase tracking-wider ts-text-muted">Active minting</div>
+					<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{fmt(data.activeMinting)}</div>
+					<div class="mt-1 text-xs ts-text-muted">Supply still expandable by the issuer</div>
+				</div>
+			{/if}
+		</div>
 	</section>
 
 	<section class="mb-8">
