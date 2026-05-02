@@ -855,6 +855,21 @@
 						</dd>
 					</div>
 				{/if}
+				{#if token.herfindahlIndex != null}
+					<div class="flex justify-between gap-3">
+						<dt class="ts-text-muted">
+							<Tooltip>
+								<TooltipTrigger class="cursor-help text-left">Herfindahl (HHI)</TooltipTrigger>
+								<TooltipContent>
+									Herfindahl-Hirschman Index across the full holder set. Sum of squared shares. Range [1/N, 1]: closer to 1 means a single address dominates; closer to 0 means balances are spread evenly. Computed in NUMERIC space across every row in token_holders, not just the top-10 list above. Suppressed for fewer than 10 holders.
+								</TooltipContent>
+							</Tooltip>
+						</dt>
+						<dd class="font-mono ts-text-primary" title="Herfindahl index — Σ(share)²">
+							{token.herfindahlIndex.toFixed(4)}
+						</dd>
+					</div>
+				{/if}
 				{#if showHybridComposition}
 					<div class="flex justify-between gap-3">
 						<dt class="ts-text-muted">Composition</dt>
@@ -1233,7 +1248,41 @@
 									{humanizeNumericSupply(holder.balance, token.decimals)}
 								</td>
 								<td class="px-4 py-3 text-right font-mono">
-									{pct == null ? '—' : `${pct.toFixed(pct >= 10 ? 1 : 2)}%`}
+									{#if pct == null}
+										—
+									{:else}
+										<!--
+											SVG progress bar — same pattern as /stats's metadata-completeness
+											bars so we don't need `style-src 'unsafe-inline'` in the CSP.
+											100×8 viewBox stretched horizontally; rect width = pct (clamped
+											to a 0.5 minimum so a 0.001% holder still renders a visible
+											sliver instead of a blank cell).
+										-->
+										<div class="flex items-center justify-end gap-2">
+											<svg
+												viewBox="0 0 100 8"
+												preserveAspectRatio="none"
+												class="hidden sm:block w-24 h-2 rounded-full overflow-hidden bg-slate-200 dark:bg-zinc-800"
+												role="progressbar"
+												aria-valuenow={pct}
+												aria-valuemin="0"
+												aria-valuemax="100"
+											>
+												<rect
+													x="0"
+													y="0"
+													width={Math.max(pct, 0.5)}
+													height="8"
+													class={pct >= 50
+														? 'fill-amber-500 dark:fill-amber-400'
+														: pct >= 20
+															? 'fill-violet-500 dark:fill-violet-400'
+															: 'fill-emerald-500 dark:fill-emerald-400'}
+												/>
+											</svg>
+											<span class="tabular-nums">{pct.toFixed(pct >= 10 ? 1 : 2)}%</span>
+										</div>
+									{/if}
 								</td>
 								<td class="px-4 py-3 text-right">{holder.nftCount}</td>
 							</tr>

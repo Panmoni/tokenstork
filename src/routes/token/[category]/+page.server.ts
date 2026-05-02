@@ -241,7 +241,8 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 		reportCountRes,
 		leaderboardStandingsRes,
 		tvlRankRes,
-		crc20Detail
+		crc20Detail,
+		herfindahlRes
 	] = await Promise.all([
 		query<HolderRow>(
 			// `balance::text AS balance` aliases the text cast under the
@@ -473,6 +474,33 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 		fetchCrc20Detail(categoryBytes).catch((err) => {
 			console.error('[token detail] CRC-20 detail query failed:', err);
 			return null;
+		}),
+		// Herfindahl-Hirschman Index across the full token_holders set for
+		// this category. Range [1/N, 1]; 1 = single holder, → 0 as holders
+		// grow and balances equalise. Computed in NUMERIC space so the
+		// per-share squaring doesn't lose precision on very large supplies.
+		// Suppressed (NULL) for fewer than 10 holders (matches Gini's
+		// suppression rule — extreme ratios are noise at single-digit-holder
+		// scale) and for zero total balance (pure-NFT / fully-burned).
+		query<{ hhi: string | null }>(
+			`WITH t AS (
+			   SELECT SUM(balance::numeric) AS total, COUNT(*) AS n
+			     FROM token_holders WHERE category = $1
+			 )
+			 SELECT CASE
+			          WHEN t.n < 10 THEN NULL
+			          WHEN t.total IS NULL OR t.total = 0 THEN NULL
+			          ELSE (
+			            SELECT (SUM((th.balance::numeric / t.total) ^ 2))::text
+			              FROM token_holders th
+			             WHERE th.category = $1
+			          )
+			        END AS hhi
+			   FROM t`,
+			[categoryBytes]
+		).catch((err) => {
+			console.error('[token detail] Herfindahl query failed:', err);
+			return { rows: [] as Array<{ hhi: string | null }> };
 		})
 	]);
 
@@ -731,7 +759,13 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 			isVerifiedOnchain: row.verified_at !== null,
 			topHolderSharePct: topHolderShare,
 			top10HolderSharePct: top10HolderShare,
-			giniCoefficient: row.gini_coefficient
+			giniCoefficient: row.gini_coefficient,
+			herfindahlIndex: (() => {
+				const raw = herfindahlRes.rows[0]?.hhi;
+				if (raw == null) return null;
+				const n = Number(raw);
+				return Number.isFinite(n) ? n : null;
+			})()
 		},
 		// Full BCMR dump — surfaced in a dedicated card on the detail page
 		// so users can see every metadata field the registry publishes
