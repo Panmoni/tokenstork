@@ -423,6 +423,36 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 				  GROUP BY t.category, m.name, m.symbol, m.icon_uri, imo.content_hash
 				  ORDER BY offer_count DESC, t.category ASC
 				  LIMIT 10`
+			),
+			// Unique ecosystem holders — distinct addresses holding at least
+			// one non-moderated category. The "how many actual people are in
+			// this" headline number. NB: caveat is the same as the per-token
+			// Gini score: exchange covenants (Cauldron pool UTXOs, Tapswap
+			// escrow, Fex covenant) all count as single addresses, so this
+			// undercounts true unique users by however many AMM pools each
+			// person interacts with simultaneously. We surface that caveat
+			// in the card subtitle.
+			query<{ n: string }>(
+				`SELECT COUNT(DISTINCT th.address)::bigint AS n
+				   FROM token_holders th
+				   JOIN tokens t ON t.category = th.category
+				  WHERE ${NOT_MODERATED_CLAUSE}`
+			),
+			// Top-10 collectors — addresses ranked by the number of distinct
+			// non-moderated categories they hold. Cross-category balance is
+			// not comparable across decimals + supply scales, so the
+			// canonical "biggest holder" question collapses to the count of
+			// categories, not a sum of dollar-equivalent balance. Same
+			// covenant-as-single-address caveat applies.
+			query<{ address: string; categories_held: string }>(
+				`SELECT th.address,
+				        COUNT(DISTINCT th.category)::bigint AS categories_held
+				   FROM token_holders th
+				   JOIN tokens t ON t.category = th.category
+				  WHERE ${NOT_MODERATED_CLAUSE}
+				  GROUP BY th.address
+				  ORDER BY categories_held DESC, th.address ASC
+				  LIMIT 10`
 			)
 		]),
 		bchPriceP,
@@ -452,7 +482,9 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		supplyBucketsRes,
 		giniMedianRes,
 		giniBucketsRes,
-		tapswapTopRes
+		tapswapTopRes,
+		uniqueHoldersRes,
+		topCollectorsRes
 	] = pageResults as [
 		PromiseSettledResult<{ rows: TypeCount[] }>,
 		PromiseSettledResult<{ rows: WindowCount[] }>,
@@ -480,7 +512,9 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 				icon_cleared_hash: string | null;
 				offer_count: string;
 			}>;
-		}>
+		}>,
+		PromiseSettledResult<{ rows: Array<{ n: string }> }>,
+		PromiseSettledResult<{ rows: Array<{ address: string; categories_held: string }> }>
 	];
 
 	// Cauldron stats — read the cached row, compute USD at render time
@@ -654,6 +688,18 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 				}))
 			: [];
 
+	const uniqueHolders =
+		uniqueHoldersRes.status === 'fulfilled'
+			? Number(uniqueHoldersRes.value.rows[0]?.n ?? 0)
+			: null;
+	const topCollectors: Array<{ address: string; categoriesHeld: number }> =
+		topCollectorsRes.status === 'fulfilled'
+			? topCollectorsRes.value.rows.map((r) => ({
+					address: r.address,
+					categoriesHeld: Number(r.categories_held)
+				}))
+			: [];
+
 	return {
 		byType,
 		newIn24h: parentData.newIn24h,
@@ -675,6 +721,8 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		iconStats,
 		giniMedian,
 		giniBuckets,
-		tapswapTop
+		tapswapTop,
+		uniqueHolders,
+		topCollectors
 	};
 };

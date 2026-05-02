@@ -774,6 +774,53 @@
 		</div>
 	</section>
 
+	{#if data.uniqueHolders != null || data.topCollectors.length > 0}
+		<section class="mb-8">
+			<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">Ecosystem holders</h2>
+			<p class="text-sm mb-3 ts-text-muted">
+				Distinct on-chain addresses that hold at least one CashToken category, plus the top collectors
+				ranked by category count. Exchange covenants (Cauldron pool UTXOs, Tapswap escrow, Fex covenant)
+				show up as single addresses here, so true unique-user count is somewhat lower than the headline
+				number — the same caveat as the per-token Gini score.
+			</p>
+
+			{#if data.uniqueHolders != null}
+				<div class="mb-4 p-5 rounded-xl border ts-border-subtle ts-surface-panel">
+					<div class="text-xs uppercase tracking-wider ts-text-muted">
+						Distinct addresses holding at least one category
+					</div>
+					<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{fmt(data.uniqueHolders)}</div>
+				</div>
+			{/if}
+
+			{#if data.topCollectors.length > 0}
+				<div class="rounded-xl border ts-border-subtle ts-surface-panel overflow-hidden">
+					<div class="px-5 py-3 border-b ts-border-subtle">
+						<div class="text-xs uppercase tracking-wider ts-text-muted">Top 10 collectors — by distinct categories held</div>
+					</div>
+					<table class="w-full text-sm">
+						<thead class="bg-slate-50 dark:bg-zinc-900/50 border-b text-xs font-semibold uppercase tracking-wider ts-text-muted ts-border-subtle">
+							<tr>
+								<th class="text-left px-4 py-2 w-10">#</th>
+								<th class="text-left px-4 py-2">Address</th>
+								<th class="text-right px-4 py-2">Categories held</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each data.topCollectors as c, i (c.address)}
+								<tr class="border-b border-slate-100 dark:border-zinc-800/50 last:border-0">
+									<td class="px-4 py-2 ts-text-muted font-mono">{i + 1}</td>
+									<td class="px-4 py-2 font-mono text-xs truncate max-w-md">{c.address}</td>
+									<td class="px-4 py-2 text-right font-mono">{fmt(c.categoriesHeld)}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{/if}
+		</section>
+	{/if}
+
 	<section class="mb-8">
 		<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">Burn status</h2>
 		{#if data.burned === null}
