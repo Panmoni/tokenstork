@@ -14,6 +14,7 @@ docs/cashtoken-index-plan.md
 10. Transfer `tokenstork.com` to Cloudflare as registrar.
 11. `docs/runbook.md` — failure-mode recipes for the tired-3am self.
 12. Bump `package.json` version to `0.2.0` once accounts + persistence ships.
+13. SEO, content operation?
 
 ## Operator (carson)
 
