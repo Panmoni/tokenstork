@@ -17,6 +17,8 @@ docs/cashtoken-index-plan.md
 
 ## Operator (carson)
 
+- test minting page, all 3 modes
+
 - Pick `REPORT_WEBHOOK_URL` (Discord / ntfy / TG bot) + add to
   `/etc/tokenstork/env`; redeploy. Optional `REPORT_WEBHOOK_SECRET`.
 - Dismiss the deploy-smoke test report:
