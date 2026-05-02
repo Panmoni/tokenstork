@@ -2,6 +2,7 @@
 // directly (no /api/tokens round trip — the app and DB share a process).
 
 import { query, hexFromBytes } from '$lib/server/db';
+import { getFirstNMap } from '$lib/server/firstN';
 import { computeMcapTvlThresholdSats } from '$lib/server/mcapThreshold';
 import { getMovers24h } from '$lib/server/movers';
 import {
@@ -17,6 +18,7 @@ interface DbRow {
 	category: Buffer;
 	token_type: TokenType;
 	genesis_block: number;
+	genesis_time: Date;
 	first_seen_at: Date;
 	name: string | null;
 	symbol: string | null;
@@ -434,6 +436,7 @@ export const load: PageServerLoad = async ({ url }) => {
 				t.category,
 				t.token_type,
 				t.genesis_block,
+				t.genesis_time,
 				t.first_seen_at,
 				m.name,
 				m.symbol,
@@ -472,9 +475,16 @@ export const load: PageServerLoad = async ({ url }) => {
 			[...values, PAGE_SIZE, offset]
 		);
 
+		// First-10 CashTokens-ever lookup. Lazy-cached in-process; the
+		// underlying SQL fires exactly once per server boot.
+		const firstNMap = await getFirstNMap();
+
 		const tokens: TokenApiRow[] = dataRes.rows.map((row) => {
 			const verifiedAt = row.verified_at?.getTime() ?? null;
 			const firstSeenAt = Math.floor(row.first_seen_at.getTime() / 1000);
+			const genesisTime = Math.floor(row.genesis_time.getTime() / 1000);
+			const categoryHex = hexFromBytes(row.category)!;
+			const firstNRank = firstNMap.get(categoryHex) ?? null;
 			const metaAt = row.metadata_fetched_at?.getTime();
 			const updatedAtMs = Math.max(
 				verifiedAt ?? 0,
@@ -512,7 +522,7 @@ export const load: PageServerLoad = async ({ url }) => {
 				? row.sparkline_points.filter((n) => Number.isFinite(n))
 				: [];
 			return {
-				id: hexFromBytes(row.category)!,
+				id: categoryHex,
 				name: row.name,
 				symbol: row.symbol,
 				decimals: row.decimals ?? 0,
@@ -527,6 +537,8 @@ export const load: PageServerLoad = async ({ url }) => {
 				holderCount: row.holder_count,
 				hasActiveMinting: row.has_active_minting ?? false,
 				firstSeenAt,
+				genesisTime,
+				firstNRank,
 				genesisBlock: row.genesis_block,
 				updatedAt: Math.floor(updatedAtMs / 1000),
 				cauldronPriceSats: row.cauldron_price_sats,

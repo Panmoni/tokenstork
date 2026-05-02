@@ -3,6 +3,7 @@
 
 import { json, error, isHttpError } from '@sveltejs/kit';
 import { hexFromBytes, query } from '$lib/server/db';
+import { getFirstNMap } from '$lib/server/firstN';
 import { NOT_MODERATED_CLAUSE } from '$lib/moderation';
 import { clientIp } from '$lib/server/clientIp';
 import { csvExportRateLimiter } from '$lib/server/rateLimit';
@@ -42,6 +43,8 @@ const CSV_COLUMNS: ReadonlyArray<keyof TokenApiRow> = [
 	'holderCount',
 	'hasActiveMinting',
 	'firstSeenAt',
+	'genesisTime',
+	'firstNRank',
 	'genesisBlock',
 	'updatedAt',
 	'isCrc20',
@@ -96,6 +99,11 @@ interface TokenApiRow {
 	holderCount: number | null;
 	hasActiveMinting: boolean;
 	firstSeenAt: number;
+	/// On-chain genesis-tx block timestamp, unix seconds.
+	genesisTime: number;
+	/// Permanent rank if this is one of the first 10 CashTokens ever
+	/// minted (1..10), null otherwise.
+	firstNRank: number | null;
 	genesisBlock: number;
 	updatedAt: number;
 	// CRC-20 covenant detection. See docs/crc20-plan.md and
@@ -111,6 +119,7 @@ interface DbRow {
 	category: Buffer;
 	token_type: TokenType;
 	genesis_block: number;
+	genesis_time: Date;
 	first_seen_at: Date;
 	name: string | null;
 	symbol: string | null;
@@ -280,6 +289,7 @@ export const GET: RequestHandler = async ({ url, request, getClientAddress, setH
 				t.category,
 				t.token_type,
 				t.genesis_block,
+				t.genesis_time,
 				t.first_seen_at,
 				m.name,
 				m.symbol,
@@ -334,9 +344,16 @@ export const GET: RequestHandler = async ({ url, request, getClientAddress, setH
 			total = Number(countRes.rows[0]?.total ?? 0);
 		}
 
+		// First-10 CashTokens-ever lookup. Lazy-cached in-process; the
+		// underlying SQL fires exactly once per server boot.
+		const firstNMap = await getFirstNMap();
+
 		const tokens: TokenApiRow[] = dataRes.rows.map((row) => {
 			const verifiedAt = row.verified_at?.getTime() ?? null;
 			const firstSeenAt = Math.floor(row.first_seen_at.getTime() / 1000);
+			const genesisTime = Math.floor(row.genesis_time.getTime() / 1000);
+			const categoryHex = hexFromBytes(row.category)!;
+			const firstNRank = firstNMap.get(categoryHex) ?? null;
 			const metaAt = row.metadata_fetched_at?.getTime();
 			const updatedAtMs = Math.max(
 				verifiedAt ?? 0,
@@ -344,7 +361,7 @@ export const GET: RequestHandler = async ({ url, request, getClientAddress, setH
 				row.first_seen_at.getTime()
 			);
 			return {
-				id: hexFromBytes(row.category)!,
+				id: categoryHex,
 				name: row.name,
 				symbol: row.symbol,
 				decimals: row.decimals ?? 0,
@@ -360,6 +377,8 @@ export const GET: RequestHandler = async ({ url, request, getClientAddress, setH
 				holderCount: row.holder_count,
 				hasActiveMinting: row.has_active_minting ?? false,
 				firstSeenAt,
+				genesisTime,
+				firstNRank,
 				genesisBlock: row.genesis_block,
 				updatedAt: Math.floor(updatedAtMs / 1000),
 				isCrc20: row.is_crc20 === true,

@@ -5,7 +5,10 @@
 		humanizeNumericSupply,
 		formatVenuePriceUSD,
 		formatVenueTvlUSD,
-		stripEmoji
+		stripEmoji,
+		getAgeBadge,
+		ageBadgeLabel,
+		firstNLabel
 	} from '$lib/format';
 	import { iconHrefFor } from '$lib/icons';
 	import { bchPrice } from '$lib/stores/bchPrice';
@@ -222,8 +225,30 @@
 							{stripEmoji(token.name) || stripEmoji(token.crc20Name) || '—'}
 							{#if token.symbol}<span class="ml-2 text-xs text-slate-500 font-mono">{stripEmoji(token.symbol)}</span>{:else if token.crc20Symbol}<span class="ml-2 text-xs text-slate-500 font-mono" title="On-chain CRC-20 symbol (no BCMR symbol published)">{token.crc20Symbol}</span>{/if}
 							<span class="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold ts-text-body ts-surface-chip" title="Token type">{token.tokenType}</span>
+							{#if token.firstNRank != null}
+								{@const label = firstNLabel(token.firstNRank)}
+								<span
+									class="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gradient-to-r from-indigo-600 to-violet-600 text-white"
+									title={`Permanent rank: this is the ${label.toLowerCase()} minted on Bitcoin Cash.`}
+								>#{token.firstNRank}</span>
+							{/if}
 							{#if token.isCrc20}
 								<span class="ml-2 inline-flex"><Crc20Badge isCanonical={token.crc20IsCanonical} symbol={token.crc20Symbol} symbolIsHex={token.crc20SymbolIsHex} /></span>
+							{/if}
+							{#if getAgeBadge(token.genesisTime) != null}
+								{@const ab = getAgeBadge(token.genesisTime)}
+								{@const tone =
+									ab === 'today'
+										? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+										: ab === 'week'
+											? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+											: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'}
+								{@const compact =
+									ab === 'today' ? 'New today' : ab === 'week' ? 'New this week' : 'New this month'}
+								<span
+									class={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold ${tone}`}
+									title={`${ageBadgeLabel(ab)} — brand-new categories are over-represented in scams and abandoned tests; verify before trusting.`}
+								>{compact}</span>
 							{/if}
 							{#if token.cauldronPriceSats != null}
 								<img src="/cauldron-logo.png" alt="Cauldron" title="Listed on Cauldron (AMM)" class="ml-1 inline-block h-4 w-4 align-text-bottom rounded-full bg-slate-900 p-0.5" />
@@ -290,8 +315,33 @@
 							<span class="px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-xs font-medium">
 								{token.tokenType}
 							</span>
+							{#if token.firstNRank != null}
+								<span
+									class="px-2 py-0.5 rounded bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-xs font-semibold"
+									title={`Permanent rank: this is the ${firstNLabel(token.firstNRank).toLowerCase()} minted on Bitcoin Cash.`}
+								>#{token.firstNRank} ever</span>
+							{/if}
 							{#if token.isCrc20}
 								<Crc20Badge isCanonical={token.crc20IsCanonical} symbol={token.crc20Symbol} symbolIsHex={token.crc20SymbolIsHex} size="sm" />
+							{/if}
+							{#if getAgeBadge(token.genesisTime) != null}
+								{@const abMobile = getAgeBadge(token.genesisTime)}
+								{@const toneMobile =
+									abMobile === 'today'
+										? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+										: abMobile === 'week'
+											? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+											: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'}
+								{@const compactMobile =
+									abMobile === 'today'
+										? 'New today'
+										: abMobile === 'week'
+											? 'New this week'
+											: 'New this month'}
+								<span
+									class={`px-2 py-0.5 rounded text-xs font-medium ${toneMobile}`}
+									title={`${ageBadgeLabel(abMobile)} — brand-new categories are over-represented in scams and abandoned tests; verify before trusting.`}
+								>{compactMobile}</span>
 							{/if}
 						</div>
 					</div>

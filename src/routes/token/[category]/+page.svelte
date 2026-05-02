@@ -1,5 +1,12 @@
 <script lang="ts">
-	import { humanizeNumericSupply, formatMarketCap, stripEmoji } from '$lib/format';
+	import {
+		humanizeNumericSupply,
+		formatMarketCap,
+		stripEmoji,
+		getAgeBadge,
+		ageBadgeLabel,
+		firstNLabel
+	} from '$lib/format';
 	import { iconHrefFor } from '$lib/icons';
 	import {
 		REPORT_REASONS,
@@ -247,6 +254,14 @@
 			(s) => s.currentRank !== null && s.currentRank <= 5
 		)
 	);
+	// Age-bucket badge — flags tokens minted recently as a caution
+	// signal. Returns null for tokens older than 30 days, in which
+	// case no badge renders. Computed from on-chain genesis_time so a
+	// /opt redeploy doesn't reset the buckets.
+	const ageBadge = $derived(getAgeBadge(token.genesisTime));
+	// Permanent rank label for the first-10 CashTokens ever minted.
+	// Empty string for ranks outside 1..10.
+	const firstNText = $derived(token.firstNRank != null ? firstNLabel(token.firstNRank) : '');
 	const showBadges = $derived(
 		data.watchlistCount > 0 ||
 			data.moverBadges.gainerRank > 0 ||
@@ -255,7 +270,9 @@
 			data.arbitrage.eligible ||
 			(data.cauldronTvlSharePct != null && data.cauldronTvlSharePct >= 10) ||
 			data.tvlRank != null ||
-			standings.length > 0
+			standings.length > 0 ||
+			token.firstNRank != null ||
+			ageBadge != null
 	);
 
 	// FT UTXO count derived from live_utxo_count − live_nft_count for
@@ -628,6 +645,43 @@
 	-->
 	{#if showBadges}
 		<div class="mb-6 flex flex-wrap items-center gap-2">
+			{#if token.firstNRank != null}
+				<!--
+					Permanent rank ribbon — first-10 CashTokens ever minted.
+					Order is fixed by `(genesis_block ASC, category ASC)` over
+					the on-chain genesis-tx outpoint hashes; immutable for the
+					life of the chain. Indigo gradient distinguishes it from
+					the activity-driven badges that come and go.
+				-->
+				<span
+					class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-xs font-semibold"
+					title="Permanent rank: this is the {firstNText.toLowerCase()} minted on Bitcoin Cash, ordered by (genesis block, category hex)."
+				>
+					🏛️ {firstNText}
+				</span>
+			{/if}
+			{#if ageBadge != null}
+				<!--
+					Age-bucket warning badge. Three escalating tones:
+					  today → red    (mint within the last 24h, treat with caution)
+					  week  → amber  (less than 7 days old)
+					  month → yellow (less than 30 days old)
+					Tokens older than 30 days don't render anything. Reads
+					on-chain genesis_time so a redeploy can't reset it.
+				-->
+				{@const ageTone =
+					ageBadge === 'today'
+						? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+						: ageBadge === 'week'
+							? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+							: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'}
+				<span
+					class={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold ${ageTone}`}
+					title="This category was minted on-chain within the warning window. Brand-new categories are over-represented in scams + abandoned tests — verify the team / liquidity / metadata before trusting it."
+				>
+					⚠️ {ageBadgeLabel(ageBadge)}
+				</span>
+			{/if}
 			{#if data.tvlRank != null}
 				<a
 					href="/?sort=tvl"

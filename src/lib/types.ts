@@ -18,7 +18,17 @@ export interface TokenApiRow {
 	holderCount: number | null;
 	hasActiveMinting: boolean;
 	firstSeenAt: number;
+	// On-chain genesis-tx block timestamp, unix seconds. Drives the
+	// "Created today / this week / this month" warning badges via
+	// `getAgeBadge` in `$lib/format.ts`. Distinct from `firstSeenAt`
+	// (which is the row's write time in our DB).
+	genesisTime: number;
 	genesisBlock: number;
+	// Permanent rank if this is one of the first 10 CashTokens ever
+	// minted, ordered by `(genesis_block ASC, category ASC)` over the
+	// on-chain genesis-tx outpoint hashes. 1..10 or null. Drives the
+	// "First/Second/.../Tenth CashToken Ever" collector's-item ribbon.
+	firstNRank: number | null;
 	updatedAt: number;
 
 	// Per-venue listing data. Populated by the `sync-cauldron` worker for

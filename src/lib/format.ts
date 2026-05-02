@@ -180,6 +180,57 @@ export function formatVenueTvlUSD(
 	return `$${usd.toFixed(2)}`;
 }
 
+// Age-bucket signal for a token, derived from on-chain genesis_time. Used to
+// surface a "this token is fresh" caution flag in the directory + detail page —
+// brand-new categories are disproportionately scams / abandoned tests, so
+// visitors deserve a heads-up. Buckets are cumulative-exclusive: a token
+// minted 6 hours ago returns 'today', not all three.
+//
+//   today — < 24h since genesis (warning red)
+//   week  — < 7d  since genesis (warning amber)
+//   month — < 30d since genesis (warning yellow)
+//   null  — older than a month, no badge
+export type AgeBadge = 'today' | 'week' | 'month' | null;
+
+export function getAgeBadge(genesisTimeSec: number, nowSec: number = Date.now() / 1000): AgeBadge {
+	const ageDays = (nowSec - genesisTimeSec) / 86_400;
+	if (ageDays < 1) return 'today';
+	if (ageDays < 7) return 'week';
+	if (ageDays < 30) return 'month';
+	return null;
+}
+
+export function ageBadgeLabel(b: AgeBadge): string {
+	if (b === 'today') return 'Created today';
+	if (b === 'week') return 'New this week';
+	if (b === 'month') return 'New this month';
+	return '';
+}
+
+// Permanent rank label for the first 10 CashToken categories ever minted.
+// Order is fixed by `(genesis_block ASC, category ASC)` over the on-chain
+// genesis-tx outpoint hashes — deterministic and immutable. Block 792,773
+// minted 28 categories simultaneously, so within-block ordering is the
+// alphanumeric category-hex sort. Useful as a collector's-item ribbon on
+// the detail page + directory.
+const FIRST_N_ORDINALS = [
+	'First',
+	'Second',
+	'Third',
+	'Fourth',
+	'Fifth',
+	'Sixth',
+	'Seventh',
+	'Eighth',
+	'Ninth',
+	'Tenth'
+];
+
+export function firstNLabel(rank: number): string {
+	if (rank < 1 || rank > FIRST_N_ORDINALS.length) return '';
+	return `${FIRST_N_ORDINALS[rank - 1]} CashToken Ever`;
+}
+
 export function formatMarketCap(marketCap: string): string {
 	if (marketCap === 'N/A' || marketCap === '0') {
 		return '-';

@@ -5,6 +5,7 @@
 
 import { error } from '@sveltejs/kit';
 import { query, hexFromBytes, bytesFromHex } from '$lib/server/db';
+import { firstNRankFor } from '$lib/server/firstN';
 import { fetchBcmr, fetchCauldron } from '$lib/server/external';
 import { fetchCrc20Detail } from '$lib/server/crc20';
 import { computeMcapTvlThresholdSats } from '$lib/server/mcapThreshold';
@@ -736,6 +737,7 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 			genesisBlock: row.genesis_block,
 			genesisTime: Math.floor(row.genesis_time.getTime() / 1000),
 			firstSeenAt: Math.floor(row.first_seen_at.getTime() / 1000),
+			firstNRank: await firstNRankFor(category),
 			// Name / symbol / decimals fall back through BCMR (already
 			// applied above) and finally to the on-chain CRC-20 covenant
 			// reveal — the chain carries authoritative bytes even when no
