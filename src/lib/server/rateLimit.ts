@@ -82,6 +82,16 @@ export const challengeRateLimiter = createRateLimiter({
 	windowMs: 60_000
 });
 
+// Airdrop draft limiter: 1 airdrop per 15 min per cashaddr. Tight
+// because every draft pre-creates N recipient rows + tx-skeletons; an
+// abusive sender could otherwise spam-write thousands of rows. The
+// 15-min window also gives a human time to actually sign + broadcast
+// before drafting another.
+export const airdropDraftRateLimiter = createRateLimiter({
+	maxPerWindow: 1,
+	windowMs: 15 * 60_000
+});
+
 // /api/tokens?format=csv limiter: 30 CSV requests per minute per IP.
 // JSON GETs already have CDN caching + a 1000-row cap, but CSV is much
 // fatter per row + much more attractive to scrapers. Tighter ceiling

@@ -363,6 +363,18 @@
 					downCount={data.votes.downCount}
 					size="md"
 				/>
+				{#if data.userHoldsThisToken}
+					<a
+						href={`/airdrops/new?source=${token.id}`}
+						class="inline-flex items-center gap-1 px-3 py-1 rounded bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold"
+						title="You hold this token — airdrop some to holders of another category"
+					>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4">
+							<path d="M12 2v6m-3-3 3 3 3-3M5 10h14l-1.5 11h-11Z" />
+						</svg>
+						Airdrop
+					</a>
+				{/if}
 				<span class="px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-xs font-medium">
 					{token.tokenType}
 				</span>

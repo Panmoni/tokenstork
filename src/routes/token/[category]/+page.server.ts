@@ -6,6 +6,7 @@
 import { error } from '@sveltejs/kit';
 import { query, hexFromBytes, bytesFromHex } from '$lib/server/db';
 import { firstNRankFor } from '$lib/server/firstN';
+import { eligibilityFor } from '$lib/server/airdrops';
 import { fetchBcmr, fetchCauldron } from '$lib/server/external';
 import { fetchCrc20Detail } from '$lib/server/crc20';
 import { computeMcapTvlThresholdSats } from '$lib/server/mcapThreshold';
@@ -148,7 +149,7 @@ export interface PriceBucket {
 	volumeSats: number | null;
 }
 
-export const load: PageServerLoad = async ({ params, fetch, url }) => {
+export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 	const category = params.category.toLowerCase();
 	if (!HEX_REGEX.test(category)) {
 		error(400, 'invalid category (expected 64 hex chars)');
@@ -886,6 +887,13 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 		// Per-bucket leaderboard standings. `latestDay` is the most
 		// recent snapshot day across all buckets; if null, the snapshot
 		// worker has never run and the UI hides the section entirely.
-		leaderboardStandings: leaderboardStandingsRes
+		leaderboardStandings: leaderboardStandingsRes,
+		// Drives the "Airdrop" CTA on this token's detail page. Only
+		// authenticated wallets that hold this category see it. Cheap
+		// indexed lookup against token_holders. Skipped (returns false)
+		// when not signed in — saves a query per anonymous pageload.
+		userHoldsThisToken: locals.user
+			? (await eligibilityFor(locals.user.cashaddr, categoryBytes)) != null
+			: false
 	};
 };

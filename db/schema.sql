@@ -901,3 +901,82 @@ CREATE INDEX IF NOT EXISTS token_crc20_sort_idx
 
 ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_crc20_run_at TIMESTAMPTZ;
 ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_crc20_canonical_run_at TIMESTAMPTZ;
+
+-- ============================================================
+-- Item #29 — airdrops (2026-05-02).
+-- ============================================================
+-- Airdrop = one sender sending tokens-they-hold to every wallet
+-- that holds another (recipient) token. Built on token_holders.
+-- Sender authenticates with wallet-login; per-recipient amount is
+-- computed equal-or-weighted at draft time and persisted, then
+-- the wizard walks the user through ceil(N / 1000) sequential
+-- signing rounds.
+--
+-- Three additive tables follow the (sender_cashaddr, category)
+-- composite-key + cascade-delete pattern from user_watchlist
+-- (line 610) / user_mint_sessions (line 689) / user_votes
+-- (line 755). Idempotent CREATE TABLE IF NOT EXISTS so re-runs
+-- of `npm run db:init` are safe.
+
+CREATE TABLE IF NOT EXISTS airdrops (
+  id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  sender_cashaddr     TEXT         NOT NULL REFERENCES users(cashaddr) ON DELETE CASCADE,
+  source_category     BYTEA        NOT NULL REFERENCES tokens(category) ON DELETE CASCADE,
+  recipient_category  BYTEA        NOT NULL REFERENCES tokens(category) ON DELETE CASCADE,
+  mode                TEXT         NOT NULL CHECK (mode IN ('equal','weighted')),
+  total_amount        NUMERIC(78,0) NOT NULL,
+  holder_count        INTEGER      NOT NULL,
+  -- Per-output BCH dust attached to each token UTXO. Default 800
+  -- (Panmoni/drop convention); operator can dial to 546-2000 via
+  -- the wizard's "Advanced" expander. Stored per-airdrop so the
+  -- value is reproducible across the per-tx broadcast loop.
+  output_value_sats   INTEGER      NOT NULL CHECK (output_value_sats BETWEEN 546 AND 2000),
+  -- Snapshot freshness guard: max(token_holders.snapshot_at) for
+  -- the recipient_category at draft time. Re-checked at broadcast;
+  -- if newer, halt remaining txs with "holder set has changed,
+  -- redraft for the new snapshot". Already-broadcast txs stand.
+  holders_snapshot_at TIMESTAMPTZ  NOT NULL,
+  state               TEXT         NOT NULL CHECK (state IN ('drafting','signing','broadcasting','complete','failed','partial')),
+  tx_count            INTEGER      NOT NULL,
+  created_at          TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  updated_at          TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+-- "Find this user's airdrops, newest first" — drives /airdrops history.
+CREATE INDEX IF NOT EXISTS airdrops_sender_idx
+  ON airdrops (sender_cashaddr, created_at DESC);
+
+-- Re-entrancy guard: prevent two parallel drafts from the same sender
+-- consuming the same funding UTXO. A double-clicked Confirm or two
+-- browser tabs would otherwise both try to build a tx against the same
+-- coin set. Partial unique index — only enforces while a draft is in
+-- flight; completed/failed drafts don't block new ones.
+CREATE UNIQUE INDEX IF NOT EXISTS airdrops_one_drafting_per_sender_idx
+  ON airdrops (sender_cashaddr) WHERE state IN ('drafting', 'signing');
+
+-- One row per chunk of recipients packed into a single tx. The wizard
+-- advances through these in tx_index order; each chunk is independent
+-- (mainnet-js's wallet.send picks UTXOs per call, no manual chaining).
+CREATE TABLE IF NOT EXISTS airdrop_txs (
+  airdrop_id   UUID        NOT NULL REFERENCES airdrops(id) ON DELETE CASCADE,
+  tx_index     INTEGER     NOT NULL,                       -- 0-based position in the chain
+  txid         BYTEA,                                      -- populated after broadcast
+  state        TEXT        NOT NULL CHECK (state IN ('pending','signed','broadcast','failed')),
+  fail_reason  TEXT,                                       -- BCHN error message on rejection (NULL when state != 'failed')
+  PRIMARY KEY (airdrop_id, tx_index)
+);
+
+-- One row per recipient. Same (airdrop_id, recipient) PK shape as
+-- user_watchlist's (cashaddr, category). Populated at draft time;
+-- txid + vout_index get filled as broadcast progresses.
+CREATE TABLE IF NOT EXISTS airdrop_outputs (
+  airdrop_id         UUID         NOT NULL REFERENCES airdrops(id) ON DELETE CASCADE,
+  recipient_cashaddr TEXT         NOT NULL,                 -- bare-form to match token_holders.address
+  amount             NUMERIC(78,0) NOT NULL,                -- base units of source-category
+  tx_index           INTEGER      NOT NULL,                 -- which chunked tx pays this recipient
+  vout_index         INTEGER,                               -- populated after broadcast
+  state              TEXT         NOT NULL CHECK (state IN ('pending','broadcast','confirmed','failed')),
+  PRIMARY KEY (airdrop_id, recipient_cashaddr)
+);
+CREATE INDEX IF NOT EXISTS airdrop_outputs_airdrop_idx
+  ON airdrop_outputs (airdrop_id, tx_index);
