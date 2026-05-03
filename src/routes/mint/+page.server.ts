@@ -5,10 +5,11 @@
 // "log in to mint" splash instead of the wizard. We deliberately don't
 // hard-redirect — the page can sell its own value first.
 //
-// This is batch 1 of the mint feature: foundation only. The wizard's
-// step state lives in browser memory for now; batch 2 adds the
-// `user_mint_sessions` round-trip so progress persists across browser
-// refreshes. Schema is already in place (db/schema.sql).
+// Wizard state is persisted via /api/mint/sessions/[id] — saveSession
+// fires on each step transition, and onMount resumes the latest
+// `drafting` row. The server-side schema lives in db/schema.sql
+// (`user_mint_sessions`). This loader stays minimal: it's just the
+// auth gate + the cashaddr the wizard targets as the recipient.
 
 import type { PageServerLoad } from './$types';
 

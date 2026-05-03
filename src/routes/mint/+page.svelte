@@ -42,6 +42,16 @@
 	let broadcastError = $state<string | null>(null);
 	let broadcasting = $state(false);
 
+	// Persistence health for the stepper. saveSession is fire-and-forget;
+	// when it fails we surface a small banner so the user knows their
+	// progress isn't being saved (otherwise they'd refresh and lose work
+	// silently).
+	let lastSaveFailed = $state(false);
+
+	// Discard-draft state for the "abandon this draft" affordance.
+	let discarding = $state(false);
+	let discardError = $state<string | null>(null);
+
 	// Mint result (post-broadcast).
 	let mintedCategoryHex = $state<string | null>(null);
 
@@ -141,23 +151,35 @@
 	}
 	async function saveSession() {
 		if (!sessionId) return;
+		// Gate per-type fields by current tokenType so a user who picks
+		// NFT, then switches to FT, doesn't leave a stale NFT commitment
+		// in the saved row. (Visual UI hides them but the state vars stay
+		// populated — without this gate, resume-after-refresh rehydrates
+		// the dead values into a row that doesn't belong with them.)
+		const wantsFt = tokenType === 'FT' || tokenType === 'FT+NFT';
+		const wantsNft = tokenType === 'NFT' || tokenType === 'FT+NFT';
 		const patch = {
 			tokenType: tokenType ?? null,
 			ticker: ticker || null,
 			name: name || null,
 			description: description || null,
 			decimals: tokenType === 'NFT' ? null : decimals,
-			supply: totalSupply || null,
-			nftCapability: tokenType !== 'FT' ? nftCapability : null,
-			nftCommitmentHex: nftCommitmentHex || null
+			supply: wantsFt ? totalSupply || null : null,
+			nftCapability: wantsNft ? nftCapability : null,
+			nftCommitmentHex: wantsNft ? nftCommitmentHex || null : null
 		};
 		try {
-			await fetch(`/api/mint/sessions/${sessionId}`, {
+			const res = await fetch(`/api/mint/sessions/${sessionId}`, {
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify(patch)
 			});
+			lastSaveFailed = !res.ok;
+			if (!res.ok) {
+				console.warn('[mint] session save HTTP', res.status);
+			}
 		} catch (e) {
+			lastSaveFailed = true;
 			console.warn('[mint] session save failed (will retry next step):', e);
 		}
 	}
@@ -197,6 +219,10 @@
 		step = Math.max(step - 1, 1);
 	}
 	async function jumpTo(target: number) {
+		// Defensive bound: the stepper only renders 1..6, but the function
+		// is exported into onclick handlers — clamp so a future caller
+		// can't drive `step` out of range.
+		target = Math.max(1, Math.min(stepLabels.length, target));
 		if (target < step) {
 			step = target;
 			return;
@@ -212,6 +238,11 @@
 			if (s === 4 && !genesisBuild) return;
 			if (s === 5 && !broadcastTxid) return;
 		}
+		// Mirror next()'s behavior: any forward motion past step 1 needs a
+		// session to persist into. Without this, clicking a forward step
+		// in the stepper (instead of "Next") leaves saveSession a no-op
+		// and a refresh silently drops the user's input.
+		if (target > 1) await ensureSession();
 		await saveSession();
 		step = target;
 	}
@@ -360,6 +391,61 @@
 		}
 	}
 
+	// Abandon the current draft. Soft-deletes via PATCH state='abandoned'
+	// (server-side preferred over DELETE so the session row is kept for
+	// audit and the per-user MAX_DRAFTING_PER_USER cap reclaims the slot
+	// because only `state='drafting'` rows count against it). Resets the
+	// wizard back to step 1 with empty fields so the user can start
+	// fresh in the same browser session.
+	async function discardDraft() {
+		discardError = null;
+		if (!sessionId) {
+			// Nothing to discard server-side — just clear local state.
+			resetWizardLocal();
+			return;
+		}
+		if (!confirm('Discard this draft? You will lose any progress in the current wizard.')) return;
+		discarding = true;
+		try {
+			const res = await fetch(`/api/mint/sessions/${sessionId}`, {
+				method: 'PATCH',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ state: 'abandoned' })
+			});
+			if (!res.ok) {
+				discardError = `Could not discard (${res.status}).`;
+				return;
+			}
+			resetWizardLocal();
+		} catch (e) {
+			discardError = (e as Error).message;
+		} finally {
+			discarding = false;
+		}
+	}
+
+	function resetWizardLocal() {
+		sessionId = null;
+		tokenType = null;
+		ticker = '';
+		name = '';
+		description = '';
+		decimals = 0;
+		totalSupply = '';
+		nftCommitmentHex = '';
+		nftCapability = 'none';
+		outpointTxid = '';
+		outpointSatoshis = 2000;
+		signedTxHex = '';
+		broadcastTxid = null;
+		broadcastError = null;
+		mintedCategoryHex = null;
+		genesisBuild = null;
+		genesisBuildError = null;
+		lastSaveFailed = false;
+		step = 1;
+	}
+
 	function downloadBcmr() {
 		const json = bcmrJsonString();
 		if (!json) return;
@@ -435,6 +521,14 @@
 			</p>
 		</div>
 	{:else}
+		{#if lastSaveFailed}
+			<div
+				class="mb-4 px-4 py-2 rounded-lg border bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/40 text-xs text-amber-800 dark:text-amber-200"
+				role="status"
+			>
+				Couldn't save your draft on the last step transition — your progress is in memory only. A refresh will lose it. Next save attempt will retry automatically.
+			</div>
+		{/if}
 		<ol class="flex items-center justify-between mb-8 text-xs sm:text-sm">
 			{#each stepLabels as label, i (label)}
 				{@const idx = i + 1}
@@ -628,6 +722,10 @@
 					</dl>
 					<details class="mt-4 text-xs ts-text-muted">
 						<summary class="cursor-pointer">Show unsigned tx hex</summary>
+						<p class="mt-2">
+							Note: the input's unlocking script is empty here — your wallet fills it during
+							signing. That's why the hex below is shorter than the typical 220+ byte signed tx.
+						</p>
 						<pre class="mt-2 p-3 rounded bg-slate-50 dark:bg-zinc-950 border break-all whitespace-pre-wrap text-[10px] ts-border-subtle">{genesisBuild.unsignedTxHex}</pre>
 					</details>
 				{/if}
@@ -758,5 +856,21 @@
 			that address; it must hold a UTXO with enough BCH to cover the genesis output + fees
 			(typically 2000-3000 sats).
 		</p>
+
+		{#if step !== 6}
+			<div class="mt-4 max-w-2xl text-xs">
+				<button
+					type="button"
+					onclick={discardDraft}
+					disabled={discarding}
+					class="text-rose-600 dark:text-rose-400 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+				>
+					{discarding ? 'Discarding…' : 'Discard this draft'}
+				</button>
+				{#if discardError}
+					<span class="ml-3 text-rose-600 dark:text-rose-400">{discardError}</span>
+				{/if}
+			</div>
+		{/if}
 	{/if}
 </main>
