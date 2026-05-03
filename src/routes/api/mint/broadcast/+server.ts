@@ -86,6 +86,13 @@ export const POST: RequestHandler = async ({ locals, request, getClientAddress }
 		if (isHttpError(err)) throw err;
 		const e = err as Error & { code?: number };
 		console.error('[api/mint/broadcast] BCHN error:', e.message, 'code=', e.code);
+		// Stamp the per-cashaddr cooldown on failure too. Without this, a
+		// user with a malformed signed tx burns one IP slot per retry and
+		// hits the 5/min IP cap in seconds — locking out everyone behind
+		// the same NAT. With the cooldown stamped, the next retry from
+		// the same cashaddr is blocked by the (free, in-memory) cooldown
+		// check before it reaches the IP limiter.
+		recentBroadcasts.set(locals.user.cashaddr, Date.now());
 		// Surface the BCHN error message to the caller — it's already
 		// structured ("transaction rejected: bad-txns-inputs-missingorspent")
 		// and helpful for debugging the user's signed tx. We just don't

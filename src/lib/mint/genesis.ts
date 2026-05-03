@@ -118,6 +118,9 @@ export function buildGenesisTx(spec: GenesisSpec): GenesisTxBuild {
 	if (!/^[0-9a-fA-F]{64}$/.test(spec.outpointTxid)) {
 		throw new Error('outpointTxid must be 64-char hex');
 	}
+	if (!Number.isInteger(spec.outpointSatoshis)) {
+		throw new Error('outpointSatoshis must be a whole number of sats');
+	}
 	if (spec.outpointSatoshis <= 0) {
 		throw new Error('outpointSatoshis must be positive');
 	}

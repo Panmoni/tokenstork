@@ -198,12 +198,20 @@ export async function updateSession(
 	// Forward-only state guard: only allow moving to a state that's
 	// "later" than the current one. The state machine is a DAG; this
 	// SQL fragment captures the allowed predecessors of each state.
+	//
+	// `broadcast` is intentionally NOT in its own predecessor list: once
+	// a session is broadcast, the genesis_txid + category are recorded
+	// and must not be overwritten by a duplicated PATCH (e.g. retry
+	// races, double-tab). The wizard only PATCHes broadcast-state on a
+	// successful broadcast call, but the session row itself is the
+	// system of record — we'd rather reject the second PATCH than let
+	// it silently overwrite an authoritative txid.
 	let stateGuard = '';
 	if (patch.state) {
 		const allowed: Record<MintState, MintState[]> = {
 			drafting: ['drafting'],
 			signed: ['drafting', 'signed'],
-			broadcast: ['drafting', 'signed', 'broadcast'],
+			broadcast: ['drafting', 'signed'],
 			confirmed: ['broadcast', 'confirmed'],
 			failed: ['drafting', 'signed', 'broadcast', 'failed'],
 			abandoned: ['drafting', 'signed', 'failed', 'abandoned']
@@ -212,10 +220,24 @@ export async function updateSession(
 		stateGuard = `AND state IN (${acceptable})`;
 	}
 
+	// Append-only guard for genesis_txid / category. Once recorded these
+	// are immutable — they're derived from the chain. A retried PATCH
+	// that tries to write a different value to a non-NULL column must
+	// fail rather than silently corrupt the row.
+	const immutableGuards: string[] = [];
+	if (patch.genesisTxidHex !== undefined && patch.genesisTxidHex !== null) {
+		immutableGuards.push('genesis_txid IS NULL');
+	}
+	if (patch.categoryHex !== undefined && patch.categoryHex !== null) {
+		immutableGuards.push('category IS NULL');
+	}
+	const immutableGuard = immutableGuards.length > 0 ? `AND ${immutableGuards.join(' AND ')}` : '';
+
 	const sql = `UPDATE user_mint_sessions
                  SET ${sets.join(', ')}
                  WHERE id = $${idIdx} AND cashaddr = $${cashaddrIdx}
                  ${stateGuard}
+                 ${immutableGuard}
                  RETURNING *`;
 	const res = await query<DbRow>(sql, values);
 	const row = res.rows[0];

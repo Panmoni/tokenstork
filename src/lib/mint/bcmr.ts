@@ -51,12 +51,13 @@ export function generateBcmr(input: BcmrInput): Record<string, unknown> {
 		decimals: input.decimals
 	};
 	if (input.tokenType === 'NFT' || input.tokenType === 'FT+NFT') {
+		// Note: BCMR's `nfts.parse` is intentionally OMITTED here. Some
+		// strict CHIP-BCMR-v2 validators reject `parse: { bytecode: '' }`
+		// because empty bytecode is contradictory (the field's purpose is
+		// to parse commitment bytes). Operators that need commitment
+		// parsing add `parse` themselves post-download.
 		token.nfts = {
-			description: 'Per-token NFT entries are operator-managed; add specific commitment-keyed entries here as you mint individual NFTs.',
-			parse: {
-				bytecode: '',
-				types: {}
-			}
+			description: 'Per-token NFT entries are operator-managed; add specific commitment-keyed entries here as you mint individual NFTs.'
 		};
 		// Surface the genesis-NFT's capability + commitment so explorers
 		// can show it directly without consulting on-chain data.
@@ -85,7 +86,11 @@ export function generateBcmr(input: BcmrInput): Record<string, unknown> {
 
 	return {
 		$schema: 'https://cashtokens.org/schemas/bcmr-v2.schema.json',
-		version: { major: 0, minor: 1, patch: 0 },
+		// Registry file version (NOT the schema version). Most public
+		// registries (Paytaca's example registry, etc.) start tokens at
+		// 1.0.0; advertising 0.x.y reads as "unstable / pre-release"
+		// to some validators.
+		version: { major: 1, minor: 0, patch: 0 },
 		latestRevision: publishedAt,
 		registryIdentity: {
 			name: input.name,
