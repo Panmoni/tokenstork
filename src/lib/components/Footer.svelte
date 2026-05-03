@@ -85,6 +85,7 @@
 					<li><a href="/blocks" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Blocks</a></li>
 					<li><a href="/mining" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Mining</a></li>
 					<li><a href="/mint" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Mint</a></li>
+					<li><a href="/airdrops/new" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Airdrop</a></li>
 					<li><a href="/stats" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Stats</a></li>
 				</ul>
 			</div>
@@ -141,7 +142,7 @@
 					title="Panmoni is a Web3 product studio"
 					class="gradient-link tracking-wider font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#00abda] to-[#1476ff]"
 				>Panmoni</a>
-				project. · v{version} (alpha) · Prices in USD
+				project. · v{version} <span class="font-mono text-xs ts-text-muted" title="Git commit hash of this build">({__GIT_COMMIT__})</span> (alpha) · Prices in USD
 			</p>
 		</div>
 

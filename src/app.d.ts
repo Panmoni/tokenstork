@@ -1,5 +1,7 @@
 // See https://svelte.dev/docs/kit/types#app
 declare global {
+	const __GIT_COMMIT__: string;
+
 	namespace App {
 		// interface Error {}
 		interface Locals {
