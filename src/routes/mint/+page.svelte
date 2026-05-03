@@ -184,9 +184,24 @@
 		}
 	}
 
-	// Resume the latest 'drafting' session on mount, if any.
+	// Resume on mount: if a specific `?session=<id>` was requested (deep
+	// link from /mints), hydrate from the server-resolved row. Otherwise
+	// fall back to the latest 'drafting' session via /api/mint/sessions.
 	onMount(async () => {
 		if (data.unauthenticated) return;
+		if (data.resumeSession) {
+			const r = data.resumeSession;
+			sessionId = r.id;
+			tokenType = r.tokenType as TokenType | null;
+			ticker = r.ticker ?? '';
+			name = r.name ?? '';
+			description = r.description ?? '';
+			decimals = r.decimals ?? 0;
+			totalSupply = r.supply ?? '';
+			nftCommitmentHex = r.nftCommitmentHex ?? '';
+			nftCapability = (r.nftCapability as NftCapability | null) ?? 'none';
+			return;
+		}
 		try {
 			const res = await fetch('/api/mint/sessions');
 			if (!res.ok) return;

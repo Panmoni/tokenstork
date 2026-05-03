@@ -125,6 +125,24 @@ export async function listSessions(cashaddr: string): Promise<MintSession[]> {
 	return res.rows.map(rowToSession);
 }
 
+/** History page query — user's sessions, newest first, paginated.
+ * Ordered by created_at (not updated_at) so rows don't reshuffle when a
+ * background sync flips a row from `broadcast` to `confirmed`. */
+export async function listSessionsPaginated(
+	cashaddr: string,
+	limit: number,
+	offset: number
+): Promise<MintSession[]> {
+	const res = await query<DbRow>(
+		`SELECT * FROM user_mint_sessions
+          WHERE cashaddr = $1
+          ORDER BY created_at DESC
+          LIMIT $2 OFFSET $3`,
+		[cashaddr, limit, offset]
+	);
+	return res.rows.map(rowToSession);
+}
+
 /** Load one session, scoped to the authenticated user. Returns null if
  * not found OR not owned by the caller — same outcome from the API
  * caller's perspective so we don't leak existence. */

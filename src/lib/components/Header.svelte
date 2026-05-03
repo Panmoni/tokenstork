@@ -272,6 +272,14 @@
 									>
 										Your airdrops
 									</a>
+									<a
+										href="/mints"
+										onclick={() => (userMenuOpen = false)}
+										class="block px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-zinc-800 ts-text-body border-b ts-border-subtle"
+										role="menuitem"
+									>
+										Your mints
+									</a>
 									<button
 										type="button"
 										onclick={() => {
