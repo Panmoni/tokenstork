@@ -1,0 +1,22 @@
+[Unit]
+Description=Bitcoin Cash Node (archival, txindex)
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bchn
+Group=bchn
+ExecStart=/usr/local/bin/bitcoind -datadir=/var/lib/bchn/.bitcoin -daemon=0
+Restart=on-failure
+RestartSec=30s
+TimeoutStopSec=600s
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/bchn
+
+[Install]
+WantedBy=multi-user.target

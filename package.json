@@ -15,10 +15,6 @@
     "start": "node build",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "db:init": "psql \"$DATABASE_URL\" -f db/schema.sql",
-    "sync:backfill": "tsx scripts/backfill-from-bchn.ts",
-    "sync:tail": "tsx scripts/tail-from-bchn.ts",
-    "sync:enrich": "tsx scripts/enrich-from-blockbook.ts",
-    "sync:verify": "tsx scripts/verify-current-state.ts",
     "sync:leaderboards": "tsx scripts/snapshot-leaderboards.ts",
     "typecheck": "tsc --noEmit --project scripts/tsconfig.json"
   },
