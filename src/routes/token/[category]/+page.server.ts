@@ -6,7 +6,6 @@
 import { error } from '@sveltejs/kit';
 import { query, hexFromBytes, bytesFromHex } from '$lib/server/db';
 import { firstNRankFor } from '$lib/server/firstN';
-import { eligibilityFor } from '$lib/server/airdrops';
 import { fetchBcmr, fetchCauldron } from '$lib/server/external';
 import { fetchCrc20Detail } from '$lib/server/crc20';
 import { computeMcapTvlThresholdSats } from '$lib/server/mcapThreshold';
@@ -149,7 +148,7 @@ export interface PriceBucket {
 	volumeSats: number | null;
 }
 
-export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
+export const load: PageServerLoad = async ({ params, fetch, url }) => {
 	const category = params.category.toLowerCase();
 	if (!HEX_REGEX.test(category)) {
 		error(400, 'invalid category (expected 64 hex chars)');
@@ -243,6 +242,7 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 		reportCountRes,
 		leaderboardStandingsRes,
 		tvlRankRes,
+		holdersRankRes,
 		crc20Detail,
 		herfindahlRes
 	] = await Promise.all([
@@ -469,6 +469,37 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 			[categoryBytes]
 		).catch((err) => {
 			console.error('[token detail] TVL rank query failed:', err);
+			return { rows: [] as Array<{ rank: string }> };
+		}),
+		// Rank of this token by `token_state.holder_count` across all
+		// non-moderated categories with at least one holder. Same self-CTE
+		// shape as tvlRank: pin the self-row's count once, then count how
+		// many other categories outrank it; +1 for 1-based. Returns no
+		// rows when this token has no holder_count recorded — the UI gates
+		// the badge on that. Wrapped in `.catch` for the same resilience
+		// rationale as the TVL rank query.
+		query<{ rank: string }>(
+			`WITH self AS (
+			   SELECT s.holder_count
+			     FROM token_state s
+			    WHERE s.category = $1
+			      AND s.holder_count IS NOT NULL
+			      AND s.holder_count > 0
+			 )
+			 SELECT (1 + (
+			   SELECT COUNT(*)::bigint
+			     FROM token_state s
+			     JOIN tokens t ON t.category = s.category
+			    WHERE s.holder_count IS NOT NULL
+			      AND s.holder_count > self.holder_count
+			      AND NOT EXISTS (
+			        SELECT 1 FROM token_moderation mod WHERE mod.category = s.category
+			      )
+			 ))::text AS rank
+			 FROM self`,
+			[categoryBytes]
+		).catch((err) => {
+			console.error('[token detail] holders rank query failed:', err);
 			return { rows: [] as Array<{ rank: string }> };
 		}),
 		// CRC-20 detection lookup. Returns null for non-CRC-20 categories;
@@ -731,6 +762,16 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 	const tvlRankRaw = tvlRankRes.rows[0]?.rank ? Number(tvlRankRes.rows[0].rank) : null;
 	const tvlRank = tvlRankRaw != null && tvlRankRaw >= 1 && tvlRankRaw <= 10 ? tvlRankRaw : null;
 
+	// Top-N-by-holder-count badge. Same gating contract as tvlRank: only
+	// surface ranks 1-10, anything below that is informational noise.
+	const holdersRankRaw = holdersRankRes.rows[0]?.rank
+		? Number(holdersRankRes.rows[0].rank)
+		: null;
+	const holdersRank =
+		holdersRankRaw != null && holdersRankRaw >= 1 && holdersRankRaw <= 10
+			? holdersRankRaw
+			: null;
+
 	return {
 		token: {
 			id: hexFromBytes(row.category)!,
@@ -858,6 +899,11 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 		// Only set when this token is in the top 10; null otherwise. The
 		// detail page renders a "🏆 #N TVL" badge when present.
 		tvlRank,
+		// Rank by `token_state.holder_count` across all non-moderated
+		// categories. Only set when this token is in the top 10; null
+		// otherwise. The detail page renders a "👥 #N by Holders" badge
+		// when present.
+		holdersRank,
 		// Per-venue first_listed_at (UNIX seconds). UI: "Listed on
 		// Cauldron since 2025-08-12" line under the AMM venues section.
 		venueListings: {
@@ -887,13 +933,6 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 		// Per-bucket leaderboard standings. `latestDay` is the most
 		// recent snapshot day across all buckets; if null, the snapshot
 		// worker has never run and the UI hides the section entirely.
-		leaderboardStandings: leaderboardStandingsRes,
-		// Drives the "Airdrop" CTA on this token's detail page. Only
-		// authenticated wallets that hold this category see it. Cheap
-		// indexed lookup against token_holders. Skipped (returns false)
-		// when not signed in — saves a query per anonymous pageload.
-		userHoldsThisToken: locals.user
-			? (await eligibilityFor(locals.user.cashaddr, categoryBytes)) != null
-			: false
+		leaderboardStandings: leaderboardStandingsRes
 	};
 };

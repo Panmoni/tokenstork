@@ -454,6 +454,38 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 				  ORDER BY categories_held DESC, th.address ASC
 				  LIMIT 10`
 			),
+			// Top-10 categories by holder count. Reads `token_state.holder_count`
+			// (denormalised live count of distinct addresses holding the
+			// category), joins through tokens for moderation gating and
+			// metadata for name/symbol/icon, and through the icon clearance
+			// scan to honour the cleared-icon contract used elsewhere.
+			query<{
+				category: Buffer;
+				name: string | null;
+				symbol: string | null;
+				icon_uri: string | null;
+				icon_cleared_hash: string | null;
+				holder_count: number;
+			}>(
+				`SELECT t.category,
+				        m.name,
+				        m.symbol,
+				        m.icon_uri,
+				        encode(imo.content_hash, 'hex') AS icon_cleared_hash,
+				        s.holder_count
+				   FROM tokens t
+				   JOIN token_state s ON s.category = t.category
+				   LEFT JOIN token_metadata m ON m.category = t.category
+				   LEFT JOIN icon_url_scan ius ON ius.icon_uri = m.icon_uri
+				   LEFT JOIN icon_moderation imo
+				          ON imo.content_hash = ius.content_hash
+				         AND imo.state = 'cleared'
+				  WHERE s.holder_count IS NOT NULL
+				    AND s.holder_count > 0
+				    AND ${NOT_MODERATED_CLAUSE}
+				  ORDER BY s.holder_count DESC, t.category ASC
+				  LIMIT 10`
+			),
 			// Active-minting count — categories with at least one live
 			// minting NFT, meaning the issuer can still mint more supply.
 			// Critical supply-inflation indicator: a token whose total
@@ -498,6 +530,7 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		tapswapTopRes,
 		uniqueHoldersRes,
 		topCollectorsRes,
+		topHoldersRes,
 		activeMintingRes
 	] = pageResults as [
 		PromiseSettledResult<{ rows: TypeCount[] }>,
@@ -529,6 +562,16 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		}>,
 		PromiseSettledResult<{ rows: Array<{ n: string }> }>,
 		PromiseSettledResult<{ rows: Array<{ address: string; categories_held: string }> }>,
+		PromiseSettledResult<{
+			rows: Array<{
+				category: Buffer;
+				name: string | null;
+				symbol: string | null;
+				icon_uri: string | null;
+				icon_cleared_hash: string | null;
+				holder_count: number;
+			}>;
+		}>,
 		PromiseSettledResult<{ rows: WindowCount[] }>
 	];
 
@@ -715,6 +758,18 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 				}))
 			: [];
 
+	const topHoldersByCount =
+		topHoldersRes.status === 'fulfilled'
+			? topHoldersRes.value.rows.map((r) => ({
+					id: hexFromBytes(r.category)!,
+					name: r.name,
+					symbol: r.symbol,
+					icon: r.icon_uri,
+					iconClearedHash: r.icon_cleared_hash,
+					holderCount: Number(r.holder_count)
+				}))
+			: [];
+
 	const activeMinting = pickNumber(activeMintingRes);
 
 	return {
@@ -741,6 +796,7 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		giniBuckets,
 		tapswapTop,
 		uniqueHolders,
-		topCollectors
+		topCollectors,
+		topHoldersByCount
 	};
 };

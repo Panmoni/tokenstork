@@ -288,6 +288,40 @@
 		</div>
 	</section>
 
+	{#if data.topHoldersByCount.length > 0}
+		<section class="mb-8">
+			<div class="flex items-baseline justify-between mb-3">
+				<h2 class="text-xl font-semibold text-slate-900 dark:text-white">Top 10 by holder count</h2>
+				<a href="/?sort=holders" class="text-xs text-violet-600 dark:text-violet-400 hover:underline">All by holders →</a>
+			</div>
+			<p class="text-sm ts-text-muted mb-3">
+				Distinct on-chain addresses holding the category. Exchange covenants
+				(Cauldron pool UTXOs, Tapswap escrow, Fex covenant) each count as a
+				single holder, so actively-traded tokens may be slightly understated
+				vs. truly-distributed tokens of the same headline number.
+			</p>
+			<div class="rounded-xl border ts-border-subtle ts-surface-panel overflow-hidden">
+				<ol class="divide-y ts-border-subtle">
+					{#each data.topHoldersByCount as t, i (t.id)}
+						<li>
+							<a href={`/token/${t.id}`} class="flex items-center gap-3 px-4 py-2 hover:bg-slate-50 dark:hover:bg-zinc-800/50 transition-colors no-underline">
+								<span class="w-5 text-xs font-mono text-slate-400 tabular-nums">{i + 1}</span>
+								<img src={iconHrefFor(t.icon, t.iconClearedHash)} alt="" class="w-7 h-7 rounded-full bg-slate-100 dark:bg-zinc-800" loading="lazy" />
+								<span class="flex-1 min-w-0 truncate text-sm text-slate-900 dark:text-white">
+									{stripEmoji(t.name) || t.id.slice(0, 10) + '…'}
+									{#if t.symbol}<span class="ml-1 text-xs text-slate-500 font-mono">{stripEmoji(t.symbol)}</span>{/if}
+								</span>
+								<span class="text-xs font-mono tabular-nums shrink-0 text-teal-700 dark:text-teal-400">
+									{fmt(t.holderCount)} holders
+								</span>
+							</a>
+						</li>
+					{/each}
+				</ol>
+			</div>
+		</section>
+	{/if}
+
 	{#if data.tapswapTop.length > 0}
 		<section class="mb-8">
 			<div class="flex items-baseline justify-between mb-3">

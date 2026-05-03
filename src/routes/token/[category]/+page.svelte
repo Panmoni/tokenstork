@@ -270,6 +270,7 @@
 			data.arbitrage.eligible ||
 			(data.cauldronTvlSharePct != null && data.cauldronTvlSharePct >= 10) ||
 			data.tvlRank != null ||
+			data.holdersRank != null ||
 			standings.length > 0 ||
 			token.firstNRank != null ||
 			ageBadge != null
@@ -363,18 +364,16 @@
 					downCount={data.votes.downCount}
 					size="md"
 				/>
-				{#if data.userHoldsThisToken}
-					<a
-						href={`/airdrops/new?source=${token.id}`}
-						class="inline-flex items-center gap-1 px-3 py-1 rounded bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold"
-						title="You hold this token — airdrop some to holders of another category"
-					>
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4">
-							<path d="M12 2v6m-3-3 3 3 3-3M5 10h14l-1.5 11h-11Z" />
-						</svg>
-						Airdrop
-					</a>
-				{/if}
+				<a
+					href={`/airdrops/new?recipient=${token.id}`}
+					class="inline-flex items-center gap-1 px-3 py-1 rounded bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold"
+					title="Airdrop a token you hold to all holders of this token"
+				>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4">
+						<path d="M12 2v6m-3-3 3 3 3-3M5 10h14l-1.5 11h-11Z" />
+					</svg>
+					Airdrop to holders
+				</a>
 				<span class="px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-xs font-medium">
 					{token.tokenType}
 				</span>
@@ -701,6 +700,15 @@
 					title={`Ranked #${data.tvlRank} by Cauldron pool TVL across all listed tokens. Other venues (Fex, Tapswap) are not factored in. Click to view the directory sorted by TVL.`}
 				>
 					🏆 #{data.tvlRank} by Cauldron TVL
+				</a>
+			{/if}
+			{#if data.holdersRank != null}
+				<a
+					href="/?sort=holders"
+					class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700"
+					title={`Ranked #${data.holdersRank} by distinct on-chain holders across all non-moderated CashTokens. Exchange covenants count as a single holder, so actively-traded tokens may be slightly understated. Click to view the directory sorted by holders.`}
+				>
+					👥 #{data.holdersRank} by Holders
 				</a>
 			{/if}
 			{#if data.cauldronTvlSharePct != null && data.cauldronTvlSharePct >= 10}
