@@ -141,7 +141,7 @@
 					title="Panmoni is a Web3 product studio"
 					class="gradient-link tracking-wider font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#00abda] to-[#1476ff]"
 				>Panmoni</a>
-				project. · v{version} (beta) · Prices in USD
+				project. · v{version} (alpha) · Prices in USD
 			</p>
 		</div>
 
@@ -156,6 +156,16 @@
 			not invest money that you cannot afford to lose. This website is for informational purposes
 			only and is not intended to provide specific financial, investment, tax, legal, accounting
 			or other advice.
+		</p>
+		<p class="text-xs leading-relaxed mt-3 ts-text-muted">
+			<strong class="ts-text-strong">Alpha tooling:</strong>
+			the <a href="/mint" class="underline hover:text-violet-600">mint</a> and
+			<a href="/airdrops/new" class="underline hover:text-violet-600">airdrop</a>
+			tools build and broadcast real BCH transactions through code that has not been independently
+			audited. They are alpha software, untested at scale, and provided as-is. Use them at your own
+			risk; test with a low-stakes wallet first; verify every output in your wallet's pre-sign
+			review. See the <a href="/terms#tools-alpha" class="underline hover:text-violet-600">Terms</a>
+			for the full disclaimer.
 		</p>
 	</div>
 </footer>

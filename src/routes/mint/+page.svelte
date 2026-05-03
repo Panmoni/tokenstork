@@ -392,12 +392,25 @@
 	<div class="mb-8">
 		<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent">
 			Mint a CashToken
+			<span
+				class="align-middle ml-2 px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300"
+			>ALPHA</span>
 		</h1>
 		<p class="mt-2 max-w-2xl ts-text-muted">
 			Create your own fungible token, NFT, or hybrid on the Bitcoin Cash chain. Walk through the
 			six-step wizard, sign the genesis transaction with your wallet, and your category appears
 			on the directory within minutes.
 		</p>
+		<div
+			class="mt-4 max-w-2xl px-4 py-3 rounded-lg border bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/40 text-sm text-amber-800 dark:text-amber-200"
+			role="note"
+		>
+			<strong>Alpha tooling — use at your own risk.</strong> Minting builds and broadcasts a real
+			BCH transaction. Construction is libauth-direct and untested at scale; the operator makes
+			no warranty as to correctness. Test with a low-stakes wallet first, verify every output in
+			your wallet's pre-sign review, and accept that bugs are possible. See the
+			<a href="/terms#tools-alpha" class="underline">Terms</a> for the full disclaimer.
+		</div>
 	</div>
 
 	{#if data.unauthenticated}

@@ -2,7 +2,7 @@
 	// Edit `lastUpdated` whenever the substantive terms change. Anchor IDs are
 	// part of the public URL contract — external links (and the /tos legacy
 	// redirect) depend on them, so don't rename without updating callers.
-	const lastUpdated = '26 Apr 2026';
+	const lastUpdated = '3 May 2026';
 
 	// Each section's body is a list of structured blocks so the page reads as
 	// a scannable document rather than a wall of text. Block kinds:
@@ -156,8 +156,37 @@
 			]
 		},
 		{
+			id: 'tools-alpha',
+			title: '9. Alpha Tooling — Use at Your Own Risk',
+			body: [
+				{
+					kind: 'lead',
+					label: 'On-chain tooling is alpha software.',
+					text: `The website's interactive tools that construct and broadcast Bitcoin Cash transactions on your behalf — including the CashToken minting wizard at /mint and the airdrop wizard at /airdrops/new — are alpha software. They have not been independently audited. They are untested at scale. They are provided "as is", with all faults, and your use of them is entirely at your own risk.`
+				},
+				{
+					kind: 'p',
+					text: `These tools build raw transaction hex against your wallet's UTXO set, ask your wallet to sign, and forward the signed transaction to the Bitcoin Cash network. The website never holds your private keys, but the construction logic that decides which UTXOs to spend, what amounts to send, what change to return, and what fees to pay is software that may contain bugs.`
+				},
+				{
+					kind: 'lead',
+					label: 'Possible failure modes you accept.',
+					text: `By using these tools, you acknowledge and accept that bugs in the construction code, in the underlying libauth library, in our local Bitcoin Cash node, in our local BlockBook indexer, in the relay network, in your wallet's signing implementation, or in your own input could result in any of the following: loss of all or part of the tokens or BCH you intended to send; broadcast of transactions to recipients you did not intend; partial completion of multi-transaction airdrops with no automatic recovery; revelation of your sender wallet to every recipient via the on-chain transaction inputs; permanent inability to spend any token UTXO created by these tools.`
+				},
+				{
+					kind: 'p',
+					text: `You are solely responsible for the consequences of operating these tools. We strongly recommend testing every flow with a low-stakes wallet and a small recipient set before committing larger value. Always verify every output address and amount in your wallet's pre-sign review before approving the signature — the wallet's review is the last opportunity to catch a malformed transaction. If anything looks wrong, refuse to sign.`
+				},
+				{
+					kind: 'lead',
+					label: 'No warranty against bugs.',
+					text: `We make no warranty, express or implied, that these tools are free from defects, that they will operate without interruption, that they will produce correct results, or that they are fit for any particular purpose. We disclaim all liability for any loss arising out of or related to their use, to the fullest extent permitted by applicable law, as further set forth in Sections 8 and 10 of these Terms.`
+				}
+			]
+		},
+		{
 			id: 'liability',
-			title: '9. Limitation of Liability',
+			title: '10. Limitation of Liability',
 			body: [
 				{
 					kind: 'p',
@@ -171,7 +200,7 @@
 		},
 		{
 			id: 'indemnification',
-			title: '10. Indemnification',
+			title: '11. Indemnification',
 			body: [
 				{
 					kind: 'p',
@@ -189,7 +218,7 @@
 		},
 		{
 			id: 'termination',
-			title: '11. Termination',
+			title: '12. Termination',
 			body: [
 				{
 					kind: 'p',
@@ -203,7 +232,7 @@
 		},
 		{
 			id: 'changes',
-			title: '12. Changes to These Terms',
+			title: '13. Changes to These Terms',
 			body: [
 				{
 					kind: 'p',
@@ -217,7 +246,7 @@
 		},
 		{
 			id: 'governing-law',
-			title: '13. Governing Law and Disputes',
+			title: '14. Governing Law and Disputes',
 			body: [
 				{
 					kind: 'p',
@@ -236,7 +265,7 @@
 		},
 		{
 			id: 'miscellaneous',
-			title: '14. Miscellaneous',
+			title: '15. Miscellaneous',
 			body: [
 				{
 					kind: 'list',
@@ -251,7 +280,7 @@
 		},
 		{
 			id: 'contact',
-			title: '15. Contact',
+			title: '16. Contact',
 			body: [
 				{
 					kind: 'p',
