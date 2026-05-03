@@ -1,9 +1,9 @@
 {
   "name": "tokenstork",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@10.33.0",
+  "packageManager": "pnpm@10.33.2+sha512.a90faf6feeab71ad6c6e57f94e0fe1a12f5dcc22cd754db40ae9593eb6a3e0b6b12e3540218bb37ae083404b1f2ce6db2a4121e979829b4aff94b99f49da1cf8",
   "engines": {
     "node": ">=22.0.0",
     "pnpm": ">=10.0.0"
@@ -45,7 +45,6 @@
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.6.0",
     "better-sqlite3": "^12.9.0",
-    "electrum-cash": "^3.2.0",
     "svelte": "^5.55.4",
     "svelte-check": "^4.4.6",
     "tsx": "^4.21.0",
