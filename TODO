@@ -4,7 +4,11 @@ docs/cashtoken-index-plan.md
 
 1. Operational hardening
 2. Long-horizon charts on the token detail page
-3. Airdrop button on token detail pages
+3. ~~Airdrop button on token detail pages~~ (shipped 2026-05-03)
+   - Standalone /airdrops page (CSV / paste-many address list)
+   - Set-algebra recipient builder (union / intersect / exclude)
+   - Block-height holder snapshots + DEX-pool unwrapping
+   - WalletConnect v2 direct-sign in-page (currently paste-signed-hex)
 4. Token claim / management
 5. One-click "submit to TokenStork BCMR registry" (replacement for OTR mirror)
 6. BCMR support workflow for existing-but-unregistered tokens
@@ -19,6 +23,12 @@ docs/cashtoken-index-plan.md
 ## Operator (carson)
 
 - test minting page, all 3 modes
+
+- smoke-test the airdrop wizard end-to-end on mainnet with the operator
+  wallet: pick a low-stakes test category, 5-10 holders, sign-and-broadcast,
+  confirm recipients show up in token_holders after the next sync-enrich
+  tick. Confirm the multi-tx case too — pick a 600+ holder category and
+  verify chunk K+1 builds against fresh BlockBook UTXOs after K confirms.
 
 - Pick `REPORT_WEBHOOK_URL` (Discord / ntfy / TG bot) + add to
   `/etc/tokenstork/env`; redeploy. Optional `REPORT_WEBHOOK_SECRET`.

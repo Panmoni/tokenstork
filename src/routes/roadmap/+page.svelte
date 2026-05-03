@@ -7,7 +7,7 @@
 </svelte:head>
 
 <script lang="ts">
-	// Roadmap items. `status` drives the icon + color. Last updated 2026-05-02
+	// Roadmap items. `status` drives the icon + color. Last updated 2026-05-03
 	// (post-CSV-export + history-endpoint ship) — if anything drifts by more than a quarter, come
 	// back and groom. The original roadmap had a version-number scheme
 	// (0.0.3, 0.0.4, …) that turned out to be ambitious vaporware; we now
@@ -178,6 +178,17 @@
 				'New /api/tokens/<cat>/history endpoint returning full price + TVL history for one category, with optional ?venue= and ?from=&to= time-window filters; CSV form too.',
 				'Per-IP rate limit (30 req/min) on the CSV branches, paired with a CDN-cacheable s-maxage so a hostile scraper bounces off Cloudflare. 429 responses carry an RFC 7231 Retry-After header.'
 			]
+		},
+		{
+			title: 'Airdrop button — send tokens to all holders of another token',
+			status: 'done',
+			bullets: [
+				'"Airdrop" CTA on /token/<category> visible only when the authenticated wallet holds that token (FT balance OR NFT count > 0).',
+				'5-step wizard at /airdrops/new: pick source → recipient token → equal-or-weighted split → review → sign each chunk\'s tx in your wallet (paste-signed-hex). Up to 600 recipients per chunk; bigger sets fan out across multiple sequential signatures.',
+				'Server-side libauth-direct tx construction — no third-party tx libraries; sender\'s UTXOs fetched from local BlockBook (mempool-inclusive so chunk K+1 sees chunk K\'s change UTXO before confirmation).',
+				'Failure-resilient per-chunk state machine: a wallet-rejection on chunk K leaves chunks 1..K-1 intact on-chain; you retry from K via the receipt page.',
+				'Privacy disclosure on every wizard step (the airdrop tx reveals your wallet to every recipient via tx-input). Holder-snapshot freshness re-checked at every broadcast — if sync-enrich advances mid-airdrop, remaining chunks halt with a "redraft" prompt.'
+			]
 		}
 	];
 
@@ -192,13 +203,13 @@
 			]
 		},
 		{
-			title: 'Airdrop tools',
+			title: 'Airdrop tools — follow-ups',
 			status: 'planned',
 			bullets: [
-				'One-click "Airdrop" button on token detail pages — split your tokens equally (or by holder weight) across all holders of another token.',
 				'Standalone airdrop page — paste/import any address list (manual entry, paste-many, CSV) and airdrop a chosen token to all of them in one tx.',
 				'Set-algebra recipient builder: union / intersect / exclude across multiple categories + blocklists + watchlists.',
-				'Block-height snapshots ("holders as of block 950,000") + multi-venue DEX-pool unwrapping so LP contracts don\'t eat budget meant for real holders.'
+				'Block-height snapshots ("holders as of block 950,000") + multi-venue DEX-pool unwrapping so LP contracts don\'t eat budget meant for real holders.',
+				'WalletConnect v2 direct-sign in-page (currently paste-signed-hex matching /mint).'
 			]
 		},
 		{

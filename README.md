@@ -50,13 +50,19 @@ src/                       SvelteKit app (Svelte 5 + Node adapter).
     token/[category]/      Per-category detail page with holders + venues + BCMR.
     moderated/             Public list of categories filtered out of the directory.
     stats/                 Ecosystem dashboard (counts, growth, venue overlap).
+    airdrops/              Wallet-tied airdrop wizard + history + receipt pages.
     learn/ faq/ roadmap/ about/ tos/   Static pages.
-    api/tokens/            Directory + per-category holders/nfts/history/report endpoints (JSON + CSV).
+    api/tokens/            Directory + per-category holders/nfts/history/eligibility/recipientPreview/report endpoints (JSON + CSV).
+    api/airdrops/          Draft + per-chunk broadcast + status endpoints for the airdrop flow.
     api/bchPrice/          BCH spot price proxy (CryptoCompare).
   lib/
+    airdrop/               Browser + shared helpers: distribute (equal/weighted BigInt), connector (WC2, scaffolded for v2).
     components/            Svelte 5 components (TokenGrid, MetricsBar, Sparkline, …).
     server/db.ts           pg pool + hex ↔ BYTEA helpers.
     server/external.ts     BCMR + Cauldron clients (timed, hex-validated).
+    server/airdrops.ts     Airdrop persistence + eligibility helpers.
+    server/airdropBuilder.ts  Server-side libauth-direct multi-output token tx builder.
+    server/walletUtxos.ts  Sender UTXO fetcher (BlockBook-backed, mempool-inclusive).
     venues.ts              Single source of truth for the {cauldron, tapswap, fex} venues.
     moderation.ts          NOT_MODERATED_CLAUSE shared across every read path.
     types.ts               TokenApiRow + venue listing shapes.
@@ -96,6 +102,12 @@ Venue + market tables:
 - **`token_moderation`** — keyed by `category`; `reason` (public) + `moderator_note` (operator-private) + `hidden_at`. Categories present in this table 410 from `/token/[hex]` and are filtered from every read path via `NOT_MODERATED_CLAUSE` in `src/lib/moderation.ts`.
 - **`token_reports`** — incoming user reports against problematic tokens. Triaged by hand into `token_moderation` decisions.
 
+Airdrop tables (sender = authenticated wallet; one row per draft, per chunked tx, per recipient):
+
+- **`airdrops`** — `id UUID PK`, `sender_cashaddr` (FK → `users`), source + recipient `BYTEA` categories, `mode IN ('equal','weighted')`, `total_amount NUMERIC(78,0)`, `output_value_sats` (per-recipient BCH dust, 546-2000 with default 800), `holders_snapshot_at` (the `MAX(token_holders.snapshot_at)` for the recipient category at draft time — re-checked at every broadcast and halts remaining chunks if `sync-enrich` advanced mid-airdrop), `state IN ('drafting','signing','broadcasting','complete','failed','partial')`, `tx_count`. Partial unique index `airdrops_one_drafting_per_sender_idx` on `(sender_cashaddr) WHERE state IN ('drafting','signing')` blocks double-drafts from the same wallet.
+- **`airdrop_txs`** — one row per chunk (≤ 600 recipients); `(airdrop_id, tx_index)` PK, `txid BYTEA` populated after broadcast, `state IN ('pending','signed','broadcast','failed')`, `fail_reason TEXT` for BCHN error echoes.
+- **`airdrop_outputs`** — one row per recipient; `(airdrop_id, recipient_cashaddr)` PK, `amount NUMERIC(78,0)` in source-token base units, `tx_index` (which chunk pays this recipient), `vout_index` (which output of that tx). Bare-form cashaddrs to match `token_holders.address`.
+
 Two design decisions worth calling out:
 
 - `category` and `genesis_txid` are stored as raw `BYTEA`, not hex text — half the storage, faster comparisons. Hex encoding happens at the API boundary in [src/lib/server/db.ts](src/lib/server/db.ts).
@@ -120,11 +132,16 @@ All endpoints return JSON by default. Response shapes are stable.
 | `GET /api/tokens/[category]/nfts` | NFT instances in a category. |
 | `GET /api/tokens/[category]/history` | Per-category price + TVL history from `token_price_history`, oldest-first. Optional `?venue=cauldron\|fex` and `?from=<unix-seconds>&to=<unix-seconds>` filters. Add `?format=csv` for the CSV form. |
 | `POST /api/tokens/[category]/report` | Submit a user report for moderation review. Rate-limited; webhook-alerts the operator. |
+| `GET /api/tokens/[category]/eligibility` | Auth-gated. Returns the authenticated cashaddr's holding of this category (FT balance + NFT count + BCMR display fields), or 410 if they don't hold any. Drives the airdrop wizard's source-token preview. |
+| `GET /api/tokens/[category]/recipientPreview` | Public. Returns holder count + display name + latest `token_holders.snapshot_at` for a category. Drives the airdrop wizard's recipient-token preview. |
+| `POST /api/airdrops` | Auth-gated, rate-limited (1 draft / 15 min / cashaddr). Creates an airdrop draft and returns the first chunk's unsigned hex. Body: `{sourceCategory, recipientCategory, mode: 'equal'\|'weighted', totalAmount, outputValueSats?}`. |
+| `POST /api/airdrops/[id]/broadcast` | Auth-gated, ownership-checked. Body: `{txIndex, signedHex}`. Forwards to BCHN's `sendrawtransaction`, updates per-tx + per-recipient state, re-checks holder snapshot freshness, and rebuilds the next chunk's unsigned hex against fresh BlockBook UTXOs. |
+| `GET /api/airdrops/[id]` | Auth-gated, ownership-checked. Receipt payload: parent airdrop record + per-chunk tx state + per-recipient outputs. |
 | `GET /api/bchPrice` | BCH spot price (CryptoCompare, cached). |
 
 CSV-emitting endpoints share a per-IP rate limit (30 requests / minute, in-memory, per process) and a CDN-cacheable response (`s-maxage=300`) so a hostile scraper bounces off Cloudflare instead of our origin. The 429 response carries an RFC 7231 `Retry-After` header.
 
-Page routes (`/`, `/token/[category]`, `/stats`, `/moderated`, `/learn`, `/faq`, `/roadmap`, `/about`, `/tos`) all render server-side from Postgres on every request — no client-side hydration of the data. The BCH price + theme switcher are the only client-state pieces.
+Page routes (`/`, `/token/[category]`, `/stats`, `/moderated`, `/airdrops`, `/airdrops/new`, `/airdrops/[id]`, `/learn`, `/faq`, `/roadmap`, `/about`, `/tos`) all render server-side from Postgres on every request — no client-side hydration of the data. The airdrop wizard at `/airdrops/new` is auth-gated; the BCH price + theme switcher are the only client-state pieces shared across the rest of the site.
 
 ---
 
@@ -157,8 +174,10 @@ cd workers && cargo build --release
 |---|---|---|
 | `DATABASE_URL` | yes | Postgres connection string. Unix-socket form works: `postgres:///tokenstork`. |
 | `CRYPTO_COMPARE_KEY` | no | Unlocks `/api/bchPrice`; returns `null` when absent. |
-| `BCHN_RPC_URL`, `BCHN_RPC_AUTH`, `BCHN_ZMQ_URL` | worker-only | Needed by `workers/`; not by the app. |
-| `BLOCKBOOK_URL` | worker-only | Needed by the enrich + verify workers. |
+| `BCHN_RPC_URL`, `BCHN_RPC_AUTH` | required for mint + airdrop broadcast | The app forwards signed txs to BCHN's `sendrawtransaction`. Default URL `http://127.0.0.1:8332`. Without these, `/mint` and `/airdrops/new` still load but signed-tx broadcast 503's. |
+| `BCHN_ZMQ_URL` | worker-only | Needed by `workers/sync-tail`; not by the app. |
+| `BLOCKBOOK_URL` | required for airdrop wizard + worker | The airdrop builder fetches the sender's UTXOs from BlockBook (mempool-inclusive — chunk-chaining needs unconfirmed UTXOs visible). Also used by `sync-enrich` + `sync-verify` workers. Default `http://127.0.0.1:9131`. |
+| `PUBLIC_WALLETCONNECT_PROJECT_ID` | optional | WalletConnect v2 project id for the wallet-login + (future) airdrop direct-sign flows. The paste-signed-hex fallback works without it. |
 | `CAULDRON_URL`, `CAULDRON_MAX_RPS`, `CAULDRON_MODE` | worker-only | Cauldron client knobs; `CAULDRON_MODE=fast` selects the 10-min listed-set refresh path. |
 | `TOKENSTORK_REPORT_WEBHOOK` | optional | Operator webhook hit on each `/api/tokens/[category]/report` POST. |
 
@@ -226,7 +245,8 @@ How quickly each kind of data on the site reflects on-chain reality. Same inform
 | **Tapswap listing transitions `open → taken / cancelled`** | `sync-tail` (ZMQ-driven, Pass 3) | sub-second | Detects the spending transaction's contract input + classifies by inspecting `vout[0]`'s recipient PKH. |
 | **Cross-venue spreads on `/arbitrage`** | derived from the above on every page render | matches whichever underlying source is freshest | Pure SQL CTE; no separate worker. |
 | **Sparkline + 1h / 24h / 7d % change columns** | `token_price_history` (one row per `sync-cauldron` fetch) | accumulates 6 points / day / token | Sparklines need ~7 days of history to fully populate; first hours after deploy show partial data. |
-| **Holders / NFT instances / fully-burned flag / Gini distribution score** | `sync-enrich` (6 h timer) | 0-6 h | Holder counts surface on the directory grid; the per-category detail page renders a top-holders table sorted numerically with a %-of-supply column, plus a Gini coefficient + 5-tier badge (Excellent / Good / Fair / Poor / Whale-controlled). `/stats` shows the directory-wide median Gini + a per-tier histogram. |
+| **Holders / NFT instances / fully-burned flag / Gini distribution score** | `sync-enrich` (6 h timer) | 0-6 h | Holder counts surface on the directory grid; the per-category detail page renders a top-holders table sorted numerically with a %-of-supply column, plus a Gini coefficient + 5-tier badge (Excellent / Good / Fair / Poor / Whale-controlled). `/stats` shows the directory-wide median Gini + a per-tier histogram. The airdrop wizard's recipient-set preview reads from the same data. |
+| **Airdrop draft + per-chunk broadcast** | wizard at `/airdrops/new` (built on demand, no worker) | sub-second per chunk | Each chunk's unsigned tx is built server-side via libauth-direct (no third-party tx libraries) against a freshly-fetched BlockBook UTXO snapshot. Sender pastes the signed hex back; broadcast forwards to local BCHN's `sendrawtransaction`. Holder freshness is re-checked at every chunk — if `sync-enrich` advances mid-airdrop the wizard halts remaining chunks and surfaces a "redraft" prompt. |
 
 **BCH spot price** (the `$X.XX` in the header) is fetched from CryptoCompare on each request, cached at the SvelteKit-app process level for ~60 seconds. Independent of the indexer pipeline.
 

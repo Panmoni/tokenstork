@@ -44,8 +44,14 @@ Optional environment variables (all read by the app; all safe to leave unset):
 
 - `CRYPTO_COMPARE_KEY` — unlocks `/api/bchPrice`.
 - `FEAR_AND_GREED_API_KEY` — unlocks `/api/fearAndGreed`.
+- `PUBLIC_WALLETCONNECT_PROJECT_ID` — required for the wallet-login + airdrop wizard's WalletConnect v2 flow. Get one from <https://cloud.walletconnect.com>; the app falls back to the paste-signed-hex flow if absent, which is fine for non-airdrop development.
 
-For worker development you will additionally need `BCHN_RPC_URL`, `BCHN_ZMQ_URL`, and `BLOCKBOOK_URL`.
+The airdrop wizard + mint broadcast paths additionally need a reachable BCH node + BlockBook indexer:
+
+- `BCHN_RPC_URL` (default `http://127.0.0.1:8332`) + `BCHN_RPC_AUTH` (`user:password`) — used by `/api/mint/broadcast` and `/api/airdrops/[id]/broadcast` to forward signed txs to BCHN's `sendrawtransaction`.
+- `BLOCKBOOK_URL` (default `http://127.0.0.1:9131`) — used by the airdrop builder (`src/lib/server/walletUtxos.ts`) to fetch the sender's UTXO set. The default response includes mempool, which is required for chunk-chaining. If you point at a different BlockBook deployment, verify it returns mempool entries.
+
+For worker development (the Rust `workers/` crate) you will additionally need `BCHN_ZMQ_URL` and the same `BCHN_RPC_*` + `BLOCKBOOK_URL` values.
 
 ---
 

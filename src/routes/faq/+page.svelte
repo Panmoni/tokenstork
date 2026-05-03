@@ -565,6 +565,46 @@
 			</div>
 		</details>
 
+		<details id="faq-airdrops" class="group p-5 rounded-xl border scroll-mt-20 ts-border-subtle ts-surface-panel">
+			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
+				<span>How do airdrops work?</span>
+				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
+			</summary>
+			<div class="mt-3 space-y-2 ts-text-body">
+				<p>
+					Sign in with your wallet, navigate to a token you hold (any FT balance or NFT
+					counts), and click <strong>Airdrop</strong> on the token detail page. Pick a
+					recipient token — the wizard will airdrop your token to every wallet that
+					currently holds the recipient token.
+				</p>
+				<p>
+					Two split modes. <em>Equal</em> divides your total amount evenly across all
+					recipients (truncation residue stays with you). <em>Weighted</em> sends each
+					recipient a share proportional to their balance + NFT count of the recipient
+					token. Sender's own wallet is always filtered out of the recipient list.
+				</p>
+				<p>
+					Recipient lists come from our local <code>token_holders</code> snapshot
+					(refreshed every 6 h by the enrich worker), so a brand-new token minted in the
+					last few hours may not have all its holders indexed yet. The wizard surfaces
+					the snapshot timestamp so you can decide whether to wait.
+				</p>
+				<p>
+					Big airdrops are split into chunks of up to 600 recipients per transaction.
+					Your wallet signs each chunk in sequence (paste the signed hex back into the
+					wizard); a wallet rejection on chunk K leaves earlier chunks intact and lets
+					you retry K from the receipt page. If our holder snapshot advances mid-airdrop
+					(an enrich tick fires), remaining chunks halt with a "redraft" prompt rather
+					than send to a possibly-stale set.
+				</p>
+				<p>
+					<strong>Privacy heads-up:</strong> like every UTXO transaction, an airdrop
+					reveals your sender wallet to every recipient via the tx-input. Your wallet's
+					public key hash is visible in any block explorer.
+				</p>
+			</div>
+		</details>
+
 		<details class="group p-5 rounded-xl border ts-border-subtle ts-surface-panel">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
 				<span>Is TokenStork open source?</span>
