@@ -94,7 +94,7 @@ const VALID_SORTS: Record<string, string> = {
 	// the top); unlisted tokens sink to the bottom via NULLS LAST.
 	tvl: `vl_cauldron.tvl_satoshis DESC NULLS LAST, ${NAME_QUALITY}, ${NAME_SORTABLE} ASC NULLS LAST`,
 	recent: 't.genesis_block DESC, t.first_seen_at DESC',
-	oldest: 't.genesis_block ASC, t.first_seen_at ASC',
+	oldest: 't.genesis_block ASC, t.category ASC',
 	// Vote-driven sorts — ranked by WEIGHTED hot scores from `vw`, not
 	// raw counts. Each vote contributes voter_weight × time_decay
 	// (log₂(tenure_days+2) × 0.5^(age_days/7)); a fresh vote from a

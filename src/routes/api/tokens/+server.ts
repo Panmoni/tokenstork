@@ -159,7 +159,7 @@ const VALID_SORTS: Record<string, string> = {
 	supply: 's.current_supply DESC NULLS LAST, m.name ASC NULLS LAST',
 	holders: 's.holder_count DESC NULLS LAST, m.name ASC NULLS LAST',
 	recent: 't.genesis_block DESC, t.first_seen_at DESC',
-	oldest: 't.genesis_block ASC, t.first_seen_at ASC'
+	oldest: 't.genesis_block ASC, t.category ASC'
 };
 
 export const GET: RequestHandler = async ({ url, request, getClientAddress, setHeaders }) => {

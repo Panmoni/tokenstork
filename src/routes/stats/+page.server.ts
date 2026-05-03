@@ -500,9 +500,14 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 				    AND ${NOT_MODERATED_CLAUSE}`
 			),
 			// First 10 created categories — earliest tokens by on-chain
-			// genesis ordering. Ordered by genesis_block (and first_seen_at
-			// as a tiebreaker for tokens minted in the same block) to match
-			// the `?sort=oldest` option on the directory.
+			// genesis ordering. Ordered by genesis_block, with category ASC
+			// as the within-block tiebreaker to match BCH's CTOR (canonical
+			// transaction order = sort by txid lexicographically). Block
+			// 792,773 minted 28 categories simultaneously, so the tiebreaker
+			// matters; category ASC keeps this list aligned with the
+			// "First / Second / ... / Tenth CashToken Ever" badge ranks
+			// computed in $lib/server/firstN.ts and with `?sort=oldest` on
+			// the directory.
 			query<{
 				category: Buffer;
 				name: string | null;
@@ -524,7 +529,7 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 				          ON imo.content_hash = ius.content_hash
 				         AND imo.state = 'cleared'
 				  WHERE ${NOT_MODERATED_CLAUSE}
-				  ORDER BY t.genesis_block ASC, t.first_seen_at ASC
+				  ORDER BY t.genesis_block ASC, t.category ASC
 				  LIMIT 10`
 			)
 		]),
