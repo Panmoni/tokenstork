@@ -34,6 +34,7 @@
 			href: '/mint',
 			children: [
 				{ name: 'Mint', href: '/mint', description: 'Create a new CashTokens genesis' },
+				{ name: 'Airdrop', href: '/airdrops/new', description: 'Send tokens to all holders of another token' },
 				{ name: 'Arbitrage', href: '/arbitrage', description: 'Cross-venue price gaps' }
 			]
 		},

@@ -14,19 +14,41 @@
 	// /api/airdrops endpoint; the browser only signs + posts.
 
 	import { goto } from '$app/navigation';
+	import { iconHrefFor } from '$lib/icons';
 
 	let { data } = $props();
+	type MyToken = (typeof data.myTokens)[number];
+	type SearchHit = {
+		categoryHex: string;
+		tokenType: 'FT' | 'NFT' | 'FT+NFT';
+		name: string | null;
+		symbol: string | null;
+		decimals: number;
+		iconUri: string | null;
+		iconClearedHash: string | null;
+		holderCount: number | null;
+	};
 
 	type Step = 1 | 2 | 3 | 4 | 5;
-	// Initial-only reads of data.preselectedSource are intentional — the
-	// SvelteKit load runs once on mount and we don't navigate inside the
-	// wizard. Wrapping in $derived would tear when the user types a new
-	// hex into step 1's input. Reading via a function call ducks the
-	// svelte-check warning.
+	// Initial-only reads of data — the SvelteKit load runs once on
+	// mount and we don't navigate inside the wizard. Wrapped in
+	// helper functions to satisfy svelte-check's "did you mean a
+	// derived?" warning.
 	function initialSource() {
 		return data.preselectedSource;
 	}
-	let step = $state<Step>(initialSource() ? 2 : 1);
+	function initialRecipient() {
+		return data.preselectedRecipient;
+	}
+	// Starting step:
+	//   - both preselected → 3 (skip both pickers)
+	//   - source only      → 2 (recipient picker)
+	//   - recipient only   → 1 (source picker — most common, from the
+	//                            "Airdrop to holders" CTA)
+	//   - neither          → 1
+	let step = $state<Step>(
+		initialSource() && initialRecipient() ? 3 : initialSource() ? 2 : 1
+	);
 
 	// Step 1: source token (the one being airdropped).
 	let sourceCategoryHex = $state(initialSource()?.categoryHex ?? '');
@@ -36,12 +58,20 @@
 	let sourceBalanceBaseUnits = $state(initialSource()?.balance ?? '0');
 	let sourceLookupError = $state<string | null>(null);
 
-	// Step 2: recipient token (whose holders receive).
-	let recipientCategoryHex = $state('');
-	let recipientName = $state<string | null>(null);
-	let recipientHolderCount = $state<number | null>(null);
+	// Step 2: recipient token (whose holders receive). Pre-filled when
+	// the user arrived from a /token/<hex> "Airdrop to holders" CTA;
+	// otherwise filled by the search-bar typeahead.
+	let recipientCategoryHex = $state(initialRecipient()?.categoryHex ?? '');
+	let recipientName = $state<string | null>(initialRecipient()?.name ?? null);
+	let recipientSymbol = $state<string | null>(initialRecipient()?.symbol ?? null);
+	let recipientHolderCount = $state<number | null>(
+		initialRecipient()?.holderCount ?? null
+	);
 	let recipientLookupError = $state<string | null>(null);
-	let recipientLookupBusy = $state(false);
+	let recipientSearchTerm = $state('');
+	let recipientSearchHits = $state<SearchHit[]>([]);
+	let recipientSearchBusy = $state(false);
+	let recipientSearchDebounce: ReturnType<typeof setTimeout> | null = null;
 
 	// Step 3: amount + split mode.
 	let mode = $state<'equal' | 'weighted'>('equal');
@@ -94,53 +124,62 @@
 		return frac.length === 0 ? whole : `${whole}.${frac}`;
 	}
 
-	async function lookupSource() {
+	function pickSource(t: MyToken) {
 		sourceLookupError = null;
-		const hex = sourceCategoryHex.trim().toLowerCase();
-		if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
-			sourceLookupError = 'Category must be 64 hex chars.';
-			return;
-		}
-		try {
-			const res = await fetch(`/api/tokens/${hex}/eligibility`);
-			if (res.status === 410) {
-				sourceLookupError = "You don't currently hold this token; airdrop unavailable.";
-				return;
-			}
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			const body = await res.json();
-			sourceName = body.name;
-			sourceSymbol = body.symbol;
-			sourceDecimals = body.decimals ?? 0;
-			sourceBalanceBaseUnits = body.balance;
-			sourceCategoryHex = hex;
-			step = 2;
-		} catch (err) {
-			sourceLookupError = (err as Error).message;
-		}
+		sourceCategoryHex = t.categoryHex;
+		sourceName = t.name;
+		sourceSymbol = t.symbol;
+		sourceDecimals = t.decimals;
+		sourceBalanceBaseUnits = t.balance;
+		// If recipient is already pre-selected (came from a /token/<hex>
+		// "Airdrop to holders" CTA), skip step 2 entirely and land on
+		// the amount-picker.
+		step = recipientCategoryHex ? 3 : 2;
 	}
 
-	async function lookupRecipient() {
+	function pickRecipient(hit: SearchHit) {
 		recipientLookupError = null;
-		recipientLookupBusy = true;
-		const hex = recipientCategoryHex.trim().toLowerCase();
-		if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
-			recipientLookupError = 'Category must be 64 hex chars.';
-			recipientLookupBusy = false;
+		recipientCategoryHex = hit.categoryHex;
+		recipientName = hit.name;
+		recipientSymbol = hit.symbol;
+		recipientHolderCount = hit.holderCount ?? null;
+		recipientSearchHits = [];
+		recipientSearchTerm = hit.symbol ?? hit.name ?? hit.categoryHex.slice(0, 16) + '…';
+	}
+
+	function onRecipientSearchInput(value: string) {
+		recipientSearchTerm = value;
+		// Clearing the box also clears the previous selection.
+		if (value.trim().length === 0) {
+			recipientCategoryHex = '';
+			recipientName = null;
+			recipientSymbol = null;
+			recipientHolderCount = null;
+			recipientSearchHits = [];
 			return;
 		}
-		try {
-			const res = await fetch(`/api/tokens/${hex}/recipientPreview`);
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			const body = await res.json();
-			recipientName = body.name ?? null;
-			recipientHolderCount = body.holderCount ?? 0;
-			recipientCategoryHex = hex;
-		} catch (err) {
-			recipientLookupError = (err as Error).message;
-		} finally {
-			recipientLookupBusy = false;
-		}
+		if (recipientSearchDebounce) clearTimeout(recipientSearchDebounce);
+		recipientSearchDebounce = setTimeout(async () => {
+			const term = value.trim();
+			if (term.length < 2) {
+				recipientSearchHits = [];
+				return;
+			}
+			recipientSearchBusy = true;
+			try {
+				const res = await fetch(
+					`/api/tokens/search?q=${encodeURIComponent(term)}`
+				);
+				if (!res.ok) throw new Error(`HTTP ${res.status}`);
+				const body = await res.json();
+				recipientSearchHits = body.tokens ?? [];
+			} catch (err) {
+				recipientLookupError = (err as Error).message;
+				recipientSearchHits = [];
+			} finally {
+				recipientSearchBusy = false;
+			}
+		}, 250);
 	}
 
 	async function createAirdrop() {
@@ -233,9 +272,6 @@
 <div class="max-w-3xl mx-auto px-4 py-8">
 	<h1 class="text-3xl font-bold mb-1 text-slate-900 dark:text-white">
 		Airdrop CashTokens
-		<span
-			class="align-middle ml-2 px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300"
-		>ALPHA</span>
 	</h1>
 	<p class="ts-text-muted mb-6">
 		Send tokens you hold to every wallet that holds another token. Equal split or proportional to
@@ -285,27 +321,104 @@
 		<section class="rounded-xl border ts-border-subtle p-5 ts-surface-panel">
 			<h2 class="text-lg font-semibold mb-3 ts-text-strong">1. Source token</h2>
 			<p class="text-sm ts-text-muted mb-3">Which of YOUR tokens are you airdropping?</p>
-			<label class="block text-xs font-medium ts-text-muted mb-1" for="src">Category hex</label>
-			<input
-				id="src"
-				type="text"
-				class="w-full px-3 py-2 rounded border ts-border-subtle font-mono text-sm bg-white dark:bg-zinc-900"
-				bind:value={sourceCategoryHex}
-				placeholder="64-character hex"
-			/>
-			{#if sourceLookupError}
-				<p class="mt-2 text-sm text-rose-600 dark:text-rose-400">{sourceLookupError}</p>
+
+			{#if data.myTokens.length === 0}
+				<div class="px-4 py-3 rounded-lg border ts-border-subtle text-sm ts-text-muted">
+					Your wallet doesn't currently hold any non-moderated CashTokens. Receive
+					some on this address (or wait for the next 6h enrich tick if you just
+					received a token) and come back.
+				</div>
+			{:else}
+				<p class="text-xs ts-text-muted mb-2">
+					{data.myTokens.length} category{data.myTokens.length === 1 ? '' : 's'} in your
+					wallet. Click one to airdrop:
+				</p>
+				<div class="rounded border ts-border-subtle max-h-96 overflow-y-auto">
+					<ul class="divide-y ts-border-subtle">
+						{#each data.myTokens as t (t.categoryHex)}
+							<li>
+								<button
+									type="button"
+									class="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-zinc-900/50 flex items-center gap-3"
+									onclick={() => pickSource(t)}
+								>
+									<img
+										src={iconHrefFor(t.iconUri, t.iconClearedHash)}
+										alt=""
+										class="w-7 h-7 rounded-full ts-surface-chip flex-none"
+										loading="lazy"
+									/>
+									<div class="min-w-0 flex-1">
+										<div class="text-sm font-semibold truncate">
+											{t.name ?? t.symbol ?? t.categoryHex.slice(0, 16) + '…'}
+											{#if t.symbol && t.name}<span class="ml-2 text-xs ts-text-muted font-mono">{t.symbol}</span>{/if}
+										</div>
+										<div class="text-xs ts-text-muted font-mono truncate">{t.categoryHex.slice(0, 32)}…</div>
+									</div>
+									<div class="text-right text-xs flex-none">
+										<div class="font-mono">
+											{(() => {
+												const big = BigInt(t.balance);
+												if (t.decimals === 0) return big.toLocaleString('en-US');
+												const padded = big.toString().padStart(t.decimals + 1, '0');
+												const whole = padded.slice(0, -t.decimals);
+												const frac = padded.slice(-t.decimals).replace(/0+$/, '');
+												return frac.length === 0 ? whole : `${whole}.${frac.slice(0, 4)}`;
+											})()}
+										</div>
+										<div class="ts-text-muted">
+											{t.tokenType}{t.nftCount > 0 ? ` · ${t.nftCount} NFT${t.nftCount === 1 ? '' : 's'}` : ''}
+										</div>
+									</div>
+								</button>
+							</li>
+						{/each}
+					</ul>
+				</div>
 			{/if}
-			<div class="mt-4 flex justify-end">
-				<button
-					type="button"
-					class="px-4 py-2 rounded bg-violet-600 hover:bg-violet-700 text-white font-semibold disabled:opacity-50"
-					disabled={!sourceCategoryHex.trim()}
-					onclick={lookupSource}
-				>
-					Look up →
-				</button>
-			</div>
+
+			<details class="mt-4 text-xs ts-text-muted">
+				<summary class="cursor-pointer">Or paste a category hex directly</summary>
+				<div class="mt-2 flex gap-2">
+					<input
+						type="text"
+						class="flex-1 px-3 py-2 rounded border ts-border-subtle font-mono text-sm bg-white dark:bg-zinc-900"
+						bind:value={sourceCategoryHex}
+						placeholder="64-character hex"
+					/>
+					<button
+						type="button"
+						class="px-3 py-2 rounded bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold disabled:opacity-50"
+						disabled={!/^[0-9a-fA-F]{64}$/.test(sourceCategoryHex.trim())}
+						onclick={async () => {
+							sourceLookupError = null;
+							const hex = sourceCategoryHex.trim().toLowerCase();
+							try {
+								const res = await fetch(`/api/tokens/${hex}/eligibility`);
+								if (res.status === 410) {
+									sourceLookupError = "You don't currently hold this token.";
+									return;
+								}
+								if (!res.ok) throw new Error(`HTTP ${res.status}`);
+								const body = await res.json();
+								sourceName = body.name;
+								sourceSymbol = body.symbol;
+								sourceDecimals = body.decimals ?? 0;
+								sourceBalanceBaseUnits = body.balance;
+								sourceCategoryHex = hex;
+								step = 2;
+							} catch (err) {
+								sourceLookupError = (err as Error).message;
+							}
+						}}
+					>
+						Use →
+					</button>
+				</div>
+				{#if sourceLookupError}
+					<p class="mt-2 text-rose-600 dark:text-rose-400">{sourceLookupError}</p>
+				{/if}
+			</details>
 		</section>
 	{:else if step === 2}
 		<section class="rounded-xl border ts-border-subtle p-5 ts-surface-panel">
@@ -315,32 +428,61 @@
 				· your balance: <span class="font-mono">{sourceBalanceDisplay}</span>
 			</p>
 			<p class="text-sm ts-text-muted mb-3">
-				Whose holders should receive? They'll all get a share of your tokens.
+				Whose holders should receive? Type a name, symbol, or paste a category hex.
+				They'll all get a share of your tokens.
 			</p>
-			<label class="block text-xs font-medium ts-text-muted mb-1" for="rcpt">Recipient category hex</label>
+			<label class="block text-xs font-medium ts-text-muted mb-1" for="rcpt">Search by name, symbol, or hex</label>
 			<input
 				id="rcpt"
 				type="text"
-				class="w-full px-3 py-2 rounded border ts-border-subtle font-mono text-sm bg-white dark:bg-zinc-900"
-				bind:value={recipientCategoryHex}
-				placeholder="64-character hex"
+				class="w-full px-3 py-2 rounded border ts-border-subtle text-sm bg-white dark:bg-zinc-900"
+				value={recipientSearchTerm}
+				oninput={(e) => onRecipientSearchInput((e.currentTarget as HTMLInputElement).value)}
+				placeholder="e.g. CASHEX, GRIM, 4091f9a6…"
+				autocomplete="off"
 			/>
-			<div class="mt-2 flex justify-between items-center">
-				<button
-					type="button"
-					class="px-3 py-1 rounded border ts-border-subtle text-sm"
-					onclick={lookupRecipient}
-					disabled={recipientLookupBusy}
-				>
-					{recipientLookupBusy ? 'Looking up…' : 'Preview holders'}
-				</button>
-				{#if recipientHolderCount != null}
-					<span class="text-xs ts-text-muted">
-						{recipientHolderCount.toLocaleString()} holders
-						{#if recipientName}· <span class="font-mono">{recipientName}</span>{/if}
-					</span>
-				{/if}
-			</div>
+			{#if recipientSearchBusy}
+				<p class="mt-1 text-xs ts-text-muted">Searching…</p>
+			{/if}
+			{#if recipientSearchHits.length > 0}
+				<div class="mt-2 rounded border ts-border-subtle max-h-72 overflow-y-auto">
+					<ul class="divide-y ts-border-subtle">
+						{#each recipientSearchHits as hit (hit.categoryHex)}
+							<li>
+								<button
+									type="button"
+									class="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-zinc-900/50 flex items-center gap-3"
+									onclick={() => pickRecipient(hit)}
+								>
+									<img
+										src={iconHrefFor(hit.iconUri, hit.iconClearedHash)}
+										alt=""
+										class="w-7 h-7 rounded-full ts-surface-chip flex-none"
+										loading="lazy"
+									/>
+									<div class="min-w-0 flex-1">
+										<div class="text-sm font-semibold truncate">
+											{hit.name ?? hit.symbol ?? hit.categoryHex.slice(0, 16) + '…'}
+											{#if hit.symbol && hit.name}<span class="ml-2 text-xs ts-text-muted font-mono">{hit.symbol}</span>{/if}
+										</div>
+										<div class="text-xs ts-text-muted font-mono truncate">{hit.categoryHex.slice(0, 32)}…</div>
+									</div>
+									<div class="text-right text-xs flex-none">
+										<div class="font-mono">{hit.holderCount?.toLocaleString() ?? '—'} holders</div>
+										<div class="ts-text-muted">{hit.tokenType}</div>
+									</div>
+								</button>
+							</li>
+						{/each}
+					</ul>
+				</div>
+			{/if}
+			{#if recipientCategoryHex && recipientHolderCount != null}
+				<div class="mt-3 p-3 rounded border ts-border-subtle bg-slate-50 dark:bg-zinc-900/30 text-sm">
+					Selected: <strong>{recipientName ?? recipientSymbol ?? recipientCategoryHex.slice(0, 16) + '…'}</strong>
+					· {recipientHolderCount.toLocaleString()} holders will receive
+				</div>
+			{/if}
 			{#if recipientLookupError}
 				<p class="mt-2 text-sm text-rose-600 dark:text-rose-400">{recipientLookupError}</p>
 			{/if}

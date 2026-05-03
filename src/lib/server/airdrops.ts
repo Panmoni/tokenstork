@@ -32,6 +32,81 @@ export async function isCategoryModerated(category: Buffer): Promise<boolean> {
 	return (result.rowCount ?? 0) > 0;
 }
 
+export interface MyTokenRow {
+	categoryHex: string;
+	tokenType: 'FT' | 'NFT' | 'FT+NFT';
+	name: string | null;
+	symbol: string | null;
+	decimals: number;
+	balance: string; // NUMERIC(78,0) text
+	nftCount: number;
+	iconUri: string | null;
+	iconClearedHash: string | null;
+}
+
+/** List every non-moderated category the authenticated wallet holds
+ *  (FT balance > 0 OR NFT count > 0), enriched with display fields
+ *  for the airdrop wizard's source-token dropdown. Joins through
+ *  token_metadata + the icon-safety pipeline so the dropdown can
+ *  show real names + safe icons.
+ *
+ *  Hard-capped at 200 rows — even the most-active collectors hold
+ *  far fewer than this; an unbounded SELECT would otherwise blow up
+ *  the dropdown UI for an outlier wallet. */
+export async function listMyTokens(cashaddr: string): Promise<MyTokenRow[]> {
+	const bare = stripCashaddrPrefix(cashaddr);
+	const result = await query<{
+		category: Buffer;
+		token_type: 'FT' | 'NFT' | 'FT+NFT';
+		name: string | null;
+		symbol: string | null;
+		decimals: number | null;
+		balance: string;
+		nft_count: number;
+		icon_uri: string | null;
+		icon_cleared_hash: string | null;
+	}>(
+		`SELECT t.category,
+		        t.token_type,
+		        m.name,
+		        m.symbol,
+		        m.decimals,
+		        th.balance::text AS balance,
+		        th.nft_count,
+		        m.icon_uri,
+		        encode(imo.content_hash, 'hex') AS icon_cleared_hash
+		   FROM token_holders th
+		   JOIN tokens t ON t.category = th.category
+		   LEFT JOIN token_metadata m ON m.category = t.category
+		   LEFT JOIN icon_url_scan ius ON ius.icon_uri = m.icon_uri
+		   LEFT JOIN icon_moderation imo
+		          ON imo.content_hash = ius.content_hash
+		         AND imo.state = 'cleared'
+		  WHERE th.address = $1
+		    AND (th.balance > 0 OR th.nft_count > 0)
+		    AND NOT EXISTS (
+		      SELECT 1 FROM token_moderation mod WHERE mod.category = t.category
+		    )
+		  ORDER BY th.balance DESC NULLS LAST, m.name ASC NULLS LAST
+		  LIMIT 200`,
+		[bare]
+	);
+	return result.rows.map((r) => {
+		const hex = Buffer.from(r.category).toString('hex');
+		return {
+			categoryHex: hex,
+			tokenType: r.token_type,
+			name: r.name,
+			symbol: r.symbol,
+			decimals: r.decimals ?? 0,
+			balance: r.balance,
+			nftCount: r.nft_count,
+			iconUri: r.icon_uri,
+			iconClearedHash: r.icon_cleared_hash
+		};
+	});
+}
+
 export interface HolderSnapshotRow {
 	address: string;
 	balance: string; // NUMERIC(78,0) — text to preserve precision
