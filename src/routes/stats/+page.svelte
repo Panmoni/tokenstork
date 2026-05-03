@@ -898,6 +898,38 @@
 		</div>
 	</section>
 
+	{#if data.firstCreated.length > 0}
+		<section class="mb-8">
+			<div class="flex items-baseline justify-between mb-3">
+				<h2 class="text-xl font-semibold text-slate-900 dark:text-white">First 10 created</h2>
+				<a href="/?sort=oldest" class="text-xs text-violet-600 dark:text-violet-400 hover:underline">All by oldest →</a>
+			</div>
+			<p class="text-sm ts-text-muted mb-3">
+				The earliest CashTokens categories minted on chain, ordered by genesis block. The
+				oldest of the old — many predate widespread tooling, so metadata may be sparse.
+			</p>
+			<div class="rounded-xl border ts-border-subtle ts-surface-panel overflow-hidden">
+				<ol class="divide-y ts-border-subtle">
+					{#each data.firstCreated as t, i (t.id)}
+						<li>
+							<a href={`/token/${t.id}`} class="flex items-center gap-3 px-4 py-2 hover:bg-slate-50 dark:hover:bg-zinc-800/50 transition-colors no-underline">
+								<span class="w-5 text-xs font-mono text-slate-400 tabular-nums">{i + 1}</span>
+								<img src={iconHrefFor(t.icon, t.iconClearedHash)} alt="" class="w-7 h-7 rounded-full bg-slate-100 dark:bg-zinc-800" loading="lazy" />
+								<span class="flex-1 min-w-0 truncate text-sm text-slate-900 dark:text-white">
+									{stripEmoji(t.name) || t.id.slice(0, 10) + '…'}
+									{#if t.symbol}<span class="ml-1 text-xs text-slate-500 font-mono">{stripEmoji(t.symbol)}</span>{/if}
+								</span>
+								<span class="text-xs font-mono tabular-nums shrink-0 ts-text-muted">
+									{t.genesisTime.slice(0, 10)}
+								</span>
+							</a>
+						</li>
+					{/each}
+				</ol>
+			</div>
+		</section>
+	{/if}
+
 	<section class="mb-8">
 		<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">Moderation</h2>
 		<p class="text-sm mb-3 ts-text-muted">

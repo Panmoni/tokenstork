@@ -498,6 +498,34 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 				   JOIN token_state s ON s.category = t.category
 				  WHERE s.has_active_minting = true
 				    AND ${NOT_MODERATED_CLAUSE}`
+			),
+			// First 10 created categories — earliest tokens by on-chain
+			// genesis ordering. Ordered by genesis_block (and first_seen_at
+			// as a tiebreaker for tokens minted in the same block) to match
+			// the `?sort=oldest` option on the directory.
+			query<{
+				category: Buffer;
+				name: string | null;
+				symbol: string | null;
+				icon_uri: string | null;
+				icon_cleared_hash: string | null;
+				genesis_time: Date;
+			}>(
+				`SELECT t.category,
+				        m.name,
+				        m.symbol,
+				        m.icon_uri,
+				        encode(imo.content_hash, 'hex') AS icon_cleared_hash,
+				        t.genesis_time
+				   FROM tokens t
+				   LEFT JOIN token_metadata m ON m.category = t.category
+				   LEFT JOIN icon_url_scan ius ON ius.icon_uri = m.icon_uri
+				   LEFT JOIN icon_moderation imo
+				          ON imo.content_hash = ius.content_hash
+				         AND imo.state = 'cleared'
+				  WHERE ${NOT_MODERATED_CLAUSE}
+				  ORDER BY t.genesis_block ASC, t.first_seen_at ASC
+				  LIMIT 10`
 			)
 		]),
 		bchPriceP,
@@ -505,7 +533,7 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		moversP
 	]);
 
-	// Destructure all 16 allSettled results by name. Magic-number indexing
+	// Destructure every allSettled result by name. Magic-number indexing
 	// silently breaks if anyone reorders the Promise array literal above;
 	// named destructuring keeps the binding tied to the source query
 	// order at the source.
@@ -531,7 +559,8 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		uniqueHoldersRes,
 		topCollectorsRes,
 		topHoldersRes,
-		activeMintingRes
+		activeMintingRes,
+		firstCreatedRes
 	] = pageResults as [
 		PromiseSettledResult<{ rows: TypeCount[] }>,
 		PromiseSettledResult<{ rows: WindowCount[] }>,
@@ -572,7 +601,17 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 				holder_count: number;
 			}>;
 		}>,
-		PromiseSettledResult<{ rows: WindowCount[] }>
+		PromiseSettledResult<{ rows: WindowCount[] }>,
+		PromiseSettledResult<{
+			rows: Array<{
+				category: Buffer;
+				name: string | null;
+				symbol: string | null;
+				icon_uri: string | null;
+				icon_cleared_hash: string | null;
+				genesis_time: Date;
+			}>;
+		}>
 	];
 
 	// Cauldron stats — read the cached row, compute USD at render time
@@ -772,6 +811,18 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 
 	const activeMinting = pickNumber(activeMintingRes);
 
+	const firstCreated =
+		firstCreatedRes.status === 'fulfilled'
+			? firstCreatedRes.value.rows.map((r) => ({
+					id: hexFromBytes(r.category)!,
+					name: r.name,
+					symbol: r.symbol,
+					icon: r.icon_uri,
+					iconClearedHash: r.icon_cleared_hash,
+					genesisTime: r.genesis_time.toISOString()
+				}))
+			: [];
+
 	return {
 		byType,
 		newIn24h: parentData.newIn24h,
@@ -797,6 +848,7 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		tapswapTop,
 		uniqueHolders,
 		topCollectors,
-		topHoldersByCount
+		topHoldersByCount,
+		firstCreated
 	};
 };
