@@ -399,12 +399,13 @@
 	// fresh in the same browser session.
 	async function discardDraft() {
 		discardError = null;
+		if (!confirm('Discard this draft? You will lose any progress in the current wizard.')) return;
+		// No server session yet (user dropped before crossing step 1) —
+		// just clear local state and bounce back to step 1.
 		if (!sessionId) {
-			// Nothing to discard server-side — just clear local state.
 			resetWizardLocal();
 			return;
 		}
-		if (!confirm('Discard this draft? You will lose any progress in the current wizard.')) return;
 		discarding = true;
 		try {
 			const res = await fetch(`/api/mint/sessions/${sessionId}`, {
@@ -478,9 +479,6 @@
 	<div class="mb-8">
 		<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent">
 			Mint a CashToken
-			<span
-				class="align-middle ml-2 px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300"
-			>ALPHA</span>
 		</h1>
 		<p class="mt-2 max-w-2xl ts-text-muted">
 			Create your own fungible token, NFT, or hybrid on the Bitcoin Cash chain. Walk through the
