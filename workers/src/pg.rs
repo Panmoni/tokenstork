@@ -494,11 +494,16 @@ pub async fn mark_verify_run(pool: &PgPool) -> Result<()> {
 /// 1. Categories with no `token_metadata` row yet.
 /// 2. Rows older than `stale_hours` (refreshes both successful and
 ///    `paytaca-missing` entries — a project might publish BCMR after we
-///    first looked).
+///    first looked) AND not already canonical via the on-chain walker.
 ///
 /// Randomized within a priority. Stale window is typically a week for
 /// successful fetches and a week for 404s too — we trust the worker's
 /// recheck cadence rather than distinguishing here.
+///
+/// Phase 4c coexistence: the stale-row branch skips
+/// `bcmr_source='onchain'` rows so the Paytaca worker stops re-overwriting
+/// authoritative on-chain data. Brand-new categories still get filled by
+/// Paytaca first; the on-chain walker upgrades them on its next tick.
 pub async fn pick_bcmr_batch(
     pool: &PgPool,
     stale_hours: i32,
@@ -507,14 +512,17 @@ pub async fn pick_bcmr_batch(
     let rows: Vec<(Vec<u8>,)> = sqlx::query_as(
         r#"
         WITH candidates AS (
-          SELECT t.category, m.fetched_at
+          SELECT t.category, m.fetched_at, m.bcmr_source
             FROM tokens t
             LEFT JOIN token_metadata m ON m.category = t.category
         )
         SELECT category
           FROM candidates
          WHERE fetched_at IS NULL
-            OR fetched_at < now() - $1 * interval '1 hour'
+            OR (
+                  fetched_at < now() - $1 * interval '1 hour'
+              AND bcmr_source IS DISTINCT FROM 'onchain'
+            )
          ORDER BY fetched_at NULLS FIRST, random()
          LIMIT $2
         "#,
@@ -543,6 +551,12 @@ pub struct TokenMetadataWrite {
 
 /// Upsert into `token_metadata` keyed on `category`. Refreshes every field
 /// on conflict — stale rows get replaced.
+///
+/// Phase 4c coexistence: the UPDATE branch is gated against
+/// `bcmr_source='onchain'` rows so a Paytaca tick that races with the
+/// on-chain walker can't silently demote canonical on-chain data back to
+/// `'paytaca'`. The brand-new-category INSERT path is unaffected — Paytaca
+/// is still the gap-filler before the on-chain walker arrives.
 pub async fn upsert_token_metadata(pool: &PgPool, w: &TokenMetadataWrite) -> Result<()> {
     sqlx::query(
         r#"
@@ -558,6 +572,7 @@ pub async fn upsert_token_metadata(pool: &PgPool, w: &TokenMetadataWrite) -> Res
             icon_uri     = EXCLUDED.icon_uri,
             bcmr_source  = EXCLUDED.bcmr_source,
             fetched_at   = EXCLUDED.fetched_at
+          WHERE token_metadata.bcmr_source IS DISTINCT FROM 'onchain'
         "#,
     )
     .bind(&w.category)
@@ -582,6 +597,206 @@ pub async fn mark_bcmr_run(pool: &PgPool) -> Result<()> {
     .execute(pool)
     .await
     .context("mark_bcmr_run")?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// On-chain BCMR walker helpers (Phase 4c).
+// ---------------------------------------------------------------------------
+
+/// One (category, genesis_txid) pair the on-chain walker should visit.
+/// Both are raw bytes — caller hex-encodes for BlockBook URL paths.
+#[derive(Debug, Clone)]
+pub struct OnchainBcmrTarget {
+    pub category: Vec<u8>,
+    pub genesis_txid: Vec<u8>,
+}
+
+/// Pick up to `limit` categories for the on-chain walker. Priority:
+///
+/// 1. Categories with NO `token_metadata` row at all (brand-new — Paytaca
+///    walker may not have run yet either; the on-chain walk is just as
+///    cheap so we may as well grab them first).
+/// 2. Categories with `bcmr_source != 'onchain'` (upgrade path — Paytaca →
+///    onchain).
+/// 3. Categories with `bcmr_source = 'onchain'` AND
+///    `fetched_at < now() - stale_hours` (revisit to detect publication
+///    updates — head may have moved since last walk).
+///
+/// Randomized within each priority bucket. Categories without a
+/// `genesis_txid` are skipped (shouldn't happen post-backfill, but the
+/// JOIN guards against it).
+pub async fn pick_bcmr_onchain_batch(
+    pool: &PgPool,
+    stale_hours: i32,
+    limit: i32,
+) -> Result<Vec<OnchainBcmrTarget>> {
+    let rows: Vec<(Vec<u8>, Vec<u8>)> = sqlx::query_as(
+        r#"
+        WITH candidates AS (
+          SELECT
+            t.category,
+            t.genesis_txid,
+            m.fetched_at,
+            m.bcmr_source,
+            CASE
+              WHEN m.category IS NULL                         THEN 1
+              WHEN m.bcmr_source IS DISTINCT FROM 'onchain'   THEN 2
+              WHEN m.fetched_at < now() - $1 * interval '1 hour' THEN 3
+              ELSE 9
+            END AS priority
+          FROM tokens t
+          LEFT JOIN token_metadata m ON m.category = t.category
+          WHERE t.genesis_txid IS NOT NULL
+        )
+        SELECT category, genesis_txid
+          FROM candidates
+         WHERE priority < 9
+         ORDER BY priority ASC, random()
+         LIMIT $2
+        "#,
+    )
+    .bind(stale_hours)
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+    .context("picking on-chain BCMR batch")?;
+    Ok(rows
+        .into_iter()
+        .map(|(category, genesis_txid)| OnchainBcmrTarget { category, genesis_txid })
+        .collect())
+}
+
+/// One row's worth of on-chain BCMR data — the canonical write for a
+/// category whose authchain we just walked. `bcmr_publication_uri` is the
+/// raw on-chain URI (NOT gateway-rewritten); `bcmr_revision` is the
+/// authchain head's block timestamp.
+#[derive(Debug, Clone)]
+pub struct TokenMetadataOnchainWrite {
+    pub category: Vec<u8>,
+    pub name: Option<String>,
+    pub symbol: Option<String>,
+    pub decimals: i16,
+    pub description: Option<String>,
+    pub icon_uri: Option<String>,
+    pub bcmr_publication_uri: String,
+    pub bcmr_revision: chrono::DateTime<chrono::Utc>,
+}
+
+/// Upsert into `token_metadata` with `bcmr_source='onchain'`. Refreshes every
+/// field on conflict — supersedes any prior Paytaca-sourced row.
+pub async fn upsert_token_metadata_onchain(
+    pool: &PgPool,
+    w: &TokenMetadataOnchainWrite,
+) -> Result<()> {
+    sqlx::query(
+        r#"
+        INSERT INTO token_metadata
+            (category, name, symbol, decimals, description, icon_uri,
+             bcmr_publication_uri, bcmr_revision, bcmr_source, fetched_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'onchain', now())
+        ON CONFLICT (category) DO UPDATE SET
+            name                  = EXCLUDED.name,
+            symbol                = EXCLUDED.symbol,
+            decimals              = EXCLUDED.decimals,
+            description           = EXCLUDED.description,
+            icon_uri              = EXCLUDED.icon_uri,
+            bcmr_publication_uri  = EXCLUDED.bcmr_publication_uri,
+            bcmr_revision         = EXCLUDED.bcmr_revision,
+            bcmr_source           = EXCLUDED.bcmr_source,
+            fetched_at            = EXCLUDED.fetched_at
+        "#,
+    )
+    .bind(&w.category)
+    .bind(&w.name)
+    .bind(&w.symbol)
+    .bind(w.decimals)
+    .bind(&w.description)
+    .bind(&w.icon_uri)
+    .bind(&w.bcmr_publication_uri)
+    .bind(w.bcmr_revision)
+    .execute(pool)
+    .await
+    .with_context(|| {
+        format!(
+            "upsert_token_metadata_onchain for {}",
+            bytes_to_hex(&w.category)
+        )
+    })?;
+    Ok(())
+}
+
+/// One authchain hop that carried a BCMR publication. Walker writes one row
+/// per locator-bearing hop; mismatched/unfetched bodies still get rows so
+/// operators can see "a publication was attempted at height X but body
+/// didn't verify".
+#[derive(Debug, Clone)]
+pub struct TokenMetadataHistoryWrite {
+    pub category: Vec<u8>,
+    pub authchain_tx: Vec<u8>,
+    pub block_height: Option<i32>,
+    pub block_time: Option<chrono::DateTime<chrono::Utc>>,
+    pub content_hash: Vec<u8>,
+    pub publication_uri: String,
+    pub body_verified: bool,
+    pub body_size_bytes: Option<i32>,
+    pub fetched_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// Upsert into `token_metadata_history` keyed on `(category, authchain_tx)`.
+/// On conflict, refresh the verification result + size + fetched_at — useful
+/// for "the body was unfetchable last time, now it works" transitions.
+pub async fn upsert_token_metadata_history(
+    pool: &PgPool,
+    w: &TokenMetadataHistoryWrite,
+) -> Result<()> {
+    sqlx::query(
+        r#"
+        INSERT INTO token_metadata_history
+            (category, authchain_tx, block_height, block_time,
+             content_hash, publication_uri,
+             body_verified, body_size_bytes, fetched_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ON CONFLICT (category, authchain_tx) DO UPDATE SET
+            block_height    = EXCLUDED.block_height,
+            block_time      = EXCLUDED.block_time,
+            content_hash    = EXCLUDED.content_hash,
+            publication_uri = EXCLUDED.publication_uri,
+            body_verified   = EXCLUDED.body_verified,
+            body_size_bytes = EXCLUDED.body_size_bytes,
+            fetched_at      = EXCLUDED.fetched_at
+        "#,
+    )
+    .bind(&w.category)
+    .bind(&w.authchain_tx)
+    .bind(w.block_height)
+    .bind(w.block_time)
+    .bind(&w.content_hash)
+    .bind(&w.publication_uri)
+    .bind(w.body_verified)
+    .bind(w.body_size_bytes)
+    .bind(w.fetched_at)
+    .execute(pool)
+    .await
+    .with_context(|| {
+        format!(
+            "upsert_token_metadata_history for {} tx {}",
+            bytes_to_hex(&w.category),
+            bytes_to_hex(&w.authchain_tx)
+        )
+    })?;
+    Ok(())
+}
+
+pub async fn mark_bcmr_onchain_run(pool: &PgPool) -> Result<()> {
+    sqlx::query(
+        "UPDATE sync_state
+            SET last_bcmr_onchain_run_at = now(), updated_at = now()
+          WHERE id = 1",
+    )
+    .execute(pool)
+    .await
+    .context("mark_bcmr_onchain_run")?;
     Ok(())
 }
 

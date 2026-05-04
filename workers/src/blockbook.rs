@@ -314,6 +314,19 @@ impl BlockbookClient {
         );
         Ok(utxos)
     }
+
+    /// Fetch a single transaction with its full vout list, including each
+    /// output's `spentTxId` / `spentIndex` pointers when spent. This is the
+    /// primitive the on-chain BCMR walker uses to follow an authchain
+    /// forward: hop = `vout[0].spentTxId` until None (current head).
+    ///
+    /// Endpoint: `/api/v2/tx/<txid>` on mainnet-pat's BlockBook fork.
+    pub async fn get_tx(&self, txid_hex: &str) -> Result<BlockbookTx> {
+        let encoded = percent_encode(txid_hex);
+        self.get(&format!("/api/v2/tx/{}", encoded))
+            .await
+            .with_context(|| format!("get_tx({})", &txid_hex[..16.min(txid_hex.len())]))
+    }
 }
 
 async fn backoff(attempt: usize) {
@@ -374,6 +387,55 @@ pub struct TokenData {
 pub struct Nft {
     pub capability: NftCapability,
     pub commitment: String,
+}
+
+/// Response shape for `/api/v2/tx/<txid>`. Used by the on-chain BCMR walker
+/// to follow the authchain forward via `vout[0].spent_tx_id`. Only the
+/// fields the walker reads are deserialised.
+#[derive(Debug, Deserialize)]
+pub struct BlockbookTx {
+    pub txid: String,
+    #[serde(rename = "blockHeight", default)]
+    pub block_height: Option<i64>,
+    #[serde(rename = "blockTime", default)]
+    pub block_time: Option<i64>,
+    #[serde(default)]
+    pub vin: Vec<BlockbookTxVin>,
+    #[serde(default)]
+    pub vout: Vec<BlockbookTxVout>,
+    /// Raw tx hex — present on most fork builds, optional in case it isn't.
+    /// The walker doesn't read this; surfaced for future use.
+    #[serde(default)]
+    pub hex: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BlockbookTxVin {
+    #[serde(default)]
+    pub txid: Option<String>,
+    #[serde(default)]
+    pub vout: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BlockbookTxVout {
+    pub n: u32,
+    /// scriptPubKey hex. The walker scans this for `OP_RETURN BCMR ...`
+    /// locator pushes.
+    #[serde(default)]
+    pub hex: Option<String>,
+    /// txid that spent this output, if spent. None means the output is
+    /// currently in the live UTXO set (authchain head, when n == 0).
+    #[serde(rename = "spentTxId", default)]
+    pub spent_tx_id: Option<String>,
+    /// vout index in the spending tx. Only meaningful when `spent_tx_id`
+    /// is Some.
+    #[serde(rename = "spentIndex", default)]
+    pub spent_index: Option<u32>,
+    #[serde(default)]
+    pub value: Option<String>,
+    #[serde(rename = "tokenData", default)]
+    pub token_data: Option<TokenData>,
 }
 
 /// Response shape for `/api/v2/address/<x>?details=txs`. Only the fields the
