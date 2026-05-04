@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS token_metadata (
   description     TEXT,
   icon_uri        TEXT,
   bcmr_revision   TIMESTAMPTZ,                                         -- revision timestamp from the BCMR json itself
-  bcmr_source     TEXT,                                                -- 'paytaca' | 'otr' | 'blockbook' | 'local' | ...
+  bcmr_source     TEXT,                                                -- 'onchain' (canonical, written by sync-bcmr-onchain) | 'onchain-empty' (walker visited, no on-chain BCMR locator found — sentinel keeps the row out of the priority-1 brand-new bucket on subsequent ticks). Legacy 'paytaca' / 'paytaca-missing' rows from the retired Phase 4b worker may remain on long-running deployments.
   fetched_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -394,7 +394,7 @@ CREATE TABLE IF NOT EXISTS sync_state (
   last_tail_run_at                TIMESTAMPTZ,                          -- every tail poll tick updates this (even when no new blocks)
   last_enrich_run_at              TIMESTAMPTZ,
   last_verify_run_at              TIMESTAMPTZ,
-  last_bcmr_run_at                TIMESTAMPTZ,                          -- last Phase 4b BCMR-hydration pass
+  last_bcmr_run_at                TIMESTAMPTZ,                          -- legacy: last Phase 4b Paytaca-BCMR run (worker retired 2026-05-04)
   last_cauldron_run_at            TIMESTAMPTZ,                          -- last Phase 4d Cauldron-listings pass
   last_tapswap_backfill_through   INTEGER,                              -- highest block the Tapswap backfill binary has covered
   last_tapswap_run_at             TIMESTAMPTZ,                          -- last Tapswap backfill / tail upsert
@@ -984,13 +984,14 @@ CREATE INDEX IF NOT EXISTS airdrop_outputs_airdrop_idx
 -- ============================================================
 -- Phase 4c — on-chain BCMR walker (2026-05-04).
 -- ============================================================
--- The Paytaca BCMR indexer (Phase 4b) is a single point of failure
--- the operator does not control. Phase 4c walks the CashTokens
--- authchain ourselves via our local BlockBook, parses the on-chain
--- OP_RETURN BCMR locator, fetches + hash-verifies the JSON body,
--- and writes with bcmr_source='onchain'. Paytaca-sourced rows stay
--- in place as a fallback for brand-new categories the on-chain
--- walker hasn't visited yet.
+-- TokenStork reads BCMR metadata directly from each category's
+-- on-chain authchain via our local BlockBook: parse the on-chain
+-- OP_RETURN BCMR locator, fetch + sha256-verify the publisher's
+-- JSON body, write with bcmr_source='onchain'. No third-party
+-- indexer in the path. The Phase 4b Paytaca HTTP-indexer worker
+-- was retired 2026-05-04; legacy 'paytaca' / 'paytaca-missing'
+-- rows on long-running deployments are upgraded to 'onchain' as
+-- the walker visits them.
 --
 -- Three additive idempotent migrations:
 --   1. token_metadata.bcmr_publication_uri — the raw URI the publisher
@@ -1006,6 +1007,14 @@ CREATE INDEX IF NOT EXISTS airdrop_outputs_airdrop_idx
 
 ALTER TABLE token_metadata
   ADD COLUMN IF NOT EXISTS bcmr_publication_uri TEXT;
+
+-- The full BCMR JSON body the walker fetched and sha256-verified, cached so
+-- the detail-page rich-metadata card (status / splitId / URIs / tags / NFT
+-- types / extensions / nftsDescription) renders from Postgres without a
+-- per-request external HTTP call. Replaces the prior `fetchBcmr()` live
+-- call against bcmr.paytaca.com. Only written when body_verified=true.
+ALTER TABLE token_metadata
+  ADD COLUMN IF NOT EXISTS bcmr_body JSONB;
 
 ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_bcmr_onchain_run_at TIMESTAMPTZ;
 
