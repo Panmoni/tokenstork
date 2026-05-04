@@ -8,12 +8,18 @@
 //!   - record one `token_metadata_history` row per locator-bearing hop
 //!     (verified or not — operators can audit unverified publications);
 //!   - upsert the LATEST verified locator into `token_metadata` with
-//!     `bcmr_source='onchain'`, superseding any prior Paytaca-sourced row.
+//!     `bcmr_source='onchain'` (cached body in `bcmr_body JSONB` for the
+//!     detail-page rich card);
+//!   - or, when no verified locator is found on the chain, mark the row
+//!     as walked-empty via [`mark_no_locator_walked`] so the next tick's
+//!     batch picker skips it under the priority-2 stale-time gate.
 //!
-//! The Paytaca worker (Phase 4b) stays in place as a fallback for brand-new
-//! categories the on-chain walker hasn't visited yet. Its batch picker now
-//! skips `bcmr_source='onchain'` rows so it doesn't re-overwrite canonical
-//! data.
+//! There is no fallback. The Paytaca BCMR HTTP-indexer worker (Phase 4b)
+//! was retired 2026-05-04; categories whose authchains carry no on-chain
+//! BCMR locator render as bare hex on the directory. Legacy
+//! `bcmr_source='paytaca' / 'paytaca-missing'` rows on long-running
+//! deployments are upgraded to `'onchain'` if the publisher publishes a
+//! verifiable locator, or left untouched if they don't.
 //!
 //! Env vars:
 //! - DATABASE_URL                  (required)
@@ -39,8 +45,9 @@ use workers::blockbook::BlockbookClient;
 use workers::env::parse_or_default;
 use workers::pg::{
     self, OnchainBcmrTarget, TokenMetadataHistoryWrite, TokenMetadataOnchainWrite,
-    bytes_to_hex, ensure_icon_url_scan_row, mark_bcmr_onchain_run, pick_bcmr_onchain_batch,
-    pool_from_env, upsert_token_metadata_history, upsert_token_metadata_onchain,
+    bytes_to_hex, ensure_icon_url_scan_row, mark_bcmr_onchain_run, mark_no_locator_walked,
+    pick_bcmr_onchain_batch, pool_from_env, upsert_token_metadata_history,
+    upsert_token_metadata_onchain,
 };
 use workers::safe_http::safe_client_builder;
 
@@ -221,7 +228,11 @@ async fn walk_one(
 
     // Track best verified hop: highest block_height (None = mempool, treat
     // as latest). Ties: later in iteration order wins (closer to head).
-    let mut best_verified: Option<(usize, &AuthchainHop, BcmrToken)> = None;
+    // Carries the typed BcmrToken (drives flat fields like name/symbol) AND
+    // the raw serde_json::Value (cached as token_metadata.bcmr_body so the
+    // detail-page rich card renders without a per-request external HTTP
+    // call to the publisher's URI).
+    let mut best_verified: Option<(usize, &AuthchainHop, BcmrToken, serde_json::Value)> = None;
 
     for (idx, hop) in hops.iter().enumerate() {
         let Some(locator) = hop.locator.as_ref() else {
@@ -237,19 +248,39 @@ async fn walk_one(
         let (body_verified, body_size, parsed) = match &outcome {
             FetchedBody::Verified { bytes, size } => {
                 stats.verified += 1;
-                let parsed: Option<BcmrToken> = match serde_json::from_slice(bytes) {
-                    Ok(p) => Some(p),
-                    Err(e) => {
-                        stats.verified_but_unparseable += 1;
-                        warn!(
-                            category = %category_hex,
-                            uri = %locator.uri,
-                            error = %e,
-                            "BCMR body verified by hash but failed to parse as BcmrToken"
-                        );
-                        None
-                    }
-                };
+                // Parse to Value first (untyped); from_value to BcmrToken
+                // separately. The Value is cached as bcmr_body for the UI
+                // even when the typed parse fails (a malformed-but-hash-
+                // verified body still represents an authentic publication
+                // intent we can show as raw JSON).
+                let parsed: Option<(BcmrToken, serde_json::Value)> =
+                    match serde_json::from_slice::<serde_json::Value>(bytes) {
+                        Ok(value) => {
+                            match serde_json::from_value::<BcmrToken>(value.clone()) {
+                                Ok(t) => Some((t, value)),
+                                Err(e) => {
+                                    stats.verified_but_unparseable += 1;
+                                    warn!(
+                                        category = %category_hex,
+                                        uri = %locator.uri,
+                                        error = %e,
+                                        "BCMR body verified by hash but failed to parse as BcmrToken"
+                                    );
+                                    None
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            stats.verified_but_unparseable += 1;
+                            warn!(
+                                category = %category_hex,
+                                uri = %locator.uri,
+                                error = %e,
+                                "BCMR body verified by hash but is not valid JSON"
+                            );
+                            None
+                        }
+                    };
                 (true, Some(*size as i32), parsed)
             }
             FetchedBody::Mismatch {
@@ -301,13 +332,13 @@ async fn walk_one(
         }
 
         if body_verified
-            && let Some(token) = parsed
+            && let Some((token, value)) = parsed
         {
-            best_verified = Some((idx, hop, token));
+            best_verified = Some((idx, hop, token, value));
         }
     }
 
-    if let Some((_, hop, token)) = best_verified.take() {
+    if let Some((_, hop, token, body_value)) = best_verified.take() {
         let flat = token.into_flat(&category_hex);
         // Seed icon-pipeline queue for the icon URI (idempotent).
         if let Some(uri) = flat.icon_uri.as_deref()
@@ -339,11 +370,27 @@ async fn walk_one(
             icon_uri: flat.icon_uri,
             bcmr_publication_uri: last_locator.uri.clone(),
             bcmr_revision: revision,
+            bcmr_body: body_value,
         };
         upsert_token_metadata_onchain(pool, &w)
             .await
             .with_context(|| format!("upsert onchain metadata for {}", category_hex))?;
         stats.upserts += 1;
+    } else {
+        // No verified locator on this category's authchain (or every hop's
+        // body failed to fetch / hash-verify). Bump fetched_at via the
+        // sentinel helper so the next tick's batch picker sees this row
+        // through the priority-2 stale-time gate, not as priority 1 / 2
+        // again immediately. Preserves any legacy Paytaca-cached fields
+        // on existing rows; inserts an `onchain-empty` row for brand-new
+        // categories so they fall out of priority 1 too.
+        if let Err(e) = mark_no_locator_walked(pool, &target.category).await {
+            error!(
+                category = %category_hex,
+                error = %e,
+                "could not mark no-locator-walked; row will be re-picked next tick"
+            );
+        }
     }
 
     Ok(stats)

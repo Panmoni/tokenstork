@@ -1,182 +1,24 @@
-//! BCMR (Bitcoin Cash Metadata Registry) REST client, aimed at Paytaca's
-//! public HTTP indexer at <https://bcmr.paytaca.com>.
+//! BCMR (Bitcoin Cash Metadata Registry) data types + flatten helpers.
 //!
-//! Phase 4b. Populates `token_metadata` so the directory listing page has
-//! names/symbols/icons. Deliberately narrow — `get_token_metadata` is the
-//! only method; anything else goes through a separate worker.
-//!
-//! Treats Paytaca as an unreliable read-only cache:
-//! - 5 s timeout per request, 5 req/s pacing (serialized min-gap limiter).
-//! - 3× retry on 5xx / 429 / network with 1-8 s exponential backoff.
-//! - Returns `Ok(None)` on 404 so the caller can record "seen, missing" in
-//!   `token_metadata` (via `bcmr_source='paytaca-missing'`) and stop
-//!   re-querying every run until the weekly refresh.
+//! Originally housed a Paytaca HTTP indexer client (Phase 4b). The on-chain
+//! authchain walker (Phase 4c, [crate::bcmr_onchain]) replaced that as the
+//! canonical source of BCMR metadata; the Paytaca dependency was retired
+//! 2026-05-04 along with `bin/bcmr.rs` and `sync-bcmr.{service,timer}`.
+//! What remains here is the JSON wire-shape (matching the BCMR CHIP) and
+//! the field flatteners — both still used by the on-chain walker to
+//! normalise a fetched + sha256-verified body into the columns
+//! `token_metadata` exposes (name / symbol / decimals / description /
+//! icon_uri).
 
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-
-use anyhow::{Context, Result};
-use reqwest::{Client, StatusCode};
 use serde::Deserialize;
-use tokio::sync::Mutex;
 use tracing::warn;
 
-use crate::safe_http::{read_body_capped, safe_client_builder};
-
-const USER_AGENT: &str = "tokenstork-workers/0.1";
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
-const RETRY_ATTEMPTS: usize = 3;
-/// Hard cap on the BCMR response body. A real Paytaca record is well
-/// under 64 KiB; 8 MiB is two orders of magnitude headroom and stops a
-/// hostile / compromised host from streaming gigabytes through
-/// `serde_json::from_slice`.
-const BCMR_BODY_CAP: usize = 8 * 1024 * 1024;
-
-#[derive(Debug, thiserror::Error)]
-pub enum BcmrError {
-    #[error("BCMR HTTP {status} on {path}")]
-    Http { status: StatusCode, path: String },
-}
-
-#[derive(Clone)]
-pub struct BcmrClient {
-    http: Client,
-    base_url: String,
-    /// Minimum gap between outbound requests, computed from `max_rps`.
-    min_gap: Duration,
-    /// Shared clock across clones — serialization *is* the mechanism.
-    last_request: Arc<Mutex<Instant>>,
-}
-
-impl BcmrClient {
-    /// Construct from env vars:
-    /// - `BCMR_URL` (default `https://bcmr.paytaca.com`)
-    /// - `BCMR_MAX_RPS` (default 5 — Paytaca is a shared service, don't hammer)
-    pub fn from_env() -> Result<Self> {
-        let base = std::env::var("BCMR_URL")
-            .unwrap_or_else(|_| "https://bcmr.paytaca.com".to_string());
-        let max_rps: u32 = std::env::var("BCMR_MAX_RPS")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(5);
-        Self::new(&base, max_rps)
-    }
-
-    pub fn new(base_url: &str, max_rps: u32) -> Result<Self> {
-        // safe_client_builder installs the SSRF-aware DNS resolver +
-        // disables connection-pool keep-alive, just like the icon
-        // pipeline. Same exit risk: BCMR is a third-party HTTP service
-        // and any future malicious response should not be able to
-        // exfiltrate data via DNS-rebound private-IP redirects.
-        let http = safe_client_builder(USER_AGENT, REQUEST_TIMEOUT, 2)
-            .build()
-            .context("building reqwest client")?;
-        let min_gap = if max_rps == 0 {
-            Duration::ZERO
-        } else {
-            Duration::from_millis((1000 / u64::from(max_rps)).max(1))
-        };
-        Ok(Self {
-            http,
-            base_url: base_url.trim_end_matches('/').to_string(),
-            min_gap,
-            last_request: Arc::new(Mutex::new(
-                Instant::now()
-                    .checked_sub(Duration::from_secs(1))
-                    .unwrap_or_else(Instant::now),
-            )),
-        })
-    }
-
-    /// Hold the lock across the sleep so concurrent callers serialize through
-    /// the min-gap window. Same design as `blockbook.rs#pace`.
-    async fn pace(&self) {
-        if self.min_gap.is_zero() {
-            return;
-        }
-        let mut last = self.last_request.lock().await;
-        let now = Instant::now();
-        let elapsed = now.duration_since(*last);
-        if elapsed < self.min_gap {
-            tokio::time::sleep(self.min_gap - elapsed).await;
-        }
-        *last = Instant::now();
-    }
-
-    /// `GET /api/tokens/<category_hex>` — returns the token's BCMR record
-    /// when Paytaca has one, `Ok(None)` on 404, `Err` on other failures.
-    pub async fn get_token_metadata(
-        &self,
-        category_hex: &str,
-    ) -> Result<Option<BcmrToken>> {
-        let path = format!("/api/tokens/{}", category_hex);
-        let url = format!("{}{}", self.base_url, path);
-        let mut last_err: Option<anyhow::Error> = None;
-
-        for attempt in 0..RETRY_ATTEMPTS {
-            self.pace().await;
-            let resp = match self.http.get(&url).send().await {
-                Ok(r) => r,
-                Err(e) => {
-                    last_err = Some(e.into());
-                    backoff(attempt).await;
-                    continue;
-                }
-            };
-
-            let status = resp.status();
-            if status == StatusCode::NOT_FOUND {
-                return Ok(None);
-            }
-            if status.as_u16() >= 500 || status == StatusCode::TOO_MANY_REQUESTS {
-                warn!(
-                    path,
-                    %status,
-                    attempt = attempt + 1,
-                    "BCMR transient status, retrying"
-                );
-                last_err = Some(
-                    BcmrError::Http {
-                        status,
-                        path: path.clone(),
-                    }
-                    .into(),
-                );
-                backoff(attempt).await;
-                continue;
-            }
-            if !status.is_success() {
-                return Err(BcmrError::Http {
-                    status,
-                    path: path.clone(),
-                }
-                .into());
-            }
-
-            // Stream-read with a hard cap before deserializing.
-            // resp.json() has no size limit; a hostile / compromised
-            // BCMR host could otherwise stream gigabytes through
-            // serde_json.
-            let raw = read_body_capped(resp, BCMR_BODY_CAP)
-                .await
-                .context("reading BCMR body")?;
-            let body: BcmrToken =
-                serde_json::from_slice(&raw).context("parsing BCMR JSON")?;
-            return Ok(Some(body));
-        }
-
-        Err(last_err.unwrap_or_else(|| anyhow::anyhow!("BCMR retries exhausted")))
-    }
-}
-
-async fn backoff(attempt: usize) {
-    let ms = (1000u64 << attempt).min(8000);
-    tokio::time::sleep(Duration::from_millis(ms)).await;
-}
-
 // ---------------------------------------------------------------------------
-// Wire shape — matches what `src/lib/server/external.ts#fetchBcmr` expects.
-// Only the fields we actually read.
+// Wire shape — only the fields the on-chain walker reads. Extra keys in the
+// publisher's BCMR JSON (status, splitId, uris.*, tags, extensions, NFT
+// types, etc.) are ignored at this layer; they ride along verbatim in the
+// raw `serde_json::Value` the walker also caches in
+// `token_metadata.bcmr_body` for the detail-page rich card.
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Deserialize)]
@@ -206,7 +48,7 @@ pub struct BcmrUris {
 }
 
 impl BcmrToken {
-    /// Flatten the nested Paytaca shape into the column layout the
+    /// Flatten the nested BCMR-CHIP shape into the column layout the
     /// `token_metadata` table expects.
     ///
     /// `category_hex` is used only as context for any `warn!` emitted during
@@ -252,10 +94,10 @@ fn nonempty_capped(s: Option<String>, max: usize) -> Option<String> {
     })
 }
 
-// Defense-in-depth caps. BCMR is third-party-sourced; an issuer can
+// Defense-in-depth caps. BCMR is publisher-controlled; an issuer can
 // publish a 100 KB name / description and the worker would dutifully
 // store it, after which every SSR for that token bloats. Same caps
-// the SvelteKit side applies in `external.ts`.
+// the SvelteKit side applies when reading bcmr_body.
 const MAX_NAME_LEN: usize = 200;
 const MAX_SYMBOL_LEN: usize = 32;
 const MAX_DESC_LEN: usize = 4000;
@@ -272,7 +114,7 @@ pub struct BcmrFlat {
     pub icon_uri: Option<String>,
 }
 
-/// Coerce whatever Paytaca emitted into a `SMALLINT` that fits the
+/// Coerce whatever the publisher emitted into a `SMALLINT` that fits the
 /// `token_metadata.decimals` column. Clamps to `0` for anything outside the
 /// CashToken-spec range `[0..=8]` and emits a `warn!` with the category so
 /// the operator can track down the malformed upstream value. A genuinely

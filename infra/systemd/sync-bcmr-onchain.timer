@@ -2,12 +2,13 @@
 Description=Run tokenstork on-chain BCMR walker hourly (Phase 4c)
 
 [Timer]
-# First run 12 min after boot — offset from sync-bcmr.timer's 5min so the
-# Paytaca and on-chain workers don't compete on warm-boot. Hourly thereafter:
-# the on-chain authchain head doesn't move often, but a publisher could push
-# a fresh BCMR at any time and we want to pick it up within the hour.
-# Steady-state batch is dominated by upgrade-from-Paytaca rows; once those
-# are exhausted the worker is fast (mostly NOOP-walks).
+# First run 12 min after boot, hourly thereafter. The on-chain authchain
+# head doesn't move often, but a publisher could push a fresh BCMR at any
+# time and we want to pick it up within the hour. Steady-state batch
+# alternates between newly-minted categories and the periodic stale-window
+# revisit of already-onchain rows; categories with no on-chain locator
+# get marked walked-empty and skipped under the priority-2 stale-time
+# gate so re-walking known-empty rows doesn't dominate the budget.
 OnBootSec=12min
 OnUnitActiveSec=1h
 Persistent=true
