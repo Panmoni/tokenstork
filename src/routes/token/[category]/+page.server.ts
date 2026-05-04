@@ -33,6 +33,8 @@ interface TokenRow {
 	icon_block_reason: string | null;
 	icon_fetch_error: string | null;
 	icon_scan_present: boolean;
+	bcmr_publication_uri: string | null;
+	bcmr_source: string | null;
 	bcmr_fetched_at: Date | null;
 	current_supply: string | null;
 	live_utxo_count: number | null;
@@ -180,6 +182,8 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 			m.decimals,
 			m.description,
 			m.icon_uri,
+			m.bcmr_publication_uri,
+			m.bcmr_source,
 			m.fetched_at AS bcmr_fetched_at,
 			encode(imo_clear.content_hash, 'hex') AS icon_cleared_hash,
 			imo_any.state          AS icon_state,
@@ -794,6 +798,8 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 			bcmrFetchedAt: row.bcmr_fetched_at
 				? Math.floor(row.bcmr_fetched_at.getTime() / 1000)
 				: null,
+			bcmrPublicationUri: row.bcmr_publication_uri,
+			bcmrSource: row.bcmr_source,
 			currentSupply: row.current_supply,
 			liveUtxoCount: row.live_utxo_count,
 			liveNftCount: row.live_nft_count,

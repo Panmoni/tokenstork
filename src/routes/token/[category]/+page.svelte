@@ -1369,21 +1369,38 @@
 
 	{#if data.bcmr}
 		<!--
-			Canonical BCMR JSON link. Same Paytaca endpoint the server fetches
-			from; placed near the page bottom alongside other power-user / nav
-			affordances so visitors who want the raw registry payload can grab
-			it without crowding the BCMR compact bar near the top.
+			Canonical BCMR JSON link. When the on-chain authchain walker
+			(Phase 4c) has populated bcmr_publication_uri, link to the
+			publisher's own copy — that's the source of truth on-chain.
+			Otherwise fall back to Paytaca's mirror.
 		-->
+		{@const onchainUri =
+			token.bcmrSource === 'onchain' &&
+			token.bcmrPublicationUri &&
+			/^(https?:|ipfs:)/i.test(token.bcmrPublicationUri)
+				? token.bcmrPublicationUri
+				: null}
+		{@const hostLabel = onchainUri
+			? (() => {
+					try {
+						return new URL(onchainUri).host;
+					} catch {
+						return 'on-chain';
+					}
+				})()
+			: 'bcmr.paytaca.com'}
 		<div class="mt-8 text-sm ts-text-muted">
 			<span class="uppercase tracking-wider text-xs mr-2">BCMR JSON</span>
 			<a
-				href={`https://bcmr.paytaca.com/api/tokens/${token.id}`}
+				href={onchainUri ?? `https://bcmr.paytaca.com/api/tokens/${token.id}`}
 				target="_blank"
 				rel="noopener noreferrer"
 				class="font-mono text-violet-600 dark:text-violet-400 hover:underline"
-				title="Open the raw BCMR JSON from the Paytaca registry"
+				title={onchainUri
+					? 'Open the on-chain-published BCMR JSON (the publisher’s own copy)'
+					: 'Open the raw BCMR JSON from the Paytaca registry'}
 			>
-				bcmr.paytaca.com ↗
+				{hostLabel} ↗
 			</a>
 		</div>
 	{/if}
