@@ -19,7 +19,6 @@ import {
 	listMyTokens,
 	type MyTokenRow
 } from '$lib/server/airdrops';
-import { fetchBcmr } from '$lib/server/external';
 import { query } from '$lib/server/db';
 import type { PageServerLoad } from './$types';
 
@@ -61,14 +60,20 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		}
 		const eligibility = await eligibilityFor(senderCashaddr, categoryBytes);
 		if (eligibility) {
-			const bcmr = await fetchBcmr(sourceParam.toLowerCase()).catch(() => null);
+			// BCMR display fields come from the cached token_metadata row
+			// the on-chain walker populates. No live HTTP call.
+			const metaRes = await query<{ name: string | null; symbol: string | null; decimals: number | null }>(
+				`SELECT name, symbol, decimals FROM token_metadata WHERE category = $1`,
+				[categoryBytes]
+			);
+			const meta = metaRes.rows[0];
 			preselectedSource = {
 				categoryHex: sourceParam.toLowerCase(),
 				balance: eligibility.balance,
 				nftCount: eligibility.nft_count,
-				name: bcmr?.name ?? null,
-				symbol: bcmr?.symbol ?? null,
-				decimals: bcmr?.decimals ?? 0
+				name: meta?.name ?? null,
+				symbol: meta?.symbol ?? null,
+				decimals: meta?.decimals ?? 0
 			};
 		}
 	}
@@ -88,8 +93,13 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		// Don't surface holder previews on moderated categories — same
 		// posture as /api/tokens/<cat>/recipientPreview.
 		if (!(await isCategoryModerated(categoryBytes))) {
-			const [bcmr, holderRow, snapshot] = await Promise.all([
-				fetchBcmr(recipientParam.toLowerCase()).catch(() => null),
+			// BCMR display fields come from the cached token_metadata row
+			// the on-chain walker populates. No live HTTP call.
+			const [metaRes, holderRow, snapshot] = await Promise.all([
+				query<{ name: string | null; symbol: string | null }>(
+					`SELECT name, symbol FROM token_metadata WHERE category = $1`,
+					[categoryBytes]
+				),
 				query<{ n: string }>(
 					`SELECT COUNT(*)::bigint AS n
 					   FROM token_holders
@@ -102,10 +112,11 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			// not load-bearing here. Keep the await so any future code can
 			// surface it.
 			void snapshot;
+			const meta = metaRes.rows[0];
 			preselectedRecipient = {
 				categoryHex: recipientParam.toLowerCase(),
-				name: bcmr?.name ?? null,
-				symbol: bcmr?.symbol ?? null,
+				name: meta?.name ?? null,
+				symbol: meta?.symbol ?? null,
 				holderCount: Number(holderRow.rows[0]?.n ?? 0)
 			};
 		}

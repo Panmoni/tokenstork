@@ -1,11 +1,16 @@
-// Server-only external fetchers: BCMR (Paytaca) + Cauldron price/TVL.
-// Called from per-token page loaders. No Chaingraph — supply/holder/NFT
-// data now comes from Postgres via enrich workers.
+// Server-only external fetchers: Cauldron price/TVL.
+//
+// BCMR metadata used to flow through a per-request HTTP fetch from
+// `bcmr.paytaca.com` (`fetchBcmr`); that dependency was retired 2026-05-04
+// when the on-chain authchain walker (Phase 4c) became the canonical
+// source. The walker fetches + sha256-verifies each publisher's BCMR JSON
+// from their own URI and caches the body in `token_metadata.bcmr_body` —
+// `bcmrFromBody()` below normalises that cached body into the same shape
+// `fetchBcmr` used to return, with no network I/O at render time.
 
 import { satoshisToBCH } from '$lib/format';
 import { timedFetch } from '$lib/server/fetch';
 
-const BCMR_ENDPOINT = 'https://bcmr.paytaca.com/api/tokens/';
 const CAULDRON_INDEXER = 'https://indexer.cauldron.quest/cauldron';
 const CATEGORY_REGEX = /^[0-9a-f]{64}$/;
 
@@ -104,37 +109,53 @@ function pickStringArray(v: unknown): string[] | null {
 	return out.length ? out : null;
 }
 
-export async function fetchBcmr(category: string): Promise<BcmrMetadata | null> {
-	assertValidCategory(category);
-	try {
-		const res = await timedFetch(BCMR_ENDPOINT + category, { timeoutMs: 5000 });
-		if (!res.ok) return null;
-		const data = await res.json();
-		const rawSplitId = typeof data?.splitId === 'string' ? data.splitId : null;
-		// splitId is a 64-char hex category id by spec; refuse anything
-		// else so downstream UI / lookups can trust the shape.
-		const splitId =
-			rawSplitId && /^[0-9a-fA-F]{64}$/.test(rawSplitId)
-				? rawSplitId.toLowerCase()
-				: null;
-		return {
-			name: clipString(data?.name, MAX_NAME_LEN),
-			symbol: clipString(data?.token?.symbol, MAX_SYMBOL_LEN),
-			decimals: validateDecimals(data?.token?.decimals),
-			description: clipString(data?.description, MAX_DESC_LEN),
-			iconUri: clipString(data?.uris?.icon, MAX_URI_VAL_LEN),
-			status: clipString(data?.status, MAX_STATUS_LEN),
-			splitId,
-			uris: pickStringDict(data?.uris),
-			tags: pickStringArray(data?.tags),
-			extensions: pickObject(data?.extensions),
-			nftTypes: pickObject(data?.token?.nfts?.types),
-			nftsDescription: clipString(data?.token?.nfts?.description, MAX_NFT_DESC_LEN)
-		};
-	} catch (err) {
-		console.error('[external] BCMR fetch failed:', err);
-		return null;
-	}
+/**
+ * Normalise a cached BCMR JSON body (from `token_metadata.bcmr_body`,
+ * written by the on-chain walker after sha256-verifying it against the
+ * publisher's on-chain locator) into the same shape `fetchBcmr` used to
+ * return.
+ *
+ * Returns `null` if the input isn't a plain object (NULL JSONB,
+ * non-object, etc.). All clipString / pickStringDict / pickStringArray /
+ * pickObject defenses still apply — the body is publisher-controlled and
+ * a hash-verified body can still be malformed (the walker stores whatever
+ * matched the on-chain hash, even if the JSON shape is non-conformant).
+ *
+ * Synchronous + zero I/O — every detail-page render reads from Postgres,
+ * not the network.
+ */
+export function bcmrFromBody(body: unknown): BcmrMetadata | null {
+	const data = pickObject(body);
+	if (!data) return null;
+	// Use pickObject for every nested untrusted dictionary so __proto__ /
+	// constructor / prototype keys are stripped at every layer (defense-
+	// in-depth — JSON.parse stores __proto__ as a regular own property
+	// since 2018, but standardising the strip avoids the foot-gun if any
+	// future code path uses Object.assign on these values).
+	const tokenBlock = pickObject(data.token);
+	const nftsBlock = tokenBlock ? pickObject(tokenBlock.nfts) : null;
+	const urisBlock = pickObject(data.uris);
+	const rawSplitId = typeof data.splitId === 'string' ? data.splitId : null;
+	// splitId is a 64-char hex category id by spec; refuse anything
+	// else so downstream UI / lookups can trust the shape.
+	const splitId =
+		rawSplitId && /^[0-9a-fA-F]{64}$/.test(rawSplitId)
+			? rawSplitId.toLowerCase()
+			: null;
+	return {
+		name: clipString(data.name, MAX_NAME_LEN),
+		symbol: clipString(tokenBlock?.symbol, MAX_SYMBOL_LEN),
+		decimals: validateDecimals(tokenBlock?.decimals),
+		description: clipString(data.description, MAX_DESC_LEN),
+		iconUri: clipString(urisBlock?.icon, MAX_URI_VAL_LEN),
+		status: clipString(data.status, MAX_STATUS_LEN),
+		splitId,
+		uris: pickStringDict(data.uris),
+		tags: pickStringArray(data.tags),
+		extensions: pickObject(data.extensions),
+		nftTypes: pickObject(nftsBlock?.types),
+		nftsDescription: clipString(nftsBlock?.description, MAX_NFT_DESC_LEN)
+	};
 }
 
 export interface CauldronStats {

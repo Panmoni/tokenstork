@@ -6,7 +6,7 @@
 import { error } from '@sveltejs/kit';
 import { query, hexFromBytes, bytesFromHex } from '$lib/server/db';
 import { firstNRankFor } from '$lib/server/firstN';
-import { fetchBcmr, fetchCauldron } from '$lib/server/external';
+import { bcmrFromBody, fetchCauldron } from '$lib/server/external';
 import { fetchCrc20Detail } from '$lib/server/crc20';
 import { computeMcapTvlThresholdSats } from '$lib/server/mcapThreshold';
 import { getVoteCounts, getLeaderboardStandings } from '$lib/server/votes';
@@ -35,6 +35,7 @@ interface TokenRow {
 	icon_scan_present: boolean;
 	bcmr_publication_uri: string | null;
 	bcmr_source: string | null;
+	bcmr_body: unknown;
 	bcmr_fetched_at: Date | null;
 	current_supply: string | null;
 	live_utxo_count: number | null;
@@ -184,6 +185,7 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 			m.icon_uri,
 			m.bcmr_publication_uri,
 			m.bcmr_source,
+			m.bcmr_body,
 			m.fetched_at AS bcmr_fetched_at,
 			encode(imo_clear.content_hash, 'hex') AS icon_cleared_hash,
 			imo_any.state          AS icon_state,
@@ -229,10 +231,15 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 
 	const row = tokenRes.rows[0];
 
+	// Phase 4c: BCMR rich-card data is read from the cached `bcmr_body`
+	// column the on-chain walker populates after sha256-verifying the
+	// publisher's JSON against the on-chain locator. No live HTTP call;
+	// no Paytaca dependency at render time.
+	const bcmr = bcmrFromBody(row.bcmr_body);
+
 	const [
 		holdersRes,
 		bchPriceUSD,
-		bcmr,
 		tapswapRes,
 		fexRes,
 		mcapTvlThresholdSats,
@@ -265,7 +272,6 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 			[categoryBytes]
 		),
 		fetchBchPrice(fetch),
-		fetchBcmr(category),
 		// Open Tapswap offers with this category on the "has" side
 		// (someone selling this token). Sorted by want_sats ASC so the
 		// cheapest asks render first. Limit 20 — detail page doesn't need

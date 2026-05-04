@@ -1367,38 +1367,30 @@
 		</section>
 	{/if}
 
-	{#if data.bcmr}
+	{#if data.bcmr && token.bcmrSource === 'onchain' && token.bcmrPublicationUri && /^(https?|ipfs):\/\//i.test(token.bcmrPublicationUri)}
 		<!--
-			Canonical BCMR JSON link. When the on-chain authchain walker
-			(Phase 4c) has populated bcmr_publication_uri, link to the
-			publisher's own copy — that's the source of truth on-chain.
-			Otherwise fall back to Paytaca's mirror.
+			Link out to the publisher's own on-chain-published BCMR JSON
+			URI. The on-chain authchain walker (Phase 4c) sha256-verifies
+			the body before storing it, so what we link here is exactly
+			what the publisher committed on-chain. No fallback link — if
+			no verified on-chain locator exists, we don't surface a link.
 		-->
-		{@const onchainUri =
-			token.bcmrSource === 'onchain' &&
-			token.bcmrPublicationUri &&
-			/^(https?:|ipfs:)/i.test(token.bcmrPublicationUri)
-				? token.bcmrPublicationUri
-				: null}
-		{@const hostLabel = onchainUri
-			? (() => {
-					try {
-						return new URL(onchainUri).host;
-					} catch {
-						return 'on-chain';
-					}
-				})()
-			: 'bcmr.paytaca.com'}
+		{@const onchainUri = token.bcmrPublicationUri}
+		{@const hostLabel = (() => {
+			try {
+				return new URL(onchainUri).host || 'on-chain';
+			} catch {
+				return 'on-chain';
+			}
+		})()}
 		<div class="mt-8 text-sm ts-text-muted">
 			<span class="uppercase tracking-wider text-xs mr-2">BCMR JSON</span>
 			<a
-				href={onchainUri ?? `https://bcmr.paytaca.com/api/tokens/${token.id}`}
+				href={onchainUri}
 				target="_blank"
 				rel="noopener noreferrer"
 				class="font-mono text-violet-600 dark:text-violet-400 hover:underline"
-				title={onchainUri
-					? 'Open the on-chain-published BCMR JSON (the publisher’s own copy)'
-					: 'Open the raw BCMR JSON from the Paytaca registry'}
+				title="Open the on-chain-published BCMR JSON (the publisher’s own copy)"
 			>
 				{hostLabel} ↗
 			</a>

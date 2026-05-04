@@ -7,8 +7,7 @@ import {
 	listOutputsFor,
 	listTxsFor
 } from '$lib/server/airdrops';
-import { hexFromBytes } from '$lib/server/db';
-import { fetchBcmr } from '$lib/server/external';
+import { hexFromBytes, query } from '$lib/server/db';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
@@ -33,10 +32,26 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 
 	const sourceHex = hexFromBytes(airdrop.source_category) ?? '';
 	const recipientHex = hexFromBytes(airdrop.recipient_category) ?? '';
-	const [sourceBcmr, recipientBcmr] = await Promise.all([
-		fetchBcmr(sourceHex).catch(() => null),
-		fetchBcmr(recipientHex).catch(() => null)
-	]);
+	// BCMR display fields come from the cached token_metadata rows the
+	// on-chain walker populates. No live HTTP call.
+	const metaRes = await query<{
+		category: Buffer;
+		name: string | null;
+		symbol: string | null;
+		decimals: number | null;
+	}>(
+		`SELECT category, name, symbol, decimals
+		   FROM token_metadata
+		  WHERE category = ANY($1::bytea[])`,
+		[[airdrop.source_category, airdrop.recipient_category]]
+	);
+	const metaByHex = new Map<string, { name: string | null; symbol: string | null; decimals: number | null }>();
+	for (const m of metaRes.rows) {
+		const h = hexFromBytes(m.category);
+		if (h) metaByHex.set(h, { name: m.name, symbol: m.symbol, decimals: m.decimals });
+	}
+	const sourceBcmr = metaByHex.get(sourceHex) ?? null;
+	const recipientBcmr = metaByHex.get(recipientHex) ?? null;
 
 	return {
 		airdrop: {

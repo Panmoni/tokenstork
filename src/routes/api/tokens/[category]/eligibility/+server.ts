@@ -7,9 +7,8 @@
 // proceed.
 
 import { json, error } from '@sveltejs/kit';
-import { categoryFromHex } from '$lib/server/db';
+import { categoryFromHex, query } from '$lib/server/db';
 import { eligibilityFor, isCategoryModerated } from '$lib/server/airdrops';
-import { fetchBcmr } from '$lib/server/external';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ locals, params }) => {
@@ -35,13 +34,20 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 		error(410, "You don't currently hold this token");
 	}
 
-	const bcmr = await fetchBcmr(hex).catch(() => null);
+	// BCMR display fields come from the cached token_metadata row the
+	// on-chain walker populates after sha256-verifying the publisher's
+	// JSON. No live HTTP call.
+	const metaRes = await query<{ name: string | null; symbol: string | null; decimals: number | null }>(
+		`SELECT name, symbol, decimals FROM token_metadata WHERE category = $1`,
+		[categoryBytes]
+	);
+	const meta = metaRes.rows[0];
 	return json({
 		categoryHex: hex,
 		balance: eligibility.balance,
 		nft_count: eligibility.nft_count,
-		name: bcmr?.name ?? null,
-		symbol: bcmr?.symbol ?? null,
-		decimals: bcmr?.decimals ?? 0
+		name: meta?.name ?? null,
+		symbol: meta?.symbol ?? null,
+		decimals: meta?.decimals ?? 0
 	});
 };
