@@ -980,3 +980,48 @@ CREATE TABLE IF NOT EXISTS airdrop_outputs (
 );
 CREATE INDEX IF NOT EXISTS airdrop_outputs_airdrop_idx
   ON airdrop_outputs (airdrop_id, tx_index);
+
+-- ============================================================
+-- Phase 4c — on-chain BCMR walker (2026-05-04).
+-- ============================================================
+-- The Paytaca BCMR indexer (Phase 4b) is a single point of failure
+-- the operator does not control. Phase 4c walks the CashTokens
+-- authchain ourselves via our local BlockBook, parses the on-chain
+-- OP_RETURN BCMR locator, fetches + hash-verifies the JSON body,
+-- and writes with bcmr_source='onchain'. Paytaca-sourced rows stay
+-- in place as a fallback for brand-new categories the on-chain
+-- walker hasn't visited yet.
+--
+-- Three additive idempotent migrations:
+--   1. token_metadata.bcmr_publication_uri — the raw URI the publisher
+--      wrote on-chain (NOT gateway-rewritten). The detail-page "BCMR
+--      JSON" link prefers this over bcmr.paytaca.com when populated.
+--   2. sync_state.last_bcmr_onchain_run_at — observability heartbeat,
+--      mirrors last_bcmr_run_at.
+--   3. token_metadata_history — full per-hop record of every authchain
+--      step that carried a BCMR locator. Walker writes one row per
+--      locator-bearing hop; only body_verified=true rows propagate
+--      up into token_metadata. UI consumer for revision diffs is a
+--      v2 follow-up; today the table just accumulates.
+
+ALTER TABLE token_metadata
+  ADD COLUMN IF NOT EXISTS bcmr_publication_uri TEXT;
+
+ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_bcmr_onchain_run_at TIMESTAMPTZ;
+
+CREATE TABLE IF NOT EXISTS token_metadata_history (
+  category        BYTEA       NOT NULL REFERENCES tokens(category) ON DELETE CASCADE,
+  authchain_tx    BYTEA       NOT NULL,                              -- 32-byte txid that carried the locator
+  block_height    INTEGER,                                           -- nullable until confirmed
+  block_time      TIMESTAMPTZ,                                       -- block timestamp of the carrying tx
+  content_hash    BYTEA       NOT NULL,                              -- 32-byte sha256 from the OP_RETURN locator
+  publication_uri TEXT        NOT NULL,                              -- URI from the locator (raw, not gateway-rewritten)
+  body_verified   BOOLEAN     NOT NULL,                              -- true = sha256(fetched body) == content_hash
+  body_size_bytes INTEGER,                                           -- size of fetched body (NULL if unfetched)
+  fetched_at      TIMESTAMPTZ,                                       -- when we last attempted the fetch
+  observed_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (category, authchain_tx)
+);
+
+CREATE INDEX IF NOT EXISTS token_metadata_history_category_height_idx
+  ON token_metadata_history (category, block_height DESC NULLS LAST);
