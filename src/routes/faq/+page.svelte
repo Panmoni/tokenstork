@@ -102,9 +102,7 @@
 						<code class="px-1 py-0.5 rounded font-mono text-xs ts-surface-chip">OP_RETURN BCMR</code>
 						locator on their token's authchain. We walk that authchain ourselves directly
 						from the chain (no third-party indexer) and verify the body's hash against the
-						on-chain commit before showing the metadata anywhere on the site. Paytaca's
-						BCMR indexer stays as a fallback for brand-new categories the on-chain walker
-						hasn't reached yet.
+						on-chain commit before showing the metadata anywhere on the site.
 					</li>
 					<li>
 						<strong>CRC-20</strong> (<a href="https://crc20.cash/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">crc20.cash</a>)
@@ -281,7 +279,7 @@
 				<ul class="list-disc list-inside ml-2 space-y-1">
 					<li><strong>New categories + Tapswap listings</strong> — sub-second. The tail worker subscribes to BCH node ZMQ and indexes within milliseconds of a new block.</li>
 					<li><strong>Cauldron prices + TVL</strong> — every 10 minutes for already-listed tokens (~60-90s fast refresh), plus a 4-hour full scan that discovers newly-listed tokens and prunes delisted ones.</li>
-					<li><strong>BCMR metadata</strong> (name, symbol, icon, description) — hourly via the on-chain authchain walker (canonical source). A fallback Paytaca fetch runs every 4 h to fill in brand-new categories the on-chain walker hasn't reached yet.</li>
+					<li><strong>BCMR metadata</strong> (name, symbol, icon, description) — hourly via the on-chain authchain walker. The walker reads each category's authchain directly from BCH and sha256-verifies the publisher's JSON body against the on-chain locator before caching it. No third-party indexer.</li>
 					<li><strong>BCH/USD price</strong> — every 5 minutes.</li>
 					<li><strong>Sparklines + 1h/24h/7d % change</strong> — rebuilt from the price history each request; fills in over the 7 days following deploy.</li>
 				</ul>
@@ -362,17 +360,16 @@
 					<code class="px-1 py-0.5 rounded font-mono text-xs ts-surface-chip">sync-bcmr-onchain</code>
 					worker walks each category's authchain via our local BlockBook, parses the
 					on-chain locator, fetches the publisher's URI, and sha256-verifies the body
-					before promoting it to canonical metadata. The "BCMR JSON" link at the bottom
-					of every token detail page points to the publisher's own URI when verified
-					(typically an IPFS CID or a self-hosted file), so you can read the same bytes
-					we did. <a href="https://www.paytaca.com/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Paytaca's</a>
-					public BCMR API stays as a fallback for brand-new categories the on-chain
-					walker hasn't reached yet.
+					before caching it. The "BCMR JSON" link at the bottom of every token detail
+					page points to the publisher's own URI (typically an IPFS CID or a self-hosted
+					file), so you can read the same bytes we did. No third-party indexer in the
+					path: if a publisher hasn't put a BCMR locator on their authchain, we don't
+					show metadata — the bare category hex shows instead.
 				</p>
 				<p>
 					If a token shows a plain category hex instead of a name, the minter hasn't
-					published BCMR metadata yet. On the token detail page you can see every BCMR
-					field we know about under the "BCMR metadata" card.
+					published an on-chain BCMR locator yet. On the token detail page you can see
+					every BCMR field we know about under the "BCMR metadata" card.
 				</p>
 			</div>
 		</details>

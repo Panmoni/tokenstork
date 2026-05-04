@@ -33,7 +33,7 @@ Everything runs on one Netcup RS 2000 G12 VPS (8 EPYC cores, 16 GB ECC, 512 GB N
 
 **External data sources** are confined to two narrow surfaces:
 
-- **BCMR metadata** (names, symbols, icons) is sourced primarily from the on-chain CashTokens authchain itself — `sync-bcmr-onchain` walks each category's authchain forward via local BlockBook every 1 h, parses the on-chain `OP_RETURN BCMR` locator, and sha256-verifies the JSON body before storing in `token_metadata` with `bcmr_source='onchain'`. [Paytaca's BCMR indexer](https://github.com/paytaca/bcmr-indexer) (`sync-bcmr`, every 4 h) stays as a fallback for brand-new categories the on-chain walker hasn't reached yet.
+- **BCMR metadata** (names, symbols, icons, full rich card) is read directly from the on-chain CashTokens authchain — `sync-bcmr-onchain` walks each category's authchain forward via local BlockBook every 1 h, parses the on-chain `OP_RETURN BCMR` locator, sha256-verifies the publisher's JSON body against the on-chain commit, and caches the body in `token_metadata.bcmr_body`. The detail page reads the rich card from Postgres without any per-request HTTP call. No third-party indexer dependency.
 - **Cauldron price / TVL** from [`indexer.cauldron.quest`](https://indexer.cauldron.quest), polled every 4 h (full discovery) + every 10 min (fast price refresh) and cached in `token_venue_listings`.
 
 **Tapswap** (P2P fixed-price listings via the MPSW OP_RETURN protocol) and **Fex.cash** (UniswapV2-style AMM via the AssetCovenant P2SH) are detected on-chain from our own BCHN — no external API.
@@ -66,9 +66,9 @@ src/                       SvelteKit app (Svelte 5 + Node adapter).
     venues.ts              Single source of truth for the {cauldron, tapswap, fex} venues.
     moderation.ts          NOT_MODERATED_CLAUSE shared across every read path.
     types.ts               TokenApiRow + venue listing shapes.
-workers/                   Rust crate. cargo build --release produces 11 binaries.
+workers/                   Rust crate. cargo build --release produces 10 binaries.
   src/{bchn,bcmr,bcmr_onchain,blockbook,cauldron,fex,pg,tapswap,tapswap_walker}.rs   Library modules.
-  src/bin/{backfill,bcmr,bcmr-onchain,cauldron,cauldron-stats,enrich,fex,
+  src/bin/{backfill,bcmr-onchain,cauldron,cauldron-stats,enrich,fex,
            tail,tapswap-backfill,tapswap-spend-backfill,verify}.rs   Binaries.
 infra/
   Caddyfile                Reverse proxy + CSP/HSTS/XFO.
@@ -88,12 +88,12 @@ Schema is idempotent and lives in [db/schema.sql](db/schema.sql). Every `CREATE 
 Core tables:
 
 - **`tokens`** — canonical category record keyed by `category BYTEA` (32-byte raw).
-- **`token_metadata`** — BCMR-derived name / symbol / decimals / description / icon. `bcmr_source IN ('onchain','paytaca','paytaca-missing',…)` records the provenance; `bcmr_publication_uri` carries the publisher's raw on-chain URI when sourced from the authchain walker. `pg_trgm` GIN index on `name` for cheap ILIKE search.
+- **`token_metadata`** — BCMR-derived name / symbol / decimals / description / icon, written by the on-chain walker after sha256-verifying the publisher's JSON body. `bcmr_source IN ('onchain', …)` records the provenance (legacy `'paytaca' / 'paytaca-missing'` rows from the retired Paytaca worker may remain on long-running deployments and are upgraded to `'onchain'` as the walker visits them); `bcmr_publication_uri` carries the publisher's raw on-chain URI; `bcmr_body JSONB` caches the verified JSON body so the detail-page rich card renders without a live HTTP call. `pg_trgm` GIN index on `name` for cheap ILIKE search.
 - **`token_metadata_history`** — append-only record of every BCMR publication observed on the authchain. One row per `(category, authchain_tx)` carrying the locator's `content_hash`, the `publication_uri`, and a `body_verified` flag. Powers a future revision-diff UI (a token's BCMR was updated 3 times…); today the table just accumulates.
 - **`token_state`** — current supply (`NUMERIC(78,0)`), live UTXO count, NFT count, holder count, minting flag, burn flag, `gini_coefficient REAL` (holder-distribution score, 0=equal / 1=whale, NULL when fewer than 10 holders).
 - **`token_holders`** — `(category, address)` with balance and NFT count.
 - **`nft_instances`** — `(category, commitment)` with capability and owner.
-- **`sync_state`** — singleton row tracking backfill / tail / enrich / verify / bcmr / bcmr_onchain / cauldron / tapswap / fex run timestamps.
+- **`sync_state`** — singleton row tracking backfill / tail / enrich / verify / bcmr_onchain / cauldron / tapswap / fex run timestamps. (`last_bcmr_run_at` from the retired Paytaca worker is left in place but no longer written.)
 
 Venue + market tables:
 
@@ -166,7 +166,7 @@ The app runs fine against an empty schema — every loader handles the no-data c
 
 ```
 cd workers && cargo build --release
-# Binaries land in workers/target/release/{backfill,bcmr,bcmr-onchain,cauldron,fex,tail,tapswap-backfill,verify}
+# Binaries land in workers/target/release/{backfill,bcmr-onchain,cauldron,fex,tail,tapswap-backfill,verify}
 ```
 
 **Environment variables** (only `DATABASE_URL` is required by the app):
@@ -201,7 +201,7 @@ The legacy `pnpm run sync:*` commands run the [scripts/](scripts/) TypeScript pr
 All of the moving parts are checked in:
 
 - [infra/Caddyfile](infra/Caddyfile) — reverse proxy, caching rules, full CSP/HSTS/XFO header chain. Assumes Cloudflare proxy in front with SSL/TLS **Full (strict)** and a Cloudflare Origin Certificate on disk at `/etc/caddy/tls/`. Comments at the top explain how to swap in Let's Encrypt for a non-CF deploy.
-- [infra/systemd/](infra/systemd/) — hardened unit files for `tokenstork.service`, `bchn.service`, `blockbook-bcash.service`, `sync-tail.service` (always-on with `Type=notify` + `WatchdogSec=120s`), `sync-bcmr.{service,timer}`, `sync-bcmr-onchain.{service,timer}`, `sync-cauldron{,-fast}.{service,timer}`, `sync-fex.{service,timer}`, `sync-enrich.{service,timer}`, `sync-verify.{service,timer}`, `sync-tapswap-backfill.service`. Same hardening profile across the board: `ProtectSystem=strict`, `CapabilityBoundingSet=`, filtered syscalls, `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`.
+- [infra/systemd/](infra/systemd/) — hardened unit files for `tokenstork.service`, `bchn.service`, `blockbook-bcash.service`, `sync-tail.service` (always-on with `Type=notify` + `WatchdogSec=120s`), `sync-bcmr-onchain.{service,timer}`, `sync-cauldron{,-fast}.{service,timer}`, `sync-fex.{service,timer}`, `sync-enrich.{service,timer}`, `sync-verify.{service,timer}`, `sync-tapswap-backfill.service`. Same hardening profile across the board: `ProtectSystem=strict`, `CapabilityBoundingSet=`, filtered syscalls, `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`.
 - [infra/redeploy.sh](infra/redeploy.sh) — one-shot deploy script: `git pull`, `pnpm install --frozen-lockfile && pnpm run build`, `cargo build --release`, schema apply, systemd unit refresh + `daemon-reload`, Caddyfile validate + sync, restart `tokenstork.service` + always-on workers.
 - Secrets load from `/etc/tokenstork/env` (chmod 600, owner `tokenstork`).
 
@@ -211,14 +211,13 @@ The step-by-step VPS runbook — BCHN install, Postgres tuning, UFW, fail2ban, C
 
 ## Indexing pipeline
 
-Eleven cooperating workers, all in the Rust [workers/](workers/) crate. Each is idempotent and crash-safe.
+Ten cooperating workers, all in the Rust [workers/](workers/) crate. Each is idempotent and crash-safe.
 
 | Worker | Trigger | Job |
 |---|---|---|
 | **backfill** | one-shot (~25 min after BCHN IBD) | Walk blocks 792,772 → tip via BCHN RPC. Insert every new CashToken category into `tokens`. |
 | **tail** | always-on, ZMQ-driven | Subscribe to `hashblock`; on each new block, run three walkers — token discovery, Tapswap MPSW listing detection, and Tapswap close detection (open → taken/cancelled). Sub-second latency from block arrival to DB row. `Type=notify` + `WatchdogSec=120s` for liveness. |
-| **bcmr-onchain** | every 1 h | **Canonical BCMR source.** Walk each category's authchain forward via local BlockBook (`/api/v2/tx/<txid>` → `vout[0].spentTxId` until None), parse the on-chain `OP_RETURN BCMR <hash> <URI>` locator at every hop, fetch + sha256-verify the JSON body, and write the latest verified publication into `token_metadata` with `bcmr_source='onchain'`. Records every locator-bearing hop in `token_metadata_history` for a future revision-diff UI. |
-| **bcmr** | every 4 h | **Fallback for brand-new categories the on-chain walker hasn't reached yet.** Pulls names / symbols / decimals / icons from Paytaca's BCMR HTTP indexer; the upsert is gated against `bcmr_source='onchain'` so it can't demote canonical on-chain rows. |
+| **bcmr-onchain** | every 1 h | **Sole BCMR source.** Walk each category's authchain forward via local BlockBook (`/api/v2/tx/<txid>` → `vout[0].spentTxId` until None), parse the on-chain `OP_RETURN BCMR <hash> <URI>` locator at every hop, fetch + sha256-verify the JSON body, and write the latest verified publication into `token_metadata` with `bcmr_source='onchain'` (including the full body in `bcmr_body JSONB` for the detail-page rich card). Records every locator-bearing hop in `token_metadata_history` for a future revision-diff UI. |
 | **cauldron** (full mode) | every 4 h | Walk every FT category, fetch price + TVL from `indexer.cauldron.quest`, upsert `token_venue_listings`, prune stale rows, append a `token_price_history` point per success. |
 | **cauldron** (fast mode) | every 10 min | Refresh price + TVL only for already-listed categories. Skips pruning — the listed-set view can't confirm delistings of unlisted categories. |
 | **cauldron-stats** | every 30 min | Pull ecosystem aggregates (total TVL, 24h/7d/30d swap volume, pool counts, unique-addresses-by-month) from Cauldron's global endpoints; cache in `cauldron_global_stats` for `/stats` SSR. Read-modify-write: per-endpoint failure preserves the prior value rather than overwriting with zero. |
@@ -239,7 +238,7 @@ How quickly each kind of data on the site reflects on-chain reality. Same inform
 | What you see on the site | Source worker | Typical lag | Notes |
 |---|---|---|---|
 | **New token category appears in the directory** | `sync-tail` (ZMQ-driven) | sub-second | A `hashblock` notification from BCHN wakes the tail worker; the new row is in Postgres before the next block arrives. |
-| **Token name / symbol / icon (BCMR metadata)** | `sync-bcmr-onchain` (1 h timer; canonical) + `sync-bcmr` (4 h timer; fallback) | 0-1 h once the publisher's on-chain authchain is observed; 0-4 h while only Paytaca knows about it | The on-chain walker reads the publisher's own copy by walking the CashTokens authchain via BlockBook and sha256-verifying the JSON body against the on-chain locator. The detail page links out to the publisher's URI directly when available, falling back to bcmr.paytaca.com otherwise. |
+| **Token name / symbol / icon (BCMR metadata)** | `sync-bcmr-onchain` (1 h timer) | 0-1 h once the publisher's on-chain authchain is observed; otherwise never (no third-party fallback) | The walker reads the publisher's own copy by walking the CashTokens authchain via BlockBook and sha256-verifying the JSON body against the on-chain locator. The detail page links out to the publisher's URI directly. Tokens whose issuers have not put a BCMR locator on their authchain show the bare category hex. |
 | **Cauldron per-token price + TVL** | `sync-cauldron` (4 h full + 10 min fast) | 0-10 min for already-listed; 0-4 h for newly-listed | `fast` mode re-queries the ~317-token already-listed set every 10 min; `full` mode re-discovers every 4 h. |
 | **Cauldron ecosystem aggregates on `/stats`** (total TVL, 24h/7d/30d volume, pool counts, unique addresses by month) | `sync-cauldron-stats` (30 min timer) | 0-30 min | Cached in `cauldron_global_stats` so the SSR loader doesn't pay a network round-trip per page hit. |
 | **Fex per-pool price + TVL** | `sync-fex` (4 h timer) | 0-4 h | One `scantxoutset` per tick walks all Fex pools at once. |
@@ -285,7 +284,7 @@ If your change touches a worker, the heavy-duty 3-pass review skill in `.claude/
 ## Credits
 
 - [@mainnet_pat](https://github.com/mainnet-pat) — the `cashtokens` BlockBook fork that every CashToken-aware explorer depends on, and the Tapswap MPSW protocol whose on-chain reference implementation we reverse-engineered against.
-- [Paytaca](https://github.com/paytaca/bcmr-indexer) — BCMR indexer API, the source of authoritative CashToken metadata.
+- [CHIP-BCMR](https://github.com/bitjson/chip-bcmr) — the on-chain metadata-registry standard our authchain walker reads directly from each token's authchain, no third-party indexer in the path.
 - [Cauldron](https://cauldron.quest) — the public AMM indexer that drives our price + TVL columns.
 - [Fex.cash](https://docs.fex.cash/) — open-source UniswapV2-style AMM with parameter-free covenants that let us index the full ecosystem in a single `scantxoutset` call.
 - [@mr-zwets](https://github.com/mr-zwets) — early encouragement and technical guidance.

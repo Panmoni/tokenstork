@@ -91,8 +91,10 @@
 			</p>
 			<ul class="list-disc list-inside ml-2 space-y-1.5 ts-text-body">
 				<li>
-					<a href="https://www.paytaca.com/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Paytaca</a>
-					— public BCMR metadata API powering every token's name, symbol, icon, and description
+					<a href="https://github.com/bitjson/chip-bcmr" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">CHIP-BCMR</a>
+					— the on-chain metadata-registry standard our hourly authchain walker reads directly
+					from each token's authchain (with sha256 verification of the publisher's JSON body
+					against the on-chain locator)
 				</li>
 				<li>
 					<a href="https://cauldron.quest/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Cauldron</a>

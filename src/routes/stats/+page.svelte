@@ -1019,7 +1019,9 @@
 
 	<p class="text-xs mt-10 ts-text-muted">
 		Counts reflect what our indexer has seen since CashTokens activation at block 792,772 (May
-		2023). Metadata comes from the BCMR registry via Paytaca's public indexer, refreshed every 4
-		hours.
+		2023). BCMR metadata is read directly from each category's on-chain authchain by our
+		<code class="px-1 py-0.5 rounded font-mono text-xs ts-surface-chip">sync-bcmr-onchain</code>
+		worker (hourly), which sha256-verifies the publisher's JSON body against the on-chain locator
+		before caching it.
 	</p>
 </main>

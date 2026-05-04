@@ -7,7 +7,7 @@
 </svelte:head>
 
 <script lang="ts">
-	// Roadmap items. `status` drives the icon + color. Last updated 2026-05-04
+	// Roadmap items. `status` drives the icon + color. Last updated 2026-05-04 (Paytaca-BCMR-indexer dep retired)
 	// (post-CSV-export + history-endpoint ship) — if anything drifts by more than a quarter, come
 	// back and groom. The original roadmap had a version-number scheme
 	// (0.0.3, 0.0.4, …) that turned out to be ambitious vaporware; we now
@@ -25,18 +25,19 @@
 			bullets: [
 				'Full Postgres + Rust workers replacing client-side API fan-out.',
 				'Archival BCHN + ZMQ hashblock tail worker — sub-second indexing from tip.',
-				'BCMR metadata sourced canonically from the on-chain authchain itself (sync-bcmr-onchain, hourly), with Paytaca as a fallback for brand-new categories (sync-bcmr, every 4h).',
+				'BCMR metadata read directly from each category\'s on-chain authchain (sync-bcmr-onchain, hourly), with sha256 verification of the publisher\'s JSON body against the on-chain locator. No third-party indexer in the path.',
 				'Tail-staleness watchdog timer — alerts within a minute if the always-on indexer goes silent.'
 			]
 		},
 		{
-			title: 'On-chain BCMR authchain walker',
+			title: 'On-chain BCMR authchain walker (Paytaca dep retired)',
 			status: 'done',
 			bullets: [
-				'New sync-bcmr-onchain worker walks each category\'s authchain forward via local BlockBook (vout[0].spentTxId until None), parses the on-chain OP_RETURN BCMR locator at every hop, and sha256-verifies the JSON body before promoting it to canonical metadata.',
-				'Token detail pages now link the "BCMR JSON" anchor to the publisher\'s own URI when the on-chain walker has verified it — the publisher\'s pinned IPFS or self-hosted copy, not a third-party mirror. Falls back to bcmr.paytaca.com otherwise.',
+				'New sync-bcmr-onchain worker walks each category\'s authchain forward via local BlockBook (vout[0].spentTxId until None), parses the on-chain OP_RETURN BCMR locator at every hop, and sha256-verifies the JSON body before caching it.',
+				'Verified body cached in token_metadata.bcmr_body so the detail-page rich card (status / splitId / URIs / tags / NFT types / extensions) renders from Postgres without any per-request external HTTP call.',
+				'Token detail pages link the "BCMR JSON" anchor to the publisher\'s own on-chain URI (their pinned IPFS CID or self-hosted file). No fallback to a third-party mirror — if no on-chain locator is verified, no link is shown.',
 				'Full revision history kept in a new token_metadata_history table — one row per locator-bearing authchain hop, with body_verified, content_hash, and publication_uri preserved. Powers a future revision-diff UI.',
-				'Removes the last single-source dependency in our metadata pipeline: Paytaca\'s indexer is now a gap-filler, not a single point of failure.'
+				'Paytaca BCMR indexer dependency retired entirely: the cron worker, HTTP client, systemd units, and per-render fetchBcmr call are all gone. The directory pipeline now has zero third-party indexer dependencies for BCMR metadata.'
 			]
 		},
 		{
