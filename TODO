@@ -14,15 +14,18 @@ docs/cashtoken-index-plan.md
 6. BCMR support workflow for existing-but-unregistered tokens
 7. Regular sync of TokenStork BCMR with OTR
 8. Better Tapswap / Fex / Cauldron logos
-9. Draw BCMR data direct from chain
 10. Transfer `tokenstork.com` to Cloudflare as registrar.
 11. `docs/runbook.md` — failure-mode recipes for the tired-3am self.
 12. Bump `package.json` version to `0.2.0` once accounts + persistence ships.
 13. SEO, content operation?
+14. i18n
+15. guidance on where to buy bch and what wallet to use
+16. docs/tokenization-mega-plan.md
 
 ## Operator (carson)
 
 - test minting page, all 3 modes
+- test airdrops
 
 - smoke-test the airdrop wizard end-to-end on mainnet with the operator
   wallet: pick a low-stakes test category, 5-10 holders, sign-and-broadcast,

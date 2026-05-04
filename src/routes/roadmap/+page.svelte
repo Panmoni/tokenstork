@@ -7,7 +7,7 @@
 </svelte:head>
 
 <script lang="ts">
-	// Roadmap items. `status` drives the icon + color. Last updated 2026-05-03
+	// Roadmap items. `status` drives the icon + color. Last updated 2026-05-04
 	// (post-CSV-export + history-endpoint ship) — if anything drifts by more than a quarter, come
 	// back and groom. The original roadmap had a version-number scheme
 	// (0.0.3, 0.0.4, …) that turned out to be ambitious vaporware; we now
@@ -25,8 +25,18 @@
 			bullets: [
 				'Full Postgres + Rust workers replacing client-side API fan-out.',
 				'Archival BCHN + ZMQ hashblock tail worker — sub-second indexing from tip.',
-				'BCMR metadata hydrator (Paytaca) on a 4-hour cadence.',
+				'BCMR metadata sourced canonically from the on-chain authchain itself (sync-bcmr-onchain, hourly), with Paytaca as a fallback for brand-new categories (sync-bcmr, every 4h).',
 				'Tail-staleness watchdog timer — alerts within a minute if the always-on indexer goes silent.'
+			]
+		},
+		{
+			title: 'On-chain BCMR authchain walker',
+			status: 'done',
+			bullets: [
+				'New sync-bcmr-onchain worker walks each category\'s authchain forward via local BlockBook (vout[0].spentTxId until None), parses the on-chain OP_RETURN BCMR locator at every hop, and sha256-verifies the JSON body before promoting it to canonical metadata.',
+				'Token detail pages now link the "BCMR JSON" anchor to the publisher\'s own URI when the on-chain walker has verified it — the publisher\'s pinned IPFS or self-hosted copy, not a third-party mirror. Falls back to bcmr.paytaca.com otherwise.',
+				'Full revision history kept in a new token_metadata_history table — one row per locator-bearing authchain hop, with body_verified, content_hash, and publication_uri preserved. Powers a future revision-diff UI.',
+				'Removes the last single-source dependency in our metadata pipeline: Paytaca\'s indexer is now a gap-filler, not a single point of failure.'
 			]
 		},
 		{
