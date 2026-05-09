@@ -289,16 +289,18 @@ fn looks_like_svg(bytes: &[u8]) -> bool {
 ///     [`DECODED_ALLOC_CAP_BYTES`] — a second guard against pathological
 ///     intermediates.
 fn rasterize_svg(bytes: &[u8]) -> Result<Vec<u8>> {
-    let mut opt = usvg::Options::default();
     // Defense in depth: refuse every non-data href, regardless of
     // `resources_dir`. The default `resolve_string` would join the href
     // against `resources_dir` and try to read from the filesystem; we
     // never want that on a worker process. Data URIs (the only legitimate
     // way to embed a raster inside an SVG icon) are still decoded by the
     // unchanged `resolve_data`.
-    opt.image_href_resolver = usvg::ImageHrefResolver {
-        resolve_data: usvg::ImageHrefResolver::default_data_resolver(),
-        resolve_string: Box::new(|_, _| None),
+    let opt = usvg::Options {
+        image_href_resolver: usvg::ImageHrefResolver {
+            resolve_data: usvg::ImageHrefResolver::default_data_resolver(),
+            resolve_string: Box::new(|_, _| None),
+        },
+        ..Default::default()
     };
     let tree = usvg::Tree::from_data(bytes, &opt).context("parse SVG")?;
 

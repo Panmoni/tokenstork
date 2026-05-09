@@ -27,8 +27,9 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow};
 use futures_util::StreamExt;
-use hickory_resolver::TokioAsyncResolver;
-use hickory_resolver::config::{ResolverConfig, ResolverOpts};
+use hickory_resolver::config::{CLOUDFLARE, ResolverConfig};
+use hickory_resolver::net::runtime::TokioRuntimeProvider;
+use hickory_resolver::{Resolver, TokioResolver};
 use reqwest::Url;
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 
@@ -43,19 +44,19 @@ pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(20);
 /// before deserialization.
 pub const DEFAULT_BODY_CAP: usize = 8 * 1024 * 1024;
 
-fn resolver() -> &'static TokioAsyncResolver {
-    static R: OnceLock<TokioAsyncResolver> = OnceLock::new();
+fn resolver() -> &'static TokioResolver {
+    static R: OnceLock<TokioResolver> = OnceLock::new();
     R.get_or_init(|| {
         // Try /etc/resolv.conf first; fall back to Cloudflare's
         // 1.1.1.1 + Google's 8.8.8.8 if the system config is missing
         // (containers, locked-down sandboxes).
-        match TokioAsyncResolver::tokio_from_system_conf() {
-            Ok(r) => r,
-            Err(_) => TokioAsyncResolver::tokio(
-                ResolverConfig::cloudflare(),
-                ResolverOpts::default(),
-            ),
-        }
+        let builder = TokioResolver::builder_tokio().unwrap_or_else(|_| {
+            Resolver::builder_with_config(
+                ResolverConfig::udp_and_tcp(&CLOUDFLARE),
+                TokioRuntimeProvider::default(),
+            )
+        });
+        builder.build().expect("build hickory resolver")
     })
 }
 
@@ -218,18 +219,18 @@ pub async fn read_body_capped(resp: reqwest::Response, max: usize) -> Result<Vec
 /// gates the *initial* URL): even if a caller misses the safe-resolve
 /// path, the resolver still drops disallowed addresses.
 pub struct SafeResolver {
-    inner: TokioAsyncResolver,
+    inner: TokioResolver,
 }
 
 impl SafeResolver {
     pub fn new() -> Self {
-        let inner = match TokioAsyncResolver::tokio_from_system_conf() {
-            Ok(r) => r,
-            Err(_) => TokioAsyncResolver::tokio(
-                ResolverConfig::cloudflare(),
-                ResolverOpts::default(),
-            ),
-        };
+        let builder = TokioResolver::builder_tokio().unwrap_or_else(|_| {
+            Resolver::builder_with_config(
+                ResolverConfig::udp_and_tcp(&CLOUDFLARE),
+                TokioRuntimeProvider::default(),
+            )
+        });
+        let inner = builder.build().expect("build hickory resolver");
         Self { inner }
     }
 }

@@ -101,4 +101,4 @@ futures-util = { version = "0.3", default-features = false }
 # ourselves, refuse any answer in private/loopback/link-local space,
 # pin the resolved IP for the actual connection, and re-validate on
 # every redirect target.
-hickory-resolver = { version = "0.24", default-features = false, features = ["tokio-runtime", "system-config"] }
+hickory-resolver = { version = "0.26", default-features = false, features = ["tokio", "system-config"] }
