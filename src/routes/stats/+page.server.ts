@@ -531,6 +531,23 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 				  WHERE ${NOT_MODERATED_CLAUSE}
 				  ORDER BY t.genesis_block ASC, t.category ASC
 				  LIMIT 10`
+			),
+			// 24h CashToken activity: sum of per-block counters from `blocks`,
+			// populated forward by sync-tail and backwards by blocks-backfill.
+			// `blocks_count` is included so the UI can warn the user when the
+			// 24h window doesn't yet contain a full 144 blocks (e.g., right
+			// after the schema migration deploy, before the tail has caught
+			// up). NULLs from a fresh DB collapse to 0 via COALESCE.
+			query<{
+				token_24h: string | null;
+				mints_24h: string | null;
+				blocks_count: string;
+			}>(
+				`SELECT COALESCE(SUM(token_tx_count), 0)::bigint::text   AS token_24h,
+				        COALESCE(SUM(genesis_tx_count), 0)::bigint::text AS mints_24h,
+				        COUNT(*)::bigint::text                            AS blocks_count
+				   FROM blocks
+				  WHERE time > now() - INTERVAL '24 hours'`
 			)
 		]),
 		bchPriceP,
@@ -565,7 +582,8 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		topCollectorsRes,
 		topHoldersRes,
 		activeMintingRes,
-		firstCreatedRes
+		firstCreatedRes,
+		activity24hRes
 	] = pageResults as [
 		PromiseSettledResult<{ rows: TypeCount[] }>,
 		PromiseSettledResult<{ rows: WindowCount[] }>,
@@ -615,6 +633,13 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 				icon_uri: string | null;
 				icon_cleared_hash: string | null;
 				genesis_time: Date;
+			}>;
+		}>,
+		PromiseSettledResult<{
+			rows: Array<{
+				token_24h: string | null;
+				mints_24h: string | null;
+				blocks_count: string;
 			}>;
 		}>
 	];
@@ -828,6 +853,25 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 				}))
 			: [];
 
+	// 24h activity counters from the `blocks` table. `blocksCount` is the
+	// number of `blocks` rows that fell inside the 24h window — the UI uses
+	// this to mark the cards "incomplete" until the tail has populated a
+	// full 144 blocks (otherwise a fresh deploy would render misleadingly
+	// low numbers right after the schema migration). Numbers parsed from
+	// the bigint::text shape SQL emits — text-then-Number on a value
+	// guaranteed to fit in i32 (per-block counts × 144 ≪ Number.MAX_SAFE_INTEGER).
+	const activity24h =
+		activity24hRes.status === 'fulfilled' && activity24hRes.value.rows[0]
+			? (() => {
+					const r = activity24hRes.value.rows[0];
+					return {
+						tokenTxs: Number(r.token_24h ?? 0),
+						mints: Number(r.mints_24h ?? 0),
+						blocksCount: Number(r.blocks_count ?? 0)
+					};
+				})()
+			: { tokenTxs: 0, mints: 0, blocksCount: 0 };
+
 	return {
 		byType,
 		newIn24h: parentData.newIn24h,
@@ -854,6 +898,7 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 		uniqueHolders,
 		topCollectors,
 		topHoldersByCount,
-		firstCreated
+		firstCreated,
+		activity24h
 	};
 };

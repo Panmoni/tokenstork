@@ -382,6 +382,38 @@ CREATE INDEX IF NOT EXISTS blocks_time_idx ON blocks (time DESC);
 -- Idempotent column add for already-deployed databases. Safe to re-run.
 ALTER TABLE blocks ADD COLUMN IF NOT EXISTS coinbase_script_sig BYTEA;
 
+-- CashToken activity counters per block — added to back the /stats
+-- "Token activity (24h)" + "Mints (24h)" cards. Both are derived purely
+-- from the verbose `getblock 2` response that the tail walker already
+-- fetches for tokens / Tapswap detection — no extra RPC calls.
+--
+-- Counter semantics (each is a count of TXs in the block, not outputs):
+--   - token_tx_count   = txs with at least one vout carrying token_data.
+--                        A tx that mints + transfers counts as 1. Coinbase
+--                        is excluded (its scriptSig doesn't decode to a
+--                        valid outputs-with-token shape under any chain).
+--   - genesis_tx_count = txs that ARE the genesis publication of a new
+--                        category. Detected purely on-chain via the
+--                        spec-required pattern: vin[0].vout == 0 (genesis
+--                        spends index-0 of a prior output) AND at least
+--                        one vout has token_data.category == tx.txid (the
+--                        category id IS the genesis txid by spec). This is
+--                        unique per category, so no DB lookup needed —
+--                        the detection is cheap and exact.
+--
+-- Burn detection is intentionally NOT included here. A burn requires
+-- knowing the input side's token data, which `getblock 2` doesn't include
+-- (vin entries don't carry prevout token_data). Implementing burns
+-- correctly needs either a UTXO mirror in our schema or a per-tx
+-- BlockBook lookup — both bigger architectural changes than fit in this
+-- commit. Tracked as a follow-up.
+--
+-- Both default to 0 for backwards compatibility with rows that pre-date
+-- this migration. The blocks-backfill binary's next pass repopulates
+-- historical rows; tail integration handles forward blocks from this commit.
+ALTER TABLE blocks ADD COLUMN IF NOT EXISTS token_tx_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE blocks ADD COLUMN IF NOT EXISTS genesis_tx_count INTEGER NOT NULL DEFAULT 0;
+
 -- ============================================================================
 -- Single-row sync bookkeeping. Replaces the old __sync_info hack that stuffed
 -- sync state into a fake tokens row.

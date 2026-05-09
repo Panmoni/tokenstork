@@ -898,6 +898,44 @@
 		</div>
 	</section>
 
+	<section class="mb-8">
+		<h2 class="text-xl font-semibold mb-3 text-slate-900 dark:text-white">On-chain activity (24h)</h2>
+		<p class="text-sm mb-3 ts-text-muted">
+			CashToken activity in the last 24 hours, summed across the {fmt(data.activity24h.blocksCount)} blocks our tail walker has processed in that window.
+			<strong>Token transfers</strong> counts every block tx that emits at least one token-bearing output
+			(transfers, mints, multi-token movements — each tx counts once).
+			<strong>New categories</strong> counts genesis txs (the spec-required pattern: spend index-0 of a prior
+			output AND emit a token whose category equals the spending tx's own txid). Both numbers are
+			pure on-chain — no DB lookup, no external API, derived directly from the verbose block JSON.
+		</p>
+		{#if data.activity24h.blocksCount < 144}
+			<p class="mb-3 text-xs ts-text-muted">
+				<em>Note: only {fmt(data.activity24h.blocksCount)} of an expected ~144 blocks are present in this window;
+				the activity counters are still accruing since the schema migration. Run
+				<code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">blocks-backfill</code>
+				to populate historical blocks retroactively, or wait ~24h for the tail to fill the rolling window.</em>
+			</p>
+		{/if}
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+			<div
+				class="block p-5 rounded-xl border ts-border-subtle ts-surface-panel"
+				title="Number of txs in the last 24h that emit at least one token_data output. Coinbase excluded."
+			>
+				<div class="text-xs uppercase tracking-wider ts-text-muted">Token-bearing txs</div>
+				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{fmt(data.activity24h.tokenTxs)}</div>
+				<div class="mt-1 text-xs ts-text-muted">Mints + transfers, each tx counted once</div>
+			</div>
+			<div
+				class="block p-5 rounded-xl border ts-border-subtle ts-surface-panel"
+				title="New categories minted in the last 24h, detected via the CashTokens genesis pattern (vin[0] spends index-0; emitted token's category == own txid)."
+			>
+				<div class="text-xs uppercase tracking-wider ts-text-muted">New categories</div>
+				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{fmt(data.activity24h.mints)}</div>
+				<div class="mt-1 text-xs ts-text-muted">Genesis transactions only</div>
+			</div>
+		</div>
+	</section>
+
 	{#if data.firstCreated.length > 0}
 		<section class="mb-8">
 			<div class="flex items-baseline justify-between mb-3">

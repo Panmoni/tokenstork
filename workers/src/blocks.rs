@@ -80,6 +80,15 @@ pub struct BlockSummary {
     /// one). Stored as BYTEA so /mining can ASCII-substring-match for
     /// well-known mining-pool tags ("ViaBTC", "AntPool", etc.).
     pub coinbase_script_sig: Option<Vec<u8>>,
+    /// Number of txs in the block with at least one vout carrying
+    /// token_data. Backs the /stats "Token activity (24h)" card.
+    /// Coinbase excluded.
+    pub token_tx_count: i32,
+    /// Number of txs that ARE the genesis publication of a new category
+    /// (vin[0].vout == 0 AND at least one vout has token_data.category
+    /// == tx.txid — the spec-required pattern). Detection is pure-chain;
+    /// no DB lookup. Backs the /stats "Mints (24h)" card.
+    pub genesis_tx_count: i32,
 }
 
 /// Errors `summarize_block` can return. Most are bounds-conversion failures
@@ -167,6 +176,38 @@ pub fn summarize_block(block: &Block) -> Result<BlockSummary, BlockSummaryError>
         .and_then(|v| v.coinbase.as_deref())
         .and_then(|hex_str| hex::decode(hex_str).ok());
 
+    // CashToken activity counters. Both pure-chain (no DB / no extra RPC):
+    //   - token_tx_count: any non-coinbase tx with ≥1 vout carrying token_data.
+    //   - genesis_tx_count: txs that ARE the genesis publication of a new
+    //     category. Per the CashTokens spec, a genesis tx must spend
+    //     vout=0 of some prior output AND emit at least one vout whose
+    //     token_data.category equals the tx's own txid (the category id
+    //     IS the genesis txid by definition). This is unique per category,
+    //     so the count is exact even though we don't consult the DB.
+    let mut token_tx_count: i32 = 0;
+    let mut genesis_tx_count: i32 = 0;
+    for tx in block.tx.iter().skip(1) {
+        let has_token_vout = tx.vout.iter().any(|v| v.token_data.is_some());
+        if has_token_vout {
+            token_tx_count = token_tx_count.saturating_add(1);
+        }
+        let vin0_spends_index_0 = tx
+            .vin
+            .first()
+            .and_then(|v| v.vout)
+            .is_some_and(|n| n == 0);
+        if vin0_spends_index_0 {
+            let creates_self_category = tx.vout.iter().any(|v| {
+                v.token_data
+                    .as_ref()
+                    .is_some_and(|td| td.category == tx.txid)
+            });
+            if creates_self_category {
+                genesis_tx_count = genesis_tx_count.saturating_add(1);
+            }
+        }
+    }
+
     Ok(BlockSummary {
         height: height_i32,
         hash,
@@ -178,6 +219,8 @@ pub fn summarize_block(block: &Block) -> Result<BlockSummary, BlockSummaryError>
         subsidy_sats,
         size_bytes: size_i32,
         coinbase_script_sig,
+        token_tx_count,
+        genesis_tx_count,
     })
 }
 
@@ -286,6 +329,55 @@ mod tests {
         }
     }
 
+    /// Token-bearing vout for activity-counter tests. The category id is
+    /// arbitrary — just needs to be a 64-char hex string.
+    fn vout_with_token_category(value: f64, category: &str) -> Vout {
+        use crate::bchn::TokenData;
+        Vout {
+            token_data: Some(TokenData {
+                category: category.to_string(),
+                amount: None,
+                nft: None,
+            }),
+            script_pub_key: ScriptPubKey::default(),
+            value,
+        }
+    }
+
+    /// Genesis-tx helper: vin[0] spends vout=0 of a prior tx AND the tx
+    /// emits a token_data vout whose category equals the tx's own txid.
+    /// Per the CashTokens spec this is the genesis pattern; our counter
+    /// in summarize_block detects exactly this shape.
+    fn genesis_tx(self_txid_hex: &str) -> Tx {
+        Tx {
+            txid: self_txid_hex.to_string(),
+            vout: vec![vout_with_token_category(0.001, self_txid_hex)],
+            vin: vec![Vin {
+                txid: Some("33".repeat(32)),
+                vout: Some(0), // genesis: spend index-0
+                script_sig: None,
+                coinbase: None,
+            }],
+        }
+    }
+
+    /// Token-bearing transfer (NOT genesis): vin[0] spends a non-zero
+    /// index, OR the vouts' token_data.category doesn't match this tx's
+    /// txid. Used to verify token_tx_count counts these but
+    /// genesis_tx_count does not.
+    fn token_transfer_tx(self_txid_hex: &str, prev_vout_index: u32, category: &str) -> Tx {
+        Tx {
+            txid: self_txid_hex.to_string(),
+            vout: vec![vout_with_token_category(0.001, category)],
+            vin: vec![Vin {
+                txid: Some("44".repeat(32)),
+                vout: Some(prev_vout_index),
+                script_sig: None,
+                coinbase: None,
+            }],
+        }
+    }
+
     fn coinbase_tx(value: f64) -> Tx {
         coinbase_tx_with_script(value, None)
     }
@@ -378,6 +470,104 @@ mod tests {
     }
 
     // ---- summarize_block ----
+
+    // ---- activity counters (token_tx_count + genesis_tx_count) ----
+
+    #[test]
+    fn counters_zero_when_no_token_txs() {
+        // Plain BCH-only block: coinbase + two non-token transfers.
+        let block = block_at(
+            800_000,
+            1_000,
+            vec![coinbase_tx(6.25), normal_tx(1, vec![1.0]), normal_tx(1, vec![0.5])],
+        );
+        let s = summarize_block(&block).expect("summarize ok");
+        assert_eq!(s.token_tx_count, 0);
+        assert_eq!(s.genesis_tx_count, 0);
+    }
+
+    #[test]
+    fn counters_recognize_genesis_tx() {
+        // Pure genesis-tx block: coinbase + one tx that mints a new
+        // category. token_tx_count and genesis_tx_count should both be 1.
+        let cat = "55".repeat(32);
+        let block = block_at(800_000, 2_000, vec![coinbase_tx(6.25), genesis_tx(&cat)]);
+        let s = summarize_block(&block).expect("summarize ok");
+        assert_eq!(s.token_tx_count, 1);
+        assert_eq!(s.genesis_tx_count, 1);
+    }
+
+    #[test]
+    fn counters_token_transfer_is_activity_but_not_genesis() {
+        // A token-bearing tx where vin[0].vout != 0 is a transfer, not
+        // a genesis. token_tx_count counts it; genesis_tx_count doesn't.
+        let block = block_at(
+            800_000,
+            2_000,
+            vec![
+                coinbase_tx(6.25),
+                token_transfer_tx(&"66".repeat(32), 1, &"77".repeat(32)),
+            ],
+        );
+        let s = summarize_block(&block).expect("summarize ok");
+        assert_eq!(s.token_tx_count, 1);
+        assert_eq!(s.genesis_tx_count, 0);
+    }
+
+    #[test]
+    fn counters_genesis_pattern_with_unrelated_category_is_not_genesis() {
+        // vin[0].vout == 0 BUT the emitted token_data.category doesn't
+        // match this tx's txid. This is a transfer that happens to spend
+        // an index-0 output (e.g., a previous genesis tx's main output).
+        // token_tx_count counts it; genesis_tx_count doesn't (the
+        // category id IS the genesis txid by spec, so a category that
+        // doesn't equal this tx's own txid means this tx is not the
+        // genesis).
+        let block = block_at(
+            800_000,
+            2_000,
+            vec![
+                coinbase_tx(6.25),
+                token_transfer_tx(&"88".repeat(32), 0, &"99".repeat(32)),
+            ],
+        );
+        let s = summarize_block(&block).expect("summarize ok");
+        assert_eq!(s.token_tx_count, 1);
+        assert_eq!(s.genesis_tx_count, 0);
+    }
+
+    #[test]
+    fn counters_mixed_block() {
+        // Realistic mixed block: coinbase + 2 BCH-only + 1 genesis +
+        // 2 token transfers. token_tx_count = 3; genesis_tx_count = 1.
+        let cat = "aa".repeat(32);
+        let block = block_at(
+            800_000,
+            10_000,
+            vec![
+                coinbase_tx(6.25),
+                normal_tx(1, vec![1.0]),
+                normal_tx(1, vec![0.5]),
+                genesis_tx(&cat),
+                token_transfer_tx(&"bb".repeat(32), 1, &"cc".repeat(32)),
+                token_transfer_tx(&"dd".repeat(32), 2, &"ee".repeat(32)),
+            ],
+        );
+        let s = summarize_block(&block).expect("summarize ok");
+        assert_eq!(s.token_tx_count, 3);
+        assert_eq!(s.genesis_tx_count, 1);
+    }
+
+    #[test]
+    fn counters_skip_coinbase() {
+        // Even if the coinbase had a phantom token_data (impossible in
+        // practice but defensive), the counter loop skips block.tx[0].
+        let mut block = block_at(800_000, 1_000, vec![coinbase_tx(6.25)]);
+        block.tx[0].vout = vec![vout_with_token_category(6.25, &"ff".repeat(32))];
+        let s = summarize_block(&block).expect("summarize ok");
+        assert_eq!(s.token_tx_count, 0);
+        assert_eq!(s.genesis_tx_count, 0);
+    }
 
     #[test]
     fn summarize_realistic_post_activation_block() {

@@ -118,6 +118,8 @@ async fn main() -> Result<()> {
                     subsidy_sats: summary.subsidy_sats,
                     size_bytes: summary.size_bytes,
                     coinbase_script_sig: summary.coinbase_script_sig,
+                    token_tx_count: summary.token_tx_count,
+                    genesis_tx_count: summary.genesis_tx_count,
                 });
             }
             Err(e) => {

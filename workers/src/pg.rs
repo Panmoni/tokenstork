@@ -1689,6 +1689,10 @@ pub struct BlockWrite {
     /// column to NULL in that case so a re-run with healthier upstream
     /// data corrects the row.
     pub coinbase_script_sig: Option<Vec<u8>>,
+    /// CashToken activity counters per block. Both feed /stats 24h cards.
+    /// See `BlockSummary` doc-comments for derivation rules.
+    pub token_tx_count: i32,
+    pub genesis_tx_count: i32,
 }
 
 /// Upsert one block. ON CONFLICT (height) DO UPDATE — re-inserts after a
@@ -1702,9 +1706,9 @@ pub async fn upsert_block(pool: &PgPool, b: &BlockWrite) -> Result<()> {
         INSERT INTO blocks
             (height, hash, time, tx_count, total_output_sats,
              coinbase_sats, fees_sats, subsidy_sats, size_bytes,
-             coinbase_script_sig)
+             coinbase_script_sig, token_tx_count, genesis_tx_count)
         VALUES
-            ($1, $2, $3, $4, $5::numeric, $6, $7, $8, $9, $10)
+            ($1, $2, $3, $4, $5::numeric, $6, $7, $8, $9, $10, $11, $12)
         ON CONFLICT (height) DO UPDATE
            SET hash                = EXCLUDED.hash,
                time                = EXCLUDED.time,
@@ -1714,7 +1718,9 @@ pub async fn upsert_block(pool: &PgPool, b: &BlockWrite) -> Result<()> {
                fees_sats           = EXCLUDED.fees_sats,
                subsidy_sats        = EXCLUDED.subsidy_sats,
                size_bytes          = EXCLUDED.size_bytes,
-               coinbase_script_sig = EXCLUDED.coinbase_script_sig
+               coinbase_script_sig = EXCLUDED.coinbase_script_sig,
+               token_tx_count      = EXCLUDED.token_tx_count,
+               genesis_tx_count    = EXCLUDED.genesis_tx_count
 "#,
     )
     .bind(b.height)
@@ -1727,6 +1733,8 @@ pub async fn upsert_block(pool: &PgPool, b: &BlockWrite) -> Result<()> {
     .bind(b.subsidy_sats)
     .bind(b.size_bytes)
     .bind(b.coinbase_script_sig.as_deref())
+    .bind(b.token_tx_count)
+    .bind(b.genesis_tx_count)
     .execute(pool)
     .await
     .with_context(|| format!("upsert_block height {}", b.height))?;
@@ -1748,9 +1756,9 @@ pub async fn upsert_blocks_batch(pool: &PgPool, batch: &[BlockWrite]) -> Result<
             INSERT INTO blocks
                 (height, hash, time, tx_count, total_output_sats,
                  coinbase_sats, fees_sats, subsidy_sats, size_bytes,
-                 coinbase_script_sig)
+                 coinbase_script_sig, token_tx_count, genesis_tx_count)
             VALUES
-                ($1, $2, $3, $4, $5::numeric, $6, $7, $8, $9, $10)
+                ($1, $2, $3, $4, $5::numeric, $6, $7, $8, $9, $10, $11, $12)
             ON CONFLICT (height) DO UPDATE
                SET hash                = EXCLUDED.hash,
                    time                = EXCLUDED.time,
@@ -1760,7 +1768,9 @@ pub async fn upsert_blocks_batch(pool: &PgPool, batch: &[BlockWrite]) -> Result<
                    fees_sats           = EXCLUDED.fees_sats,
                    subsidy_sats        = EXCLUDED.subsidy_sats,
                    size_bytes          = EXCLUDED.size_bytes,
-                   coinbase_script_sig = EXCLUDED.coinbase_script_sig
+                   coinbase_script_sig = EXCLUDED.coinbase_script_sig,
+                   token_tx_count      = EXCLUDED.token_tx_count,
+                   genesis_tx_count    = EXCLUDED.genesis_tx_count
 "#,
         )
         .bind(b.height)
@@ -1773,6 +1783,8 @@ pub async fn upsert_blocks_batch(pool: &PgPool, batch: &[BlockWrite]) -> Result<
         .bind(b.subsidy_sats)
         .bind(b.size_bytes)
         .bind(b.coinbase_script_sig.as_deref())
+        .bind(b.token_tx_count)
+        .bind(b.genesis_tx_count)
         .execute(&mut *tx)
         .await
         .with_context(|| format!("upsert_blocks_batch height {}", b.height))?;
