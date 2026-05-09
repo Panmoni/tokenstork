@@ -121,10 +121,23 @@ function pickStringArray(v: unknown): string[] | null {
  * a hash-verified body can still be malformed (the walker stores whatever
  * matched the on-chain hash, even if the JSON shape is non-conformant).
  *
+ * Resolution order matches the Rust-side `BcmrToken::into_flat`:
+ *   1. `identities[lowercase(categoryHex)][latestRevision]` — canonical
+ *      BCMR v2 path.
+ *   2. `identities[lowercase(categoryHex)][max-by-key]` — fallback when
+ *      `latestRevision` is missing or doesn't resolve.
+ *   3. Top-level fields — backwards-compat for legacy / Paytaca-flat
+ *      bodies that pre-date Phase 4c.
+ *
+ * `categoryHex` is required so we can find the per-category snapshot
+ * inside the registry. ISO-8601 revision keys sort lexicographically the
+ * same as chronologically, so a `max(keys)` reliably picks the newest
+ * revision when the publisher omitted `latestRevision`.
+ *
  * Synchronous + zero I/O — every detail-page render reads from Postgres,
  * not the network.
  */
-export function bcmrFromBody(body: unknown): BcmrMetadata | null {
+export function bcmrFromBody(body: unknown, categoryHex: string): BcmrMetadata | null {
 	const data = pickObject(body);
 	if (!data) return null;
 	// Use pickObject for every nested untrusted dictionary so __proto__ /
@@ -132,9 +145,17 @@ export function bcmrFromBody(body: unknown): BcmrMetadata | null {
 	// in-depth — JSON.parse stores __proto__ as a regular own property
 	// since 2018, but standardising the strip avoids the foot-gun if any
 	// future code path uses Object.assign on these values).
-	const tokenBlock = pickObject(data.token);
+
+	// Resolve the per-category snapshot from the BCMR-v2 envelope, falling
+	// back to the top-level fields (legacy shape).
+	const snapshot = resolveIdentitySnapshot(data, categoryHex) ?? data;
+
+	const tokenBlock = pickObject(snapshot.token);
 	const nftsBlock = tokenBlock ? pickObject(tokenBlock.nfts) : null;
-	const urisBlock = pickObject(data.uris);
+	const urisBlock = pickObject(snapshot.uris);
+	// Extended fields (status, splitId, tags, extensions) live at the
+	// top level of the registry envelope per BCMR v2 — keep reading them
+	// from `data`, not from the per-revision snapshot.
 	const rawSplitId = typeof data.splitId === 'string' ? data.splitId : null;
 	// splitId is a 64-char hex category id by spec; refuse anything
 	// else so downstream UI / lookups can trust the shape.
@@ -143,19 +164,49 @@ export function bcmrFromBody(body: unknown): BcmrMetadata | null {
 			? rawSplitId.toLowerCase()
 			: null;
 	return {
-		name: clipString(data.name, MAX_NAME_LEN),
+		name: clipString(snapshot.name, MAX_NAME_LEN),
 		symbol: clipString(tokenBlock?.symbol, MAX_SYMBOL_LEN),
 		decimals: validateDecimals(tokenBlock?.decimals),
-		description: clipString(data.description, MAX_DESC_LEN),
+		description: clipString(snapshot.description, MAX_DESC_LEN),
 		iconUri: clipString(urisBlock?.icon, MAX_URI_VAL_LEN),
 		status: clipString(data.status, MAX_STATUS_LEN),
 		splitId,
-		uris: pickStringDict(data.uris),
+		uris: pickStringDict(snapshot.uris),
 		tags: pickStringArray(data.tags),
 		extensions: pickObject(data.extensions),
 		nftTypes: pickObject(nftsBlock?.types),
 		nftsDescription: clipString(nftsBlock?.description, MAX_NFT_DESC_LEN)
 	};
+}
+
+/**
+ * Pull the canonical per-revision snapshot out of `identities[<cat>]`.
+ * Returns null when the BCMR envelope doesn't carry a v2 identities tree
+ * for this category — caller should fall back to top-level fields.
+ */
+function resolveIdentitySnapshot(
+	data: Record<string, unknown>,
+	categoryHex: string
+): Record<string, unknown> | null {
+	const identities = pickObject(data.identities);
+	if (!identities) return null;
+	const catLc = categoryHex.toLowerCase();
+	const revisions = pickObject(identities[catLc]);
+	if (!revisions) return null;
+
+	const latestRevisionKey =
+		typeof data.latestRevision === 'string' ? data.latestRevision : null;
+	const explicit = latestRevisionKey ? pickObject(revisions[latestRevisionKey]) : null;
+	if (explicit) return explicit;
+
+	// Fallback: max-by-key (ISO-8601 sorts lexicographically the same as
+	// chronologically). Skip non-object entries — defensive against a
+	// publisher who put a string / number where the snapshot belongs.
+	let bestKey: string | null = null;
+	for (const k of Object.keys(revisions)) {
+		if (bestKey === null || k > bestKey) bestKey = k;
+	}
+	return bestKey ? pickObject(revisions[bestKey]) : null;
 }
 
 export interface CauldronStats {

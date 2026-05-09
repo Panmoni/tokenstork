@@ -235,7 +235,7 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 	// column the on-chain walker populates after sha256-verifying the
 	// publisher's JSON against the on-chain locator. No live HTTP call;
 	// no Paytaca dependency at render time.
-	const bcmr = bcmrFromBody(row.bcmr_body);
+	const bcmr = bcmrFromBody(row.bcmr_body, category);
 
 	const [
 		holdersRes,
