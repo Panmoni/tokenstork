@@ -185,6 +185,36 @@
 		humanizeNumericSupply(token.currentSupply, token.decimals)
 	);
 
+	// BCMR JSON link (rendered near the bottom of the detail page). Renders
+	// only when we have a real publisher-provided URI — i.e. when the
+	// on-chain authchain walker has sha256-verified a body against the
+	// on-chain OP_RETURN BCMR locator. Legacy bcmr_source='paytaca' rows
+	// have flat metadata cached but no publisher URI, so they show no link
+	// (we deliberately don't link to bcmr.paytaca.com — that's a third-party
+	// mirror, not the source of truth, and our pipeline no longer depends
+	// on it). Tokens whose publishers have not published an on-chain BCMR
+	// locator simply don't get a link.
+	const bcmrJsonLink = $derived.by(() => {
+		if (
+			token.bcmrSource !== 'onchain' ||
+			!token.bcmrPublicationUri ||
+			!/^(https?|ipfs):\/\//i.test(token.bcmrPublicationUri)
+		) {
+			return null;
+		}
+		let host = 'on-chain';
+		try {
+			host = new URL(token.bcmrPublicationUri).host || host;
+		} catch {
+			/* malformed URI — fall back to the placeholder label */
+		}
+		return {
+			href: token.bcmrPublicationUri,
+			label: host,
+			title: "Open the on-chain-published BCMR JSON (the publisher's own copy)"
+		};
+	});
+
 	// Days since chain genesis — stable across page renders since
 	// genesisTime is a fixed past timestamp; we don't need a reactive clock.
 	const ageDays = $derived(
@@ -1367,32 +1397,17 @@
 		</section>
 	{/if}
 
-	{#if data.bcmr && token.bcmrSource === 'onchain' && token.bcmrPublicationUri && /^(https?|ipfs):\/\//i.test(token.bcmrPublicationUri)}
-		<!--
-			Link out to the publisher's own on-chain-published BCMR JSON
-			URI. The on-chain authchain walker (Phase 4c) sha256-verifies
-			the body before storing it, so what we link here is exactly
-			what the publisher committed on-chain. No fallback link — if
-			no verified on-chain locator exists, we don't surface a link.
-		-->
-		{@const onchainUri = token.bcmrPublicationUri}
-		{@const hostLabel = (() => {
-			try {
-				return new URL(onchainUri).host || 'on-chain';
-			} catch {
-				return 'on-chain';
-			}
-		})()}
+	{#if bcmrJsonLink}
 		<div class="mt-8 text-sm ts-text-muted">
 			<span class="uppercase tracking-wider text-xs mr-2">BCMR JSON</span>
 			<a
-				href={onchainUri}
+				href={bcmrJsonLink.href}
 				target="_blank"
 				rel="noopener noreferrer"
 				class="font-mono text-violet-600 dark:text-violet-400 hover:underline"
-				title="Open the on-chain-published BCMR JSON (the publisher’s own copy)"
+				title={bcmrJsonLink.title}
 			>
-				{hostLabel} ↗
+				{bcmrJsonLink.label} ↗
 			</a>
 		</div>
 	{/if}
