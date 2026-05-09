@@ -394,7 +394,7 @@
 </svelte:head>
 
 <main class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-	<div class="flex items-start gap-4 mb-6">
+	<div class="flex items-start flex-wrap gap-4 sm:gap-6 mb-6">
 		<img src={iconHrefFor(token.icon, token.iconClearedHash)} alt={token.name ?? ''} class="w-24 h-24 sm:w-28 sm:h-28 rounded-full ts-surface-chip" />
 		<div class="flex-1 min-w-0">
 			<h1 class="text-3xl font-bold text-slate-900 dark:text-white truncate flex items-center gap-2">
@@ -458,6 +458,29 @@
 				<FormatCategory category={token.id} />
 			</div>
 		</div>
+		{#if data.priceUSD > 0 || data.fexPriceUSD > 0}
+			{@const heroPrice = data.priceUSD > 0 ? data.priceUSD : data.fexPriceUSD}
+			{@const heroSource = data.priceUSD > 0 ? 'Cauldron' : 'Fex'}
+			{@const heroPct = data.priceUSD > 0 ? data.moverBadges.pricePct : null}
+			{@const heroSymbol = token.symbol ? stripEmoji(token.symbol) : ''}
+			<div class="shrink-0 sm:text-right">
+				<div class="text-4xl md:text-5xl font-mono font-bold tracking-tight ts-text-strong leading-none">
+					{fmtUsd(heroPrice)}
+				</div>
+				{#if heroPct != null && heroPct !== 0}
+					<div
+						class={`mt-2 text-sm font-semibold ${heroPct >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}
+						title="24h price change on Cauldron"
+					>
+						{heroPct >= 0 ? '▲ +' : '▼ '}{heroPct.toFixed(2)}%
+						<span class="opacity-70 font-normal">24h</span>
+					</div>
+				{/if}
+				<div class="mt-1 text-xs ts-text-muted">
+					per {heroSymbol || 'token'} · via {heroSource}
+				</div>
+			</div>
+		{/if}
 	</div>
 
 	{#if token.description}
@@ -883,16 +906,6 @@
 			{:else}
 				<div class="text-xl font-mono">—</div>
 			{/if}
-		</div>
-		<div class="p-4 rounded-xl border ts-border-subtle">
-			<div class="text-xs uppercase tracking-wider mb-1 ts-text-muted">Price (USD)</div>
-			<div class="text-xl font-mono">
-				{#if data.priceUSD > 0}
-					${data.priceUSD >= 1 ? data.priceUSD.toFixed(2) : data.priceUSD.toFixed(6)}
-				{:else}
-					—
-				{/if}
-			</div>
 		</div>
 		<div class="p-4 rounded-xl border ts-border-subtle">
 			<div class="text-xs uppercase tracking-wider mb-1 ts-text-muted">TVL (USD)</div>
