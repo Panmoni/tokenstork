@@ -202,16 +202,33 @@
 		) {
 			return null;
 		}
+		const uri = token.bcmrPublicationUri;
+		// ipfs:// URIs aren't openable in mainstream browsers without an
+		// extension, so we surface a public-gateway https:// fallback
+		// alongside the publisher's canonical scheme. Gateway choice
+		// mirrors workers/src/icons.rs::IPFS_GATEWAY for consistency
+		// across the two read paths (worker fetch + user click).
 		let host = 'on-chain';
-		try {
-			host = new URL(token.bcmrPublicationUri).host || host;
-		} catch {
-			/* malformed URI — fall back to the placeholder label */
+		let gatewayHref: string | null = null;
+		const ipfsRest = /^ipfs:\/\//i.test(uri)
+			? uri.replace(/^ipfs:\/\//i, '').replace(/^\/+/, '')
+			: null;
+		if (ipfsRest && ipfsRest.length > 0) {
+			gatewayHref = `https://ipfs.io/ipfs/${ipfsRest}`;
+			host = ipfsRest.split('/')[0];
+		} else {
+			try {
+				host = new URL(uri).host || host;
+			} catch {
+				/* malformed URI — fall back to the placeholder label */
+			}
 		}
 		return {
-			href: token.bcmrPublicationUri,
+			href: uri,
 			label: host,
-			title: "Open the on-chain-published BCMR JSON (the publisher's own copy)"
+			title: "Open the on-chain-published BCMR JSON (the publisher's own copy)",
+			gatewayHref,
+			gatewayTitle: 'View via ipfs.io public gateway (HTTPS proxy for the ipfs:// link)'
 		};
 	});
 
@@ -1409,6 +1426,18 @@
 			>
 				{bcmrJsonLink.label} ↗
 			</a>
+			{#if bcmrJsonLink.gatewayHref}
+				<span class="mx-1">·</span>
+				<a
+					href={bcmrJsonLink.gatewayHref}
+					target="_blank"
+					rel="noopener noreferrer"
+					class="text-violet-600 dark:text-violet-400 hover:underline text-xs"
+					title={bcmrJsonLink.gatewayTitle}
+				>
+					via ipfs.io ↗
+				</a>
+			{/if}
 		</div>
 	{/if}
 
