@@ -302,11 +302,32 @@ export async function listOutputsFor(airdropId: string): Promise<AirdropOutputRo
 	return result.rows;
 }
 
+/** Sentinel thrown when a markTxResult success-path UPDATE matches zero
+ *  rows. Indicates a re-entrancy race: another concurrent request already
+ *  flipped this airdrop_tx out of 'pending' / 'signed', and we MUST NOT
+ *  silently overwrite the existing broadcast result with a fresh txid. */
+export class MarkTxStateConflictError extends Error {
+	constructor(airdropId: string, txIndex: number) {
+		super(
+			`airdrop_txs row not in pending/signed state for ${airdropId}#${txIndex}; ` +
+				`possible double-broadcast race`
+		);
+		this.name = 'MarkTxStateConflictError';
+	}
+}
+
 /** Walk a single tx index from 'pending' → 'broadcast' (or 'failed'),
  *  recording the txid on success. Updates child airdrop_outputs in lockstep
  *  via the matching tx_index. Caller is responsible for rolling the parent
  *  airdrop's state forward (drafting → signing → broadcasting → complete |
  *  partial | failed); this helper only owns the per-tx + per-output rows.
+ *
+ *  **Re-entrancy guard**: the success-path UPDATE is gated on the row's
+ *  current state being 'pending' or 'signed'. If two concurrent broadcasts
+ *  race (double-clicked Submit, retried network), only the first to commit
+ *  flips the row; the second's UPDATE matches zero rows and we throw
+ *  [`MarkTxStateConflictError`] so the caller surfaces the conflict
+ *  instead of silently overwriting the canonical txid with a different one.
  */
 export async function markTxResult(
 	airdropId: string,
@@ -328,11 +349,16 @@ export async function markTxResult(
 			return;
 		}
 
-		await client.query(
+		const upd = await client.query(
 			`UPDATE airdrop_txs SET state = 'broadcast', txid = $1, fail_reason = NULL
-			  WHERE airdrop_id = $2 AND tx_index = $3`,
+			  WHERE airdrop_id = $2 AND tx_index = $3
+			    AND state IN ('pending', 'signed')
+			  RETURNING tx_index`,
 			[result.txid, airdropId, txIndex]
 		);
+		if (upd.rowCount === 0) {
+			throw new MarkTxStateConflictError(airdropId, txIndex);
+		}
 		// Bulk update each recipient's vout_index from the per-tx map. We
 		// pass parallel arrays + UNNEST for one round-trip rather than N
 		// individual UPDATEs.
@@ -347,6 +373,38 @@ export async function markTxResult(
 			[recipients, vouts, airdropId, txIndex]
 		);
 	});
+}
+
+/** Mark every remaining (still 'pending' or 'signed') airdrop_txs row
+ *  for an airdrop as 'failed' with a snapshot-advance fail_reason. Called
+ *  by the broadcast handler when `holderSnapshotFor` reports drift mid-
+ *  airdrop, so the parent state machine can naturally compute 'partial'
+ *  via [`recomputeAirdropState`] instead of the broadcast handler
+ *  returning a 'partial' string that doesn't match the DB.
+ *
+ *  Idempotent: re-runs do nothing because the state filter excludes
+ *  already-finalized rows. */
+export async function markRemainingTxsSnapshotHalted(
+	airdropId: string,
+	fromTxIndex: number,
+	fail_reason = 'holder snapshot advanced; airdrop halted'
+): Promise<number> {
+	const result = await query<{ tx_index: number }>(
+		`UPDATE airdrop_txs SET state = 'failed', fail_reason = $1
+		  WHERE airdrop_id = $2
+		    AND tx_index >= $3
+		    AND state IN ('pending', 'signed')
+		  RETURNING tx_index`,
+		[fail_reason, airdropId, fromTxIndex]
+	);
+	if (result.rows.length > 0) {
+		await query(
+			`UPDATE airdrop_outputs SET state = 'failed'
+			  WHERE airdrop_id = $1 AND tx_index = ANY($2::int[])`,
+			[airdropId, result.rows.map((r) => r.tx_index)]
+		);
+	}
+	return result.rows.length;
 }
 
 /** Roll the parent airdrop state forward. Computed from `airdrop_txs`
