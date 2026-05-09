@@ -286,17 +286,37 @@
 			}
 			broadcastTxid = body.txid ?? null;
 			mintedCategoryHex = genesisBuild?.categoryHex ?? null;
-			// Persist the broadcast result.
+			// Persist the broadcast result. The on-chain tx HAS landed at
+			// this point (we have the txid from BCHN); we MUST record it
+			// so /mints + the receipt page reflect reality. If the PATCH
+			// response is non-OK (state-machine guard rejected, network
+			// error, server crash), set the persist-failed banner so the
+			// user sees "tx broadcast successfully (txid: …) but the
+			// session record is out of sync — visit /mints" and isn't
+			// confused by a still-drafting state on resume.
 			if (sessionId && broadcastTxid && mintedCategoryHex) {
-				await fetch(`/api/mint/sessions/${sessionId}`, {
-					method: 'PATCH',
-					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify({
-						state: 'broadcast',
-						genesisTxidHex: broadcastTxid,
-						categoryHex: mintedCategoryHex
-					})
-				});
+				try {
+					const persistRes = await fetch(`/api/mint/sessions/${sessionId}`, {
+						method: 'PATCH',
+						headers: { 'content-type': 'application/json' },
+						body: JSON.stringify({
+							state: 'broadcast',
+							genesisTxidHex: broadcastTxid,
+							categoryHex: mintedCategoryHex
+						})
+					});
+					if (!persistRes.ok) {
+						console.warn(
+							'[mint] post-broadcast PATCH non-OK',
+							persistRes.status,
+							await persistRes.text().catch(() => '<no body>')
+						);
+						lastSaveFailed = true;
+					}
+				} catch (err) {
+					console.warn('[mint] post-broadcast PATCH threw', err);
+					lastSaveFailed = true;
+				}
 			}
 			step = 6;
 		} finally {

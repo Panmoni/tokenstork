@@ -106,5 +106,15 @@ export async function sendRawTransaction(rawHex: string): Promise<string> {
 	if (rawHex.length === 0 || rawHex.length % 2 !== 0) {
 		throw new Error('rawHex must be non-empty and even length');
 	}
-	return await rpcCall<string>('sendrawtransaction', [rawHex]);
+	const txid = await rpcCall<string>('sendrawtransaction', [rawHex]);
+	// Defense-in-depth: BCHN should always return a 64-char lowercase
+	// hex txid on success. If we ever see a malformed value (RPC quirk,
+	// proxy interference), throw rather than persist garbage into
+	// downstream tables (airdrop_txs.txid / user_mint_sessions.genesis_txid).
+	if (typeof txid !== 'string' || !/^[0-9a-f]{64}$/.test(txid)) {
+		throw new Error(
+			`BCHN returned malformed txid from sendrawtransaction: ${JSON.stringify(txid)}`
+		);
+	}
+	return txid;
 }
