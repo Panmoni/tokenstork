@@ -394,12 +394,17 @@ ALTER TABLE blocks ADD COLUMN IF NOT EXISTS coinbase_script_sig BYTEA;
 --                        valid outputs-with-token shape under any chain).
 --   - genesis_tx_count = txs that ARE the genesis publication of a new
 --                        category. Detected purely on-chain via the
---                        spec-required pattern: vin[0].vout == 0 (genesis
---                        spends index-0 of a prior output) AND at least
---                        one vout has token_data.category == tx.txid (the
---                        category id IS the genesis txid by spec). This is
---                        unique per category, so no DB lookup needed —
---                        the detection is cheap and exact.
+--                        CashTokens-CHIP-required pattern: vin[0].vout ==
+--                        0 (genesis spends index-0 of a prior output) AND
+--                        at least one vout has token_data.category ==
+--                        vin[0].txid (the category id is the *parent*
+--                        UTXO's txid, NOT the genesis tx's own txid —
+--                        confusingly, see tokens.category vs
+--                        tokens.genesis_txid in this schema, where they
+--                        are different values for the same row by spec).
+--                        A given (parent_txid, vout=0) outpoint can be
+--                        spent only once, so the pattern is unique per
+--                        category — exact and DB-free.
 --
 -- Burn detection is intentionally NOT included here. A burn requires
 -- knowing the input side's token data, which `getblock 2` doesn't include

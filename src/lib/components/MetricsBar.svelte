@@ -8,9 +8,17 @@
 		newIn24h: number;
 		totalTvlSats: number;
 		listedCount: number;
+		tokenTxs24h: number;
 	}
 
-	let { tokensTracked, tailLastBlock, newIn24h, totalTvlSats, listedCount }: Props = $props();
+	let {
+		tokensTracked,
+		tailLastBlock,
+		newIn24h,
+		totalTvlSats,
+		listedCount,
+		tokenTxs24h
+	}: Props = $props();
 
 	const fmt = (n: number) => n.toLocaleString('en-US');
 
@@ -95,6 +103,23 @@
 					</span>
 				</a>
 
+				<Tooltip>
+					<TooltipTrigger class="flex items-center gap-2 cursor-default">
+						<span class="text-xs font-medium uppercase tracking-wider ts-text-muted">
+							Txs 24h
+						</span>
+						<a
+							href="/stats"
+							class="font-semibold text-violet-600 dark:text-violet-400 text-sm underline-offset-4 hover:underline"
+						>
+							{fmt(tokenTxs24h)}
+						</a>
+					</TooltipTrigger>
+					<TooltipContent>
+						CashToken-bearing transactions across all categories in the last 24 hours — every block tx that emits at least one token output (transfers, mints, multi-token movements; each tx counts once). Pure on-chain count from the verbose block JSON. Click for the full /stats activity breakdown.
+					</TooltipContent>
+				</Tooltip>
+
 				{#if tailLastBlock !== null}
 					<Tooltip>
 						<TooltipTrigger class="flex items-center gap-2 cursor-default">
@@ -162,6 +187,14 @@
 			>
 				<span class="text-xs ts-text-muted">New 24h</span>
 				<span class="font-semibold text-sm text-violet-600 dark:text-violet-400">{fmt(newIn24h)}</span>
+			</a>
+			<a
+				href="/stats"
+				class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 shadow-sm no-underline"
+				title="CashToken-bearing txs across all categories, last 24h"
+			>
+				<span class="text-xs ts-text-muted">Txs 24h</span>
+				<span class="font-semibold text-sm text-violet-600 dark:text-violet-400">{fmt(tokenTxs24h)}</span>
 			</a>
 			{#if tailLastBlock !== null}
 				<a

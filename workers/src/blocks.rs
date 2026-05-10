@@ -84,10 +84,14 @@ pub struct BlockSummary {
     /// token_data. Backs the /stats "Token activity (24h)" card.
     /// Coinbase excluded.
     pub token_tx_count: i32,
-    /// Number of txs that ARE the genesis publication of a new category
-    /// (vin[0].vout == 0 AND at least one vout has token_data.category
-    /// == tx.txid — the spec-required pattern). Detection is pure-chain;
-    /// no DB lookup. Backs the /stats "Mints (24h)" card.
+    /// Number of txs that ARE the genesis publication of a new category.
+    /// Per the CashTokens CHIP: vin[0].vout == 0 AND at least one vout
+    /// has `token_data.category == vin[0].txid` (the category id is the
+    /// parent UTXO's txid by spec, NOT the genesis tx's own txid). Pure-
+    /// chain detection; no DB lookup. Backs the /stats "New categories"
+    /// card. Goes hand-in-hand with the existing tokens table where
+    /// `tokens.category == vin[0].txid` and
+    /// `tokens.genesis_txid == this_tx.txid`.
     pub genesis_tx_count: i32,
 }
 
@@ -179,11 +183,22 @@ pub fn summarize_block(block: &Block) -> Result<BlockSummary, BlockSummaryError>
     // CashToken activity counters. Both pure-chain (no DB / no extra RPC):
     //   - token_tx_count: any non-coinbase tx with ≥1 vout carrying token_data.
     //   - genesis_tx_count: txs that ARE the genesis publication of a new
-    //     category. Per the CashTokens spec, a genesis tx must spend
-    //     vout=0 of some prior output AND emit at least one vout whose
-    //     token_data.category equals the tx's own txid (the category id
-    //     IS the genesis txid by definition). This is unique per category,
-    //     so the count is exact even though we don't consult the DB.
+    //     category. Per the CashTokens CHIP, a genesis tx must:
+    //       (a) have vin[0] that spends an output at outpoint index 0
+    //           (vin[0].vout == 0), AND
+    //       (b) emit at least one vout whose token_data.category equals
+    //           **vin[0].txid** — the txid of the parent tx whose
+    //           index-0 output is being spent. This is the spec-mandated
+    //           definition of the category id: "the transaction ID of the
+    //           genesis transaction's spent UTXO". A given (parent_txid,
+    //           vout=0) outpoint can be spent only once, so this pattern
+    //           is exact and unique per category — no DB lookup needed.
+    //
+    //     Earlier versions of this counter checked
+    //     `td.category == tx.txid`, which is WRONG: the category id is
+    //     the parent's txid, not the genesis tx's own txid. That bug
+    //     produced genesis_tx_count = 0 across the entire chain at the
+    //     2026-05-09 launch.
     let mut token_tx_count: i32 = 0;
     let mut genesis_tx_count: i32 = 0;
     for tx in block.tx.iter().skip(1) {
@@ -191,18 +206,16 @@ pub fn summarize_block(block: &Block) -> Result<BlockSummary, BlockSummaryError>
         if has_token_vout {
             token_tx_count = token_tx_count.saturating_add(1);
         }
-        let vin0_spends_index_0 = tx
-            .vin
-            .first()
-            .and_then(|v| v.vout)
-            .is_some_and(|n| n == 0);
-        if vin0_spends_index_0 {
-            let creates_self_category = tx.vout.iter().any(|v| {
+        if let Some(vin0) = tx.vin.first()
+            && vin0.vout.is_some_and(|n| n == 0)
+            && let Some(parent_txid) = vin0.txid.as_deref()
+        {
+            let creates_new_category = tx.vout.iter().any(|v| {
                 v.token_data
                     .as_ref()
-                    .is_some_and(|td| td.category == tx.txid)
+                    .is_some_and(|td| td.category == parent_txid)
             });
-            if creates_self_category {
+            if creates_new_category {
                 genesis_tx_count = genesis_tx_count.saturating_add(1);
             }
         }
@@ -344,16 +357,21 @@ mod tests {
         }
     }
 
-    /// Genesis-tx helper: vin[0] spends vout=0 of a prior tx AND the tx
-    /// emits a token_data vout whose category equals the tx's own txid.
-    /// Per the CashTokens spec this is the genesis pattern; our counter
-    /// in summarize_block detects exactly this shape.
-    fn genesis_tx(self_txid_hex: &str) -> Tx {
+    /// Genesis-tx helper. Per the CashTokens CHIP, a genesis tx (a) has
+    /// vin[0] spending vout=0 of a prior tx, and (b) emits at least one
+    /// token_data vout whose category equals **vin[0].txid** — the txid
+    /// of the parent UTXO being spent (the category id IS the parent's
+    /// txid by spec; see also tokens.category vs tokens.genesis_txid in
+    /// the schema where category == parent_txid and genesis_txid == this
+    /// tx's own txid).
+    fn genesis_tx(self_txid_hex: &str, parent_txid_hex: &str) -> Tx {
         Tx {
             txid: self_txid_hex.to_string(),
-            vout: vec![vout_with_token_category(0.001, self_txid_hex)],
+            // td.category MUST equal parent_txid_hex per spec — that's
+            // the rule that makes this tx the genesis of a new category.
+            vout: vec![vout_with_token_category(0.001, parent_txid_hex)],
             vin: vec![Vin {
-                txid: Some("33".repeat(32)),
+                txid: Some(parent_txid_hex.to_string()),
                 vout: Some(0), // genesis: spend index-0
                 script_sig: None,
                 coinbase: None,
@@ -362,9 +380,9 @@ mod tests {
     }
 
     /// Token-bearing transfer (NOT genesis): vin[0] spends a non-zero
-    /// index, OR the vouts' token_data.category doesn't match this tx's
-    /// txid. Used to verify token_tx_count counts these but
-    /// genesis_tx_count does not.
+    /// index, OR td.category doesn't equal vin[0].txid (i.e. the tx
+    /// transfers an existing category, it's not creating one). Used to
+    /// verify token_tx_count counts these but genesis_tx_count does not.
     fn token_transfer_tx(self_txid_hex: &str, prev_vout_index: u32, category: &str) -> Tx {
         Tx {
             txid: self_txid_hex.to_string(),
@@ -489,9 +507,16 @@ mod tests {
     #[test]
     fn counters_recognize_genesis_tx() {
         // Pure genesis-tx block: coinbase + one tx that mints a new
-        // category. token_tx_count and genesis_tx_count should both be 1.
-        let cat = "55".repeat(32);
-        let block = block_at(800_000, 2_000, vec![coinbase_tx(6.25), genesis_tx(&cat)]);
+        // category. The category id == vin[0].txid (parent of the
+        // outpoint being spent at index 0), per CashTokens CHIP. Both
+        // counters should be 1.
+        let parent = "11".repeat(32);
+        let self_txid = "55".repeat(32);
+        let block = block_at(
+            800_000,
+            2_000,
+            vec![coinbase_tx(6.25), genesis_tx(&self_txid, &parent)],
+        );
         let s = summarize_block(&block).expect("summarize ok");
         assert_eq!(s.token_tx_count, 1);
         assert_eq!(s.genesis_tx_count, 1);
@@ -515,22 +540,29 @@ mod tests {
     }
 
     #[test]
-    fn counters_genesis_pattern_with_unrelated_category_is_not_genesis() {
-        // vin[0].vout == 0 BUT the emitted token_data.category doesn't
-        // match this tx's txid. This is a transfer that happens to spend
-        // an index-0 output (e.g., a previous genesis tx's main output).
-        // token_tx_count counts it; genesis_tx_count doesn't (the
-        // category id IS the genesis txid by spec, so a category that
-        // doesn't equal this tx's own txid means this tx is not the
-        // genesis).
-        let block = block_at(
-            800_000,
-            2_000,
-            vec![
-                coinbase_tx(6.25),
-                token_transfer_tx(&"88".repeat(32), 0, &"99".repeat(32)),
-            ],
-        );
+    fn counters_index_0_spend_with_unrelated_category_is_not_genesis() {
+        // vin[0].vout == 0 BUT td.category doesn't equal vin[0].txid.
+        // This is a transfer of an EXISTING category that happens to
+        // also spend a parent's index-0 output (e.g. a transfer chain
+        // that flows through index-0 outputs). The genesis of that
+        // category was a different earlier tx — this one isn't creating
+        // anything new, so genesis_tx_count must NOT count it.
+        let parent = "33".repeat(32);
+        let self_txid = "88".repeat(32);
+        let other_category = "99".repeat(32);
+        // Custom: vin[0] spends parent at index 0, but vouts carry an
+        // unrelated category id (the existing category being transferred).
+        let tx = Tx {
+            txid: self_txid,
+            vout: vec![vout_with_token_category(0.001, &other_category)],
+            vin: vec![Vin {
+                txid: Some(parent),
+                vout: Some(0),
+                script_sig: None,
+                coinbase: None,
+            }],
+        };
+        let block = block_at(800_000, 2_000, vec![coinbase_tx(6.25), tx]);
         let s = summarize_block(&block).expect("summarize ok");
         assert_eq!(s.token_tx_count, 1);
         assert_eq!(s.genesis_tx_count, 0);
@@ -540,7 +572,8 @@ mod tests {
     fn counters_mixed_block() {
         // Realistic mixed block: coinbase + 2 BCH-only + 1 genesis +
         // 2 token transfers. token_tx_count = 3; genesis_tx_count = 1.
-        let cat = "aa".repeat(32);
+        let parent = "aa".repeat(32);
+        let genesis_self = "bb".repeat(32);
         let block = block_at(
             800_000,
             10_000,
@@ -548,9 +581,9 @@ mod tests {
                 coinbase_tx(6.25),
                 normal_tx(1, vec![1.0]),
                 normal_tx(1, vec![0.5]),
-                genesis_tx(&cat),
-                token_transfer_tx(&"bb".repeat(32), 1, &"cc".repeat(32)),
-                token_transfer_tx(&"dd".repeat(32), 2, &"ee".repeat(32)),
+                genesis_tx(&genesis_self, &parent),
+                token_transfer_tx(&"cc".repeat(32), 1, &"dd".repeat(32)),
+                token_transfer_tx(&"ee".repeat(32), 2, &"ff".repeat(32)),
             ],
         );
         let s = summarize_block(&block).expect("summarize ok");

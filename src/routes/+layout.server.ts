@@ -52,8 +52,15 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 	// NOT_MODERATED_CLAUSE ($lib/moderation) — single source of truth so
 	// schema evolution is one-line governance. The `sync_state` query is
 	// untouched (no tokens join).
-	const [tokensTrackedRes, syncRes, newIn24hRes, cauldronTvlRes, fexTvlRes, listedRes] =
-		await Promise.allSettled([
+	const [
+		tokensTrackedRes,
+		syncRes,
+		newIn24hRes,
+		cauldronTvlRes,
+		fexTvlRes,
+		listedRes,
+		tokenTxs24hRes
+	] = await Promise.allSettled([
 			query<{ total: string }>(
 				`SELECT COUNT(*)::bigint AS total
 				   FROM tokens t
@@ -131,6 +138,16 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 				     WHERE o.status = 'open'
 				       AND ${NOT_MODERATED_CLAUSE}
 				 ) x`
+			),
+			query<{ total: string | null }>(
+				// CashToken-bearing txs in the last 24h, summed per-block.
+				// Matches the /stats "Token-bearing txs" card; surfaces in
+				// the MetricsBar so the topline shows on-chain activity at
+				// a glance. NULL → 0 via COALESCE so a fresh DB renders 0
+				// rather than "—".
+				`SELECT COALESCE(SUM(token_tx_count), 0)::bigint::text AS total
+				   FROM blocks
+				  WHERE time > now() - INTERVAL '24 hours'`
 			)
 		]);
 
@@ -140,6 +157,10 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 	const tokensTracked = pickCount(tokensTrackedRes);
 	const newIn24h = pickCount(newIn24hRes);
 	const listedCount = pickCount(listedRes);
+	const tokenTxs24h =
+		tokenTxs24hRes.status === 'fulfilled'
+			? Number(tokenTxs24hRes.value.rows[0]?.total ?? 0) || 0
+			: 0;
 
 	// Two TVL queries fan in here. Either failing soft-falls to 0 for
 	// that side; both failing yields a 0 total which the UI already
@@ -157,7 +178,15 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 	const tailLastBlock =
 		syncRes.status === 'fulfilled' ? (syncRes.value.rows[0]?.tail_last_block ?? null) : null;
 
-	for (const r of [tokensTrackedRes, syncRes, newIn24hRes, cauldronTvlRes, fexTvlRes, listedRes]) {
+	for (const r of [
+		tokensTrackedRes,
+		syncRes,
+		newIn24hRes,
+		cauldronTvlRes,
+		fexTvlRes,
+		listedRes,
+		tokenTxs24hRes
+	]) {
 		if (r.status === 'rejected') console.error('[+layout.server] metric query failed:', r.reason);
 	}
 
@@ -167,6 +196,7 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 		newIn24h,
 		totalTvlSats,
 		listedCount,
+		tokenTxs24h,
 		user: locals.user ?? null,
 		watchlistCategoryHexes,
 		userVoteByCategory

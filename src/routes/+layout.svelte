@@ -15,6 +15,7 @@
 			newIn24h: number;
 			totalTvlSats: number;
 			listedCount: number;
+			tokenTxs24h: number;
 		};
 		children: Snippet;
 	}
@@ -65,6 +66,7 @@
 			newIn24h={data.newIn24h}
 			totalTvlSats={data.totalTvlSats}
 			listedCount={data.listedCount}
+			tokenTxs24h={data.tokenTxs24h}
 		/>
 		<Header />
 		{@render children()}
