@@ -509,6 +509,55 @@
 			</div>
 		</details>
 
+		<details id="faq-txs-24h" class="group p-5 rounded-xl border scroll-mt-20 ts-border-subtle ts-surface-panel">
+			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
+				<span>How is the "Txs 24h" number calculated?</span>
+				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
+			</summary>
+			<div class="mt-3 space-y-2 ts-text-body">
+				<p>
+					The <strong>Txs 24h</strong> pill in the header — and the matching
+					<strong>Token-bearing txs</strong> card on
+					<a href="/stats" class="text-violet-600 dark:text-violet-400 hover:underline">/stats</a> —
+					counts every transaction in the last 24 hours that emits at least one CashToken-bearing
+					output. A tx that mints a new category, transfers existing tokens, or moves multiple
+					token types in a single tx all count as <em>one</em> entry. Coinbase transactions are
+					excluded.
+				</p>
+				<p>
+					We derive the count purely from on-chain data — no DB lookup, no external API. Our
+					<code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">sync-tail</code>
+					worker reads the verbose JSON of every new block from our local BCHN node, scans each
+					transaction's outputs for any
+					<code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">tokenData</code>
+					field, and stores a per-block tally in the
+					<code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">blocks.token_tx_count</code>
+					column. The headline number is just
+					<code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">SUM(token_tx_count) WHERE time &gt; now() - INTERVAL '24 hours'</code>.
+					Roughly 144 blocks land in any 24-hour window at BCH's 10-minute target spacing, so
+					a fresh deploy might briefly show a partial number while the rolling window fills.
+				</p>
+				<p>
+					The companion <strong>New categories</strong> card on
+					<a href="/stats" class="text-violet-600 dark:text-violet-400 hover:underline">/stats</a> uses
+					a stricter detection: per the CashTokens CHIP, a transaction creates a new token
+					category if it spends a previous transaction's output at index 0 and emits a
+					<code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">token_data</code>
+					vout whose category id matches that parent's transaction id. The category id IS the
+					parent UTXO's txid by spec, so we can detect new categories without consulting a
+					database — every chain participant can verify the same number.
+				</p>
+				<p>
+					What this number is <em>not</em>: it is not BCH transaction volume, not USD volume,
+					and not a measure of trade activity specifically. A token's whole UTXO set being
+					reorganised by its issuer counts the same as a real user-driven transfer. If you want
+					trading-specific signal, look at the Cauldron 24h volume on
+					<a href="/stats" class="text-violet-600 dark:text-violet-400 hover:underline">/stats</a> or
+					Tapswap's open-listing depth.
+				</p>
+			</div>
+		</details>
+
 		<details class="group p-5 rounded-xl border ts-border-subtle ts-surface-panel">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
 				<span>How do I add a token? How do I report one?</span>

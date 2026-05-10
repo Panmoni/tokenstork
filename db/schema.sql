@@ -392,19 +392,23 @@ ALTER TABLE blocks ADD COLUMN IF NOT EXISTS coinbase_script_sig BYTEA;
 --                        A tx that mints + transfers counts as 1. Coinbase
 --                        is excluded (its scriptSig doesn't decode to a
 --                        valid outputs-with-token shape under any chain).
---   - genesis_tx_count = txs that ARE the genesis publication of a new
---                        category. Detected purely on-chain via the
---                        CashTokens-CHIP-required pattern: vin[0].vout ==
---                        0 (genesis spends index-0 of a prior output) AND
---                        at least one vout has token_data.category ==
---                        vin[0].txid (the category id is the *parent*
---                        UTXO's txid, NOT the genesis tx's own txid —
---                        confusingly, see tokens.category vs
---                        tokens.genesis_txid in this schema, where they
---                        are different values for the same row by spec).
---                        A given (parent_txid, vout=0) outpoint can be
---                        spent only once, so the pattern is unique per
---                        category — exact and DB-free.
+--   - genesis_tx_count = count of NEW CATEGORIES created in this block.
+--                        Per the CashTokens CHIP, a category id is the
+--                        txid of the prevout being spent at outpoint
+--                        index 0; ANY input may carry the index-0 spend
+--                        (not just vin[0]). A single tx that mints two
+--                        distinct categories (two vins with vout=0, each
+--                        parent's txid appearing in some vout's
+--                        td.category) contributes 2. Counts categories,
+--                        not transactions — column name kept stable for
+--                        backwards compatibility but semantics are
+--                        category-granular. Distinguish from
+--                        tokens.category (the parent UTXO's txid) vs
+--                        tokens.genesis_txid (the spending tx's own
+--                        txid) — these are different 32-byte values for
+--                        every row by spec. (genesis_tx_count for the
+--                        genesis_block of every tokens row sums to that
+--                        block's tokens-table row count.)
 --
 -- Burn detection is intentionally NOT included here. A burn requires
 -- knowing the input side's token data, which `getblock 2` doesn't include

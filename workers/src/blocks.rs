@@ -84,14 +84,17 @@ pub struct BlockSummary {
     /// token_data. Backs the /stats "Token activity (24h)" card.
     /// Coinbase excluded.
     pub token_tx_count: i32,
-    /// Number of txs that ARE the genesis publication of a new category.
-    /// Per the CashTokens CHIP: vin[0].vout == 0 AND at least one vout
-    /// has `token_data.category == vin[0].txid` (the category id is the
-    /// parent UTXO's txid by spec, NOT the genesis tx's own txid). Pure-
-    /// chain detection; no DB lookup. Backs the /stats "New categories"
-    /// card. Goes hand-in-hand with the existing tokens table where
-    /// `tokens.category == vin[0].txid` and
-    /// `tokens.genesis_txid == this_tx.txid`.
+    /// Count of NEW CATEGORIES created in this block. Per the CashTokens
+    /// CHIP, a category id is the txid of the prevout being spent at
+    /// outpoint index 0 — and ANY input of the tx may carry that
+    /// index-0 spend (not just vin[0], despite an early misreading of
+    /// the spec). Pure-chain detection; no DB lookup. Backs the /stats
+    /// "New categories" card. Counts categories, not transactions: a
+    /// single tx that mints two distinct categories (two vins with
+    /// vout=0, each parent's txid present in some vout's td.category)
+    /// contributes 2 to this counter. Goes hand-in-hand with the
+    /// existing tokens table where `tokens.category` is the parent
+    /// UTXO's txid and `tokens.genesis_txid` is this tx's own txid.
     pub genesis_tx_count: i32,
 }
 
@@ -182,43 +185,54 @@ pub fn summarize_block(block: &Block) -> Result<BlockSummary, BlockSummaryError>
 
     // CashToken activity counters. Both pure-chain (no DB / no extra RPC):
     //   - token_tx_count: any non-coinbase tx with ≥1 vout carrying token_data.
-    //   - genesis_tx_count: txs that ARE the genesis publication of a new
-    //     category. Per the CashTokens CHIP, a genesis tx must:
-    //       (a) have vin[0] that spends an output at outpoint index 0
-    //           (vin[0].vout == 0), AND
-    //       (b) emit at least one vout whose token_data.category equals
-    //           **vin[0].txid** — the txid of the parent tx whose
-    //           index-0 output is being spent. This is the spec-mandated
-    //           definition of the category id: "the transaction ID of the
-    //           genesis transaction's spent UTXO". A given (parent_txid,
-    //           vout=0) outpoint can be spent only once, so this pattern
-    //           is exact and unique per category — no DB lookup needed.
+    //   - genesis_tx_count: count of NEW CATEGORIES created in this block
+    //     (one entry per distinct genesis publication, even when multiple
+    //     categories are created in the same tx). Per the CashTokens CHIP,
+    //     a category id is the txid of the prevout being spent at outpoint
+    //     index 0 — and ANY input of a tx may carry that index-0 spend
+    //     (not just vin[0]). The empirical pattern on chain: many tokens
+    //     are minted by txs whose vin[0] is a BCH-funding input and the
+    //     genesis-eligible spend is on vin[1] or later. So we scan every
+    //     vin with vout==0, gather the candidate parent_txids, and count
+    //     a distinct category whenever any vout's td.category matches one
+    //     of those candidates. A given (parent_txid, vout=0) outpoint can
+    //     be spent only once, so duplicates within a tx are impossible —
+    //     but we de-dup with a HashSet for safety against malformed RPC
+    //     responses.
     //
-    //     Earlier versions of this counter checked
-    //     `td.category == tx.txid`, which is WRONG: the category id is
-    //     the parent's txid, not the genesis tx's own txid. That bug
-    //     produced genesis_tx_count = 0 across the entire chain at the
-    //     2026-05-09 launch.
+    //     History note: earlier revisions of this counter checked only
+    //     vin[0] (the 2026-05-09 launch counted 15,619 of an actual
+    //     ~16,255 tokens — 96% recall). The current scan-all-vins
+    //     formulation closes the gap.
     let mut token_tx_count: i32 = 0;
     let mut genesis_tx_count: i32 = 0;
+    let mut new_categories_in_tx: std::collections::HashSet<&str> = std::collections::HashSet::new();
     for tx in block.tx.iter().skip(1) {
         let has_token_vout = tx.vout.iter().any(|v| v.token_data.is_some());
         if has_token_vout {
             token_tx_count = token_tx_count.saturating_add(1);
         }
-        if let Some(vin0) = tx.vin.first()
-            && vin0.vout.is_some_and(|n| n == 0)
-            && let Some(parent_txid) = vin0.txid.as_deref()
-        {
-            let creates_new_category = tx.vout.iter().any(|v| {
+        new_categories_in_tx.clear();
+        for vin in &tx.vin {
+            if vin.vout.is_none_or(|n| n != 0) {
+                continue;
+            }
+            let Some(parent_txid) = vin.txid.as_deref() else {
+                continue;
+            };
+            // Does any vout in this tx mint a token whose category id
+            // is this parent's txid? If so, the parent's index-0 outpoint
+            // is being consumed to genesis a new category.
+            let matched = tx.vout.iter().any(|v| {
                 v.token_data
                     .as_ref()
                     .is_some_and(|td| td.category == parent_txid)
             });
-            if creates_new_category {
-                genesis_tx_count = genesis_tx_count.saturating_add(1);
+            if matched {
+                new_categories_in_tx.insert(parent_txid);
             }
         }
+        genesis_tx_count = genesis_tx_count.saturating_add(new_categories_in_tx.len() as i32);
     }
 
     Ok(BlockSummary {
@@ -589,6 +603,82 @@ mod tests {
         let s = summarize_block(&block).expect("summarize ok");
         assert_eq!(s.token_tx_count, 3);
         assert_eq!(s.genesis_tx_count, 1);
+    }
+
+    #[test]
+    fn counters_recognize_genesis_via_non_vin_0() {
+        // On-chain pattern observed at carson 2026-05-10: tx
+        // 6995ace8…d3e3 has vin[0] spending an unrelated parent at
+        // index 0 AND vin[1] spending the genesis-eligible parent at
+        // index 0. The minted category id == vin[1].txid. Earlier
+        // detection that only checked vin[0] missed this entirely —
+        // gap of 636 categories across the chain history.
+        let unrelated_parent = "11".repeat(32);
+        let genesis_parent = "22".repeat(32);
+        let self_txid = "ff".repeat(32);
+        let tx = Tx {
+            txid: self_txid,
+            // The genesis-eligible category id == vin[1].txid (genesis_parent).
+            vout: vec![vout_with_token_category(0.001, &genesis_parent)],
+            vin: vec![
+                Vin {
+                    txid: Some(unrelated_parent),
+                    vout: Some(0), // index-0 but parent's txid doesn't appear in any vout
+                    script_sig: None,
+                    coinbase: None,
+                },
+                Vin {
+                    txid: Some(genesis_parent),
+                    vout: Some(0), // the actual genesis input
+                    script_sig: None,
+                    coinbase: None,
+                },
+            ],
+        };
+        let block = block_at(800_000, 2_000, vec![coinbase_tx(6.25), tx]);
+        let s = summarize_block(&block).expect("summarize ok");
+        assert_eq!(s.token_tx_count, 1);
+        assert_eq!(
+            s.genesis_tx_count, 1,
+            "genesis via vin[1] should be detected"
+        );
+    }
+
+    #[test]
+    fn counters_multi_category_per_tx_counts_each() {
+        // A single tx that mints TWO distinct categories: vin[0] and
+        // vin[1] both spend index-0 outpoints, AND the tx emits two
+        // vouts whose categories match each parent's txid. The counter
+        // is category-granular, so this contributes 2 (matches the
+        // tokens-table row count for the same block).
+        let parent_a = "aa".repeat(32);
+        let parent_b = "bb".repeat(32);
+        let self_txid = "cc".repeat(32);
+        let tx = Tx {
+            txid: self_txid,
+            vout: vec![
+                vout_with_token_category(0.001, &parent_a),
+                vout_with_token_category(0.001, &parent_b),
+            ],
+            vin: vec![
+                Vin {
+                    txid: Some(parent_a),
+                    vout: Some(0),
+                    script_sig: None,
+                    coinbase: None,
+                },
+                Vin {
+                    txid: Some(parent_b),
+                    vout: Some(0),
+                    script_sig: None,
+                    coinbase: None,
+                },
+            ],
+        };
+        let block = block_at(800_000, 2_000, vec![coinbase_tx(6.25), tx]);
+        let s = summarize_block(&block).expect("summarize ok");
+        assert_eq!(s.token_tx_count, 1);
+        assert_eq!(s.genesis_tx_count, 2, "two categories minted in one tx");
     }
 
     #[test]

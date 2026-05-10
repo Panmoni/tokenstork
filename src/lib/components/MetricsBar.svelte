@@ -109,14 +109,14 @@
 							Txs 24h
 						</span>
 						<a
-							href="/stats"
+							href="/faq#faq-txs-24h"
 							class="font-semibold text-violet-600 dark:text-violet-400 text-sm underline-offset-4 hover:underline"
 						>
 							{fmt(tokenTxs24h)}
 						</a>
 					</TooltipTrigger>
 					<TooltipContent>
-						CashToken-bearing transactions across all categories in the last 24 hours — every block tx that emits at least one token output (transfers, mints, multi-token movements; each tx counts once). Pure on-chain count from the verbose block JSON. Click for the full /stats activity breakdown.
+						CashToken-bearing transactions across all categories in the last 24 hours — every block tx that emits at least one token output (transfers, mints, multi-token movements; each tx counts once). Pure on-chain count from the verbose block JSON. Click for the FAQ explainer.
 					</TooltipContent>
 				</Tooltip>
 
@@ -189,7 +189,7 @@
 				<span class="font-semibold text-sm text-violet-600 dark:text-violet-400">{fmt(newIn24h)}</span>
 			</a>
 			<a
-				href="/stats"
+				href="/faq#faq-txs-24h"
 				class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 shadow-sm no-underline"
 				title="CashToken-bearing txs across all categories, last 24h"
 			>
