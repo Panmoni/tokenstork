@@ -129,6 +129,45 @@ pub fn resolve_icon_url(uri: &str) -> Option<String> {
         return Some(uri.to_string());
     }
 
+    // Schemeless fallback. If the URI has no scheme prefix at all,
+    // assume the publisher meant `https://`. About 3% of on-chain
+    // BCMR locators at 2026-05-09 are written schemeless
+    // (`nftstorage.link/ipfs/<cid>`, `gist.githubusercontent.com/.../raw`)
+    // — non-conformant per the BCMR CHIP but real production data.
+    //
+    // Safety:
+    //   - SSRF chain unaffected: `safe_http::SafeResolver` still drops
+    //     every private/loopback/CGNAT answer at the connector layer
+    //     regardless of which scheme we inferred.
+    //   - Hash gate unaffected: the BCMR walker verifies sha256 against
+    //     the on-chain locator before persistence; a wrong-scheme guess
+    //     that happens to resolve to attacker-chosen bytes still fails
+    //     hash and never lands in `token_metadata`.
+    //   - Worst-case is one wasted fetch on a URL whose body doesn't
+    //     verify — same outcome as today's unfetchable-locator failure
+    //     mode.
+    //
+    // Detection: opaque-scheme URIs like `mailto:foo`, `data:image/...`,
+    // `javascript:alert(1)` carry a `:` before any `/`; we treat those
+    // as scheme-prefixed (they fall through to the None branch). A real
+    // schemeless host/path has either no colon at all, or only colons
+    // that come AFTER the first slash (e.g. a `:port` in the authority,
+    // implausible but allowable). First char must be alphanumeric to
+    // be a plausible hostname start.
+    let first_colon = uri.find(':');
+    let first_slash = uri.find('/');
+    let has_scheme = match (first_colon, first_slash) {
+        (Some(_), None) => true,
+        (Some(c), Some(s)) if c < s => true,
+        _ => false,
+    };
+    if !has_scheme && uri.starts_with(|c: char| c.is_ascii_alphanumeric()) {
+        // Recurse with `https://` prepended. Bounded at depth 1
+        // because the prepended URI now satisfies `starts_with("https://")`
+        // on the next call and returns immediately.
+        return resolve_icon_url(&format!("https://{uri}"));
+    }
+
     // `data:`, `file:`, `http:`, `ftp:`, javascript:, anything weird → reject.
     None
 }
@@ -639,6 +678,64 @@ mod tests {
             resolve_icon_url("  ipfs://x  ").as_deref(),
             Some("https://ipfs.io/ipfs/x")
         );
+    }
+
+    #[test]
+    fn resolver_schemeless_fallback_assumes_https() {
+        // The two real-world patterns observed in production at
+        // 2026-05-09 — publishers writing the BCMR locator without an
+        // `https://` prefix. Both should now be fetched as https.
+        assert_eq!(
+            resolve_icon_url("nftstorage.link/ipfs/bafybeihash/icon.png").as_deref(),
+            Some("https://nftstorage.link/ipfs/bafybeihash/icon.png")
+        );
+        assert_eq!(
+            resolve_icon_url("gist.githubusercontent.com/raw/abc/def").as_deref(),
+            Some("https://gist.githubusercontent.com/raw/abc/def")
+        );
+        // Bare hostname (no path) also works — `https://example.com`.
+        assert_eq!(
+            resolve_icon_url("example.com").as_deref(),
+            Some("https://example.com")
+        );
+    }
+
+    #[test]
+    fn resolver_schemeless_fallback_composes_with_ipfs_subdomain_rewrite() {
+        // Pathological-but-possible: a schemeless URI that ALSO matches
+        // the `*.ipfs.<host>` gateway shape. The fallback prepends
+        // https, then the existing rewrite branch pins it to the
+        // canonical gateway — net effect is correct.
+        assert_eq!(
+            resolve_icon_url("bafybeihash.ipfs.nftstorage.link/icon.png").as_deref(),
+            Some("https://ipfs.io/ipfs/bafybeihash/icon.png")
+        );
+    }
+
+    #[test]
+    fn resolver_schemeless_fallback_does_not_promote_opaque_schemes() {
+        // Opaque-URI schemes (colon before any slash) MUST NOT be
+        // schemeless-promoted to https. These have to keep returning
+        // None to preserve the SSRF + content-safety floor.
+        assert!(resolve_icon_url("mailto:foo@bar.com").is_none());
+        assert!(resolve_icon_url("javascript:alert(1)").is_none());
+        assert!(resolve_icon_url("data:image/png;base64,iVBORw0KGgoA").is_none());
+        // http:// already rejected; not a schemeless case but defensive.
+        assert!(resolve_icon_url("http://example.com").is_none());
+        // Doesn't start with alphanumeric (`/path` is treated as
+        // scheme-incomplete garbage, NOT promoted).
+        assert!(resolve_icon_url("/ipfs/bafybeihash").is_none());
+        assert!(resolve_icon_url(".weird.start").is_none());
+    }
+
+    #[test]
+    fn resolver_schemeless_fallback_bounded_recursion() {
+        // The fallback recurses with `https://` prepended, which the
+        // next call recognizes via the existing `starts_with("https://")`
+        // branch — no second recursion. Belt-and-suspenders test that
+        // even pathological inputs return in one call.
+        let r = resolve_icon_url("foo");
+        assert_eq!(r.as_deref(), Some("https://foo"));
     }
 
     #[test]
