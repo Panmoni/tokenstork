@@ -1935,7 +1935,8 @@ pub async fn flip_icon_url_to_pending(pool: &PgPool, uri: &str) -> Result<()> {
         "UPDATE icon_url_scan
             SET content_hash = NULL,
                 last_fetched_at = now(),
-                fetch_error = NULL
+                fetch_error = NULL,
+                fail_count = 0
           WHERE icon_uri = $1",
     )
     .bind(uri)
@@ -1965,18 +1966,45 @@ pub async fn ensure_icon_url_scan_row(pool: &PgPool, icon_uri: &str) -> Result<(
     Ok(())
 }
 
+/// Hard ceiling on `icon_url_scan.fail_count` — once a URL has failed
+/// this many times consecutively, the picker stops surfacing it. At our
+/// exponential-backoff schedule (4min × 2^fail_count, capped at 256min
+/// from fail_count = 6 onward) this is ~2.7 days of retries before
+/// give-up. Publisher-side dead links (404s, expired domains, discontinued
+/// IPFS gateways) age out without forever burning fetch budget.
+const ICON_FETCH_GIVE_UP_FAIL_COUNT: i32 = 20;
+
 /// Pull a batch of pending icon URLs to scan. "Pending" = no content_hash
-/// recorded yet OR a previous fetch error needs retry. Oldest first
-/// (NULLS FIRST means never-fetched rows lead).
+/// recorded yet OR a previous fetch error needs retry, with two backoff
+/// gates layered on top:
+///   1. Hard give-up at `fail_count >= ICON_FETCH_GIVE_UP_FAIL_COUNT` (20).
+///      Permanently-broken URLs age out of the queue after ~5.5 days of
+///      retries instead of churning every 15 min forever (the prior
+///      behavior at 2026-05-11 had 52 URLs in that state).
+///   2. Exponential-backoff delay between retries: 5 minutes × 2^fail_count
+///      capped at 256 minutes (~4 hours). A row that has failed N times
+///      can only be re-picked after `last_fetched_at + backoff(N)` has
+///      elapsed. The first attempt (fail_count = 0, last_fetched_at IS
+///      NULL) bypasses the gate — newly-seeded URLs are always eligible.
+///
+/// Ordered `last_fetched_at NULLS FIRST` so never-tried URLs surface
+/// before any retry candidate, matching the previous picker semantics.
 pub async fn find_pending_icon_urls(pool: &PgPool, batch_size: i64) -> Result<Vec<String>> {
     let rows: Vec<(String,)> = sqlx::query_as(
         "SELECT icon_uri
            FROM icon_url_scan
-          WHERE content_hash IS NULL OR fetch_error IS NOT NULL
+          WHERE (content_hash IS NULL OR fetch_error IS NOT NULL)
+            AND fail_count < $2
+            AND (
+              last_fetched_at IS NULL
+              OR last_fetched_at < now()
+                 - LEAST(POWER(2, LEAST(fail_count, 8))::int, 64) * INTERVAL '4 minutes'
+            )
           ORDER BY last_fetched_at NULLS FIRST
           LIMIT $1",
     )
     .bind(batch_size)
+    .bind(ICON_FETCH_GIVE_UP_FAIL_COUNT)
     .fetch_all(pool)
     .await
     .context("finding pending icon URLs")?;
@@ -2034,13 +2062,17 @@ pub async fn upsert_icon_moderation(pool: &PgPool, w: &IconModerationWrite<'_>) 
     Ok(())
 }
 
-/// Link a URL row to its content hash. Clears any prior fetch_error.
+/// Link a URL row to its content hash. Clears any prior fetch_error AND
+/// resets fail_count so a previously-failing URL that finally serves the
+/// correct bytes goes back to "happy" state — important for legitimate
+/// publishers who fixed their gateway after we'd already given up.
 pub async fn link_url_to_hash(pool: &PgPool, uri: &str, hash: &[u8]) -> Result<()> {
     sqlx::query(
         "UPDATE icon_url_scan
             SET content_hash = $2,
                 last_fetched_at = now(),
-                fetch_error = NULL
+                fetch_error = NULL,
+                fail_count = 0
           WHERE icon_uri = $1",
     )
     .bind(uri)
@@ -2053,12 +2085,16 @@ pub async fn link_url_to_hash(pool: &PgPool, uri: &str, hash: &[u8]) -> Result<(
 
 /// Record a fetch error against the URL row without linking a hash.
 /// `last_fetched_at` is bumped so the row drops to the back of the queue
-/// rather than spinning on the next tick.
+/// rather than spinning on the next tick. `fail_count` is incremented so
+/// the exponential-backoff gate in find_pending_icon_urls delays the
+/// next retry, and so repeated failures eventually trigger the hard
+/// give-up at fail_count = ICON_FETCH_GIVE_UP_FAIL_COUNT.
 pub async fn mark_icon_fetch_failed(pool: &PgPool, uri: &str, err: &str) -> Result<()> {
     sqlx::query(
         "UPDATE icon_url_scan
             SET fetch_error = $2,
-                last_fetched_at = now()
+                last_fetched_at = now(),
+                fail_count = fail_count + 1
           WHERE icon_uri = $1",
     )
     .bind(uri)

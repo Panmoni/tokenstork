@@ -709,6 +709,16 @@ CREATE INDEX IF NOT EXISTS icon_url_scan_pending_idx
   ON icon_url_scan (last_fetched_at NULLS FIRST)
   WHERE content_hash IS NULL OR fetch_error IS NOT NULL;
 
+-- Consecutive-failure counter — backs the picker's exponential-backoff +
+-- hard-cap policy. Incremented on every mark_icon_fetch_failed call;
+-- reset to 0 on successful fetch (link_url_to_hash). Without this counter,
+-- the previous picker selected `content_hash IS NULL OR fetch_error IS
+-- NOT NULL` and retried every persistently-dead URL on every 15-min tick,
+-- wasting fetch budget on URLs whose publisher has long since deleted the
+-- icon. The current backoff schedule (in find_pending_icon_urls) is
+-- exponential 5min → 256min cap, with a hard give-up at fail_count >= 20.
+ALTER TABLE icon_url_scan ADD COLUMN IF NOT EXISTS fail_count INTEGER NOT NULL DEFAULT 0;
+
 ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_icons_run_at TIMESTAMPTZ;
 ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_icons_backfill_through INTEGER;
 
