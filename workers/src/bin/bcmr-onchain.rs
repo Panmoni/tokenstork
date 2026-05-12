@@ -46,8 +46,8 @@ use workers::env::parse_or_default;
 use workers::pg::{
     self, OnchainBcmrTarget, TokenMetadataHistoryWrite, TokenMetadataOnchainWrite,
     bytes_to_hex, ensure_icon_url_scan_row, mark_bcmr_onchain_run, mark_no_locator_walked,
-    pick_bcmr_onchain_batch, pool_from_env, upsert_token_metadata_history,
-    upsert_token_metadata_onchain,
+    pick_bcmr_onchain_batch, pool_from_env, update_token_authchain_head,
+    upsert_token_metadata_history, upsert_token_metadata_onchain,
 };
 use workers::safe_http::safe_client_builder;
 
@@ -225,6 +225,24 @@ async fn walk_one(
     let hops = outcome.hops;
     stats.hops_total = hops.len();
     stats.hit_max_hops = outcome.hit_max_hops;
+
+    // Cache the current authchain head on the tokens row so the SvelteKit
+    // publish-eligibility check (#33) can avoid a per-render authchain
+    // walk. Only persist when we found a definitive head (not when
+    // hit_max_hops was true — the chain we observed is incomplete and
+    // caching the "head" we stopped at would be misleading). Idempotent
+    // and best-effort: a failure here is logged but doesn't fail the
+    // walk (the BCMR upsert path below is what matters for correctness).
+    if !outcome.hit_max_hops
+        && let Some(head) = hops.iter().find(|h| h.is_head)
+        && let Err(e) = update_token_authchain_head(pool, &target.category, &head.txid).await
+    {
+        warn!(
+            category = %category_hex,
+            error = %e,
+            "could not cache authchain head; publish-eligibility falls back to cold-start walk"
+        );
+    }
 
     // Track best verified hop: highest block_height (None = mempool, treat
     // as latest). Ties: later in iteration order wins (closer to head).

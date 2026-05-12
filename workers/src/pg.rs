@@ -737,6 +737,38 @@ pub async fn mark_no_locator_walked(pool: &PgPool, category: &[u8]) -> Result<()
     Ok(())
 }
 
+/// Cache the current authchain head for a category. Called by the
+/// on-chain BCMR walker after `walk_authchain` finds the head (the hop
+/// where `vout[0].spent_tx_id.is_none()`). The SvelteKit publish-
+/// eligibility check (#33) reads this cached head + a single BlockBook
+/// ownership lookup of vout=0 to decide "can this wallet publish BCMR
+/// for this category?", avoiding a per-render authchain walk.
+///
+/// Idempotent: re-running the walker against the same chain state is a
+/// no-op. When the publisher updates BCMR (authNFT spent, new head
+/// emitted), the walker's next tick picks up the new head and overwrites
+/// this row.
+///
+/// `head_txid` is the 32-byte raw txid (display order).
+pub async fn update_token_authchain_head(
+    pool: &PgPool,
+    category: &[u8],
+    head_txid: &[u8],
+) -> Result<()> {
+    sqlx::query("UPDATE tokens SET authchain_head_txid = $2 WHERE category = $1")
+        .bind(category)
+        .bind(head_txid)
+        .execute(pool)
+        .await
+        .with_context(|| {
+            format!(
+                "update_token_authchain_head for {}",
+                bytes_to_hex(category)
+            )
+        })?;
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // CRC-20 detection helpers. See workers/src/crc20.rs for the parser and
 // docs/crc20-plan.md for the design.

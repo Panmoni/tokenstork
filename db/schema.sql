@@ -1085,3 +1085,97 @@ CREATE TABLE IF NOT EXISTS token_metadata_history (
 
 CREATE INDEX IF NOT EXISTS token_metadata_history_category_height_idx
   ON token_metadata_history (category, block_height DESC NULLS LAST);
+
+-- ============================================================================
+-- BCMR publish wizard (#33) — wallet-gated authority for the category's
+-- authNFT-holder to publish or update a BCMR locator. Three additive pieces:
+--
+--   1. tokens.authchain_head_txid — cached current authchain head per
+--      category, populated by sync-bcmr-onchain. The publish-eligibility
+--      check uses this + a single BlockBook lookup of vout=0 ownership.
+--   2. bcmr_publish_sessions — wizard state, mirrors user_mint_sessions
+--      shape (resume-across-refresh, 6-step state machine).
+--   3. bcmr_tokenstork_submissions — operator-approval queue for the
+--      optional tokenstork-hosted backup copy. The on-chain publication
+--      points at the user's own IPFS/HTTPS host (always); tokenstork is
+--      a fallback mirror at /bcmr/<content_hash>.json gated on operator
+--      approval. Approved rows have their JSON written to
+--      /var/lib/tokenstork/bcmr/<hash>.json for Caddy to serve.
+-- ============================================================================
+
+-- Cached current authchain head. Set by the on-chain walker on every walk;
+-- read by the publish-eligibility check on /publish-bcmr and the CTA on
+-- /token/[category]. NULL for categories the walker hasn't visited yet;
+-- the eligibility-check path does a cold-start authchain walk in that case.
+ALTER TABLE tokens ADD COLUMN IF NOT EXISTS authchain_head_txid BYTEA;
+
+-- Wizard state. One row per (user, category, in-progress draft) by the
+-- partial unique index below; closed/abandoned drafts are not unique-
+-- constrained so a user can re-publish the same category after a prior
+-- session ended.
+CREATE TABLE IF NOT EXISTS bcmr_publish_sessions (
+  id                          UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+  cashaddr                    TEXT            NOT NULL REFERENCES users(cashaddr) ON DELETE CASCADE,
+  category                    BYTEA           NOT NULL,
+  state                       TEXT            NOT NULL DEFAULT 'drafting'
+                                              CHECK (state IN ('drafting','signed','broadcast','confirmed','failed','abandoned')),
+  -- BCMR draft fields (caps mirror the mint wizard's #28 server-side validator)
+  name                        TEXT,
+  ticker                      TEXT,
+  description                 TEXT,
+  decimals                    SMALLINT        CHECK (decimals IS NULL OR decimals BETWEEN 0 AND 8),
+  icon_uri                    TEXT,
+  -- Canonicalized output
+  bcmr_json                   JSONB,                                  -- the canonical JSON shape
+  content_hash                BYTEA,                                  -- sha256(canonical(bcmr_json))
+  publication_uri             TEXT,                                   -- user's own host URL
+  publication_verified_at     TIMESTAMPTZ,                            -- when sha256 matched
+  -- Authchain context captured at session start
+  authchain_head_txid_at_session BYTEA,                               -- the head we'll spend
+  authchain_head_captured_at  TIMESTAMPTZ,
+  -- Tx record
+  unsigned_tx_hex             TEXT,
+  signed_tx_hex               TEXT,
+  publish_txid                BYTEA,                                  -- 32-byte txid after broadcast
+  -- Bookkeeping
+  created_at                  TIMESTAMPTZ     NOT NULL DEFAULT now(),
+  updated_at                  TIMESTAMPTZ     NOT NULL DEFAULT now()
+);
+
+-- One drafting session per (wallet, category) at a time; closed sessions
+-- can stack. Mirrors airdrops one-drafting-per-sender pattern.
+CREATE UNIQUE INDEX IF NOT EXISTS bcmr_publish_sessions_one_drafting_idx
+  ON bcmr_publish_sessions (cashaddr, category)
+  WHERE state = 'drafting';
+
+CREATE INDEX IF NOT EXISTS bcmr_publish_sessions_user_idx
+  ON bcmr_publish_sessions (cashaddr, state);
+
+CREATE INDEX IF NOT EXISTS bcmr_publish_sessions_publish_txid_idx
+  ON bcmr_publish_sessions (publish_txid)
+  WHERE publish_txid IS NOT NULL;
+
+-- Operator-approval queue for the tokenstork-hosted backup. Idempotent on
+-- content_hash — content is immutable so resubmitting the same JSON is a
+-- no-op. The on-chain publication is independent of approval state; this
+-- table only gates whether tokenstork serves the backup at
+-- /bcmr/<content_hash>.json.
+CREATE TABLE IF NOT EXISTS bcmr_tokenstork_submissions (
+  content_hash                BYTEA           PRIMARY KEY,             -- sha256(canonical(json_body))
+  category                    BYTEA           NOT NULL,                -- the token this BCMR is for
+  cashaddr                    TEXT            NOT NULL,                -- submitter
+  json_body                   JSONB           NOT NULL,                -- canonical BCMR JSON
+  submitted_at                TIMESTAMPTZ     NOT NULL DEFAULT now(),
+  review_state                TEXT            NOT NULL DEFAULT 'pending'
+                                              CHECK (review_state IN ('pending','approved','rejected')),
+  reviewed_at                 TIMESTAMPTZ,                              -- set on approve/reject
+  reviewer_cashaddr           TEXT,                                     -- which operator made the call
+  moderator_note              TEXT                                      -- private — reason for approval/rejection
+);
+
+CREATE INDEX IF NOT EXISTS bcmr_tokenstork_submissions_pending_idx
+  ON bcmr_tokenstork_submissions (submitted_at)
+  WHERE review_state = 'pending';
+
+CREATE INDEX IF NOT EXISTS bcmr_tokenstork_submissions_category_idx
+  ON bcmr_tokenstork_submissions (category);
