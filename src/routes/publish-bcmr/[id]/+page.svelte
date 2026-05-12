@@ -58,9 +58,12 @@
 	let session = $state<BcmrPublishSession>(initialSession());
 
 	function maxStepForState(s: BcmrPublishSession): number {
-		if (s.contentHashHex) return 3;
-		if (s.iconUri !== null && s.iconUri !== undefined) return 2;
-		return 1;
+		if (s.publishTxidHex) return 6;
+		if (s.signedTxHex) return 5;
+		if (s.publicationVerifiedAt) return 5;
+		if (s.contentHashHex) return 4;
+		if (s.iconUri !== null && s.iconUri !== undefined) return 3;
+		return 2;
 	}
 
 	let step = $state(initialStep());
@@ -81,6 +84,21 @@
 	let canonicalJson = $state<string | null>(null);
 	let canonicalizing = $state(false);
 	let canonicalizeError = $state<string | null>(null);
+
+	// Step 4: publication verification + optional tokenstork backup.
+	let publicationUriInput = $state<string>(initialPublicationUri());
+	function initialPublicationUri() {
+		return data.session.publicationUri ?? '';
+	}
+	let verifying = $state(false);
+	let verifyResult = $state<
+		| null
+		| { ok: true; sizeBytes: number }
+		| { ok: false; reason: string; message: string; expected?: string; observed?: string }
+	>(null);
+	let submitBackup = $state(false); // checkbox
+	let submittingBackup = $state(false);
+	let submitBackupResult = $state<null | { ok: true } | { ok: false; message: string }>(null);
 
 	const stepLabels = ['Identity', 'Icon', 'Canonicalize', 'Publish', 'Build & sign', 'Broadcast'];
 
@@ -198,6 +216,81 @@
 			await navigator.clipboard.writeText(text);
 		} catch {
 			/* clipboard API failed — silently no-op */
+		}
+	}
+
+	async function runVerify() {
+		verifyResult = null;
+		const url = publicationUriInput.trim();
+		if (!url) {
+			verifyResult = { ok: false, reason: 'invalid-url', message: 'Enter your URL first' };
+			return;
+		}
+		verifying = true;
+		try {
+			const res = await fetch(`/api/bcmr/sessions/${session.id}/verify-uri`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ publicationUri: url })
+			});
+			if (res.status === 200) {
+				const body = (await res.json()) as
+					| { ok: true; session: BcmrPublishSession; sizeBytes: number }
+					| {
+							ok: false;
+							reason: string;
+							message: string;
+							expected?: string;
+							observed?: string;
+					  };
+				if (body.ok) {
+					session = body.session;
+					verifyResult = { ok: true, sizeBytes: body.sizeBytes };
+				} else {
+					verifyResult = body;
+				}
+			} else {
+				const body = (await res.json().catch(() => ({}))) as { message?: string };
+				verifyResult = {
+					ok: false,
+					reason: 'server-error',
+					message: body.message ?? `Verify failed (HTTP ${res.status})`
+				};
+			}
+		} catch (err) {
+			verifyResult = {
+				ok: false,
+				reason: 'network',
+				message: (err as Error).message ?? 'Network error'
+			};
+		} finally {
+			verifying = false;
+		}
+	}
+
+	async function runSubmitBackup() {
+		submitBackupResult = null;
+		submittingBackup = true;
+		try {
+			const res = await fetch(`/api/bcmr/sessions/${session.id}/submit-backup`, {
+				method: 'POST'
+			});
+			if (res.ok) {
+				submitBackupResult = { ok: true };
+			} else {
+				const body = (await res.json().catch(() => ({}))) as { message?: string };
+				submitBackupResult = {
+					ok: false,
+					message: body.message ?? `Submit failed (HTTP ${res.status})`
+				};
+			}
+		} catch (err) {
+			submitBackupResult = {
+				ok: false,
+				message: (err as Error).message ?? 'Network error'
+			};
+		} finally {
+			submittingBackup = false;
 		}
 	}
 
@@ -413,12 +506,103 @@
 		{:else if step === 4}
 			<h2 class="text-xl font-semibold ts-text-strong mb-2">4. Publish & verify</h2>
 			<p class="text-sm mb-5 ts-text-muted">
-				Coming in Day 3 — paste your hosted URL here, we'll fetch + sha256-verify. You'll also have
-				the option to submit a backup copy to tokenstork.com for operator approval.
+				Upload the canonical JSON from step 3 to your own IPFS / web3.storage / Pinata / any
+				HTTPS host you control, then paste the URL here. <strong>Your own host stays the canonical
+				source</strong> — it's what we'll commit on-chain.
 			</p>
-			<div class="p-3 rounded-md bg-slate-100 dark:bg-zinc-800 text-sm ts-text-muted">
-				This step is not yet wired. Skip is disabled.
+
+			<label class="block">
+				<span class="text-sm font-medium ts-text-strong">Publication URL (https://)</span>
+				<input
+					type="url"
+					maxlength="2048"
+					bind:value={publicationUriInput}
+					placeholder="https://your-host.example/path/to/bcmr.json"
+					class="mt-1 w-full px-3 py-2 rounded-md border ts-border-strong ts-surface-input font-mono text-sm"
+					disabled={!!session.publicationVerifiedAt}
+				/>
+				<span class="block mt-1 text-xs ts-text-muted">
+					HTTPS only. If your host uses redirects, paste the final URL. Maximum 8 MiB body.
+				</span>
+			</label>
+
+			<div class="mt-4 flex items-center gap-3">
+				<button
+					type="button"
+					onclick={runVerify}
+					disabled={verifying || !publicationUriInput.trim() || !!session.publicationVerifiedAt}
+					class="px-4 py-2 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold disabled:opacity-50"
+				>
+					{verifying ? 'Verifying…' : session.publicationVerifiedAt ? 'Verified ✓' : 'Verify my host'}
+				</button>
+				{#if session.publicationVerifiedAt}
+					<span class="text-xs text-emerald-700 dark:text-emerald-400">
+						Hosted bytes match the canonical content hash.
+					</span>
+				{/if}
 			</div>
+
+			{#if verifyResult && !verifyResult.ok}
+				<div
+					class="mt-4 p-3 rounded-md bg-rose-50 dark:bg-rose-950/30 text-sm text-rose-700 dark:text-rose-300"
+					role="alert"
+				>
+					<strong>Verification failed:</strong>
+					{verifyResult.message}
+					{#if verifyResult.reason === 'hash-mismatch' && verifyResult.expected && verifyResult.observed}
+						<div class="mt-2 font-mono text-[11px]">
+							expected: {verifyResult.expected}<br />
+							observed: {verifyResult.observed}
+						</div>
+						<div class="mt-2 text-xs">
+							The bytes returned by your host don't match what step 3 canonicalized. Re-download
+							the canonical JSON from step 3 and upload exactly those bytes (any whitespace
+							difference changes the hash).
+						</div>
+					{/if}
+				</div>
+			{/if}
+
+			{#if session.publicationVerifiedAt}
+				<div class="mt-6 p-4 rounded-xl border ts-border-subtle bg-slate-50 dark:bg-zinc-900/50">
+					<label class="flex items-start gap-3 cursor-pointer">
+						<input
+							type="checkbox"
+							bind:checked={submitBackup}
+							class="mt-0.5"
+							disabled={submitBackupResult?.ok || submittingBackup}
+						/>
+						<span class="flex-1 text-sm">
+							<strong class="ts-text-strong block">Optional: submit a backup copy to tokenstork.com.</strong>
+							<span class="ts-text-muted">
+								The bytes get content-addressed at
+								<code class="text-xs">https://tokenstork.com/bcmr/&lt;hash&gt;.json</code> after operator
+								approval, so consumers can fall back to our copy if your own host is ever unreachable.
+								Your IPFS / HTTPS host remains the canonical source — this is just an additional mirror.
+								Approval is operator-discretionary.
+							</span>
+						</span>
+					</label>
+					{#if submitBackup && !submitBackupResult?.ok}
+						<button
+							type="button"
+							onclick={runSubmitBackup}
+							disabled={submittingBackup}
+							class="mt-3 px-3 py-1.5 rounded-md bg-slate-700 hover:bg-slate-800 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-white text-xs font-semibold disabled:opacity-50"
+						>
+							{submittingBackup ? 'Submitting…' : 'Submit backup for review'}
+						</button>
+					{/if}
+					{#if submitBackupResult?.ok}
+						<div class="mt-3 text-xs text-emerald-700 dark:text-emerald-400">
+							✓ Backup submitted. The operator will review; approval is independent of the on-chain
+							publication, which proceeds either way.
+						</div>
+					{:else if submitBackupResult && !submitBackupResult.ok}
+						<div class="mt-3 text-xs text-rose-700 dark:text-rose-400">{submitBackupResult.message}</div>
+					{/if}
+				</div>
+			{/if}
 		{:else if step === 5}
 			<h2 class="text-xl font-semibold ts-text-strong mb-2">5. Build & sign</h2>
 			<p class="text-sm mb-5 ts-text-muted">
@@ -484,6 +668,15 @@
 						type="button"
 						onclick={() => session.contentHashHex && (step = 4)}
 						disabled={!session.contentHashHex}
+						class="px-5 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+					>
+						Next →
+					</button>
+				{:else if step === 4}
+					<button
+						type="button"
+						onclick={() => session.publicationVerifiedAt && (step = 5)}
+						disabled={!session.publicationVerifiedAt}
 						class="px-5 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
 					>
 						Next →

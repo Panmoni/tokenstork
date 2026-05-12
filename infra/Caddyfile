@@ -46,6 +46,21 @@ tokenstork.com {
 		file_server
 	}
 
+	# BCMR backup hosting (item #33 / docs/bcmr-publish-plan.md).
+	# Operator-approved BCMR JSON copies live at
+	# /var/lib/tokenstork/bcmr/<sha256>.json, served directly by Caddy.
+	# Filenames are the on-chain content_hash (64 hex), so URL → bytes
+	# mapping is immutable; year-long Cache-Control with `immutable` is
+	# correct. The user's own IPFS / HTTPS host remains the canonical
+	# source — we're a secondary mirror gated on operator approval (see
+	# /admin/bcmr-submissions and the bcmr_tokenstork_submissions table).
+	handle_path /bcmr/* {
+		header Cache-Control "public, max-age=31536000, immutable"
+		header Content-Type "application/json; charset=utf-8"
+		root * /var/lib/tokenstork/bcmr
+		file_server
+	}
+
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 		X-Content-Type-Options "nosniff"
