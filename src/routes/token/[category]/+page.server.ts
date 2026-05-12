@@ -23,6 +23,8 @@ interface TokenRow {
 	genesis_block: number;
 	genesis_time: Date;
 	first_seen_at: Date;
+	genesis_txid: Buffer;
+	authchain_head_txid: Buffer | null;
 	name: string | null;
 	symbol: string | null;
 	decimals: number | null;
@@ -151,7 +153,7 @@ export interface PriceBucket {
 	volumeSats: number | null;
 }
 
-export const load: PageServerLoad = async ({ params, fetch, url }) => {
+export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 	const category = params.category.toLowerCase();
 	if (!HEX_REGEX.test(category)) {
 		error(400, 'invalid category (expected 64 hex chars)');
@@ -178,6 +180,8 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 			t.genesis_block,
 			t.genesis_time,
 			t.first_seen_at,
+			t.genesis_txid,
+			t.authchain_head_txid,
 			m.name,
 			m.symbol,
 			m.decimals,
@@ -782,6 +786,43 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 			? holdersRankRaw
 			: null;
 
+	// BCMR publish eligibility (#33). Only authenticated wallets get the
+	// check; unauthenticated visitors save the BlockBook round-trip. The
+	// check is best-effort: if it fails (BlockBook unreachable, stale
+	// cache, etc.) we surface canPublishBcmr=false rather than failing
+	// the page — the CTA just doesn't appear.
+	let canPublishBcmr = false;
+	if (locals.user) {
+		try {
+			const { isOwnerOfHeadVout0, findAuthchainHead } = await import(
+				'$lib/server/authchain'
+			);
+			let headTxidHex: string | null = row.authchain_head_txid
+				? hexFromBytes(row.authchain_head_txid)
+				: null;
+			let owns: boolean | null = null;
+			if (headTxidHex) {
+				owns = await isOwnerOfHeadVout0(headTxidHex, locals.user.cashaddr);
+			}
+			if (owns === null) {
+				// Cached head is stale OR no cache at all — fall back to a
+				// cold walk. This is the common case for freshly-minted
+				// categories the BCMR walker hasn't visited yet.
+				const cold = await findAuthchainHead(hexFromBytes(row.genesis_txid)!);
+				headTxidHex = cold.headTxid;
+				owns = cold.headVout0Addresses.includes(locals.user.cashaddr);
+			}
+			canPublishBcmr = !!owns;
+		} catch (err) {
+			// Soft-fail. The CTA is convenience — a network blip shouldn't
+			// 500 the detail page.
+			console.warn(
+				'[token detail] BCMR-publish eligibility check failed:',
+				(err as Error).message
+			);
+		}
+	}
+
 	return {
 		token: {
 			id: hexFromBytes(row.category)!,
@@ -945,6 +986,13 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 		// Per-bucket leaderboard standings. `latestDay` is the most
 		// recent snapshot day across all buckets; if null, the snapshot
 		// worker has never run and the UI hides the section entirely.
-		leaderboardStandings: leaderboardStandingsRes
+		leaderboardStandings: leaderboardStandingsRes,
+		// BCMR publish eligibility (#33). True iff the authenticated
+		// session wallet currently holds the authority NFT for this
+		// category. Drives the "Publish BCMR" / "Update BCMR" CTA on
+		// the detail page. False (no CTA) for unauthenticated visitors,
+		// for non-authority-holders, and when the eligibility check
+		// errored.
+		canPublishBcmr
 	};
 };

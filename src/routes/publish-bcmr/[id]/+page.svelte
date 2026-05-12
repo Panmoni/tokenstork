@@ -100,6 +100,23 @@
 	let submittingBackup = $state(false);
 	let submitBackupResult = $state<null | { ok: true } | { ok: false; message: string }>(null);
 
+	// Step 5: build tx + paste-hex sign + broadcast.
+	let buildingTx = $state(false);
+	let buildTxError = $state<string | null>(null);
+	let buildTxSummary = $state<null | {
+		feeSats: number;
+		changeSats: number;
+		authNftOutputSats: number;
+		encodedTxBytes: number;
+	}>(null);
+	let signedTxHexInput = $state('');
+	let broadcasting = $state(false);
+	let broadcastError = $state<string | null>(null);
+	let broadcastTxid = $state<string | null>(initialPublishTxid());
+	function initialPublishTxid() {
+		return data.session.publishTxidHex ?? null;
+	}
+
 	const stepLabels = ['Identity', 'Icon', 'Canonicalize', 'Publish', 'Build & sign', 'Broadcast'];
 
 	// Per-step validators.
@@ -291,6 +308,80 @@
 			};
 		} finally {
 			submittingBackup = false;
+		}
+	}
+
+	async function runBuildTx() {
+		buildingTx = true;
+		buildTxError = null;
+		try {
+			const res = await fetch(`/api/bcmr/sessions/${session.id}/build-tx`, {
+				method: 'POST'
+			});
+			if (!res.ok) {
+				const body = (await res.json().catch(() => ({}))) as { message?: string };
+				buildTxError = body.message ?? `Build failed (HTTP ${res.status})`;
+				return;
+			}
+			const body = (await res.json()) as {
+				unsignedTxHex: string;
+				feeSats: number;
+				changeSats: number;
+				authNftOutputSats: number;
+				encodedTxBytes: number;
+				session: BcmrPublishSession;
+				alreadyBuilt: boolean;
+			};
+			session = body.session;
+			buildTxSummary = {
+				feeSats: body.feeSats ?? 0,
+				changeSats: body.changeSats ?? 0,
+				authNftOutputSats: body.authNftOutputSats ?? 0,
+				encodedTxBytes: body.encodedTxBytes ?? body.unsignedTxHex.length / 2
+			};
+		} catch (err) {
+			buildTxError = (err as Error).message ?? 'Network error';
+		} finally {
+			buildingTx = false;
+		}
+	}
+
+	async function runBroadcast() {
+		const trimmed = signedTxHexInput.trim();
+		if (!trimmed) {
+			broadcastError = 'Paste the signed tx hex from your wallet first.';
+			return;
+		}
+		if (!/^[0-9a-fA-F]+$/.test(trimmed) || trimmed.length % 2 !== 0) {
+			broadcastError = 'Signed hex must be even-length and hex-only (0-9, a-f).';
+			return;
+		}
+		broadcasting = true;
+		broadcastError = null;
+		try {
+			const res = await fetch(`/api/bcmr/sessions/${session.id}/broadcast`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ signedTxHex: trimmed })
+			});
+			if (!res.ok) {
+				const body = (await res.json().catch(() => ({}))) as { message?: string };
+				broadcastError = body.message ?? `Broadcast failed (HTTP ${res.status})`;
+				return;
+			}
+			const body = (await res.json()) as {
+				txid: string;
+				alreadyBroadcast: boolean;
+				session?: BcmrPublishSession;
+				persistRace?: boolean;
+			};
+			broadcastTxid = body.txid;
+			if (body.session) session = body.session;
+			step = 6;
+		} catch (err) {
+			broadcastError = (err as Error).message ?? 'Network error';
+		} finally {
+			broadcasting = false;
 		}
 	}
 
@@ -606,21 +697,151 @@
 		{:else if step === 5}
 			<h2 class="text-xl font-semibold ts-text-strong mb-2">5. Build & sign</h2>
 			<p class="text-sm mb-5 ts-text-muted">
-				Coming in Day 4 — we build the authNFT-spending tx with the BCMR locator in
-				<code class="text-xs">OP_RETURN</code>, you sign it in your wallet, paste the signed hex back.
+				We build the unsigned transaction that spends your category's authority NFT (at vout 0
+				of the current authchain head), emits a new authority NFT to your wallet (preserving the
+				NFT's commitment + capability), and attaches an
+				<code class="text-xs">OP_RETURN BCMR</code>
+				locator carrying your content hash + publication URL. You sign in your wallet, paste the
+				signed hex back, and we broadcast.
 			</p>
-			<div class="p-3 rounded-md bg-slate-100 dark:bg-zinc-800 text-sm ts-text-muted">
-				This step is not yet wired.
-			</div>
+
+			{#if !session.unsignedTxHex && !buildTxSummary}
+				<button
+					type="button"
+					onclick={runBuildTx}
+					disabled={buildingTx}
+					class="px-4 py-2 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold disabled:opacity-50"
+				>
+					{buildingTx ? 'Building…' : 'Build unsigned tx'}
+				</button>
+			{/if}
+
+			{#if buildTxError}
+				<p class="mt-4 text-sm text-rose-600 dark:text-rose-400" role="alert">{buildTxError}</p>
+			{/if}
+
+			{#if session.unsignedTxHex || buildTxSummary}
+				<div class="space-y-4">
+					{#if buildTxSummary}
+						<div class="p-3 rounded-md bg-slate-50 dark:bg-zinc-900/50 text-sm">
+							<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+								<div>
+									<div class="text-xs ts-text-muted">authNFT (new)</div>
+									<div class="font-mono ts-text-strong">{buildTxSummary.authNftOutputSats} sats</div>
+								</div>
+								<div>
+									<div class="text-xs ts-text-muted">Fee</div>
+									<div class="font-mono ts-text-strong">{buildTxSummary.feeSats} sats</div>
+								</div>
+								<div>
+									<div class="text-xs ts-text-muted">Change</div>
+									<div class="font-mono ts-text-strong">{buildTxSummary.changeSats} sats</div>
+								</div>
+								<div>
+									<div class="text-xs ts-text-muted">Tx size</div>
+									<div class="font-mono ts-text-strong">{buildTxSummary.encodedTxBytes} B</div>
+								</div>
+							</div>
+						</div>
+					{/if}
+
+					<div>
+						<div class="flex items-center justify-between mb-1">
+							<div class="text-sm font-medium ts-text-strong">Unsigned transaction hex</div>
+							<button
+								type="button"
+								onclick={() => session.unsignedTxHex && copyToClipboard(session.unsignedTxHex)}
+								class="px-3 py-1 rounded-md border ts-border-strong text-xs hover:bg-slate-50 dark:hover:bg-zinc-800"
+							>
+								Copy
+							</button>
+						</div>
+						<pre
+							class="px-3 py-2 rounded-md bg-slate-100 dark:bg-zinc-800 font-mono text-[11px] max-h-32 overflow-auto break-all"
+						>{session.unsignedTxHex}</pre>
+						<p class="mt-2 text-xs ts-text-muted">
+							Sign this hex in your wallet (Paytaca, Electron Cash, Cashonize, etc. — any wallet that
+							supports paste-and-sign). Then paste the signed hex below.
+						</p>
+					</div>
+
+					<div>
+						<label class="block">
+							<span class="text-sm font-medium ts-text-strong">Signed transaction hex</span>
+							<textarea
+								rows="4"
+								bind:value={signedTxHexInput}
+								placeholder="Paste signed hex from your wallet here…"
+								class="mt-1 w-full px-3 py-2 rounded-md border ts-border-strong ts-surface-input font-mono text-xs"
+							></textarea>
+						</label>
+						<button
+							type="button"
+							onclick={runBroadcast}
+							disabled={broadcasting || !signedTxHexInput.trim()}
+							class="mt-3 px-4 py-2 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold disabled:opacity-50"
+						>
+							{broadcasting ? 'Broadcasting…' : 'Broadcast →'}
+						</button>
+					</div>
+				</div>
+			{/if}
+
+			{#if broadcastError}
+				<p class="mt-4 text-sm text-rose-600 dark:text-rose-400" role="alert">{broadcastError}</p>
+			{/if}
 		{:else if step === 6}
-			<h2 class="text-xl font-semibold ts-text-strong mb-2">6. Broadcast</h2>
-			<p class="text-sm mb-5 ts-text-muted">
-				Coming in Day 4 — forward the signed tx to our BCHN, record the txid, transition the session
-				to <code class="text-xs">broadcast</code>.
-			</p>
-			<div class="p-3 rounded-md bg-slate-100 dark:bg-zinc-800 text-sm ts-text-muted">
-				This step is not yet wired.
-			</div>
+			<h2 class="text-xl font-semibold ts-text-strong mb-2">6. Done — published on-chain</h2>
+			{#if broadcastTxid || session.publishTxidHex}
+				{@const txid = broadcastTxid ?? session.publishTxidHex}
+				<div class="space-y-4">
+					<div class="p-4 rounded-xl border ts-border-subtle bg-emerald-50 dark:bg-emerald-950/30">
+						<div class="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+							✓ BCMR publication broadcast.
+						</div>
+						<p class="mt-2 text-sm ts-text-body">
+							The transaction is in the mempool. Our on-chain BCMR walker runs hourly — your
+							token's name, symbol, icon, and description will start appearing on the directory
+							within ~1 hour of the next walker tick after this tx confirms.
+						</p>
+					</div>
+
+					<div>
+						<div class="text-sm font-medium ts-text-strong mb-1">Transaction ID</div>
+						<div class="flex items-center gap-2">
+							<code class="flex-1 px-3 py-2 rounded-md bg-slate-100 dark:bg-zinc-800 font-mono text-xs break-all">
+								{txid}
+							</code>
+							<button
+								type="button"
+								onclick={() => txid && copyToClipboard(txid)}
+								class="px-3 py-2 rounded-md border ts-border-strong text-xs hover:bg-slate-50 dark:hover:bg-zinc-800"
+							>
+								Copy
+							</button>
+						</div>
+					</div>
+
+					<div class="flex items-center gap-3 flex-wrap text-sm">
+						<a
+							href={`/token/${session.categoryHex}`}
+							class="px-3 py-1.5 rounded-md bg-violet-600 hover:bg-violet-700 text-white font-semibold"
+						>
+							View your token →
+						</a>
+						<a href="/publish-bcmr" class="text-violet-600 dark:text-violet-400 hover:underline">
+							Publish for another category
+						</a>
+						<a href="/faq#faq-bcmr-publish" class="ml-auto text-xs ts-text-muted hover:text-violet-600">
+							How this works ↗
+						</a>
+					</div>
+				</div>
+			{:else}
+				<p class="text-sm ts-text-muted">
+					This step shows after a successful broadcast. Complete step 5 first.
+				</p>
+			{/if}
 		{/if}
 
 		{#if saveError}
@@ -681,14 +902,12 @@
 					>
 						Next →
 					</button>
-				{:else}
-					<button
-						type="button"
-						disabled
-						class="px-5 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium opacity-50 cursor-not-allowed"
-					>
-						Not yet wired
-					</button>
+				{:else if step === 5}
+					<!-- Step 5 advances via the broadcast button itself (which jumps to step 6 on success); no separate Next button needed -->
+					<span></span>
+				{:else if step === 6}
+					<!-- Final step; advance UX is the "View your token" link in the success card -->
+					<span></span>
 				{/if}
 			</div>
 		</div>

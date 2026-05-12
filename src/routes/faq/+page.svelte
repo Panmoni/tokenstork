@@ -558,6 +558,66 @@
 			</div>
 		</details>
 
+		<details id="faq-bcmr-publish" class="group p-5 rounded-xl border scroll-mt-20 ts-border-subtle ts-surface-panel">
+			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
+				<span>How does "Publish BCMR" work?</span>
+				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
+			</summary>
+			<div class="mt-3 space-y-2 ts-text-body">
+				<p>
+					BCMR (Bitcoin Cash Metadata Registry) is how a CashToken tells wallets + explorers what
+					its name, symbol, icon, and description are. Without a BCMR publication, your token
+					shows up as a 16-char hex string — useless for any kind of brand or community use. The
+					<a href="/publish-bcmr" class="text-violet-600 dark:text-violet-400 hover:underline">Publish BCMR</a>
+					wizard at tokenstork.com walks you through publishing one on-chain.
+				</p>
+				<p>
+					<strong>Who can publish?</strong> Only the wallet holding your category's
+					<em>authority NFT</em> — the NFT created at genesis that anchors the authchain. The
+					wizard automatically detects which categories your connected wallet can publish for and
+					rejects anything else. This is the CashTokens-protocol way of preventing impersonation:
+					if someone else minted the token, they can't publish metadata on your behalf, and vice
+					versa.
+				</p>
+				<p>
+					<strong>How does the wizard work?</strong> Six steps:
+				</p>
+				<ol class="list-decimal pl-6 space-y-1">
+					<li>Enter the identity: name, ticker (symbol), decimals, description.</li>
+					<li>Paste an icon URI (<code class="text-xs">https://</code> or <code class="text-xs">ipfs://</code>) or skip.</li>
+					<li>
+						We generate the canonical BCMR JSON and compute its <code class="text-xs">sha256</code> — that hash
+						will be committed on-chain alongside your publication URL.
+					</li>
+					<li>
+						Upload the JSON to your own IPFS / web3.storage / Pinata / any HTTPS host, paste the
+						URL, and we sha256-verify the returned bytes. Your own host is the canonical source.
+						Optionally, opt into a tokenstork-hosted backup mirror (operator-approved; serves at
+						<code class="text-xs">https://tokenstork.com/bcmr/&lt;hash&gt;.json</code> as a fallback).
+					</li>
+					<li>
+						We build the unsigned transaction that spends your authority NFT, emits a new one
+						(preserving the NFT's commitment + capability), and attaches the
+						<code class="text-xs">OP_RETURN BCMR</code> locator with your content hash + URL. You sign in your
+						wallet and paste the signed hex.
+					</li>
+					<li>We broadcast to BCH. Done.</li>
+				</ol>
+				<p>
+					<strong>What happens after broadcast?</strong> Our on-chain BCMR walker runs hourly, and
+					on its next tick it'll see your new authchain hop, fetch the JSON from your host, verify
+					the hash matches, and update the token's metadata across the directory. Typically your
+					token's name and icon appear within an hour of broadcast.
+				</p>
+				<p>
+					<strong>Why does my IPFS host need to keep the JSON?</strong> The on-chain locator points
+					at <em>your</em> URL — that's the canonical reference for the metadata. If your host goes
+					down, any cached copy (including ours, if you opted in) still works, but the publisher-of-record
+					is you. <a href="/publish-bcmr" class="text-violet-600 dark:text-violet-400 hover:underline">Start a publication →</a>
+				</p>
+			</div>
+		</details>
+
 		<details class="group p-5 rounded-xl border ts-border-subtle ts-surface-panel">
 			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
 				<span>How do I add a token? How do I report one?</span>

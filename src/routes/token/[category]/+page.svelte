@@ -421,6 +421,20 @@
 					</svg>
 					Airdrop to holders
 				</a>
+				{#if data.canPublishBcmr}
+					<a
+						href="/publish-bcmr"
+						class="inline-flex items-center gap-1 px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold"
+						title={token.bcmrSource === 'onchain'
+							? 'Update this category\'s BCMR metadata. You hold the authority NFT.'
+							: 'Publish BCMR metadata so this token displays a name, symbol, icon, and description. You hold the authority NFT.'}
+					>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4">
+							<path d="M9 12h6m-6 4h6M5 4v16h14V8l-4-4H5z" />
+						</svg>
+						{token.bcmrSource === 'onchain' ? 'Update BCMR' : 'Publish BCMR'}
+					</a>
+				{/if}
 				<span class="px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-xs font-medium">
 					{token.tokenType}
 				</span>
