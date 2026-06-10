@@ -44,6 +44,7 @@
 
 	// Step 5 inputs (signed tx hex pasted from wallet).
 	let signedTxHex = $state('');
+	let copiedUnsignedTx = $state(false);
 	let broadcastTxid = $state<string | null>(null);
 	let broadcastError = $state<string | null>(null);
 	let broadcasting = $state(false);
@@ -297,6 +298,15 @@
 		if (target > 1) await ensureSession();
 		await saveSession();
 		step = target;
+	}
+
+	async function copyUnsignedTx() {
+		if (!genesisBuild) return;
+		try {
+			await navigator.clipboard.writeText(genesisBuild.unsignedTxHex);
+			copiedUnsignedTx = true;
+			setTimeout(() => (copiedUnsignedTx = false), 2000);
+		} catch { /* clipboard unavailable — no-op */ }
 	}
 
 	async function broadcast() {
@@ -855,15 +865,31 @@
 				{/if}
 			{:else if step === 5}
 				<h2 class="text-xl font-semibold text-slate-900 dark:text-white mb-2">5. Sign & broadcast</h2>
-				<p class="text-sm mb-3 ts-text-muted">
-					Take the unsigned tx hex from step 4, sign it in your wallet, and paste the signed
-					hex back here. We'll broadcast it via the Token Stork BCHN node.
-				</p>
+
+				<!-- Unsigned tx hex — surfaced here so the user doesn't need to go back to step 4 -->
+				<div class="mb-5 p-4 rounded-lg border ts-border-subtle bg-slate-50 dark:bg-zinc-950">
+					<div class="flex items-center justify-between mb-2">
+						<span class="text-sm font-medium ts-text-strong">Unsigned transaction</span>
+						<button
+							type="button"
+							onclick={copyUnsignedTx}
+							disabled={!genesisBuild}
+							class="text-xs px-2 py-1 rounded border ts-border-strong hover:bg-slate-100 dark:hover:bg-zinc-900 disabled:opacity-50"
+						>
+							{copiedUnsignedTx ? 'Copied ✓' : '📋 Copy'}
+						</button>
+					</div>
+					<p class="text-xs mb-2 ts-text-muted">
+						Sign this in your wallet, then paste the <strong>signed</strong> hex below.
+					</p>
+					<pre class="p-3 rounded bg-white dark:bg-black border break-all whitespace-pre-wrap text-[10px] font-mono ts-border-subtle">{genesisBuild?.unsignedTxHex ?? '(build the tx in step 4 first)'}</pre>
+				</div>
+
 				<details class="text-xs mb-4 p-3 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 ts-text-muted">
 					<summary class="cursor-pointer text-amber-900 dark:text-amber-200 font-medium">Wallet integration status</summary>
 					<p class="mt-2 text-amber-900 dark:text-amber-200">
 						Direct WalletConnect <code>bch_signTransaction</code> handoff is a follow-up.
-						Today's flow uses paste-the-hex: copy the unsigned tx from step 4, paste into your
+						Today's flow uses paste-the-hex: copy the unsigned tx above, paste into your
 						wallet's "sign tx" interface (Paytaca, Electron Cash, etc.), copy the resulting
 						signed hex, paste it below.
 					</p>
