@@ -455,9 +455,8 @@
 					setTimeout(() => reject(new Error('Wallet did not respond within 2 minutes. Your wallet may not support bch_signTransaction — try the manual paste-hex flow below instead.')), WC_SIGN_TIMEOUT_MS)
 				)
 			]);
+			console.log('[mint-wc] sign result type:', typeof result, result ? JSON.stringify(result).slice(0, 200) : 'null/undefined');
 
-			// wc2-bch-bcr response: { signedTransaction, signedTransactionHash }
-			// Some older wallets return a bare hex string.
 			if (!result) {
 				wcSignError = 'Wallet returned an empty response. Try again.';
 				return;
@@ -469,8 +468,6 @@
 				wcSignError = 'Wallet response missing signed transaction. Try again.';
 				return;
 			}
-
-			// Success — populate the textarea and trigger broadcast.
 			signedTxHex = signed;
 			await broadcast();
 
