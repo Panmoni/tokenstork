@@ -51,10 +51,13 @@
 	let broadcastTxid = $state<string | null>(null);
 	let broadcastError = $state<string | null>(null);
 	let broadcasting = $state(false);
-
-	// WalletConnect sign-in-page state.
 	let wcSigning = $state(false);
 	let wcSignError = $state<string | null>(null);
+
+	// Prepare-funding flow: consolidate plain BCH into vout=0 UTXO.
+	let prepareInProgress = $state(false);
+	let prepareError = $state<string | null>(null);
+	let prepareDone = $state(false);
 
 	// Step 4 manual-outpoint validation: when the user pastes a txid
 	// manually, warn if vout=0 of that txid isn't in their wallet.
@@ -471,6 +474,128 @@
 			wcSignError = (e as Error).message || 'WalletConnect signing failed';
 		} finally {
 			wcSigning = false;
+		}
+	}
+
+	async function prepareFunding() {
+		prepareInProgress = true;
+		prepareError = null;
+		prepareDone = false;
+		try {
+			// 1. Get consolidation tx from server.
+			const prepRes = await fetch('/api/mint/prepare-funding', { method: 'POST' });
+			if (!prepRes.ok) {
+				const msg = (await prepRes.json().catch(() => ({})) as { message?: string }).message;
+				prepareError = msg ?? `Server returned ${prepRes.status}`;
+				return;
+			}
+			const prep = (await prepRes.json()) as {
+				unsignedTxHex: string;
+				sourceOutputs: Array<{
+					outpointTransactionHash: string;
+					outpointIndex: number;
+					lockingBytecode: string;
+					valueSatoshis: number;
+				}>;
+				totalInputSats: number;
+				feeSats: number;
+				outputSats: number;
+			};
+
+			// 2. Sign via WalletConnect.
+			const [{ default: SignClient }, { WalletConnectModal }] = await Promise.all([
+				import('@walletconnect/sign-client'),
+				import('@walletconnect/modal')
+			]);
+			const WC_PROJECT_ID = publicEnv.PUBLIC_WALLETCONNECT_PROJECT_ID ?? '';
+			if (!WC_PROJECT_ID) {
+				prepareError = 'WalletConnect is not configured. Set PUBLIC_WALLETCONNECT_PROJECT_ID.';
+				return;
+			}
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const client: any = await SignClient.init({
+				projectId: WC_PROJECT_ID,
+				metadata: {
+					name: 'Token Stork — Create Funding UTXO',
+					description: 'Consolidate BCH into a single output for CashTokens minting',
+					url: window.location.origin,
+					icons: [`${window.location.origin}/logo-simple-bch.png`]
+				}
+			});
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const modal: any = new WalletConnectModal({
+				projectId: WC_PROJECT_ID,
+				themeMode: document.documentElement.classList.contains('dark') ? 'dark' : 'light'
+			});
+			const BCH_CHAIN = 'bch:bitcoincash';
+			const { uri, approval } = await client.connect({
+				requiredNamespaces: {
+					bch: {
+						chains: [BCH_CHAIN],
+						methods: ['bch_signTransaction', 'bch_getAddresses'],
+						events: []
+					}
+				}
+			});
+			if (!uri) {
+				prepareError = 'WalletConnect returned no pairing URI.';
+				return;
+			}
+			modal.openModal({ uri });
+			let session: { topic: string; namespaces: { bch?: { accounts?: string[] } } };
+			try { session = await approval(); } finally { modal.closeModal(); }
+			const accounts = session.namespaces.bch?.accounts ?? [];
+			if (accounts.length === 0) {
+				prepareError = 'Wallet did not return any addresses.';
+				return;
+			}
+			const walletCashaddr = accounts[0].split(':').slice(2).join(':');
+			if (walletCashaddr !== data!.cashaddr) {
+				prepareError = `Connected wallet does not match your authenticated address.`;
+				return;
+			}
+			const result = await client.request({
+				chainId: BCH_CHAIN,
+				topic: session.topic,
+				request: {
+					method: 'bch_signTransaction',
+					params: {
+						transaction: prep.unsignedTxHex,
+						sourceOutputs: prep.sourceOutputs,
+						broadcast: false,
+						userPrompt: `Consolidate ${prep.totalInputSats.toLocaleString()} sats into one UTXO`
+					}
+				}
+			});
+			const signed =
+				typeof result === 'string' ? result
+				: (result as { signedTransaction?: string })?.signedTransaction;
+			if (!signed) {
+				prepareError = 'Wallet returned no signed transaction.';
+				return;
+			}
+
+			// 3. Broadcast the consolidation tx.
+			const bcRes = await fetch('/api/mint/broadcast', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ rawHex: signed })
+			});
+			if (!bcRes.ok) {
+				const msg = (await bcRes.json().catch(() => ({})) as { message?: string }).message;
+				prepareError = msg ?? `Broadcast failed (${bcRes.status})`;
+				return;
+			}
+
+			// 4. Cleanup WC, refresh UTXOs.
+			try { await client.disconnect({ topic: session.topic, reason: { code: 6000, message: 'Done' } }); } catch { /* ok */ }
+			prepareDone = true;
+			fundingUtxosFetched = false;
+			fetchFundingUtxos();
+		} catch (e) {
+			prepareError = (e as Error).message || 'Prepare funding failed';
+		} finally {
+			prepareInProgress = false;
 		}
 	}
 
@@ -996,27 +1121,38 @@
 									{/if}
 								</ul>
 							{/if}
-							<p class="text-amber-700 dark:text-amber-300 mt-1">
-								<strong>Most wallets don't have vout=0 UTXOs by default.</strong> To create one:
-							</p>
-							<ol class="list-decimal pl-4 space-y-1 ts-text-muted">
-								<li>Open your BCH wallet</li>
-								<li>Send a small amount (e.g. 0.00002 BCH = 2000 sats) <strong>to yourself</strong></li>
-								<li>Wait for the transaction to confirm (a few seconds on BCH)</li>
-								<li>Click <strong>Refresh</strong> above — the new UTXO should appear</li>
-							</ol>
-						</div>
-					{:else}
-						<div class="text-xs space-y-2">
-							<p class="text-amber-700 dark:text-amber-300">
-								<strong>No suitable vout=0 UTXOs found.</strong> You need to create one first.
-							</p>
-							<ol class="list-decimal pl-4 space-y-1 ts-text-muted">
-								<li>Open your BCH wallet</li>
-								<li>Send a small amount (e.g. 0.00002 BCH = 2000 sats) <strong>to yourself</strong></li>
-								<li>Copy the resulting txid</li>
-								<li>Paste it below, then click Refresh to confirm</li>
-							</ol>
+							{#if fundingUtxosDiag.notVout0 > 0}
+								<div class="mt-3 p-3 rounded bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-900">
+									<p class="text-xs text-violet-900 dark:text-violet-200 mb-2">
+										<strong>You have {fundingUtxosDiag.notVout0} plain-BCH UTXO{fundingUtxosDiag.notVout0 === 1 ? '' : 's'}.</strong>
+										We can consolidate them into a single vout=0 UTXO with one wallet approval.
+									</p>
+									<button
+										type="button"
+										onclick={prepareFunding}
+										disabled={prepareInProgress}
+										class="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium"
+									>
+										{prepareInProgress ? 'Connecting to wallet…' : '🚀 Create funding UTXO'}
+									</button>
+									{#if prepareError}
+										<p class="text-xs text-rose-600 dark:text-rose-400 mt-2">{prepareError}</p>
+									{/if}
+									{#if prepareDone}
+										<p class="text-xs text-emerald-600 dark:text-emerald-400 mt-2">Consolidation broadcast! Refreshing UTXOs…</p>
+									{/if}
+								</div>
+							{:else}
+								<p class="text-amber-700 dark:text-amber-300 mt-1">
+									<strong>No plain-BCH UTXOs available.</strong> To create one:
+								</p>
+								<ol class="list-decimal pl-4 space-y-1 ts-text-muted">
+									<li>Open your BCH wallet</li>
+									<li>Send a small amount (e.g. 0.00002 BCH = 2000 sats) <strong>to yourself</strong></li>
+									<li>Wait for the transaction to confirm (a few seconds on BCH)</li>
+									<li>Click <strong>Refresh</strong> above — the new UTXO should appear</li>
+								</ol>
+							{/if}
 						</div>
 					{/if}
 				</div>
