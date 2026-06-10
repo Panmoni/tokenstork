@@ -435,19 +435,28 @@
 				valueSatoshis: outpointSatoshis
 			}];
 
-			const result = await client.request({
-				chainId: BCH_CHAIN,
-				topic: session.topic,
-				request: {
-					method: 'bch_signTransaction',
-					params: {
-						transaction: genesisBuild.unsignedTxHex,
-						sourceOutputs,
-						broadcast: false,
-						userPrompt: 'Sign CashTokens genesis'
+			// Some wallets support bch_signMessage (login) but not
+			// bch_signTransaction (mint). If the wallet never responds,
+			// we time out rather than leave the UI stuck.
+			const WC_SIGN_TIMEOUT_MS = 120_000;
+			const result = await Promise.race([
+				client.request({
+					chainId: BCH_CHAIN,
+					topic: session.topic,
+					request: {
+						method: 'bch_signTransaction',
+						params: {
+							transaction: genesisBuild.unsignedTxHex,
+							sourceOutputs,
+							broadcast: false,
+							userPrompt: 'Sign CashTokens genesis'
+						}
 					}
-				}
-			});
+				}),
+				new Promise<never>((_, reject) =>
+					setTimeout(() => reject(new Error('Wallet did not respond within 2 minutes. Your wallet may not support bch_signTransaction — try the manual paste-hex flow below instead.')), WC_SIGN_TIMEOUT_MS)
+				)
+			]);
 
 			// wc2-bch-bcr response: { signedTransaction, signedTransactionHash }
 			// Some older wallets return a bare hex string.
@@ -605,19 +614,25 @@
 				prepareError = 'Connected wallet does not match your authenticated address.';
 				return;
 			}
-			const result = await client.request({
-				chainId: BCH_CHAIN,
-				topic: session.topic,
-				request: {
-					method: 'bch_signTransaction',
-					params: {
-						transaction: unsignedTxHex,
-						sourceOutputs,
-						broadcast: false,
-						userPrompt: `Consolidate ${totalInputSats.toLocaleString()} sats into one UTXO`
+			const WC_SIGN_TIMEOUT_MS = 120_000;
+			const result = await Promise.race([
+				client.request({
+					chainId: BCH_CHAIN,
+					topic: session.topic,
+					request: {
+						method: 'bch_signTransaction',
+						params: {
+							transaction: unsignedTxHex,
+							sourceOutputs,
+							broadcast: false,
+							userPrompt: `Consolidate ${totalInputSats.toLocaleString()} sats into one UTXO`
+						}
 					}
-				}
-			});
+				}),
+				new Promise<never>((_, reject) =>
+					setTimeout(() => reject(new Error('Wallet did not respond within 2 minutes. Your wallet may not support bch_signTransaction.')), WC_SIGN_TIMEOUT_MS)
+				)
+			]);
 			const signed =
 				typeof result === 'string' ? result
 				: (result as { signedTransaction?: string })?.signedTransaction;
