@@ -38,6 +38,7 @@
 
 	// Step 4 auto-detected funding UTXOs from the user's wallet.
 	let fundingUtxos = $state<{ txid: string; valueSats: number; height: number }[]>([]);
+	let fundingUtxosDiag = $state<{ total: number; notVout0: number; hasTokens: number; tooSmall: number; passed: number } | null>(null);
 	let fundingUtxosLoading = $state(false);
 	let fundingUtxosError = $state<string | null>(null);
 	let fundingUtxosFetched = $state(false);
@@ -157,8 +158,9 @@
 				fundingUtxosError = `Could not fetch UTXOs (HTTP ${res.status})`;
 				return;
 			}
-			const body = (await res.json()) as { utxos: typeof fundingUtxos };
+			const body = (await res.json()) as { utxos: typeof fundingUtxos; diag: typeof fundingUtxosDiag };
 			fundingUtxos = body.utxos;
+			fundingUtxosDiag = body.diag;
 			// Auto-select the largest UTXO if the user hasn't manually
 			// entered a txid yet.
 			if (fundingUtxos.length > 0 && !outpointTxid) {
@@ -328,6 +330,19 @@
 			}
 			if (!/^[0-9a-fA-F]+$/.test(signedTxHex.trim())) {
 				broadcastError = 'Signed tx must be hex (0-9, a-f).';
+				return;
+			}
+			// Guard: pasting the unsigned tx back without signing is the
+			// most common user error. The unsigned tx has a zero-length
+			// unlocking bytecode (scriptSig = 00); a signed tx's scriptSig
+			// is 106-108 bytes (71-73 byte DER sig + 33 byte pubkey + 1-2
+			// byte push opcodes). Any signed tx must be ≥ 228 bytes.
+			if (signedTxHex.trim().length < 460) {
+				broadcastError = 'This hex is too short to be a signed transaction — it looks like the unsigned tx from step 4. Sign it in your wallet first, then paste the signed version.';
+				return;
+			}
+			if (genesisBuild && signedTxHex.trim() === genesisBuild.unsignedTxHex) {
+				broadcastError = 'This is the unsigned transaction. Sign it in your wallet first, then paste the signed hex here.';
 				return;
 			}
 			const res = await fetch('/api/mint/broadcast', {
@@ -803,6 +818,40 @@
 						<p class="text-xs mt-2 ts-text-muted">
 							Found {fundingUtxos.length} suitable UTXO{fundingUtxos.length === 1 ? '' : 's'} at vout=0 in your wallet.
 						</p>
+					{:else if fundingUtxosDiag}
+						<div class="text-xs space-y-2">
+							<p class="text-amber-700 dark:text-amber-300">
+								<strong>No suitable vout=0 UTXOs found.</strong>
+							</p>
+							<p class="ts-text-muted">
+								Your wallet has <strong>{fundingUtxosDiag.total}</strong> spendable UTXO{fundingUtxosDiag.total === 1 ? '' : 's'} total.
+								{#if fundingUtxosDiag.total === 0}
+									No UTXOs at all — your wallet may be empty, or BlockBook hasn't indexed this address yet.
+								{:else}
+									Breakdown:
+								{/if}
+							</p>
+							{#if fundingUtxosDiag.total > 0}
+								<ul class="list-disc pl-4 space-y-0.5 ts-text-muted">
+									<li>{fundingUtxosDiag.notVout0} skipped — not at vout=0</li>
+									{#if fundingUtxosDiag.hasTokens > 0}
+										<li>{fundingUtxosDiag.hasTokens} skipped — carry tokens (can't seed a new category)</li>
+									{/if}
+									{#if fundingUtxosDiag.tooSmall > 0}
+										<li>{fundingUtxosDiag.tooSmall} skipped — below {1500} sat minimum</li>
+									{/if}
+								</ul>
+							{/if}
+							<p class="text-amber-700 dark:text-amber-300 mt-1">
+								<strong>Most wallets don't have vout=0 UTXOs by default.</strong> To create one:
+							</p>
+							<ol class="list-decimal pl-4 space-y-1 ts-text-muted">
+								<li>Open your BCH wallet</li>
+								<li>Send a small amount (e.g. 0.00002 BCH = 2000 sats) <strong>to yourself</strong></li>
+								<li>Wait for the transaction to confirm (a few seconds on BCH)</li>
+								<li>Click <strong>Refresh</strong> above — the new UTXO should appear</li>
+							</ol>
+						</div>
 					{:else}
 						<div class="text-xs space-y-2">
 							<p class="text-amber-700 dark:text-amber-300">
