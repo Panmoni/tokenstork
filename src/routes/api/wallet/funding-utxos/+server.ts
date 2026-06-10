@@ -9,7 +9,7 @@
 //   - value >= 1500 sats (covers token dust + change dust + fee)
 //
 // Returns:
-//   200  { utxos: FundingUtxo[], diag: { total, notVout0, hasTokens, tooSmall } }
+//   200  { utxos: FundingUtxo[], plainUtxos: PlainUtxo[], diag: { total, notVout0, hasTokens, tooSmall } }
 //   401  if no authenticated session
 
 import { error, json } from '@sveltejs/kit';
@@ -21,6 +21,8 @@ import type { RequestHandler } from './$types';
  *  - ~546 sats change output dust threshold
  *  - ~300 sats fee (typical genesis tx is 250-350 bytes at 1 sat/byte) */
 const MIN_FUNDING_SATS = 1500n;
+/** Minimum value for a plain-BCH UTXO to be worth consolidating. */
+const MIN_PLAIN_SATS = 546n;
 
 export interface FundingUtxo {
 	txid: string;
@@ -28,16 +30,18 @@ export interface FundingUtxo {
 	height: number;
 }
 
+export interface PlainUtxo {
+	txid: string;
+	vout: number;
+	valueSats: number;
+	height: number;
+}
+
 export interface FundingUtxoDiag {
-	/** Total spendable UTXOs BlockBook returned for this address. */
 	total: number;
-	/** UTXOs filtered because vout != 0. */
 	notVout0: number;
-	/** UTXOs filtered because they carry a token (can't seed a new category). */
 	hasTokens: number;
-	/** UTXOs filtered because value < MIN_FUNDING_SATS. */
 	tooSmall: number;
-	/** UTXOs that passed all filters (length of utxos array). */
 	passed: number;
 }
 
@@ -57,9 +61,25 @@ export const GET: RequestHandler = async ({ locals }) => {
 	};
 
 	const fundingUtxos: FundingUtxo[] = [];
+	const plainUtxos: PlainUtxo[] = [];
 	for (const u of allUtxos) {
+		// Track token-bearing UTXOs for diagnostics and exclude from
+		// both funding and plain lists (token UTXOs can't seed a new
+		// category or be consolidated without losing the token).
+		if (u.tokenData) { diag.hasTokens++; continue; }
+
+		// Collect ALL plain-BCH UTXOs for the consolidation flow.
+		if (u.valueSats >= MIN_PLAIN_SATS) {
+			plainUtxos.push({
+				txid: u.txid,
+				vout: u.vout,
+				valueSats: Number(u.valueSats),
+				height: u.height
+			});
+		}
+
+		// Funding-eligible: must be vout=0 and ≥ min funding sats.
 		if (u.vout !== 0) { diag.notVout0++; continue; }
-		if (u.tokenData)   { diag.hasTokens++; continue; }
 		if (u.valueSats < MIN_FUNDING_SATS) { diag.tooSmall++; continue; }
 
 		fundingUtxos.push({
@@ -71,6 +91,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 	diag.passed = fundingUtxos.length;
 
 	fundingUtxos.sort((a, b) => b.valueSats - a.valueSats);
+	plainUtxos.sort((a, b) => b.valueSats - a.valueSats);
 
-	return json({ utxos: fundingUtxos, diag });
+	return json({ utxos: fundingUtxos, plainUtxos, diag });
 };

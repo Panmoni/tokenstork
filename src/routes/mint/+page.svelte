@@ -15,7 +15,7 @@
 	import { env as publicEnv } from '$env/dynamic/public';
 	import { buildGenesisTx, type TokenType, type NftCapability } from '$lib/mint/genesis';
 	import { generateBcmrJson } from '$lib/mint/bcmr';
-	import { cashAddressToLockingBytecode, binToHex } from '@bitauth/libauth';
+	import { cashAddressToLockingBytecode, binToHex, hexToBin, encodeTransaction } from '@bitauth/libauth';
 	import type { MintSession } from '$lib/server/mintSessions';
 
 	let { data } = $props();
@@ -40,17 +40,19 @@
 
 	// Step 4 auto-detected funding UTXOs from the user's wallet.
 	let fundingUtxos = $state<{ txid: string; valueSats: number; height: number }[]>([]);
+	let plainUtxos = $state<{ txid: string; vout: number; valueSats: number; height: number }[]>([]);
 	let fundingUtxosDiag = $state<{ total: number; notVout0: number; hasTokens: number; tooSmall: number; passed: number } | null>(null);
 	let fundingUtxosLoading = $state(false);
 	let fundingUtxosError = $state<string | null>(null);
 	let fundingUtxosFetched = $state(false);
-
 	// Step 5 inputs (signed tx hex pasted from wallet).
 	let signedTxHex = $state('');
 	let copiedUnsignedTx = $state(false);
 	let broadcastTxid = $state<string | null>(null);
 	let broadcastError = $state<string | null>(null);
 	let broadcasting = $state(false);
+
+	// WalletConnect sign-in-page state.
 	let wcSigning = $state(false);
 	let wcSignError = $state<string | null>(null);
 
@@ -178,9 +180,9 @@
 				fundingUtxosError = `Could not fetch UTXOs (HTTP ${res.status})`;
 				return;
 			}
-			const body = (await res.json()) as { utxos: typeof fundingUtxos; diag: typeof fundingUtxosDiag };
+			const body = (await res.json()) as { utxos: typeof fundingUtxos; plainUtxos: typeof plainUtxos; diag: typeof fundingUtxosDiag };
 			fundingUtxos = body.utxos;
-			fundingUtxosDiag = body.diag;
+			plainUtxos = body.plainUtxos;
 			// Auto-select the largest UTXO if the user hasn't manually
 			// entered a txid yet.
 			if (fundingUtxos.length > 0 && !outpointTxid) {
@@ -482,32 +484,84 @@
 		prepareError = null;
 		prepareDone = false;
 		try {
-			// 1. Get consolidation tx from server.
-			const prepRes = await fetch('/api/mint/prepare-funding', { method: 'POST' });
-			if (!prepRes.ok) {
-				const msg = (await prepRes.json().catch(() => ({})) as { message?: string }).message;
-				prepareError = msg ?? `Server returned ${prepRes.status}`;
+			if (plainUtxos.length === 0) {
+				prepareError = 'No plain-BCH UTXOs available for consolidation.';
 				return;
 			}
-			const prep = (await prepRes.json()) as {
-				unsignedTxHex: string;
-				sourceOutputs: Array<{
-					outpointTransactionHash: string;
-					outpointIndex: number;
-					lockingBytecode: string;
-					valueSatoshis: number;
-				}>;
-				totalInputSats: number;
-				feeSats: number;
-				outputSats: number;
-			};
 
-			// 2. Sign via WalletConnect.
+			// Derive the P2PKH lock for the user's address.
+			const lockResult = cashAddressToLockingBytecode(data!.cashaddr ?? '');
+			if (typeof lockResult === 'string') {
+				prepareError = `Could not derive locking script: ${lockResult}`;
+				return;
+			}
+			const selfLock = lockResult.bytecode;
+
+			// Build consolidation tx: all plain-BCH UTXOs as inputs,
+			// single self-output at vout=0.
+			const inputs: Array<{
+				outpointTransactionHash: Uint8Array;
+				outpointIndex: number;
+				sequenceNumber: number;
+				unlockingBytecode: Uint8Array;
+			}> = [];
+			const sourceOutputs: Array<{
+				outpointTransactionHash: string;
+				outpointIndex: number;
+				lockingBytecode: string;
+				valueSatoshis: number;
+			}> = [];
+			let totalInputSats = 0n;
+
+			for (const u of plainUtxos) {
+				inputs.push({
+					outpointTransactionHash: hexToBin(u.txid),
+					outpointIndex: u.vout,
+					sequenceNumber: 0xfffffffe,
+					unlockingBytecode: new Uint8Array(0)
+				});
+				sourceOutputs.push({
+					outpointTransactionHash: u.txid,
+					outpointIndex: u.vout,
+					lockingBytecode: binToHex(selfLock),
+					valueSatoshis: u.valueSats
+				});
+				totalInputSats += BigInt(u.valueSats);
+			}
+
+			const TX_OVERHEAD = 10n;
+			const INPUT_BYTES = 41n;
+			const OUTPUT_BYTES = 34n;
+			const FEE_RATE = 1n;
+			const estimatedBytes = TX_OVERHEAD + BigInt(inputs.length) * INPUT_BYTES + OUTPUT_BYTES;
+			let feeSats = estimatedBytes * FEE_RATE;
+			const outputSats = Number(totalInputSats - feeSats);
+
+			if (outputSats < 546) {
+				prepareError = `Not enough BCH to cover fee. Total: ${totalInputSats} sats, fee: ${feeSats} sats.`;
+				return;
+			}
+			feeSats = BigInt(outputSats > 0 ? Number(totalInputSats) - outputSats : Number(totalInputSats));
+
+			const tx = {
+				version: 2,
+				locktime: 0,
+				inputs,
+				outputs: [{
+					lockingBytecode: selfLock,
+					valueSatoshis: BigInt(outputSats)
+				}]
+			};
+			const unsignedTxBin = encodeTransaction(tx as Parameters<typeof encodeTransaction>[0]);
+			const unsignedTxHex = binToHex(unsignedTxBin);
+
+			// Sign via WalletConnect.
 			const [{ default: SignClient }, { WalletConnectModal }] = await Promise.all([
 				import('@walletconnect/sign-client'),
 				import('@walletconnect/modal')
 			]);
 			const WC_PROJECT_ID = publicEnv.PUBLIC_WALLETCONNECT_PROJECT_ID ?? '';
+			console.log('[mint-prepare] WC_PROJECT_ID present:', !!WC_PROJECT_ID);
 			if (!WC_PROJECT_ID) {
 				prepareError = 'WalletConnect is not configured. Set PUBLIC_WALLETCONNECT_PROJECT_ID.';
 				return;
@@ -517,7 +571,7 @@
 				projectId: WC_PROJECT_ID,
 				metadata: {
 					name: 'Token Stork — Create Funding UTXO',
-					description: 'Consolidate BCH into a single output for CashTokens minting',
+					description: 'Consolidate BCH for CashTokens minting',
 					url: window.location.origin,
 					icons: [`${window.location.origin}/logo-simple-bch.png`]
 				}
@@ -537,21 +591,15 @@
 					}
 				}
 			});
-			if (!uri) {
-				prepareError = 'WalletConnect returned no pairing URI.';
-				return;
-			}
+			if (!uri) { prepareError = 'WalletConnect returned no pairing URI.'; return; }
 			modal.openModal({ uri });
 			let session: { topic: string; namespaces: { bch?: { accounts?: string[] } } };
 			try { session = await approval(); } finally { modal.closeModal(); }
 			const accounts = session.namespaces.bch?.accounts ?? [];
-			if (accounts.length === 0) {
-				prepareError = 'Wallet did not return any addresses.';
-				return;
-			}
+			if (accounts.length === 0) { prepareError = 'Wallet returned no addresses.'; return; }
 			const walletCashaddr = accounts[0].split(':').slice(2).join(':');
 			if (walletCashaddr !== data!.cashaddr) {
-				prepareError = `Connected wallet does not match your authenticated address.`;
+				prepareError = 'Connected wallet does not match your authenticated address.';
 				return;
 			}
 			const result = await client.request({
@@ -560,22 +608,19 @@
 				request: {
 					method: 'bch_signTransaction',
 					params: {
-						transaction: prep.unsignedTxHex,
-						sourceOutputs: prep.sourceOutputs,
+						transaction: unsignedTxHex,
+						sourceOutputs,
 						broadcast: false,
-						userPrompt: `Consolidate ${prep.totalInputSats.toLocaleString()} sats into one UTXO`
+						userPrompt: `Consolidate ${totalInputSats.toLocaleString()} sats into one UTXO`
 					}
 				}
 			});
 			const signed =
 				typeof result === 'string' ? result
 				: (result as { signedTransaction?: string })?.signedTransaction;
-			if (!signed) {
-				prepareError = 'Wallet returned no signed transaction.';
-				return;
-			}
+			if (!signed) { prepareError = 'Wallet returned no signed transaction.'; return; }
 
-			// 3. Broadcast the consolidation tx.
+			// Broadcast.
 			const bcRes = await fetch('/api/mint/broadcast', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
@@ -587,7 +632,6 @@
 				return;
 			}
 
-			// 4. Cleanup WC, refresh UTXOs.
 			try { await client.disconnect({ topic: session.topic, reason: { code: 6000, message: 'Done' } }); } catch { /* ok */ }
 			prepareDone = true;
 			fundingUtxosFetched = false;
@@ -598,6 +642,7 @@
 			prepareInProgress = false;
 		}
 	}
+
 
 	async function broadcast() {
 		broadcastError = null;
