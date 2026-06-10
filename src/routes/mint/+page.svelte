@@ -12,10 +12,12 @@
 	// transition; resumes via the latest 'drafting' session on mount.
 
 	import { onMount } from 'svelte';
+	import { env as publicEnv } from '$env/dynamic/public';
 	import { buildGenesisTx, type TokenType, type NftCapability } from '$lib/mint/genesis';
 	import { generateBcmrJson } from '$lib/mint/bcmr';
 	import { cashAddressToLockingBytecode, binToHex } from '@bitauth/libauth';
 	import type { MintSession } from '$lib/server/mintSessions';
+
 	let { data } = $props();
 
 	// Wizard step (1-6).
@@ -351,18 +353,16 @@
 
 			// Lazy-load WalletConnect packages so they stay out of every
 			// other page's bundle.
+			const WC_PROJECT_ID = publicEnv.PUBLIC_WALLETCONNECT_PROJECT_ID ?? '';
+			if (!WC_PROJECT_ID) {
+				wcSignError = 'WalletConnect is not configured on this deployment. Set PUBLIC_WALLETCONNECT_PROJECT_ID and rebuild.';
+				return;
+			}
+
 			const [{ default: SignClient }, { WalletConnectModal }] = await Promise.all([
 				import('@walletconnect/sign-client'),
 				import('@walletconnect/modal')
 			]);
-
-			const WC_PROJECT_ID = (
-				(typeof process !== 'undefined' && process.env?.PUBLIC_WALLETCONNECT_PROJECT_ID) || ''
-			).toString();
-			if (!WC_PROJECT_ID) {
-				wcSignError = 'WalletConnect is not configured on this deployment. Paste the signed hex manually below.';
-				return;
-			}
 
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			const client: any = await SignClient.init({
@@ -380,7 +380,6 @@
 				projectId: WC_PROJECT_ID,
 				themeMode: document.documentElement.classList.contains('dark') ? 'dark' : 'light'
 			});
-
 			const BCH_CHAIN = 'bch:bitcoincash';
 			const { uri, approval } = await client.connect({
 				requiredNamespaces: {
