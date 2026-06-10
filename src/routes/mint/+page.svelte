@@ -48,8 +48,22 @@
 	let copiedUnsignedTx = $state(false);
 	let broadcastTxid = $state<string | null>(null);
 	let broadcastError = $state<string | null>(null);
-	let broadcasting = $state(false);
 
+	// Step 4 manual-outpoint validation: when the user pastes a txid
+	// manually, warn if vout=0 of that txid isn't in their wallet.
+	let manualOutpointWarning = $derived.by(() => {
+		if (!outpointTxid || !/^[0-9a-fA-F]{64}$/.test(outpointTxid)) return null;
+		if (fundingUtxosLoading || !fundingUtxosFetched) return null;
+		// If it's already in the auto-detected list, it's valid.
+		if (fundingUtxos.some(u => u.txid === outpointTxid.toLowerCase())) return null;
+		// Check if this txid exists at a different vout in the full UTXO set
+		// (we don't have the full set client-side, so use heuristics).
+		if (fundingUtxosDiag && fundingUtxosDiag.total > 0) {
+			return { message: 'This txid was not found at vout=0 in your wallet. The genesis tx MUST spend vout=0 — if you control a different output of this transaction, it will not work. Send BCH to yourself first to create a vout=0 UTXO.' };
+		}
+		return { message: 'This txid could not be verified against your wallet. Make sure it is the txid of a transaction where you control output #0 (vout=0).' };
+	});
+	let broadcasting = $state(false);
 	// Persistence health for the stepper. saveSession is fire-and-forget;
 	// when it fails we surface a small banner so the user knows their
 	// progress isn't being saved (otherwise they'd refresh and lose work
@@ -881,6 +895,12 @@
 						</label>
 					</div>
 				</details>
+
+				{#if manualOutpointWarning}
+					<p class="text-xs text-amber-600 dark:text-amber-400 mb-3 p-2 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900">
+						⚠️ {manualOutpointWarning.message}
+					</p>
+				{/if}
 
 				{#if genesisBuildError}
 					<p class="text-sm text-rose-600 dark:text-rose-400 mb-3">{genesisBuildError}</p>
