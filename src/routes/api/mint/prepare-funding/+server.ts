@@ -46,6 +46,7 @@ export const POST: RequestHandler = async ({ locals }) => {
 	}
 
 	const allUtxos = await fetchWalletUtxos(locals.user.cashaddr);
+	console.log('[prepare-funding] total UTXOs:', allUtxos.length, 'cashaddr:', locals.user.cashaddr);
 
 	// Filter: plain BCH only (no token data), any vout, enough value
 	// to be worth including in the consolidation.
@@ -55,6 +56,7 @@ export const POST: RequestHandler = async ({ locals }) => {
 		if (u.valueSats < MIN_INPUT_SATS) continue;
 		spendable.push(u);
 	}
+	console.log('[prepare-funding] spendable:', spendable.length);
 
 	if (spendable.length === 0) {
 		throw error(400, 'No spendable plain-BCH UTXOs found in your wallet. Fund it first.');
@@ -65,8 +67,6 @@ export const POST: RequestHandler = async ({ locals }) => {
 		throw error(500, `Could not derive locking script: ${lockResult}`);
 	}
 	const selfLock = lockResult.bytecode;
-
-	// Build inputs (all spendable UTXOs) and source outputs for WC2.
 	const inputs: Input[] = [];
 	const sourceOutputs: PrepareFundingResponse['sourceOutputs'] = [];
 	let totalInputSats = 0n;
