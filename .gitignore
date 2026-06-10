@@ -11,3 +11,4 @@ scripts/tsconfig.tsbuildinfo
 docs/
 .claude/
 workers/target
+CLAUDE.md
