@@ -14,8 +14,8 @@
 	import { onMount } from 'svelte';
 	import { buildGenesisTx, type TokenType, type NftCapability } from '$lib/mint/genesis';
 	import { generateBcmrJson } from '$lib/mint/bcmr';
+	import { cashAddressToLockingBytecode, binToHex } from '@bitauth/libauth';
 	import type { MintSession } from '$lib/server/mintSessions';
-
 	let { data } = $props();
 
 	// Wizard step (1-6).
@@ -48,22 +48,23 @@
 	let copiedUnsignedTx = $state(false);
 	let broadcastTxid = $state<string | null>(null);
 	let broadcastError = $state<string | null>(null);
+	let broadcasting = $state(false);
+
+	// WalletConnect sign-in-page state.
+	let wcSigning = $state(false);
+	let wcSignError = $state<string | null>(null);
 
 	// Step 4 manual-outpoint validation: when the user pastes a txid
 	// manually, warn if vout=0 of that txid isn't in their wallet.
 	let manualOutpointWarning = $derived.by(() => {
 		if (!outpointTxid || !/^[0-9a-fA-F]{64}$/.test(outpointTxid)) return null;
 		if (fundingUtxosLoading || !fundingUtxosFetched) return null;
-		// If it's already in the auto-detected list, it's valid.
 		if (fundingUtxos.some(u => u.txid === outpointTxid.toLowerCase())) return null;
-		// Check if this txid exists at a different vout in the full UTXO set
-		// (we don't have the full set client-side, so use heuristics).
 		if (fundingUtxosDiag && fundingUtxosDiag.total > 0) {
 			return { message: 'This txid was not found at vout=0 in your wallet. The genesis tx MUST spend vout=0 — if you control a different output of this transaction, it will not work. Send BCH to yourself first to create a vout=0 UTXO.' };
 		}
 		return { message: 'This txid could not be verified against your wallet. Make sure it is the txid of a transaction where you control output #0 (vout=0).' };
 	});
-	let broadcasting = $state(false);
 	// Persistence health for the stepper. saveSession is fire-and-forget;
 	// when it fails we surface a small banner so the user knows their
 	// progress isn't being saved (otherwise they'd refresh and lose work
@@ -332,6 +333,145 @@
 			copiedUnsignedTx = true;
 			setTimeout(() => (copiedUnsignedTx = false), 2000);
 		} catch { /* clipboard unavailable — no-op */ }
+	}
+
+	async function signWithWalletConnect() {
+		if (!genesisBuild || !data || data.unauthenticated) return;
+		wcSigning = true;
+		wcSignError = null;
+		try {
+			// Derive the P2PKH locking bytecode for the user's address
+			// so we can provide source-output data to the wallet.
+			const lockResult = cashAddressToLockingBytecode(data.cashaddr);
+			if (typeof lockResult === 'string') {
+				wcSignError = `Could not derive locking script from your address: ${lockResult}`;
+				return;
+			}
+			const lockingBytecodeHex = binToHex(lockResult.bytecode);
+
+			// Lazy-load WalletConnect packages so they stay out of every
+			// other page's bundle.
+			const [{ default: SignClient }, { WalletConnectModal }] = await Promise.all([
+				import('@walletconnect/sign-client'),
+				import('@walletconnect/modal')
+			]);
+
+			const WC_PROJECT_ID = (
+				(typeof process !== 'undefined' && process.env?.PUBLIC_WALLETCONNECT_PROJECT_ID) || ''
+			).toString();
+			if (!WC_PROJECT_ID) {
+				wcSignError = 'WalletConnect is not configured on this deployment. Paste the signed hex manually below.';
+				return;
+			}
+
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const client: any = await SignClient.init({
+				projectId: WC_PROJECT_ID,
+				metadata: {
+					name: 'Token Stork — Mint',
+					description: 'Sign a CashTokens genesis transaction',
+					url: window.location.origin,
+					icons: [`${window.location.origin}/logo-simple-bch.png`]
+				}
+			});
+
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const modal: any = new WalletConnectModal({
+				projectId: WC_PROJECT_ID,
+				themeMode: document.documentElement.classList.contains('dark') ? 'dark' : 'light'
+			});
+
+			const BCH_CHAIN = 'bch:bitcoincash';
+			const { uri, approval } = await client.connect({
+				requiredNamespaces: {
+					bch: {
+						chains: [BCH_CHAIN],
+						methods: ['bch_signTransaction', 'bch_getAddresses'],
+						events: []
+					}
+				}
+			});
+
+			if (!uri) {
+				wcSignError = 'WalletConnect returned no pairing URI. Try again or paste the signed hex manually.';
+				return;
+			}
+
+			modal.openModal({ uri });
+			let session: { topic: string; namespaces: { bch?: { accounts?: string[] } } };
+			try {
+				session = await approval();
+			} finally {
+				modal.closeModal();
+			}
+
+			// Verify the wallet's address matches the authenticated session.
+			const accounts = session.namespaces.bch?.accounts ?? [];
+			if (accounts.length === 0) {
+				wcSignError = 'Wallet did not return any addresses. Try again.';
+				return;
+			}
+			const walletCashaddr = accounts[0].split(':').slice(2).join(':');
+			if (walletCashaddr !== data.cashaddr) {
+				wcSignError = `Connected wallet (${walletCashaddr.slice(0, 12)}…) does not match your authenticated address. Sign in with the same wallet.`;
+				return;
+			}
+
+			// Build source-output data for the single funding UTXO.
+			// WC2 bch_signTransaction expects outpointTransactionHash as the
+			// txid hex in user-facing (big-endian) format — the wallet handles
+			// byte-order reversal for the raw tx internally.
+			const sourceOutputs = [{
+				outpointTransactionHash: outpointTxid,
+				outpointIndex: 0,
+				lockingBytecode: lockingBytecodeHex,
+				valueSatoshis: outpointSatoshis
+			}];
+
+			const result = await client.request({
+				chainId: BCH_CHAIN,
+				topic: session.topic,
+				request: {
+					method: 'bch_signTransaction',
+					params: {
+						transaction: genesisBuild.unsignedTxHex,
+						sourceOutputs,
+						broadcast: false,
+						userPrompt: 'Sign CashTokens genesis'
+					}
+				}
+			});
+
+			// wc2-bch-bcr response: { signedTransaction, signedTransactionHash }
+			// Some older wallets return a bare hex string.
+			if (!result) {
+				wcSignError = 'Wallet returned an empty response. Try again.';
+				return;
+			}
+			const signed =
+				typeof result === 'string' ? result
+				: (result as { signedTransaction?: string; signedTransactionHash?: string }).signedTransaction;
+			if (!signed) {
+				wcSignError = 'Wallet response missing signed transaction. Try again.';
+				return;
+			}
+
+			// Success — populate the textarea and trigger broadcast.
+			signedTxHex = signed;
+			await broadcast();
+
+			// Clean up the WC session.
+			try {
+				await client.disconnect({
+					topic: session.topic,
+					reason: { code: 6000, message: 'Mint signing complete' }
+				});
+			} catch { /* best-effort */ }
+		} catch (e) {
+			wcSignError = (e as Error).message || 'WalletConnect signing failed';
+		} finally {
+			wcSigning = false;
+		}
 	}
 
 	async function broadcast() {
@@ -963,15 +1103,23 @@
 					<pre class="p-3 rounded bg-white dark:bg-black border break-all whitespace-pre-wrap text-[10px] font-mono ts-border-subtle">{genesisBuild?.unsignedTxHex ?? '(build the tx in step 4 first)'}</pre>
 				</div>
 
-				<details class="text-xs mb-4 p-3 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 ts-text-muted">
-					<summary class="cursor-pointer text-amber-900 dark:text-amber-200 font-medium">Wallet integration status</summary>
-					<p class="mt-2 text-amber-900 dark:text-amber-200">
-						Direct WalletConnect <code>bch_signTransaction</code> handoff is a follow-up.
-						Today's flow uses paste-the-hex: copy the unsigned tx above, paste into your
-						wallet's "sign tx" interface (Paytaca, Electron Cash, etc.), copy the resulting
-						signed hex, paste it below.
-					</p>
-				</details>
+
+				<div class="mb-4 flex flex-wrap items-center gap-3">
+					<button
+						type="button"
+						onclick={signWithWalletConnect}
+						disabled={wcSigning || !genesisBuild}
+						class="px-5 py-2.5 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium"
+					>
+						{wcSigning ? 'Connecting to wallet…' : '✍️ Sign with Wallet'}
+					</button>
+					<span class="text-xs ts-text-muted">or paste signed hex below</span>
+				</div>
+
+				{#if wcSignError}
+					<p class="text-xs text-rose-600 dark:text-rose-400 mb-3">{wcSignError}</p>
+				{/if}
+
 				<label class="block">
 					<span class="text-sm font-medium ts-text-strong">Signed tx (hex)</span>
 					<textarea bind:value={signedTxHex} rows="4" placeholder="0200000001..." class="mt-1 w-full rounded-lg border px-3 py-2 text-xs font-mono break-all ts-border-strong ts-surface-page"></textarea>
