@@ -36,6 +36,12 @@
 	let outpointTxid = $state('');
 	let outpointSatoshis = $state<number>(2000);
 
+	// Step 4 auto-detected funding UTXOs from the user's wallet.
+	let fundingUtxos = $state<{ txid: string; valueSats: number; height: number }[]>([]);
+	let fundingUtxosLoading = $state(false);
+	let fundingUtxosError = $state<string | null>(null);
+	let fundingUtxosFetched = $state(false);
+
 	// Step 5 inputs (signed tx hex pasted from wallet).
 	let signedTxHex = $state('');
 	let broadcastTxid = $state<string | null>(null);
@@ -133,8 +139,39 @@
 		}
 	}
 	$effect(() => {
-		if (step === 4) rebuildGenesis();
+		if (step === 4) {
+			rebuildGenesis();
+			if (!fundingUtxosFetched && !fundingUtxosLoading) {
+				fetchFundingUtxos();
+			}
+		}
 	});
+
+	async function fetchFundingUtxos() {
+		fundingUtxosLoading = true;
+		fundingUtxosError = null;
+		try {
+			const res = await fetch('/api/wallet/funding-utxos');
+			if (!res.ok) {
+				fundingUtxosError = `Could not fetch UTXOs (HTTP ${res.status})`;
+				return;
+			}
+			const body = (await res.json()) as { utxos: typeof fundingUtxos };
+			fundingUtxos = body.utxos;
+			// Auto-select the largest UTXO if the user hasn't manually
+			// entered a txid yet.
+			if (fundingUtxos.length > 0 && !outpointTxid) {
+				const best = fundingUtxos[0];
+				outpointTxid = best.txid;
+				outpointSatoshis = best.valueSats;
+			}
+		} catch (e) {
+			fundingUtxosError = (e as Error).message;
+		} finally {
+			fundingUtxosLoading = false;
+			fundingUtxosFetched = true;
+		}
+	}
 
 	// Persist session state on each step transition.
 	async function ensureSession() {
@@ -700,29 +737,83 @@
 				{/if}
 			{:else if step === 4}
 				<h2 class="text-xl font-semibold text-slate-900 dark:text-white mb-2">4. Review</h2>
-				<p class="text-sm mb-5 ts-text-muted">
-					Provide a funding outpoint from your wallet — a UTXO at <strong>vout=0</strong> of any
-					transaction. The CashTokens spec uses that outpoint's txid as the new category id.
-					Recipient is automatically set to your authenticated address.
+				<p class="text-sm mb-4 ts-text-muted">
+					Your token's <strong>category ID</strong> is the txid of a UTXO you own at
+					<strong>vout=0</strong>. We'll auto-detect suitable UTXOs from your wallet below.
+					The recipient is automatically set to your authenticated address.
 				</p>
-				<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-					<label class="block sm:col-span-2">
-						<span class="text-sm font-medium ts-text-strong">Funding outpoint txid (vout=0)</span>
-						<input type="text" bind:value={outpointTxid} placeholder="64-char hex" class="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-mono ts-border-strong ts-surface-page" />
-					</label>
-					<label class="block">
-						<span class="text-sm font-medium ts-text-strong">UTXO value (sats)</span>
-						<input type="number" min="2000" bind:value={outpointSatoshis} class="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-mono ts-border-strong ts-surface-page" />
-					</label>
+
+				<!-- Funding UTXO selector -->
+				<div class="mb-5 p-4 rounded-lg border ts-border-subtle bg-slate-50 dark:bg-zinc-950">
+					<div class="flex items-center justify-between mb-3">
+						<span class="text-sm font-medium ts-text-strong">Funding UTXO</span>
+						<button
+							type="button"
+							onclick={() => { fundingUtxosFetched = false; fetchFundingUtxos(); }}
+							disabled={fundingUtxosLoading}
+							class="text-xs px-2 py-1 rounded border ts-border-strong hover:bg-slate-100 dark:hover:bg-zinc-900 disabled:opacity-50"
+						>
+							{fundingUtxosLoading ? 'Checking…' : '🔄 Refresh'}
+						</button>
+					</div>
+
+					{#if fundingUtxosLoading}
+						<p class="text-xs ts-text-muted">Checking your wallet for suitable UTXOs…</p>
+					{:else if fundingUtxosError}
+						<p class="text-xs text-amber-600 dark:text-amber-400">{fundingUtxosError}</p>
+						<p class="text-xs mt-1 ts-text-muted">You can still paste a txid manually below.</p>
+					{:else if fundingUtxos.length > 0}
+						<label class="block">
+							<span class="text-xs font-medium ts-text-muted">Select a vout=0 UTXO from your wallet</span>
+							<select
+								bind:value={outpointTxid}
+								class="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-mono ts-border-strong ts-surface-page"
+								onchange={(e) => {
+									const txid = (e.currentTarget as HTMLSelectElement).value;
+									const match = fundingUtxos.find(u => u.txid === txid);
+									if (match) outpointSatoshis = match.valueSats;
+								}}
+							>
+								{#each fundingUtxos as utxo}
+									<option value={utxo.txid}>
+										{utxo.txid.slice(0, 16)}… — {utxo.valueSats.toLocaleString()} sats{utxo.height < 0 ? ' (mempool)' : ''}
+									</option>
+								{/each}
+							</select>
+						</label>
+						<p class="text-xs mt-2 ts-text-muted">
+							Found {fundingUtxos.length} suitable UTXO{fundingUtxos.length === 1 ? '' : 's'} at vout=0 in your wallet.
+						</p>
+					{:else}
+						<div class="text-xs space-y-2">
+							<p class="text-amber-700 dark:text-amber-300">
+								<strong>No suitable vout=0 UTXOs found.</strong> You need to create one first.
+							</p>
+							<ol class="list-decimal pl-4 space-y-1 ts-text-muted">
+								<li>Open your BCH wallet</li>
+								<li>Send a small amount (e.g. 0.00002 BCH = 2000 sats) <strong>to yourself</strong></li>
+								<li>Copy the resulting txid</li>
+								<li>Paste it below, then click Refresh to confirm</li>
+							</ol>
+						</div>
+					{/if}
 				</div>
-				<details class="text-xs mb-4 ts-text-muted">
-					<summary class="cursor-pointer">How to create a vout=0 funding UTXO</summary>
-					<p class="mt-2">
-						In your wallet, send any small amount of BCH (e.g. 0.00002 BCH = 2000 sats) to your
-						OWN address. The first output of that transaction (vout=0) is now a UTXO you can
-						use here. Copy the txid into the field above.
-					</p>
+
+				<!-- Manual override / fallback -->
+				<details class="text-xs mb-5 ts-text-muted">
+					<summary class="cursor-pointer">Or paste a txid manually</summary>
+					<div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+						<label class="block sm:col-span-2">
+							<span class="text-xs font-medium ts-text-strong">Outpoint txid (vout=0)</span>
+							<input type="text" bind:value={outpointTxid} placeholder="64-char hex" class="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-mono ts-border-strong ts-surface-page" />
+						</label>
+						<label class="block">
+							<span class="text-xs font-medium ts-text-strong">UTXO value (sats)</span>
+							<input type="number" min="1000" bind:value={outpointSatoshis} class="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-mono ts-border-strong ts-surface-page" />
+						</label>
+					</div>
 				</details>
+
 				{#if genesisBuildError}
 					<p class="text-sm text-rose-600 dark:text-rose-400 mb-3">{genesisBuildError}</p>
 				{/if}
