@@ -585,7 +585,7 @@
 
 					<div class="p-3 rounded-md bg-amber-50 dark:bg-amber-950/30 text-sm">
 						<strong class="text-amber-700 dark:text-amber-300">Next step:</strong> upload these exact
-						bytes to your own IPFS / web3.storage / Pinata / HTTPS host. We'll fetch your URL on
+						bytes to your own IPFS / Pinata / Lighthouse / HTTPS host. We'll fetch your URL on
 						step 4 and verify the sha256 matches before allowing the on-chain broadcast.
 					</div>
 				</div>
@@ -597,7 +597,7 @@
 		{:else if step === 4}
 			<h2 class="text-xl font-semibold ts-text-strong mb-2">4. Publish & verify</h2>
 			<p class="text-sm mb-5 ts-text-muted">
-				Upload the canonical JSON from step 3 to your own IPFS / web3.storage / Pinata / any
+				Upload the canonical JSON from step 3 to your own IPFS / Pinata / Lighthouse / any
 				HTTPS host you control, then paste the URL here. <strong>Your own host stays the canonical
 				source</strong> — it's what we'll commit on-chain.
 			</p>

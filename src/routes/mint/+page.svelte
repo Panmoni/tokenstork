@@ -55,10 +55,10 @@
 	// Mint result (post-broadcast).
 	let mintedCategoryHex = $state<string | null>(null);
 
-	// Step 6 IPFS upload — user pastes their OWN web3.storage / Pinata
+	// Step 6 IPFS upload — user pastes their OWN Pinata / Lighthouse
 	// API key; we never see, store, or persist it. The fetch goes
 	// directly browser → IPFS provider, not through our backend.
-	let ipfsProvider = $state<'web3.storage' | 'pinata'>('web3.storage');
+	let ipfsProvider = $state<'pinata' | 'lighthouse'>('pinata');
 	let ipfsApiKey = $state('');
 	let ipfsUploading = $state(false);
 	let ipfsCid = $state<string | null>(null);
@@ -345,19 +345,19 @@
 	async function pinFileToIpfs(file: Blob, filename: string, key: string): Promise<string> {
 		const fd = new FormData();
 		fd.append('file', file, filename);
-		if (ipfsProvider === 'web3.storage') {
-			const res = await fetch('https://api.web3.storage/upload', {
+		if (ipfsProvider === 'lighthouse') {
+			const res = await fetch('https://upload.lighthouse.storage/api/v0/add', {
 				method: 'POST',
 				headers: { authorization: `Bearer ${key}` },
 				body: fd
 			});
 			if (!res.ok) {
 				const t = await res.text().catch(() => '');
-				throw new Error(`web3.storage HTTP ${res.status}: ${t.slice(0, 200)}`);
+				throw new Error(`Lighthouse HTTP ${res.status}: ${t.slice(0, 200)}`);
 			}
-			const body = (await res.json()) as { cid?: string };
-			if (!body.cid) throw new Error('web3.storage returned no CID');
-			return body.cid;
+			const body = (await res.json()) as { data?: { Hash?: string } };
+			if (!body.data?.Hash) throw new Error('Lighthouse returned no CID');
+			return body.data.Hash;
 		}
 		const res = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
 			method: 'POST',
@@ -366,7 +366,7 @@
 		});
 		if (!res.ok) {
 			const t = await res.text().catch(() => '');
-			throw new Error(`pinata HTTP ${res.status}: ${t.slice(0, 200)}`);
+			throw new Error(`Pinata HTTP ${res.status}: ${t.slice(0, 200)}`);
 		}
 		const body = (await res.json()) as { IpfsHash?: string };
 		if (!body.IpfsHash) throw new Error('Pinata returned no CID');
@@ -642,7 +642,7 @@
 					<summary class="cursor-pointer text-sm font-medium ts-text-strong">Pin an icon file to IPFS</summary>
 					<p class="mt-3 ts-text-muted">
 						Upload a static raster (PNG / JPEG / WebP, ≤ 2 MiB) directly from your browser to
-						<strong>web3.storage</strong> or <strong>Pinata</strong> using your own API key.
+						<strong>Pinata</strong> or <strong>Lighthouse</strong> using your own API key.
 						The file never reaches Token Stork's server. Once pinned, the resulting
 						<code>ipfs://&lt;cid&gt;</code> populates the Icon URI field above.
 					</p>
@@ -650,8 +650,8 @@
 						<label class="block">
 							<span class="font-medium ts-text-strong">Provider</span>
 							<select bind:value={ipfsProvider} class="mt-1 w-full rounded-lg border px-2 py-1.5 text-xs ts-border-strong ts-surface-page">
-								<option value="web3.storage">web3.storage</option>
 								<option value="pinata">Pinata</option>
+								<option value="lighthouse">Lighthouse</option>
 							</select>
 						</label>
 						<label class="block sm:col-span-2">
@@ -813,17 +813,17 @@
 				<div class="mt-8 p-5 rounded-xl border bg-slate-50 dark:bg-zinc-950 ts-border-subtle">
 					<h3 class="text-sm font-semibold text-slate-900 dark:text-white mb-2">Or pin directly to IPFS</h3>
 					<p class="text-xs mb-3 ts-text-muted">
-						Paste your own <strong>Pinata</strong> JWT or <strong>web3.storage</strong> API
+						Paste your own <strong>Pinata</strong> JWT or <strong>Lighthouse</strong> API
 						key. The upload runs <em>directly</em> from your browser to the IPFS provider —
 						your key never reaches Token Stork's server, and we clear it from memory after
 						each attempt. Returns a CID you can use as <code>ipfs://&lt;cid&gt;</code> in
 						BCMR registries or directly in your wallet.
 					</p>
 					<p class="text-xs text-amber-700 dark:text-amber-300 mb-3">
-						⚠️ web3.storage migrated to UCAN-based <strong>w3up</strong> in mid-2024 — the
-						legacy upload endpoint may not authenticate against new accounts. Pinata's
-						<code>pinFileToIPFS</code> is the more reliable default; web3.storage works if
-						your account has a paid plan or you've configured a legacy API key.
+						⚠️ Pinata and Lighthouse both require an API key from their respective dashboards
+						(<a href="https://app.pinata.cloud/developers/api-keys" class="underline" target="_blank" rel="noopener">Pinata</a>,
+						<a href="https://files.lighthouse.storage/" class="underline" target="_blank" rel="noopener">Lighthouse</a>).
+						Lighthouse offers a free tier (5 GB/yr); Pinata offers 1 GB free with 100 file limit.
 					</p>
 					<p class="text-xs text-amber-700 dark:text-amber-300 mb-3">
 						⚠️ The BCMR JSON above is a working starting point but may need tweaking before
@@ -835,8 +835,8 @@
 						<label class="block">
 							<span class="text-xs font-medium ts-text-strong">Provider</span>
 							<select bind:value={ipfsProvider} class="mt-1 w-full rounded-lg border px-3 py-2 text-sm ts-border-strong ts-surface-page">
-								<option value="web3.storage">web3.storage</option>
 								<option value="pinata">Pinata (JWT)</option>
+								<option value="lighthouse">Lighthouse</option>
 							</select>
 						</label>
 						<label class="block sm:col-span-2">

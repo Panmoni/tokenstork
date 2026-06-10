@@ -128,7 +128,7 @@
 			bullets: [
 				'Wallet-gated `/mint` route with a 6-step wizard: Type → Identity → Supply → Review → Sign + broadcast → Publish BCMR.',
 				'Genesis tx built browser-side via libauth — our server never sees a private key.',
-				'BCMR JSON generated client-side; download or pin to IPFS via the user\'s own web3.storage / Pinata API key (the key never reaches our server).',
+				'BCMR JSON generated client-side; download or pin to IPFS via the user\'s own Pinata / Lighthouse API key (the key never reaches our server).',
 				'Resumable wizard sessions persisted across browser refreshes via the wallet-cookie.',
 				'Direct WalletConnect `bch_signTransaction` is a follow-up; today the wallet handoff is paste-the-signed-hex, which works with every BCH wallet that signs raw tx hex.'
 			]

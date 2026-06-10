@@ -590,7 +590,7 @@
 						will be committed on-chain alongside your publication URL.
 					</li>
 					<li>
-						Upload the JSON to your own IPFS / web3.storage / Pinata / any HTTPS host, paste the
+						Upload the JSON to your own IPFS / Pinata / Lighthouse / any HTTPS host, paste the
 						URL, and we sha256-verify the returned bytes. Your own host is the canonical source.
 						Optionally, opt into a tokenstork-hosted backup mirror (operator-approved; serves at
 						<code class="text-xs">https://tokenstork.com/bcmr/&lt;hash&gt;.json</code> as a fallback).
