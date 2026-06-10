@@ -793,6 +793,15 @@ BEGIN
     END IF;
 END $$;
 
+-- Wizard-persisted state: the external icon URI the user entered for
+-- their token (Pinata/Lighthouse IPFS URL, or any HTTPS image URL).
+ALTER TABLE user_mint_sessions ADD COLUMN IF NOT EXISTS icon_uri TEXT;
+
+-- The funding outpoint the user provided or we auto-detected in step 4.
+-- The txid is 64-char hex; satoshis is the UTXO value (safe as INTEGER
+-- since no sane funding UTXO exceeds 2^31-1 sats).
+ALTER TABLE user_mint_sessions ADD COLUMN IF NOT EXISTS outpoint_txid TEXT;
+ALTER TABLE user_mint_sessions ADD COLUMN IF NOT EXISTS outpoint_satoshis INTEGER;
 -- ============================================================================
 -- User up/down votes on tokens. One vote per (cashaddr, category) pair —
 -- changing direction overwrites the row, retracting deletes it. Cascading

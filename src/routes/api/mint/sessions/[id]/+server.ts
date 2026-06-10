@@ -140,6 +140,31 @@ function validatedPatch(body: unknown): MintSessionPatch {
 			out.iconStagingPath = b.iconStagingPath;
 		}
 	}
+	if ('iconUri' in b) {
+		if (b.iconUri === null) {
+			out.iconUri = null;
+		} else if (typeof b.iconUri !== 'string' || b.iconUri.length > 2048) {
+			error(400, 'iconUri must be a string ≤2048 chars');
+		} else {
+			out.iconUri = b.iconUri;
+		}
+	}
+	if ('outpointTxid' in b) {
+		out.outpointTxid = nullableHex(b.outpointTxid, 'outpointTxid', 64, 64);
+	}
+	if ('outpointSatoshis' in b) {
+		if (b.outpointSatoshis === null || b.outpointSatoshis === undefined) {
+			out.outpointSatoshis = null;
+		} else if (
+			typeof b.outpointSatoshis !== 'number' ||
+			!Number.isInteger(b.outpointSatoshis) ||
+			b.outpointSatoshis < 0
+		) {
+			error(400, 'outpointSatoshis must be a non-negative integer');
+		} else {
+			out.outpointSatoshis = b.outpointSatoshis;
+		}
+	}
 	if ('genesisTxidHex' in b) {
 		out.genesisTxidHex = nullableHex(b.genesisTxidHex, 'genesisTxidHex', 64, 64);
 	}

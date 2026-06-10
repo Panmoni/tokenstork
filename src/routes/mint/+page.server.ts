@@ -36,6 +36,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		supply: string | null;
 		nftCapability: string | null;
 		nftCommitmentHex: string | null;
+		iconUri: string | null;
+		outpointTxid: string | null;
+		outpointSatoshis: number | null;
 	} | null = null;
 	if (requestedId) {
 		const s = await getSession(locals.user.cashaddr, requestedId);
@@ -49,7 +52,10 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 				decimals: s.decimals,
 				supply: s.supply,
 				nftCapability: s.nftCapability,
-				nftCommitmentHex: s.nftCommitmentHex
+				nftCommitmentHex: s.nftCommitmentHex,
+				iconUri: s.iconUri,
+				outpointTxid: s.outpointTxid,
+				outpointSatoshis: s.outpointSatoshis
 			};
 		}
 	}

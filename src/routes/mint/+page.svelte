@@ -196,7 +196,7 @@
 		// the dead values into a row that doesn't belong with them.)
 		const wantsFt = tokenType === 'FT' || tokenType === 'FT+NFT';
 		const wantsNft = tokenType === 'NFT' || tokenType === 'FT+NFT';
-		const patch = {
+		const patch: Record<string, unknown> = {
 			tokenType: tokenType ?? null,
 			ticker: ticker || null,
 			name: name || null,
@@ -204,7 +204,10 @@
 			decimals: tokenType === 'NFT' ? null : decimals,
 			supply: wantsFt ? totalSupply || null : null,
 			nftCapability: wantsNft ? nftCapability : null,
-			nftCommitmentHex: wantsNft ? nftCommitmentHex || null : null
+			nftCommitmentHex: wantsNft ? nftCommitmentHex || null : null,
+			iconUri: iconUri || null,
+			outpointTxid: outpointTxid || null,
+			outpointSatoshis: outpointTxid ? outpointSatoshis : null
 		};
 		try {
 			const res = await fetch(`/api/mint/sessions/${sessionId}`, {
@@ -238,6 +241,9 @@
 			totalSupply = r.supply ?? '';
 			nftCommitmentHex = r.nftCommitmentHex ?? '';
 			nftCapability = (r.nftCapability as NftCapability | null) ?? 'none';
+			iconUri = r.iconUri ?? '';
+			outpointTxid = r.outpointTxid ?? '';
+			outpointSatoshis = r.outpointSatoshis ?? 2000;
 			return;
 		}
 		try {
@@ -255,6 +261,9 @@
 			totalSupply = draft.supply ?? '';
 			nftCommitmentHex = draft.nftCommitmentHex ?? '';
 			nftCapability = draft.nftCapability ?? 'none';
+			iconUri = draft.iconUri ?? '';
+			outpointTxid = draft.outpointTxid ?? '';
+			outpointSatoshis = draft.outpointSatoshis ?? 2000;
 		} catch (e) {
 			console.warn('[mint] session resume failed:', e);
 		}

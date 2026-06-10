@@ -29,13 +29,16 @@ export interface MintSession {
 	name: string | null;
 	description: string | null;
 	decimals: number | null;
-	supply: string | null; // text — NUMERIC(78,0) preserved precision
+	supply: string | null;
 	nftCapability: NftCapability | null;
 	nftCommitmentHex: string | null;
 	iconStagingPath: string | null;
+	iconUri: string | null;
+	outpointTxid: string | null;
+	outpointSatoshis: number | null;
 	genesisTxidHex: string | null;
 	categoryHex: string | null;
-	createdAt: number; // unix seconds
+	createdAt: number;
 	updatedAt: number;
 }
 
@@ -52,6 +55,9 @@ interface DbRow {
 	nft_capability: NftCapability | null;
 	nft_commitment: Buffer | null;
 	icon_staging_path: string | null;
+	icon_uri: string | null;
+	outpoint_txid: string | null;
+	outpoint_satoshis: number | null;
 	genesis_txid: Buffer | null;
 	category: Buffer | null;
 	created_at: Date;
@@ -72,13 +78,15 @@ function rowToSession(r: DbRow): MintSession {
 		nftCapability: r.nft_capability,
 		nftCommitmentHex: hexFromBytes(r.nft_commitment),
 		iconStagingPath: r.icon_staging_path,
+		iconUri: r.icon_uri,
+		outpointTxid: r.outpoint_txid,
+		outpointSatoshis: r.outpoint_satoshis,
 		genesisTxidHex: hexFromBytes(r.genesis_txid),
 		categoryHex: hexFromBytes(r.category),
 		createdAt: Math.floor(r.created_at.getTime() / 1000),
 		updatedAt: Math.floor(r.updated_at.getTime() / 1000)
 	};
 }
-
 /** Per-user cap on in-flight `drafting` sessions. Friction on a runaway
  * client / abusive wallet without limiting legitimate operators (10 is
  * generous — most users mint one token at a time). */
@@ -167,6 +175,9 @@ export interface MintSessionPatch {
 	nftCapability?: NftCapability | null;
 	nftCommitmentHex?: string | null;
 	iconStagingPath?: string | null;
+	iconUri?: string | null;
+	outpointTxid?: string | null;
+	outpointSatoshis?: number | null;
 	genesisTxidHex?: string | null;
 	categoryHex?: string | null;
 }
@@ -202,6 +213,9 @@ export async function updateSession(
 		push('nft_commitment', patch.nftCommitmentHex ? bytesFromHex(patch.nftCommitmentHex) : null);
 	}
 	if (patch.iconStagingPath !== undefined) push('icon_staging_path', patch.iconStagingPath);
+	if (patch.iconUri !== undefined) push('icon_uri', patch.iconUri);
+	if (patch.outpointTxid !== undefined) push('outpoint_txid', patch.outpointTxid);
+	if (patch.outpointSatoshis !== undefined) push('outpoint_satoshis', patch.outpointSatoshis);
 	if (patch.genesisTxidHex !== undefined) {
 		push('genesis_txid', patch.genesisTxidHex ? bytesFromHex(patch.genesisTxidHex) : null);
 	}
