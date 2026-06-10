@@ -165,13 +165,11 @@
 	$effect(() => {
 		if (step === 4) {
 			rebuildGenesis();
-			if (!fundingUtxosFetched && !fundingUtxosLoading) {
-				fetchFundingUtxos();
-			}
+			fetchFundingUtxos();
 		}
 	});
-
 	async function fetchFundingUtxos() {
+		if (fundingUtxosLoading) return;
 		fundingUtxosLoading = true;
 		fundingUtxosError = null;
 		try {
@@ -1217,8 +1215,9 @@
 								</ol>
 							{/if}
 						</div>
+					{:else}
+						<p class="text-xs ts-text-muted">Click Refresh to scan your wallet for suitable UTXOs.</p>
 					{/if}
-				</div>
 
 				<!-- Manual override / fallback -->
 				<details class="text-xs mb-5 ts-text-muted">
@@ -1280,6 +1279,7 @@
 						<pre class="mt-2 p-3 rounded bg-slate-50 dark:bg-zinc-950 border break-all whitespace-pre-wrap text-[10px] ts-border-subtle">{genesisBuild.unsignedTxHex}</pre>
 					</details>
 				{/if}
+				</div>
 			{:else if step === 5}
 				<h2 class="text-xl font-semibold text-slate-900 dark:text-white mb-2">5. Sign & broadcast</h2>
 
