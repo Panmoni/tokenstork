@@ -50,6 +50,8 @@ const config: Config = {
       // a sibling of the violet "% of Cauldron TVL" pill, kept distinct so
       // ordinal-rank vs share-of-TVL aren't visually confused.
       cyan: colors.cyan,
+      // teal: "top N by holders" badge on the per-token detail page.
+      teal: colors.teal,
     },
     fontSize: {
       sm: "0.8rem",
