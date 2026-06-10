@@ -354,6 +354,7 @@
 			// Lazy-load WalletConnect packages so they stay out of every
 			// other page's bundle.
 			const WC_PROJECT_ID = publicEnv.PUBLIC_WALLETCONNECT_PROJECT_ID ?? '';
+			console.log('[mint] WC_PROJECT_ID present:', !!WC_PROJECT_ID, WC_PROJECT_ID ? WC_PROJECT_ID.slice(0, 8) + '...' : 'MISSING');
 			if (!WC_PROJECT_ID) {
 				wcSignError = 'WalletConnect is not configured on this deployment. Set PUBLIC_WALLETCONNECT_PROJECT_ID and rebuild.';
 				return;
