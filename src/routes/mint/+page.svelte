@@ -417,7 +417,9 @@
 				return;
 			}
 			const walletCashaddr = accounts[0].split(':').slice(2).join(':');
-			if (walletCashaddr !== data.cashaddr) {
+			// Normalise: WC may return with or without 'bitcoincash:' prefix.
+			const normAddr = (a: string) => a.replace(/^bitcoincash:/, '');
+			if (normAddr(walletCashaddr) !== normAddr(data!.cashaddr)) {
 				wcSignError = `Connected wallet (${walletCashaddr.slice(0, 12)}…) does not match your authenticated address. Sign in with the same wallet.`;
 				return;
 			}
@@ -598,7 +600,8 @@
 			const accounts = session.namespaces.bch?.accounts ?? [];
 			if (accounts.length === 0) { prepareError = 'Wallet returned no addresses.'; return; }
 			const walletCashaddr = accounts[0].split(':').slice(2).join(':');
-			if (walletCashaddr !== data!.cashaddr) {
+			const normA = (a: string) => a.replace(/^bitcoincash:/, '');
+			if (normA(walletCashaddr) !== normA(data!.cashaddr ?? '')) {
 				prepareError = 'Connected wallet does not match your authenticated address.';
 				return;
 			}
