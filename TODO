@@ -1,26 +1,23 @@
 # TODO
 
 docs/cashtoken-index-plan.md
+docs/bcmr-publish-plan.md
 
 1. Operational hardening
 2. Long-horizon charts on the token detail page
-3. ~~Airdrop button on token detail pages~~ (shipped 2026-05-03)
-   - Standalone /airdrops page (CSV / paste-many address list)
-   - Set-algebra recipient builder (union / intersect / exclude)
-   - Block-height holder snapshots + DEX-pool unwrapping
-   - WalletConnect v2 direct-sign in-page (currently paste-signed-hex)
-4. Token claim / management
-5. One-click "submit to TokenStork BCMR registry" (replacement for OTR mirror)
-6. BCMR support workflow for existing-but-unregistered tokens
-7. Regular sync of TokenStork BCMR with OTR
-8. Better Tapswap / Fex / Cauldron logos
-10. Transfer `tokenstork.com` to Cloudflare as registrar.
-11. `docs/runbook.md` — failure-mode recipes for the tired-3am self.
-12. Bump `package.json` version to `0.2.0` once accounts + persistence ships.
-13. SEO, content operation?
-14. i18n
-15. guidance on where to buy bch and what wallet to use
-16. docs/tokenization-mega-plan.md
+3. Token claim / management
+4. One-click "submit to TokenStork BCMR registry" (replacement for OTR mirror)
+5. BCMR support workflow for existing-but-unregistered tokens
+6. Regular sync of TokenStork BCMR with OTR
+7. Better Tapswap / Fex / Cauldron logos
+8. Transfer `tokenstork.com` to Cloudflare as registrar.
+9. `docs/runbook.md` — failure-mode recipes for the tired-3am self.
+10. Bump `package.json` version to `0.2.0` once accounts + persistence ships.
+11. SEO, content operation?
+12. i18n
+13. commenting and discussions?
+14. guidance on where to buy bch and what wallet to use
+15. docs/tokenization-mega-plan.md
 
 ## Operator (carson)
 
