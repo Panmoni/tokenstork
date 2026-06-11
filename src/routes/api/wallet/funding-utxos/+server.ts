@@ -68,11 +68,20 @@ export const GET: RequestHandler = async ({ locals }) => {
 		// mutually exclusive with the vout=0 funding list, not with the
 		// token list.
 		if (u.vout !== 0) { diag.notVout0++; }
-		if (u.tokenData)   { diag.hasTokens++; }
-
-		// Include in plainUtxos if it's plain BCH (no token data) AND
-		// above the minimum value for consolidation.
-		if (!u.tokenData && u.valueSats >= MIN_PLAIN_SATS) {
+		if (u.tokenData) {
+			diag.hasTokens++;
+			// BlockBook sometimes reports tokenData on UTXOs that have
+			// zero token amount (dust from airdrops). Treat those as
+			// plain BCH for consolidation purposes.
+			if (u.tokenData.amount === 0n && u.valueSats >= MIN_PLAIN_SATS) {
+				plainUtxos.push({
+					txid: u.txid,
+					vout: u.vout,
+					valueSats: Number(u.valueSats),
+					height: u.height
+				});
+			}
+		} else if (u.valueSats >= MIN_PLAIN_SATS) {
 			plainUtxos.push({
 				txid: u.txid,
 				vout: u.vout,
