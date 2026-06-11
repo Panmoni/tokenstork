@@ -1122,19 +1122,6 @@
 				<div class="mb-5 p-4 rounded-lg border ts-border-subtle bg-slate-50 dark:bg-zinc-950">
 					<div class="flex items-center justify-between mb-3">
 						<span class="text-sm font-medium ts-text-strong">Funding UTXO</span>
-						<button
-							type="button"
-							onclick={() => { fundingUtxosFetched = false; fetchFundingUtxos(); }}
-							disabled={fundingUtxosLoading}
-							class="text-xs px-2 py-1 rounded border ts-border-strong hover:bg-slate-100 dark:hover:bg-zinc-900 disabled:opacity-50"
-						>
-							{fundingUtxosLoading ? 'Checking…' : '🔄 Refresh'}
-						</button>
-					</div>
-				<!-- Funding UTXO selector -->
-				<div class="mb-5 p-4 rounded-lg border ts-border-subtle bg-slate-50 dark:bg-zinc-950">
-					<div class="flex items-center justify-between mb-3">
-						<span class="text-sm font-medium ts-text-strong">Funding UTXO</span>
 						<button type="button" onclick={fetchFundingUtxos}
 							class="text-xs px-2 py-1 rounded border ts-border-strong hover:bg-slate-100 dark:hover:bg-zinc-900">
 							{fundingUtxosLoading ? 'Checking…' : '🔄 Refresh'}
@@ -1251,7 +1238,6 @@
 						</p>
 					</details>
 				{/if}
-				</div>
 			{:else if step === 5}
 				<h2 class="text-xl font-semibold text-slate-900 dark:text-white mb-2">5. Sign & broadcast</h2>
 
