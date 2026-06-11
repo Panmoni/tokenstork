@@ -50,6 +50,10 @@ export async function getSignClient(): Promise<unknown> {
  * Open WalletConnect modal, pair with the user's wallet, and verify that
  * the connected wallet's cashaddr matches `expectedCashaddr`.
  *
+ * **Session reuse:** if a previous WC session is cached in wcSession and
+ * still paired, it is reused — no modal popup. This mirrors the old
+ * `_mwc` caching pattern from the mint wizard.
+ *
  * @returns The WC session bundle (client, session, topic).
  * @throws If WC is unconfigured, pairing fails, or the wallet address
  *   doesn't match the authenticated user.
@@ -62,6 +66,27 @@ export async function connectWallet(
 	const themeMode = document.documentElement.classList.contains('dark')
 		? 'dark'
 		: 'light';
+
+	// Try to reuse a cached session.
+	const cached = wcSession.session?.topic;
+	if (cached) {
+		try {
+			const existingSessions: Array<{ topic: string; namespaces: Record<string, { accounts?: string[] }> }> =
+				client.session?.values?.() ?? [];
+			const alive = existingSessions.find((s) => s.topic === cached);
+			if (alive) {
+				const accounts = alive.namespaces.bch?.accounts ?? [];
+				const walletCashaddr = accounts[0]?.split(':').slice(2).join(':') ?? '';
+				const normAddr = (a: string) => a.replace(/^bitcoincash:/, '');
+				if (normAddr(walletCashaddr) === normAddr(expectedCashaddr)) {
+					// Session is alive and address matches — reuse it.
+					return { client, session: alive, topic: alive.topic };
+				}
+			}
+		} catch {
+			// Cached session stale — fall through to fresh connect.
+		}
+	}
 
 	const { WalletConnectModal } = await import('@walletconnect/modal');
 	const modal: any = new WalletConnectModal({ projectId, themeMode });

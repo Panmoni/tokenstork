@@ -544,7 +544,19 @@
 			};
 			session = build.session;
 
-			// 2. Connect to wallet via WalletConnect.
+			// Transform sourceOutputs from server lockingBytecodeHex format
+			// into the WC2/Uint8Array token format Paytaca expects.
+			const wcSourceOutputs = build.sourceOutputs.map((so) => ({
+				outpointTransactionHash: `<Uint8Array: 0x${so.outpointTransactionHash}>`,
+				outpointIndex: so.outpointIndex,
+				sequenceNumber: 0xfffffffe,
+				lockingBytecode: `<Uint8Array: 0x${so.lockingBytecodeHex}>`,
+				unlockingBytecode: '<Uint8Array: 0x>',
+				valueSatoshis: `<bigint: ${so.valueSatoshis}n>`,
+				...(so.token ? { token: so.token } : {})
+			}));
+
+			// 2. Connect to wallet via WalletConnect (reuses cached session if available).
 			const { client, topic } = await connectWallet(data.session.cashaddr);
 
 			// 3. Sign the tx.
@@ -552,7 +564,7 @@
 				client,
 				topic,
 				build.unsignedTxHex,
-				build.sourceOutputs,
+				wcSourceOutputs,
 				'Sign BCMR publication'
 			);
 
