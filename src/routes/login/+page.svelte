@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto, invalidateAll } from '$app/navigation';
 	import { env as publicEnv } from '$env/dynamic/public';
-
+	import { wcSession } from '$lib/client/wc-session';
 	// Two paths to acquire a wallet signature for the auth handshake:
 	//
 	//   1. Primary — WalletConnect v2 over the BCH namespace defined by
@@ -101,10 +101,10 @@
 			// the signing method we need — narrow scope = clearer wallet
 			// approval prompt.
 			const { uri, approval } = await client.connect({
-				requiredNamespaces: {
+				optionalNamespaces: {
 					bch: {
 						chains: [BCH_CHAIN],
-						methods: ['bch_signMessage'],
+						methods: ['bch_signMessage', 'bch_signTransaction', 'bch_getAddresses'],
 						events: []
 					}
 				}
@@ -174,33 +174,16 @@
 				throw new Error(body?.error ?? `Verification failed (${vRes.status})`);
 			}
 
-			// Cleanup: disconnect the WC session. The auth cookie is the
-			// persistent state from here on; keeping the WC pairing
-			// open would leave a stale entry in the wallet's "connected
-			// dApps" list.
-			session = sessionResult;
-			await client
-				.disconnect({
-					topic: session.topic,
-					reason: { code: 6000, message: 'Login complete' }
-				})
-				.catch(() => {
-					// Best-effort cleanup; don't fail the user-visible
-					// flow if the disconnect call hiccups.
-				});
-
+			// Store the WC session for reuse by mint/prepareFunding.
+			// The auth cookie handles identity; keeping the WC pairing
+			// alive lets in-page signing reuse it without a new QR.
+			wcSession.client = client;
+			wcSession.session = sessionResult;
+			wcSession.cashaddr = cashaddr;
 			await invalidateAll();
 			await goto('/');
 		} catch (err) {
 			modal?.closeModal();
-			if (session && client) {
-				await client
-					.disconnect({
-						topic: session.topic,
-						reason: { code: 6000, message: 'Login aborted' }
-					})
-					.catch(() => undefined);
-			}
 			stage = {
 				kind: 'error',
 				reason: err instanceof Error ? err.message : 'Unknown error'

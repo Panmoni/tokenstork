@@ -1,6 +1,7 @@
 <script module lang="ts">
 	// Module-level WC session — survives route navigations and re-renders.
 	let _mwc: { client: any; session: any } | null = null;
+	import { wcSession } from '$lib/client/wc-session';
 </script>
 
 <script lang="ts">
@@ -581,14 +582,14 @@
 			const unsignedTxBin = encodeTransaction(tx as Parameters<typeof encodeTransaction>[0]);
 			const unsignedTxHex = binToHex(unsignedTxBin);
 			const WC_PROJECT_ID = publicEnv.PUBLIC_WALLETCONNECT_PROJECT_ID ?? '';
-			if (!WC_PROJECT_ID) {
-				prepareError = 'WalletConnect is not configured. Set PUBLIC_WALLETCONNECT_PROJECT_ID.';
-				return;
-			}
+			if (!WC_PROJECT_ID) { prepareError = 'WC not configured.'; return; }
 			const BCH_CHAIN = 'bch:bitcoincash';
 			let client: any;
 			let session: { topic: string; namespaces: { bch?: { accounts?: string[] } } };
-			if (_mwc) {
+			if (wcSession.client && wcSession.session && wcSession.cashaddr === data!.cashaddr) {
+				client = wcSession.client;
+				session = { topic: wcSession.session.topic, namespaces: { bch: { accounts: [`bch:bitcoincash:${data!.cashaddr}`] } } };
+			} else if (_mwc) {
 				client = _mwc.client;
 				session = _mwc.session;
 			} else {
