@@ -530,8 +530,8 @@
 				valueSatoshis: string;
 			}> = [];
 			let totalInputSats = 0n;
-
 			for (const u of plainUtxos) {
+				console.log('[prepareFunding] UTXO:', u.txid.slice(0, 16), 'vout:', u.vout, 'value:', u.valueSats);
 				inputs.push({
 					outpointTransactionHash: hexToBin(u.txid),
 					outpointIndex: u.vout,
@@ -546,6 +546,7 @@
 					unlockingBytecode: '<Uint8Array: 0x>',
 					valueSatoshis: `<bigint: ${u.valueSats}n>`
 				});
+				totalInputSats += BigInt(u.valueSats);
 			}
 
 			const TX_OVERHEAD = 10n;
