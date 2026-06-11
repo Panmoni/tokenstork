@@ -758,6 +758,17 @@
 					lastSaveFailed = true;
 				}
 			}
+			// Create BCMR publish session so user can publish metadata
+			// immediately, without waiting for BlockBook indexing.
+			if (mintedCategoryHex) {
+				try {
+					await fetch('/api/bcmr/sessions', {
+						method: 'POST',
+						headers: { 'content-type': 'application/json' },
+						body: JSON.stringify({ categoryHex: mintedCategoryHex })
+					});
+				} catch { /* non-blocking */ }
+			}
 			step = 6;
 			// Auto-redirect to token page after 3 seconds.
 			if (mintedCategoryHex) {
