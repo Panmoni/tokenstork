@@ -1,9 +1,3 @@
-<script module lang="ts">
-	// Module-level WC session — survives route navigations and re-renders.
-	let _mwc: { client: any; session: any } | null = null;
-	import { wcSession } from '$lib/client/wc-session';
-</script>
-
 <script lang="ts">
 	//
 	//   1 type      — radio between FT / NFT / FT+NFT
@@ -17,11 +11,12 @@
 	// transition; resumes via the latest 'drafting' session on mount.
 
 	import { onMount } from 'svelte';
-	import { env as publicEnv } from '$env/dynamic/public';
 	import { buildGenesisTx, type TokenType, type NftCapability } from '$lib/mint/genesis';
 	import { generateBcmrJson } from '$lib/mint/bcmr';
-	import { cashAddressToLockingBytecode, binToHex, hexToBin, encodeTransaction } from '@bitauth/libauth';
+	import { cashAddressToLockingBytecode, binToHex } from '@bitauth/libauth';
 	import type { MintSession } from '$lib/server/mintSessions';
+	import { connectWallet, signTransaction, disconnectWallet } from '$lib/client/wc-client';
+	import { buildConsolidationTx, plainUtxosToConsolidationInputs } from '$lib/client/consolidationBuilder';
 
 	let { data } = $props();
 
@@ -388,78 +383,10 @@
 			}
 			const lockingBytecodeHex = binToHex(lockResult.bytecode);
 
-			// Lazy-load WalletConnect packages so they stay out of every
-			// other page's bundle.
-			const WC_PROJECT_ID = publicEnv.PUBLIC_WALLETCONNECT_PROJECT_ID ?? '';
-			console.log('[mint] WC_PROJECT_ID present:', !!WC_PROJECT_ID, WC_PROJECT_ID ? WC_PROJECT_ID.slice(0, 8) + '...' : 'MISSING');
-			if (!WC_PROJECT_ID) {
-				wcSignError = 'WalletConnect is not configured on this deployment. Set PUBLIC_WALLETCONNECT_PROJECT_ID and rebuild.';
-				return;
-			}
-
-			const [{ default: SignClient }, { WalletConnectModal }] = await Promise.all([
-				import('@walletconnect/sign-client'),
-				import('@walletconnect/modal')
-			]);
-
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const client: any = await SignClient.init({
-				projectId: WC_PROJECT_ID,
-				metadata: {
-					name: 'Token Stork — Mint',
-					description: 'Sign a CashTokens genesis transaction',
-					url: window.location.origin,
-					icons: [`${window.location.origin}/logo-simple-bch.png`]
-				}
-			});
-
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const modal: any = new WalletConnectModal({
-				projectId: WC_PROJECT_ID,
-				themeMode: document.documentElement.classList.contains('dark') ? 'dark' : 'light'
-			});
-			const BCH_CHAIN = 'bch:bitcoincash';
-			const { uri, approval } = await client.connect({
-				optionalNamespaces: {
-					bch: {
-						chains: [BCH_CHAIN],
-						methods: ['bch_signTransaction', 'bch_getAddresses'],
-						events: []
-					}
-				}
-			});
-
-			if (!uri) {
-				wcSignError = 'WalletConnect returned no pairing URI. Try again or paste the signed hex manually.';
-				return;
-			}
-
-			modal.openModal({ uri });
-			let session: { topic: string; namespaces: { bch?: { accounts?: string[] } } };
-			try {
-				session = await approval();
-			} finally {
-				modal.closeModal();
-			}
-
-			// Verify the wallet's address matches the authenticated session.
-			const accounts = session.namespaces.bch?.accounts ?? [];
-			if (accounts.length === 0) {
-				wcSignError = 'Wallet did not return any addresses. Try again.';
-				return;
-			}
-			const walletCashaddr = accounts[0].split(':').slice(2).join(':');
-			// Normalise: WC may return with or without 'bitcoincash:' prefix.
-			const normAddr = (a: string) => a.replace(/^bitcoincash:/, '');
-			if (normAddr(walletCashaddr) !== normAddr(data!.cashaddr)) {
-				wcSignError = `Connected wallet (${walletCashaddr.slice(0, 12)}…) does not match your authenticated address. Sign in with the same wallet.`;
-				return;
-			}
+			// Connect to wallet via WalletConnect.
+			const { client, topic } = await connectWallet(data.cashaddr);
 
 			// Build source-output data for the single funding UTXO.
-			// WC2 bch_signTransaction expects outpointTransactionHash as the
-			// txid hex in user-facing (big-endian) format — the wallet handles
-			// byte-order reversal for the raw tx internally.
 			const sourceOutputs = [{
 				outpointTransactionHash: `<Uint8Array: 0x${outpointTxid}>`,
 				outpointIndex: 0,
@@ -469,53 +396,22 @@
 				valueSatoshis: `<bigint: ${outpointSatoshis}n>`
 			}];
 
-			// Some wallets support bch_signMessage (login) but not
-			// bch_signTransaction (mint). If the wallet never responds,
-			// we time out rather than leave the UI stuck.
-			const WC_SIGN_TIMEOUT_MS = 120_000;
-			const result = await Promise.race([
-				client.request({
-					chainId: BCH_CHAIN,
-					topic: session.topic,
-					request: {
-						method: 'bch_signTransaction',
-						params: {
-							transaction: genesisBuild.unsignedTxHex,
-							sourceOutputs,
-							broadcast: false,
-							userPrompt: 'Sign CashTokens genesis'
-						}
-					}
-				}),
-				new Promise<never>((_, reject) =>
-					setTimeout(() => reject(new Error('Wallet did not respond within 2 minutes. Your wallet may not support bch_signTransaction — try the manual paste-hex flow below instead.')), WC_SIGN_TIMEOUT_MS)
-				)
-			]);
-			console.log('[mint-wc] sign result type:', typeof result, result ? JSON.stringify(result).slice(0, 200) : 'null/undefined');
+			// Sign via WC.
+			const signedHex = await signTransaction(
+				client,
+				topic,
+				genesisBuild.unsignedTxHex,
+				sourceOutputs,
+				'Sign CashTokens genesis'
+			);
 
-			if (!result) {
-				wcSignError = 'Wallet returned an empty response. Try again.';
-				return;
-			}
-			const signed =
-				typeof result === 'string' ? result
-				: (result as { signedTransaction?: string; signedTransactionHash?: string }).signedTransaction;
-			if (!signed) {
-				wcSignError = 'Wallet response missing signed transaction. Try again.';
-				return;
-			}
-			signedTxHex = signed;
-			// Transition state: WC signing is done, now broadcasting.
+			signedTxHex = signedHex;
+			// Signing done — now broadcast.
 			wcSigning = false;
 			await broadcast();
 
-			// Clean up the WC session.
-			try {
-				await client.disconnect({
-					topic: session.topic,
-					reason: { code: 6000, message: 'Mint signing complete' }
-				});
-			} catch { /* best-effort */ }
+			// Cleanup.
+			await disconnectWallet(client, topic);
 		} catch (e) {
 			wcSignError = (e as Error).message || 'WalletConnect signing failed';
 		} finally {
@@ -533,143 +429,44 @@
 				return;
 			}
 
-			// Derive the P2PKH lock for the user's address.
-			const lockResult = cashAddressToLockingBytecode(data!.cashaddr ?? '');
-			if (typeof lockResult === 'string') {
-				prepareError = `Could not derive locking script: ${lockResult}`;
-				return;
-			}
-			const selfLock = lockResult.bytecode;
+			// Connect WC.
+			const cashaddr = data!.cashaddr;
+			if (!cashaddr) { prepareError = 'Wallet address unavailable.'; return; }
+			const { client, topic } = await connectWallet(cashaddr);
 
-			// Build consolidation tx: all plain-BCH UTXOs as inputs,
-			// single self-output at vout=0.
-			const inputs: Array<{
-				outpointTransactionHash: Uint8Array;
-				outpointIndex: number;
-				sequenceNumber: number;
-				unlockingBytecode: Uint8Array;
-			}> = [];
-			const sourceOutputs: Array<{
-				outpointTransactionHash: string;
-				outpointIndex: number;
-				sequenceNumber: number;
-				lockingBytecode: string;
-				unlockingBytecode: string;
-				valueSatoshis: string;
-			}> = [];
-			let totalInputSats = 0n;
-			for (const u of plainUtxos) {
-				console.log('[prepareFunding] UTXO:', u.txid.slice(0, 16), 'vout:', u.vout, 'value:', u.valueSats);
-				inputs.push({
-					outpointTransactionHash: hexToBin(u.txid),
-					outpointIndex: u.vout,
-					sequenceNumber: 0xfffffffe,
-					unlockingBytecode: new Uint8Array(0)
-				});
-				sourceOutputs.push({
-					outpointTransactionHash: `<Uint8Array: 0x${u.txid}>`,
-					outpointIndex: u.vout,
-					sequenceNumber: 0xfffffffe,
-					lockingBytecode: `<Uint8Array: 0x${binToHex(selfLock)}>`,
-					unlockingBytecode: '<Uint8Array: 0x>',
-					valueSatoshis: `<bigint: ${u.valueSats}n>`
-				});
-				totalInputSats += BigInt(u.valueSats);
-			}
+			// Build consolidation tx via shared builder.
+			const inputs = plainUtxosToConsolidationInputs(plainUtxos);
+			const consolidation = buildConsolidationTx(inputs, cashaddr);
 
-			const TX_OVERHEAD = 10n;
-			const INPUT_BYTES = 41n;
-			const SIG_BYTES_PER_INPUT = 106n; // DER sig(~71) + pubkey(33) + push ops(2)
-			const OUTPUT_BYTES = 34n;
-			const estimatedBytes =
-				TX_OVERHEAD + BigInt(inputs.length) * (INPUT_BYTES + SIG_BYTES_PER_INPUT) + OUTPUT_BYTES;
-			let feeSats = estimatedBytes; // 1 sat/byte
-			const outputSats = Number(totalInputSats - feeSats);
-			if (outputSats < 546) {
-				prepareError = `Not enough BCH to cover fee. Total: ${totalInputSats} sats, fee: ${feeSats} sats.`;
-				return;
-			}
-			const tx = {
-				version: 2,
-				locktime: 0,
-				inputs,
-				outputs: [{
-					lockingBytecode: selfLock,
-					valueSatoshis: BigInt(outputSats)
-				}]
-			};
-			const unsignedTxBin = encodeTransaction(tx as Parameters<typeof encodeTransaction>[0]);
-			const unsignedTxHex = binToHex(unsignedTxBin);
-			const WC_PROJECT_ID = publicEnv.PUBLIC_WALLETCONNECT_PROJECT_ID ?? '';
-			if (!WC_PROJECT_ID) { prepareError = 'WC not configured.'; return; }
-			const BCH_CHAIN = 'bch:bitcoincash';
-			let client: any;
-			let session: { topic: string; namespaces: { bch?: { accounts?: string[] } } };
-			console.log('[prepareFunding] wcSession:', !!wcSession.client, !!wcSession.session, '_mwc:', !!_mwc);
-			if (_mwc) {
-				client = _mwc.client;
-				session = _mwc.session;
-			} else {
-				const [{ default: SignClient }, { WalletConnectModal }] = await Promise.all([
-					import('@walletconnect/sign-client'),
-					import('@walletconnect/modal')
-				]);
-				client = await SignClient.init({
-					projectId: WC_PROJECT_ID,
-					metadata: {
-						name: 'Token Stork — Mint',
-						description: 'Sign CashTokens transactions',
-						url: window.location.origin,
-						icons: [`${window.location.origin}/logo-simple-bch.png`]
-					}
-				});
-				const modal = new WalletConnectModal({
-					projectId: WC_PROJECT_ID,
-					themeMode: document.documentElement.classList.contains('dark') ? 'dark' : 'light'
-				});
-				const { uri, approval } = await client.connect({
-					optionalNamespaces: { bch: { chains: [BCH_CHAIN], methods: ['bch_signTransaction', 'bch_getAddresses'], events: [] } }
-				});
-				try { session = await approval(); } finally { modal.closeModal(); }
-				_mwc = { client, session };
-				console.log('[prepareFunding] stored _mwc, topic:', session.topic.slice(0, 16));
-			}
-			const accounts = session.namespaces.bch?.accounts ?? [];
-			if (accounts.length === 0) { prepareError = 'Wallet returned no addresses.'; return; }
-			const walletCashaddr = accounts[0].split(':').slice(2).join(':');
-			const normA = (a: string) => a.replace(/^bitcoincash:/, '');
-			if (normA(walletCashaddr) !== normA(data!.cashaddr ?? '')) {
-				prepareError = 'Connected wallet does not match your authenticated address.';
-				return;
-			}
-			const WC_SIGN_TIMEOUT_MS = 120_000;
-			const result = await Promise.race([
-				client.request({
-					chainId: BCH_CHAIN,
-					topic: session.topic,
-					request: {
-						method: 'bch_signTransaction',
-						params: {
-							transaction: unsignedTxHex,
-							sourceOutputs,
-							broadcast: false,
-							userPrompt: `Consolidate ${totalInputSats.toLocaleString()} sats into one UTXO`
-						}
-					}
-				}),
-				new Promise<never>((_, reject) =>
-					setTimeout(() => reject(new Error('Wallet did not respond within 2 minutes.')), WC_SIGN_TIMEOUT_MS)
-				)
-			]);
-			console.log('[prepareFunding] sign result:', typeof result, JSON.stringify(result).slice(0, 200));
-			const signed = typeof result === 'string' ? result : (result as { signedTransaction?: string })?.signedTransaction;
-			if (!signed) { prepareError = 'Wallet returned no signed transaction.'; return; }
+			// Derive locking bytecode for source outputs.
+			const lockResult = cashAddressToLockingBytecode(cashaddr);
+			if (typeof lockResult === 'string') throw new Error(`Address decode failed: ${lockResult}`);
+			const selfLockHex = binToHex(lockResult.bytecode);
+
+			// Build sourceOutputs with WC2 <Uint8Array: ...> tokens.
+			const sourceOutputs = plainUtxos.map((u) => ({
+				outpointTransactionHash: `<Uint8Array: 0x${u.txid}>`,
+				outpointIndex: u.vout,
+				sequenceNumber: 0xfffffffe,
+				lockingBytecode: `<Uint8Array: 0x${selfLockHex}>`,
+				unlockingBytecode: '<Uint8Array: 0x>',
+				valueSatoshis: `<bigint: ${u.valueSats}n>`
+			}));
+
+			// Sign via WC.
+			const signedHex = await signTransaction(
+				client,
+				topic,
+				consolidation.unsignedTxHex,
+				sourceOutputs,
+				`Consolidate ${inputs.length} UTXOs`
+			);
 
 			// Broadcast.
 			const bcRes = await fetch('/api/mint/broadcast', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ rawHex: signed })
+				body: JSON.stringify({ rawHex: signedHex })
 			});
 			if (!bcRes.ok) {
 				const msg = (await bcRes.json().catch(() => ({})) as { message?: string }).message;
@@ -677,7 +474,7 @@
 				return;
 			}
 
-			try { await client.disconnect({ topic: session.topic, reason: { code: 6000, message: 'Done' } }); } catch { /* ok */ }
+			await disconnectWallet(client, topic);
 			prepareDone = true;
 			fundingUtxosFetched = false;
 			fetchFundingUtxos();

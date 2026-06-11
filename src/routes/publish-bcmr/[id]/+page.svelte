@@ -8,11 +8,11 @@
 	//                 content_hash).
 	//   4 verify    — user posts their hosted URL, we sha256-verify the
 	//                 returned bytes. Optionally submit a backup copy to
-	//                 tokenstork for operator approval.            [Day 3]
-	//   5 build+sign — libauth-direct unsigned tx (spend authNFT, emit
-	//                  new authNFT, OP_RETURN BCMR locator), paste-hex
-	//                  signing.                                    [Day 4]
-	//   6 broadcast  — forward signed hex to BCHN.                 [Day 4]
+	//                 tokenstork for operator approval.
+	//   5 build+sign — decision-tree readiness diagnostic + WalletConnect
+	//                  one-click sign-and-broadcast, with paste-hex
+	//                  fallback.
+	//   6 broadcast  — forward signed hex to BCHN.
 	//
 	// State persists via /api/bcmr/sessions/[id] PATCH on each step
 	// transition. Resume-across-refresh is automatic — the SSR loader
@@ -20,6 +20,12 @@
 
 	import { goto } from '$app/navigation';
 	import type { BcmrPublishSession } from '$lib/server/bcmrPublishSessions';
+	import type { WalletUtxo } from '$lib/server/walletUtxos';
+	import type { TxReadinessReport } from '$lib/client/txReadiness';
+	import { checkBcmrPublishReadiness } from '$lib/client/txReadiness';
+	import { connectWallet, signTransaction, disconnectWallet } from '$lib/client/wc-client';
+	import { buildConsolidationTx, plainUtxosToConsolidationInputs } from '$lib/client/consolidationBuilder';
+	import { cashAddressToLockingBytecode, binToHex } from '@bitauth/libauth';
 
 	let { data } = $props();
 
@@ -90,6 +96,7 @@
 	let ipfsKeyInput = $state('');
 
 	// Step 4: publication verification + optional tokenstork backup.
+
 	// Step 4: publication verification + optional tokenstork backup.
 
 	// Step 4: publication verification + optional tokenstork backup.
@@ -107,7 +114,7 @@
 	let submittingBackup = $state(false);
 	let submitBackupResult = $state<null | { ok: true } | { ok: false; message: string }>(null);
 
-	// Step 5: build tx + paste-hex sign + broadcast.
+	// Step 5: build tx + smart flow (WC + readiness) + paste-hex fallback.
 	let buildingTx = $state(false);
 	let buildTxError = $state<string | null>(null);
 	let buildTxSummary = $state<null | {
@@ -123,6 +130,16 @@
 	function initialPublishTxid() {
 		return data.session.publishTxidHex ?? null;
 	}
+
+	// Step 5 smart flow: readiness diagnostic + WalletConnect one-click.
+	let readiness = $state<TxReadinessReport | null>(null);
+	let readinessLoading = $state(false);
+	let wcSigning = $state(false);
+	let wcSignError = $state<string | null>(null);
+	let prepareInProgress = $state(false);
+	let prepareError = $state<string | null>(null);
+	let prepareDone = $state(false);
+	let walletUtxos = $state<WalletUtxo[]>([]);
 
 	const stepLabels = ['Identity', 'Icon', 'Canonicalize', 'Publish', 'Build & sign', 'Broadcast'];
 
@@ -391,6 +408,200 @@
 			broadcastError = (err as Error).message ?? 'Network error';
 		} finally {
 			broadcasting = false;
+		}
+	}
+
+	// ─── Step 5 smart flow helpers ─────────────────────────────────
+
+	async function fetchAndCheckReadiness() {
+		readinessLoading = true;
+		readiness = null;
+		try {
+			const res = await fetch('/api/wallet/funding-utxos');
+			if (!res.ok) {
+				readiness = {
+					ready: false,
+					requirements: [{ label: 'Wallet check', satisfied: false, reason: `Could not fetch UTXOs (HTTP ${res.status})`, fixable: 'refresh' }],
+					summary: 'UTXO check failed'
+				};
+				return;
+			}
+			const body = (await res.json()) as {
+				utxos: Array<{ txid: string; valueSats: number; height: number }>;
+				plainUtxos: Array<{ txid: string; vout: number; valueSats: number; height: number }>;
+			};
+			const mapped: WalletUtxo[] = [
+				...body.utxos.map((u) => ({
+					txid: u.txid,
+					vout: 0,
+					valueSats: BigInt(u.valueSats),
+					height: u.height
+				})),
+				...body.plainUtxos.map((u) => ({
+					txid: u.txid,
+					vout: u.vout,
+					valueSats: BigInt(u.valueSats),
+					height: u.height
+				}))
+			];
+			walletUtxos = mapped;
+
+			const authchainHeadHex = session.authchainHeadTxidHex;
+			const authNftPresent = mapped.some(
+				(u) => u.vout === 0 && authchainHeadHex && u.txid.toLowerCase() === authchainHeadHex.toLowerCase()
+			);
+			readiness = checkBcmrPublishReadiness({
+				walletUtxos: mapped,
+				ownsAuthNft: authchainHeadHex ? true : null,
+				authNftPresent,
+				authNftValueSats: mapped.find(
+					(u) => u.vout === 0 && authchainHeadHex && u.txid.toLowerCase() === authchainHeadHex.toLowerCase()
+				)?.valueSats
+			});
+		} catch (err) {
+			readiness = {
+				ready: false,
+				requirements: [
+					{ label: 'Wallet check', satisfied: false, reason: (err as Error).message || 'Unknown error', fixable: 'refresh' }
+				],
+				summary: 'Readiness check failed'
+			};
+		} finally {
+			readinessLoading = false;
+		}
+	}
+
+	async function signAndBroadcastWithWC() {
+		wcSignError = null;
+		wcSigning = true;
+		try {
+			// 1. Build the unsigned tx server-side.
+			const buildRes = await fetch(`/api/bcmr/sessions/${session.id}/build-tx`, {
+				method: 'POST'
+			});
+			if (!buildRes.ok) {
+				const errBody = (await buildRes.json().catch(() => ({}))) as { message?: string };
+				throw new Error(errBody.message ?? `Build failed (HTTP ${buildRes.status})`);
+			}
+			const build = (await buildRes.json()) as {
+				unsignedTxHex: string;
+				sourceOutputs: Array<{
+					outpointTransactionHash: string;
+					outpointIndex: number;
+					valueSatoshis: string;
+					lockingBytecodeHex: string;
+					token?: { categoryHex: string; amount: string; commitmentHex?: string; capability?: string };
+				}>;
+				alreadyBuilt: boolean;
+				session: BcmrPublishSession;
+			};
+			session = build.session;
+
+			// 2. Connect to wallet via WalletConnect.
+			const { client, topic } = await connectWallet(data.session.cashaddr);
+
+			// 3. Sign the tx.
+			const signedHex = await signTransaction(
+				client,
+				topic,
+				build.unsignedTxHex,
+				build.sourceOutputs,
+				'Sign BCMR publication'
+			);
+
+			// 4. Broadcast via server.
+			const bcRes = await fetch(`/api/bcmr/sessions/${session.id}/broadcast`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ signedTxHex: signedHex })
+			});
+			if (!bcRes.ok) {
+				const errBody = (await bcRes.json().catch(() => ({}))) as { message?: string };
+				throw new Error(errBody.message ?? `Broadcast failed (HTTP ${bcRes.status})`);
+			}
+			const bcBody = (await bcRes.json()) as {
+				txid: string;
+				alreadyBroadcast: boolean;
+				session?: BcmrPublishSession;
+			};
+			broadcastTxid = bcBody.txid;
+			if (bcBody.session) session = bcBody.session;
+			step = 6;
+
+			// 5. Cleanup WC session.
+			await disconnectWallet(client, topic);
+		} catch (err) {
+			wcSignError = (err as Error).message || 'WalletConnect signing failed';
+		} finally {
+			wcSigning = false;
+		}
+	}
+
+	async function prepareFundingConsolidation() {
+		prepareInProgress = true;
+		prepareError = null;
+		prepareDone = false;
+		try {
+			// Get plain-BCH UTXOs for consolidation.
+			const res = await fetch('/api/wallet/funding-utxos');
+			if (!res.ok) throw new Error(`UTXO fetch failed (HTTP ${res.status})`);
+			const body = (await res.json()) as {
+				plainUtxos: Array<{ txid: string; vout: number; valueSats: number; height: number }>;
+			};
+			if (body.plainUtxos.length === 0) {
+				throw new Error('No plain-BCH UTXOs available for consolidation.');
+			}
+
+			// Connect WC.
+			const { client, topic } = await connectWallet(data.session.cashaddr);
+
+			// Derive locking bytecode for source outputs.
+			const lockResult = cashAddressToLockingBytecode(data.session.cashaddr);
+			if (typeof lockResult === 'string') throw new Error(`Address decode failed: ${lockResult}`);
+			const selfLockHex = binToHex(lockResult.bytecode);
+
+			// Build consolidation tx.
+			const inputs = plainUtxosToConsolidationInputs(body.plainUtxos);
+			const consolidation = buildConsolidationTx(inputs, data.session.cashaddr);
+
+			// Build sourceOutputs with WC2 <Uint8Array: ...> tokens.
+			const sourceOutputs = body.plainUtxos.map((u) => ({
+				outpointTransactionHash: `<Uint8Array: 0x${u.txid}>`,
+				outpointIndex: u.vout,
+				sequenceNumber: 0xfffffffe,
+				lockingBytecode: `<Uint8Array: 0x${selfLockHex}>`,
+				unlockingBytecode: '<Uint8Array: 0x>',
+				valueSatoshis: `<bigint: ${u.valueSats}n>`
+			}));
+
+			// Sign via WC.
+			const signedHex = await signTransaction(
+				client,
+				topic,
+				consolidation.unsignedTxHex,
+				sourceOutputs,
+				`Consolidate ${inputs.length} UTXOs`
+			);
+
+			// Broadcast.
+			const bcRes = await fetch('/api/mint/broadcast', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ rawHex: signedHex })
+			});
+			if (!bcRes.ok) {
+				const errBody = (await bcRes.json().catch(() => ({}))) as { message?: string };
+				throw new Error(errBody.message ?? `Broadcast failed (${bcRes.status})`);
+			}
+
+			await disconnectWallet(client, topic);
+			prepareDone = true;
+			// Refresh readiness to pick up the new UTXO.
+			await fetchAndCheckReadiness();
+		} catch (err) {
+			prepareError = (err as Error).message || 'Consolidation failed';
+		} finally {
+			prepareInProgress = false;
 		}
 	}
 
@@ -754,99 +965,182 @@
 		{:else if step === 5}
 			<h2 class="text-xl font-semibold ts-text-strong mb-2">5. Build & sign</h2>
 			<p class="text-sm mb-5 ts-text-muted">
-				We build the unsigned transaction that spends your category's authority NFT (at vout 0
-				of the current authchain head), emits a new authority NFT to your wallet (preserving the
-				NFT's commitment + capability), and attaches an
-				<code class="text-xs">OP_RETURN BCMR</code>
-				locator carrying your content hash + publication URL. You sign in your wallet, paste the
-				signed hex back, and we broadcast.
+				We build the unsigned transaction that spends your category's authority NFT, emits a new
+				authority NFT to your wallet, and attaches an <code class="text-xs">OP_RETURN BCMR</code>
+				locator. Token Stork can orchestrate the signing via WalletConnect — or you can build,
+				sign manually, and paste the hex below.
 			</p>
 
-			{#if !session.unsignedTxHex && !buildTxSummary}
-				<button
-					type="button"
-					onclick={runBuildTx}
-					disabled={buildingTx}
-					class="px-4 py-2 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold disabled:opacity-50"
-				>
-					{buildingTx ? 'Building…' : 'Build unsigned tx'}
-				</button>
-			{/if}
+			<!-- Readiness diagnostic card -->
+			<div class="mb-5 p-4 rounded-lg border ts-border-subtle bg-slate-50 dark:bg-zinc-950">
+				<div class="flex items-center justify-between mb-3">
+					<span class="text-sm font-medium ts-text-strong">Transaction readiness</span>
+					<button
+						type="button"
+						onclick={fetchAndCheckReadiness}
+						disabled={readinessLoading}
+						class="text-xs px-2 py-1 rounded border ts-border-strong hover:bg-slate-100 dark:hover:bg-zinc-900 disabled:opacity-50"
+					>
+						{readinessLoading ? 'Checking…' : '🔄 Check wallet'}
+					</button>
+				</div>
 
-			{#if buildTxError}
-				<p class="mt-4 text-sm text-rose-600 dark:text-rose-400" role="alert">{buildTxError}</p>
-			{/if}
+				{#if readinessLoading}
+					<p class="text-xs ts-text-muted">Checking your wallet for sufficient BCH and the authority NFT…</p>
+				{:else if readiness}
+					<div class="space-y-2">
+						{#each readiness.requirements as req}
+							<div class="flex items-start gap-2 text-xs">
+								<span class="mt-0.5 shrink-0">
+									{#if req.satisfied}
+										<span class="text-emerald-600 dark:text-emerald-400">✅</span>
+									{:else}
+										<span class="text-rose-500">❌</span>
+									{/if}
+								</span>
+								<div>
+									<span class="font-medium ts-text-strong">{req.label}</span>
+									{#if !req.satisfied && req.reason}
+										<p class="ts-text-muted">{req.reason}</p>
+									{/if}
+								</div>
+							</div>
+						{/each}
+					</div>
 
-			{#if session.unsignedTxHex || buildTxSummary}
-				<div class="space-y-4">
-					{#if buildTxSummary}
-						<div class="p-3 rounded-md bg-slate-50 dark:bg-zinc-900/50 text-sm">
-							<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-								<div>
-									<div class="text-xs ts-text-muted">authNFT (new)</div>
-									<div class="font-mono ts-text-strong">{buildTxSummary.authNftOutputSats} sats</div>
+					<!-- Action buttons based on readiness -->
+					<div class="mt-4 flex flex-wrap items-center gap-3">
+						{#if readiness.ready}
+							<button
+								type="button"
+								onclick={signAndBroadcastWithWC}
+								disabled={wcSigning}
+								class="px-5 py-2.5 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium"
+							>
+								{wcSigning ? 'Connecting to wallet…' : '✍️ Sign with Wallet'}
+							</button>
+							<span class="text-xs ts-text-muted">or sign manually below</span>
+						{:else if readiness.requirements.some(r => !r.satisfied && r.fixable === 'consolidate-bch')}
+							<button
+								type="button"
+								onclick={prepareFundingConsolidation}
+								disabled={prepareInProgress}
+								class="px-5 py-2.5 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium"
+							>
+								{prepareInProgress ? 'Consolidating…' : '🚀 Create funding UTXO'}
+							</button>
+							<span class="text-xs ts-text-muted">Consolidate plain BCH into one spendable UTXO</span>
+						{:else if !readiness.ready}
+							<p class="text-xs text-amber-700 dark:text-amber-300">
+								Resolve the issues above to enable one-click signing, or use the manual flow below.
+							</p>
+						{/if}
+					</div>
+
+					{#if wcSignError}
+						<p class="mt-2 text-xs text-rose-600 dark:text-rose-400">{wcSignError}</p>
+					{/if}
+					{#if prepareError}
+						<p class="mt-2 text-xs text-rose-600 dark:text-rose-400">{prepareError}</p>
+					{/if}
+					{#if prepareDone}
+						<p class="mt-2 text-xs text-emerald-600 dark:text-emerald-400">Consolidation broadcast! Refreshing readiness…</p>
+					{/if}
+				{:else}
+					<p class="text-xs ts-text-muted">Click "Check wallet" to see if you're ready to publish.</p>
+				{/if}
+			</div>
+
+			<!-- Manual paste-hex fallback (collapsible) -->
+			<details class="mt-4 mb-5" open={!readiness?.ready}>
+				<summary class="cursor-pointer text-sm font-medium ts-text-strong">or sign manually</summary>
+				<div class="mt-4 space-y-4">
+					{#if !session.unsignedTxHex && !buildTxSummary}
+						<button
+							type="button"
+							onclick={runBuildTx}
+							disabled={buildingTx}
+							class="px-4 py-2 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold disabled:opacity-50"
+						>
+							{buildingTx ? 'Building…' : 'Build unsigned tx'}
+						</button>
+					{/if}
+
+					{#if buildTxError}
+						<p class="text-sm text-rose-600 dark:text-rose-400" role="alert">{buildTxError}</p>
+					{/if}
+
+					{#if session.unsignedTxHex || buildTxSummary}
+						<div class="space-y-4">
+							{#if buildTxSummary}
+								<div class="p-3 rounded-md bg-slate-50 dark:bg-zinc-900/50 text-sm">
+									<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+										<div>
+											<div class="text-xs ts-text-muted">authNFT (new)</div>
+											<div class="font-mono ts-text-strong">{buildTxSummary.authNftOutputSats} sats</div>
+										</div>
+										<div>
+											<div class="text-xs ts-text-muted">Fee</div>
+											<div class="font-mono ts-text-strong">{buildTxSummary.feeSats} sats</div>
+										</div>
+										<div>
+											<div class="text-xs ts-text-muted">Change</div>
+											<div class="font-mono ts-text-strong">{buildTxSummary.changeSats} sats</div>
+										</div>
+										<div>
+											<div class="text-xs ts-text-muted">Tx size</div>
+											<div class="font-mono ts-text-strong">{buildTxSummary.encodedTxBytes} B</div>
+										</div>
+									</div>
 								</div>
-								<div>
-									<div class="text-xs ts-text-muted">Fee</div>
-									<div class="font-mono ts-text-strong">{buildTxSummary.feeSats} sats</div>
+							{/if}
+
+							<div>
+								<div class="flex items-center justify-between mb-1">
+									<div class="text-sm font-medium ts-text-strong">Unsigned transaction hex</div>
+									<button
+										type="button"
+										onclick={() => session.unsignedTxHex && copyToClipboard(session.unsignedTxHex)}
+										class="px-3 py-1 rounded-md border ts-border-strong text-xs hover:bg-slate-50 dark:hover:bg-zinc-800"
+									>
+										Copy
+									</button>
 								</div>
-								<div>
-									<div class="text-xs ts-text-muted">Change</div>
-									<div class="font-mono ts-text-strong">{buildTxSummary.changeSats} sats</div>
-								</div>
-								<div>
-									<div class="text-xs ts-text-muted">Tx size</div>
-									<div class="font-mono ts-text-strong">{buildTxSummary.encodedTxBytes} B</div>
-								</div>
+								<pre
+									class="px-3 py-2 rounded-md bg-slate-100 dark:bg-zinc-800 font-mono text-[11px] max-h-32 overflow-auto break-all"
+								>{session.unsignedTxHex}</pre>
+								<p class="mt-2 text-xs ts-text-muted">
+									Sign this hex in your wallet (Paytaca, Electron Cash, Cashonize, etc.). Then paste the signed hex below.
+								</p>
+							</div>
+
+							<div>
+								<label class="block">
+									<span class="text-sm font-medium ts-text-strong">Signed transaction hex</span>
+									<textarea
+										rows="4"
+										bind:value={signedTxHexInput}
+										placeholder="Paste signed hex from your wallet here…"
+										class="mt-1 w-full px-3 py-2 rounded-md border ts-border-strong ts-surface-input font-mono text-xs"
+									></textarea>
+								</label>
+								<button
+									type="button"
+									onclick={runBroadcast}
+									disabled={broadcasting || !signedTxHexInput.trim()}
+									class="mt-3 px-4 py-2 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold disabled:opacity-50"
+								>
+									{broadcasting ? 'Broadcasting…' : 'Broadcast →'}
+								</button>
 							</div>
 						</div>
 					{/if}
 
-					<div>
-						<div class="flex items-center justify-between mb-1">
-							<div class="text-sm font-medium ts-text-strong">Unsigned transaction hex</div>
-							<button
-								type="button"
-								onclick={() => session.unsignedTxHex && copyToClipboard(session.unsignedTxHex)}
-								class="px-3 py-1 rounded-md border ts-border-strong text-xs hover:bg-slate-50 dark:hover:bg-zinc-800"
-							>
-								Copy
-							</button>
-						</div>
-						<pre
-							class="px-3 py-2 rounded-md bg-slate-100 dark:bg-zinc-800 font-mono text-[11px] max-h-32 overflow-auto break-all"
-						>{session.unsignedTxHex}</pre>
-						<p class="mt-2 text-xs ts-text-muted">
-							Sign this hex in your wallet (Paytaca, Electron Cash, Cashonize, etc. — any wallet that
-							supports paste-and-sign). Then paste the signed hex below.
-						</p>
-					</div>
-
-					<div>
-						<label class="block">
-							<span class="text-sm font-medium ts-text-strong">Signed transaction hex</span>
-							<textarea
-								rows="4"
-								bind:value={signedTxHexInput}
-								placeholder="Paste signed hex from your wallet here…"
-								class="mt-1 w-full px-3 py-2 rounded-md border ts-border-strong ts-surface-input font-mono text-xs"
-							></textarea>
-						</label>
-						<button
-							type="button"
-							onclick={runBroadcast}
-							disabled={broadcasting || !signedTxHexInput.trim()}
-							class="mt-3 px-4 py-2 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold disabled:opacity-50"
-						>
-							{broadcasting ? 'Broadcasting…' : 'Broadcast →'}
-						</button>
-					</div>
+					{#if broadcastError}
+						<p class="mt-4 text-sm text-rose-600 dark:text-rose-400" role="alert">{broadcastError}</p>
+					{/if}
 				</div>
-			{/if}
-
-			{#if broadcastError}
-				<p class="mt-4 text-sm text-rose-600 dark:text-rose-400" role="alert">{broadcastError}</p>
-			{/if}
+			</details>
 		{:else if step === 6}
 			<h2 class="text-xl font-semibold ts-text-strong mb-2">6. Done — published on-chain</h2>
 			{#if broadcastTxid || session.publishTxidHex}
@@ -960,7 +1254,7 @@
 						Next →
 					</button>
 				{:else if step === 5}
-					<!-- Step 5 advances via the broadcast button itself (which jumps to step 6 on success); no separate Next button needed -->
+					<!-- Step 5 advances via the WC sign or broadcast button; no separate Next button needed -->
 					<span></span>
 				{:else if step === 6}
 					<!-- Final step; advance UX is the "View your token" link in the success card -->
