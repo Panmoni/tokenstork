@@ -251,11 +251,18 @@ export function buildBcmrPublishTx(spec: BcmrPublishBuildSpec): BcmrPublishBuild
 	});
 	// vout[1]: BCMR locator OP_RETURN. Zero-value (data carrier).
 	outputs.push({ lockingBytecode: bcmrLocatorScript, valueSatoshis: 0n });
-	// vout[2] (optional): BCH change.
+	for (const u of bchInputs) {
+		if (u.tokenData) {
+			outputs.push({
+				lockingBytecode: senderLock,
+				valueSatoshis: BigInt(DUST_THRESHOLD_SATS),
+				token: buildAuthNftTokenField(u.tokenData)
+			});
+		}
+	}
 	if (createChangeOutput) {
 		outputs.push({ lockingBytecode: senderLock, valueSatoshis: changeSats });
 	}
-
 	const tx: TransactionCommon = { version: 2, locktime: 0, inputs, outputs };
 	const unsignedBin = encodeTransactionCommon(tx);
 
@@ -414,7 +421,6 @@ function pickBchUtxos(available: WalletUtxo[], target: bigint): WalletUtxo[] {
 	// Smallest-first: consolidates dust as a side benefit. Same policy as
 	// airdropBuilder.
 	const sorted = [...available]
-		.filter((u) => !u.tokenData)
 		.sort((a, b) => (a.valueSats < b.valueSats ? -1 : a.valueSats > b.valueSats ? 1 : 0));
 	const picked: WalletUtxo[] = [];
 	let sum = 0n;
