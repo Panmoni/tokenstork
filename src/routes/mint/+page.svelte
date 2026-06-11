@@ -55,11 +55,14 @@
 	// WalletConnect sign-in-page state.
 	let wcSigning = $state(false);
 	let wcSignError = $state<string | null>(null);
-
 	// Prepare-funding flow: consolidate plain BCH into vout=0 UTXO.
 	let prepareInProgress = $state(false);
 	let prepareError = $state<string | null>(null);
 	let prepareDone = $state(false);
+
+	// Persistent WC session so repeat clicks don't show a new QR.
+	let _wcClient: any = null;
+	let _wcSession: any = null;
 
 	// Step 4 manual-outpoint validation: when the user pastes a txid
 	// manually, warn if vout=0 of that txid isn't in their wallet.
@@ -566,47 +569,45 @@
 			};
 			const unsignedTxBin = encodeTransaction(tx as Parameters<typeof encodeTransaction>[0]);
 			const unsignedTxHex = binToHex(unsignedTxBin);
-
-			// Sign via WalletConnect.
-			const [{ default: SignClient }, { WalletConnectModal }] = await Promise.all([
-				import('@walletconnect/sign-client'),
-				import('@walletconnect/modal')
-			]);
 			const WC_PROJECT_ID = publicEnv.PUBLIC_WALLETCONNECT_PROJECT_ID ?? '';
-			console.log('[mint-prepare] WC_PROJECT_ID present:', !!WC_PROJECT_ID);
 			if (!WC_PROJECT_ID) {
 				prepareError = 'WalletConnect is not configured. Set PUBLIC_WALLETCONNECT_PROJECT_ID.';
 				return;
 			}
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const client: any = await SignClient.init({
-				projectId: WC_PROJECT_ID,
-				metadata: {
-					name: 'Token Stork — Create Funding UTXO',
-					description: 'Consolidate BCH for CashTokens minting',
-					url: window.location.origin,
-					icons: [`${window.location.origin}/logo-simple-bch.png`]
-				}
-			});
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const modal: any = new WalletConnectModal({
-				projectId: WC_PROJECT_ID,
-				themeMode: document.documentElement.classList.contains('dark') ? 'dark' : 'light'
-			});
 			const BCH_CHAIN = 'bch:bitcoincash';
-			const { uri, approval } = await client.connect({
-				requiredNamespaces: {
-					bch: {
-						chains: [BCH_CHAIN],
-						methods: ['bch_signTransaction', 'bch_getAddresses'],
-						events: []
-					}
-				}
-			});
-			if (!uri) { prepareError = 'WalletConnect returned no pairing URI.'; return; }
-			modal.openModal({ uri });
+			let client: any;
 			let session: { topic: string; namespaces: { bch?: { accounts?: string[] } } };
-			try { session = await approval(); } finally { modal.closeModal(); }
+			if (_wcClient && _wcSession) {
+				client = _wcClient;
+				session = _wcSession;
+			} else {
+				const [{ default: SignClient }, { WalletConnectModal }] = await Promise.all([
+					import('@walletconnect/sign-client'),
+					import('@walletconnect/modal')
+				]);
+				client = await SignClient.init({
+					projectId: WC_PROJECT_ID,
+					metadata: {
+						name: 'Token Stork — Mint',
+						description: 'Sign CashTokens transactions',
+						url: window.location.origin,
+						icons: [`${window.location.origin}/logo-simple-bch.png`]
+					}
+				});
+				const modal = new WalletConnectModal({
+					projectId: WC_PROJECT_ID,
+					themeMode: document.documentElement.classList.contains('dark') ? 'dark' : 'light'
+				});
+				const { uri, approval } = await client.connect({
+					requiredNamespaces: { bch: { chains: [BCH_CHAIN], methods: ['bch_signTransaction', 'bch_getAddresses'], events: [] } }
+				});
+				if (!uri) { prepareError = 'WalletConnect returned no pairing URI.'; return; }
+				modal.openModal({ uri });
+				try { session = await approval(); } finally { modal.closeModal(); }
+				_wcClient = client;
+				_wcSession = session;
+			}
+
 			const accounts = session.namespaces.bch?.accounts ?? [];
 			if (accounts.length === 0) { prepareError = 'Wallet returned no addresses.'; return; }
 			const walletCashaddr = accounts[0].split(':').slice(2).join(':');
