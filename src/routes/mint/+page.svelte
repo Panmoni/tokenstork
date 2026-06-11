@@ -296,10 +296,12 @@
 	});
 
 	async function next() {
-		if (step === 1 && step1Error) return;
-		if (step === 2 && step2Error) return;
-		if (step === 3 && step3Error) return;
-		if (step === 1) await ensureSession();
+		// Block: can't proceed to step 5 without a genesis build (which
+		// requires a valid outpoint txid). This prevents the most common
+		// user error: pasting a random txid and trying to sign a tx that
+		// references a UTXO they can't spend.
+		if (step === 4 && !genesisBuild) return;
+		if (step < 2) await ensureSession();
 		await saveSession();
 		step = Math.min(step + 1, 6);
 	}
