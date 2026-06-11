@@ -586,10 +586,8 @@
 			const BCH_CHAIN = 'bch:bitcoincash';
 			let client: any;
 			let session: { topic: string; namespaces: { bch?: { accounts?: string[] } } };
-			if (wcSession.client && wcSession.session && wcSession.cashaddr === data!.cashaddr) {
-				client = wcSession.client;
-				session = { topic: wcSession.session.topic, namespaces: { bch: { accounts: [`bch:bitcoincash:${data!.cashaddr}`] } } };
-			} else if (_mwc) {
+			console.log('[prepareFunding] wcSession:', !!wcSession.client, !!wcSession.session, '_mwc:', !!_mwc);
+			if (_mwc) {
 				client = _mwc.client;
 				session = _mwc.session;
 			} else {
@@ -613,10 +611,9 @@
 				const { uri, approval } = await client.connect({
 					optionalNamespaces: { bch: { chains: [BCH_CHAIN], methods: ['bch_signTransaction', 'bch_getAddresses'], events: [] } }
 				});
-				if (!uri) { prepareError = 'WalletConnect returned no pairing URI.'; return; }
-				modal.openModal({ uri });
 				try { session = await approval(); } finally { modal.closeModal(); }
 				_mwc = { client, session };
+				console.log('[prepareFunding] stored _mwc, topic:', session.topic.slice(0, 16));
 			}
 			const accounts = session.namespaces.bch?.accounts ?? [];
 			if (accounts.length === 0) { prepareError = 'Wallet returned no addresses.'; return; }
@@ -642,12 +639,11 @@
 					}
 				}),
 				new Promise<never>((_, reject) =>
-					setTimeout(() => reject(new Error('Wallet did not respond within 2 minutes. Your wallet may not support bch_signTransaction.')), WC_SIGN_TIMEOUT_MS)
+					setTimeout(() => reject(new Error('Wallet did not respond within 2 minutes.')), WC_SIGN_TIMEOUT_MS)
 				)
 			]);
-			const signed =
-				typeof result === 'string' ? result
-				: (result as { signedTransaction?: string })?.signedTransaction;
+			console.log('[prepareFunding] sign result:', typeof result, JSON.stringify(result).slice(0, 200));
+			const signed = typeof result === 'string' ? result : (result as { signedTransaction?: string })?.signedTransaction;
 			if (!signed) { prepareError = 'Wallet returned no signed transaction.'; return; }
 
 			// Broadcast.
