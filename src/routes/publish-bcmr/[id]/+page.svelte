@@ -481,6 +481,15 @@
 								else if (typeof ident.decimals === 'number') decimals = ident.decimals;
 								if (ident.description) description = ident.description;
 								if (ident.uris?.icon) iconUri = ident.uris.icon;
+								// Save and advance to step 2 (Icon).
+								await patchSession({
+									name: name || undefined,
+									ticker: ticker || undefined,
+									decimals,
+									description: description || undefined,
+									iconUri: iconUri || undefined
+								}).catch(() => {});
+								step = 2;
 							}
 						} catch (err) {
 							alert('Could not parse BCMR JSON: ' + (err as Error).message);
