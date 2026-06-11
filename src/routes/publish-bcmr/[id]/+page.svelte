@@ -87,7 +87,9 @@
 	let ipfsUploading = $state(false);
 	let ipfsCid = $state<string | null>(null);
 	let ipfsError = $state<string | null>(null);
+	let ipfsKeyInput = $state('');
 
+	// Step 4: publication verification + optional tokenstork backup.
 	// Step 4: publication verification + optional tokenstork backup.
 
 	// Step 4: publication verification + optional tokenstork backup.
@@ -236,9 +238,12 @@
 		if (!json) return;
 		ipfsUploading = true; ipfsError = null;
 		try {
-			const saved = localStorage.getItem('mint-ipfs-key');
-			if (!saved) { ipfsError = 'No Pinata key saved. Paste it in the mint step 6 first.'; return; }
-			const { key, provider } = JSON.parse(saved) as { key: string; provider: string };
+			let { key, provider } = (() => {
+				const saved = localStorage.getItem('mint-ipfs-key');
+				if (saved) return JSON.parse(saved) as { key: string; provider: string };
+				return { key: ipfsKeyInput, provider: 'pinata' };
+			})();
+			if (!key) { ipfsError = 'Enter your Pinata API key below.'; return; }
 			const blob = new Blob([json], { type: 'application/json' });
 			const fd = new FormData(); fd.append('file', blob, 'bcmr.json');
 			const url = provider === 'lighthouse' ? 'https://upload.lighthouse.storage/api/v0/add' : 'https://api.pinata.cloud/pinning/pinFileToIPFS';
@@ -248,6 +253,8 @@
 			const cid = provider === 'lighthouse' ? body.data?.Hash : body.IpfsHash;
 			if (!cid) throw new Error(`${provider} returned no CID`);
 			ipfsCid = cid;
+			// Save key to localStorage for future use.
+			try { localStorage.setItem('mint-ipfs-key', JSON.stringify({ key, provider })); } catch {}
 			publicationUriInput = `ipfs://${cid}`;
 			await patchSession({ publicationUri: publicationUriInput }).catch(() => {});
 		} catch (e) { ipfsError = (e as Error).message; }
@@ -644,8 +651,6 @@
 							class="px-3 py-2 rounded-md bg-slate-100 dark:bg-zinc-800 font-mono text-[11px] max-h-80 overflow-auto"
 						>{canonicalJson ?? JSON.stringify(session.bcmrJson, null, 2)}</pre>
 					</div>
-
-
 					<div class="p-3 rounded-md bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-900">
 						{#if ipfsCid}
 							<p class="text-xs text-emerald-700 dark:text-emerald-300">Pinned ✓ <code>ipfs://{ipfsCid}</code></p>
@@ -654,6 +659,13 @@
 								class="px-4 py-2 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold disabled:opacity-50">
 								{ipfsUploading ? 'Pinning…' : '🚀 Pin to IPFS'}
 							</button>
+							{#if !localStorage.getItem('mint-ipfs-key')}
+								<div class="mt-2">
+									<input type="password" bind:value={ipfsKeyInput} placeholder="Pinata JWT or Lighthouse API key"
+										class="w-full px-3 py-1.5 text-xs rounded border ts-border-strong font-mono" />
+									<span class="block mt-1 text-[10px] ts-text-muted">Saved to localStorage — never sent to Token Stork.</span>
+								</div>
+							{/if}
 							{#if ipfsError}<p class="text-xs text-rose-600 mt-2">{ipfsError}</p>{/if}
 						{/if}
 					</div>
