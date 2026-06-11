@@ -522,8 +522,10 @@
 			const sourceOutputs: Array<{
 				outpointTransactionHash: string;
 				outpointIndex: number;
+				sequenceNumber: number;
 				lockingBytecode: string;
-				valueSatoshis: number;
+				unlockingBytecode: string;
+				valueSatoshis: string;
 			}> = [];
 			let totalInputSats = 0n;
 
@@ -535,10 +537,12 @@
 					unlockingBytecode: new Uint8Array(0)
 				});
 				sourceOutputs.push({
-					outpointTransactionHash: u.txid,
+					outpointTransactionHash: `<Uint8Array: 0x${u.txid}>`,
 					outpointIndex: u.vout,
-					lockingBytecode: binToHex(selfLock),
-					valueSatoshis: u.valueSats
+					sequenceNumber: 0xfffffffe,
+					lockingBytecode: `<Uint8Array: 0x${binToHex(selfLock)}>`,
+					unlockingBytecode: '',
+					valueSatoshis: String(u.valueSats)
 				});
 				totalInputSats += BigInt(u.valueSats);
 			}
