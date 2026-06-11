@@ -553,7 +553,11 @@
 			});
 
 			// Transform sourceOutputs from server lockingBytecodeHex format
-			// into the WC2/Uint8Array token format Paytaca expects.
+			// into the WC2 extended-JSON format (libauth `stringify` encoding)
+			// Paytaca expects. The `token` field must be libauth-shaped —
+			// `category` as Uint8Array and `amount` as bigint, NOT the
+			// server's categoryHex/string form, or the wallet's signer
+			// fails silently and the request times out.
 			const wcSourceOutputs = (build.sourceOutputs || []).map((so) => ({
 				outpointTransactionHash: `<Uint8Array: 0x${so.outpointTransactionHash}>`,
 				outpointIndex: so.outpointIndex,
@@ -561,7 +565,22 @@
 				lockingBytecode: `<Uint8Array: 0x${so.lockingBytecodeHex}>`,
 				unlockingBytecode: '<Uint8Array: 0x>',
 				valueSatoshis: `<bigint: ${so.valueSatoshis}n>`,
-				...(so.token ? { token: so.token } : {})
+				...(so.token
+					? {
+							token: {
+								amount: `<bigint: ${so.token.amount}n>`,
+								category: `<Uint8Array: 0x${so.token.categoryHex}>`,
+								...(so.token.capability
+									? {
+											nft: {
+												capability: so.token.capability,
+												commitment: `<Uint8Array: 0x${so.token.commitmentHex ?? ''}>`
+											}
+										}
+									: {})
+							}
+						}
+					: {})
 			}));
 
 			// 2. Connect to wallet via WalletConnect (reuses cached session if available).

@@ -10,6 +10,7 @@
 
 import { wcSession } from './wc-session';
 import { env as publicEnv } from '$env/dynamic/public';
+import { decodeTransaction, hexToBin, stringify } from '@bitauth/libauth';
 
 // [wc-debug] temporary diagnostic logging for the publish-bcmr signing hang.
 // Remove with: grep -rn 'wc-debug' src/
@@ -99,49 +100,52 @@ export async function connectWallet(
 		? 'dark'
 		: 'light';
 
-	// Try to reuse a cached session.
-	const cached = wcSession.session?.topic;
-	wcLog('connectWallet: start', {
-		expectedCashaddr,
-		cachedTopic: cached ? `${cached.slice(0, 8)}…` : null
-	});
-	if (cached) {
-		try {
-			const valuesProp = client.session?.values;
-			wcLog('connectWallet: cached topic present — inspecting client.session.values', {
-				type: typeof valuesProp,
-				isArray: Array.isArray(valuesProp),
-				arrayLength: Array.isArray(valuesProp) ? valuesProp.length : undefined
-			});
-			const existingSessions: Array<{ topic: string; namespaces: Record<string, { accounts?: string[] }> }> =
-				client.session?.values?.() ?? [];
-			wcLog(
-				'connectWallet: live sessions',
-				existingSessions.map((s) => ({
-					topic: `${s.topic.slice(0, 8)}…`,
-					bchAccounts: s.namespaces?.bch?.accounts
-				}))
-			);
-			const alive = existingSessions.find((s) => s.topic === cached);
-			if (alive) {
-				const accounts = alive.namespaces.bch?.accounts ?? [];
-				const walletCashaddr = accounts[0]?.split(':').slice(2).join(':') ?? '';
-				const normAddr = (a: string) => a.replace(/^bitcoincash:/, '');
-				if (normAddr(walletCashaddr) === normAddr(expectedCashaddr)) {
-					// Session is alive and address matches — reuse it.
-					wcLog('connectWallet: REUSING cached session', `${alive.topic.slice(0, 8)}…`);
-					return { client, session: alive, topic: alive.topic };
-				}
-				wcLog('connectWallet: cached session alive but address mismatch — fresh connect', {
-					walletCashaddr
-				});
-			} else {
-				wcLog('connectWallet: cached topic not among live sessions — fresh connect');
-			}
-		} catch (err) {
-			// Cached session stale — fall through to fresh connect.
-			wcLog('connectWallet: cached-session check THREW (falling through to fresh connect)', err);
+	// Try to reuse a persisted session. SignClient persists sessions to
+	// IndexedDB/localStorage, so a session from a previous page (e.g. the
+	// login flow) is still listed here after a full reload — the old
+	// in-memory wcSession check never survived a hard navigation, which
+	// is why users were re-shown the QR modal on every transaction.
+	wcLog('connectWallet: start', { expectedCashaddr });
+	try {
+		const store = client.session;
+		const existingSessions: Array<{
+			topic: string;
+			expiry?: number;
+			namespaces: Record<string, { accounts?: string[] }>;
+		}> =
+			typeof store?.getAll === 'function'
+				? store.getAll()
+				: Array.isArray(store?.values)
+					? store.values
+					: [];
+		const nowSec = Math.floor(Date.now() / 1000);
+		wcLog(
+			'connectWallet: persisted sessions',
+			existingSessions.map((s) => ({
+				topic: `${s.topic.slice(0, 8)}…`,
+				expiresInMin: s.expiry ? Math.round((s.expiry - nowSec) / 60) : null,
+				bchAccounts: s.namespaces?.bch?.accounts
+			}))
+		);
+		const normAddr = (a: string) => a.replace(/^bitcoincash:/, '');
+		const match = existingSessions.find((s) => {
+			if (s.expiry && s.expiry <= nowSec + 60) return false;
+			const acct = s.namespaces?.bch?.accounts?.[0] ?? '';
+			const walletCashaddr = acct.split(':').slice(2).join(':');
+			return walletCashaddr !== '' && normAddr(walletCashaddr) === normAddr(expectedCashaddr);
+		});
+		if (match) {
+			wcLog('connectWallet: REUSING persisted session', `${match.topic.slice(0, 8)}…`);
+			wcSession.session = { topic: match.topic };
+			return {
+				client,
+				session: match as WcSessionBundle['session'],
+				topic: match.topic
+			};
 		}
+		wcLog('connectWallet: no reusable persisted session — fresh pairing');
+	} catch (err) {
+		wcLog('connectWallet: persisted-session check THREW — fresh pairing', err);
 	}
 
 	wcLog('connectWallet: importing @walletconnect/modal…');
@@ -232,9 +236,22 @@ export async function signTransaction(
 	const BCH_CHAIN = 'bch:bitcoincash';
 	const WC_SIGN_TIMEOUT_MS = 120_000;
 
+	// The wc2-bch-bcr spec allows `transaction` to be raw hex, but
+	// Paytaca's handler does `transaction.inputs.map(...)` directly — a
+	// hex string makes the wallet throw before it ever responds (observed
+	// as a silent 2-minute timeout). Send the decoded libauth Transaction
+	// in extended-JSON form (libauth `stringify`), which both the spec and
+	// Paytaca accept.
+	const decoded = decodeTransaction(hexToBin(unsignedTxHex));
+	if (typeof decoded === 'string') {
+		throw new Error(`Failed to decode unsigned transaction: ${decoded}`);
+	}
+	const transaction = JSON.parse(stringify(decoded));
+
 	wcLog('signTransaction: sending bch_signTransaction request', {
 		topic: `${topic.slice(0, 8)}…`,
 		txHexLength: unsignedTxHex.length,
+		transaction,
 		sourceOutputCount: sourceOutputs.length,
 		firstSourceOutput: sourceOutputs[0]
 	});
@@ -248,7 +265,7 @@ export async function signTransaction(
 			request: {
 				method: 'bch_signTransaction',
 				params: {
-					transaction: unsignedTxHex,
+					transaction,
 					sourceOutputs,
 					broadcast: false,
 					userPrompt
@@ -261,8 +278,9 @@ export async function signTransaction(
 					reject(
 						new Error(
 							'Wallet did not respond within 2 minutes. ' +
-								'Your wallet may not support bch_signTransaction — ' +
-								'try the manual paste-hex flow instead.'
+								'If no signing prompt appeared in your wallet, the session may be stale — ' +
+								'it has been reset, so clicking "Sign with Wallet" again will re-pair. ' +
+								'Or use the manual paste-hex flow below.'
 						)
 					),
 				WC_SIGN_TIMEOUT_MS
@@ -271,6 +289,16 @@ export async function signTransaction(
 		]);
 	} catch (err) {
 		wcLog(`signTransaction: FAILED after ${Math.round(performance.now() - t0)}ms`, err);
+		// A timeout usually means the session is dead on the wallet side.
+		// Drop it so the next attempt does a fresh pairing instead of
+		// hanging on the same dead topic.
+		if ((err as Error).message?.includes('did not respond')) {
+			wcSession.session = null;
+			(client as any)
+				.disconnect({ topic, reason: { code: 6000, message: 'Sign request timed out' } })
+				.catch(() => {});
+			wcLog('signTransaction: stale session dropped after timeout', `${topic.slice(0, 8)}…`);
+		}
 		throw err;
 	}
 	wcLog(`signTransaction: wallet responded in ${Math.round(performance.now() - t0)}ms`, {
