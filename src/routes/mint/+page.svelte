@@ -1,5 +1,9 @@
+<script module lang="ts">
+	// Module-level WC session — survives route navigations and re-renders.
+	let _mwc: { client: any; session: any } | null = null;
+</script>
+
 <script lang="ts">
-	// Mint wizard — full flow.
 	//
 	//   1 type      — radio between FT / NFT / FT+NFT
 	//   2 identity  — name, ticker, decimals, description
@@ -59,11 +63,6 @@
 	let prepareInProgress = $state(false);
 	let prepareError = $state<string | null>(null);
 	let prepareDone = $state(false);
-
-	// Persistent WC session so repeat clicks don't show a new QR.
-	// Must use $state() — plain let resets on component re-render.
-	let _wcStore = $state<{ client: any; session: any } | null>(null);
-
 	// Step 4 manual-outpoint validation: when the user pastes a txid
 	// manually, warn if vout=0 of that txid isn't in their wallet.
 	let manualOutpointWarning = $derived.by(() => {
@@ -577,9 +576,9 @@
 			const BCH_CHAIN = 'bch:bitcoincash';
 			let client: any;
 			let session: { topic: string; namespaces: { bch?: { accounts?: string[] } } };
-			if (_wcStore) {
-				client = _wcStore.client;
-				session = _wcStore.session;
+			if (_mwc) {
+				client = _mwc.client;
+				session = _mwc.session;
 			} else {
 				const [{ default: SignClient }, { WalletConnectModal }] = await Promise.all([
 					import('@walletconnect/sign-client'),
@@ -604,7 +603,7 @@
 				if (!uri) { prepareError = 'WalletConnect returned no pairing URI.'; return; }
 				modal.openModal({ uri });
 				try { session = await approval(); } finally { modal.closeModal(); }
-				_wcStore = { client, session };
+				_mwc = { client, session };
 			}
 			const accounts = session.namespaces.bch?.accounts ?? [];
 			if (accounts.length === 0) { prepareError = 'Wallet returned no addresses.'; return; }
