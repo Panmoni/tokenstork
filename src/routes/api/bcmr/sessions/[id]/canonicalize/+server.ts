@@ -78,10 +78,13 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 		contentHashHex: hashHex
 	});
 	if (!updated) {
-		error(
-			409,
-			'Session content hash already recorded; abandon this draft and start fresh if you need to change fields.'
-		);
+		// Hash already recorded — return existing data (idempotent).
+		return json({
+			bcmrJson: session.bcmrJson,
+			canonical: canonicalizeBcmr(session.bcmrJson ?? bcmrJson),
+			contentHashHex: session.contentHashHex ?? hashHex,
+			session
+		});
 	}
 
 	return json({

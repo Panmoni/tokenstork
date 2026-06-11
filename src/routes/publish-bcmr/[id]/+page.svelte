@@ -234,10 +234,11 @@
 	}
 
 	async function pinCanonicalJson() {
-		// Use canonicalJson (the canonicalized string from the server)
-		// because the sha256 hash is computed from these exact bytes.
+		// canonicalJson is client-only and resets on page load. If null but
+		// the session has a content hash, re-fetch the canonical bytes.
+		if (!canonicalJson) { await runCanonicalize(); }
 		const json = canonicalJson;
-		if (!json) { ipfsError = 'Generate the canonical JSON first (step 3).'; return; }
+		if (!json) { ipfsError = 'Generate the canonical JSON first.'; return; }
 		ipfsUploading = true; ipfsError = null;
 		try {
 			let { key, provider } = (() => {
