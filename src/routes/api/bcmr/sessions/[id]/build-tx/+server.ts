@@ -175,15 +175,17 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 		error(500, 'Tx build failed (unexpected)');
 	}
 
-	// Persist. Append-only guard on authchain_head_txid_at_session
-	// (column is checked via `IS NULL` in updateSession's immutability
-	// guard) means a retried build against an already-recorded head
-	// returns null → 409.
-	const updated = await updateSession(cashaddr, sessionId, {
+	// Persist. Only send authchainHeadTxidHex if not already recorded
+	// (the immutable guard rejects non-null writes to a non-null column).
+	// This handles the rebuild-after-stale-sourceOutputs case.
+	const persistFields: Record<string, unknown> = {
 		unsignedTxHex: build.unsignedTxHex,
-		sourceOutputs: build.sourceOutputs,
-		authchainHeadTxidHex: headTxidHex
-	});
+		sourceOutputs: build.sourceOutputs
+	};
+	if (!session.authchainHeadTxidHex) {
+		persistFields.authchainHeadTxidHex = headTxidHex;
+	}
+	const updated = await updateSession(cashaddr, sessionId, persistFields);
 	if (!updated) {
 		error(409, 'Session changed during build (retry will return the existing unsigned hex)');
 	}
