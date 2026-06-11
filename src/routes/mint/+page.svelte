@@ -394,7 +394,7 @@
 			});
 			const BCH_CHAIN = 'bch:bitcoincash';
 			const { uri, approval } = await client.connect({
-				requiredNamespaces: {
+				optionalNamespaces: {
 					bch: {
 						chains: [BCH_CHAIN],
 						methods: ['bch_signTransaction', 'bch_getAddresses'],
@@ -435,10 +435,12 @@
 			// txid hex in user-facing (big-endian) format — the wallet handles
 			// byte-order reversal for the raw tx internally.
 			const sourceOutputs = [{
-				outpointTransactionHash: outpointTxid,
+				outpointTransactionHash: `<Uint8Array: 0x${outpointTxid}>`,
 				outpointIndex: 0,
-				lockingBytecode: lockingBytecodeHex,
-				valueSatoshis: outpointSatoshis
+				sequenceNumber: 0xfffffffe,
+				lockingBytecode: `<Uint8Array: 0x${lockingBytecodeHex}>`,
+				unlockingBytecode: '<Uint8Array: 0x>',
+				valueSatoshis: `<bigint: ${outpointSatoshis}n>`
 			}];
 
 			// Some wallets support bch_signMessage (login) but not
@@ -541,10 +543,9 @@
 					outpointIndex: u.vout,
 					sequenceNumber: 0xfffffffe,
 					lockingBytecode: `<Uint8Array: 0x${binToHex(selfLock)}>`,
-					unlockingBytecode: '',
-					valueSatoshis: String(u.valueSats)
+					unlockingBytecode: '<Uint8Array: 0x>',
+					valueSatoshis: `<bigint: ${u.valueSats}n>`
 				});
-				totalInputSats += BigInt(u.valueSats);
 			}
 
 			const TX_OVERHEAD = 10n;
@@ -602,7 +603,7 @@
 					themeMode: document.documentElement.classList.contains('dark') ? 'dark' : 'light'
 				});
 				const { uri, approval } = await client.connect({
-					requiredNamespaces: { bch: { chains: [BCH_CHAIN], methods: ['bch_signTransaction', 'bch_getAddresses'], events: [] } }
+					optionalNamespaces: { bch: { chains: [BCH_CHAIN], methods: ['bch_signTransaction', 'bch_getAddresses'], events: [] } }
 				});
 				if (!uri) { prepareError = 'WalletConnect returned no pairing URI.'; return; }
 				modal.openModal({ uri });
