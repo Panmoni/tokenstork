@@ -23,6 +23,7 @@
 // proceed to step 5 instead of re-building.
 
 import { json, error, isHttpError } from '@sveltejs/kit';
+import { decodeTransaction, encodeTransactionOutput, hexToBin } from '@bitauth/libauth';
 import { getSession, updateSession } from '$lib/server/bcmrPublishSessions';
 import { fetchWalletUtxos } from '$lib/server/walletUtxos';
 import { findAuthchainHead, isOwnerOfHeadVout0 } from '$lib/server/authchain';
@@ -39,6 +40,25 @@ function bufToHex(b: Buffer): string {
 	return b.toString('hex');
 }
 
+/**
+ * Sanity-check a cached unsigned tx against BCHN relay rules before
+ * returning it idempotently. Drafts built by older builder versions can
+ * carry sub-dust token outputs (rejected by BCHN as `dust (code 64)`);
+ * serving them would make the user sign a tx that can never broadcast.
+ *
+ * BCHN dust rule: a non-OP_RETURN output is dust when
+ * `value < 3 * (serializedOutputSize + 148)` at the 1 sat/B relay floor.
+ */
+function cachedBuildStillValid(unsignedTxHex: string): boolean {
+	const tx = decodeTransaction(hexToBin(unsignedTxHex));
+	if (typeof tx === 'string') return false;
+	return tx.outputs.every((o) => {
+		if (o.lockingBytecode[0] === 0x6a) return true; // OP_RETURN: no dust rule
+		const serializedSize = encodeTransactionOutput(o).length;
+		return o.valueSatoshis >= BigInt(3 * (serializedSize + 148));
+	});
+}
+
 export const POST: RequestHandler = async ({ locals, params }) => {
 	if (!locals.user) error(401, 'Wallet sign-in required');
 	const sessionId = params.id!;
@@ -53,13 +73,21 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 	if (!session.publicationVerifiedAt) error(409, 'Verify your host first (step 4)');
 	if (!session.publicationUri) error(409, 'No verified publication URI on session');
 	if (session.unsignedTxHex && session.sourceOutputs) {
-		// Already built. Don't rebuild — return the existing hex so the
-		// wizard advances. Idempotency keeps repeated POSTs cheap.
-		return json({
-			sourceOutputs: session.sourceOutputs,
-			unsignedTxHex: session.unsignedTxHex,
-			alreadyBuilt: true,
-			session
+		if (cachedBuildStillValid(session.unsignedTxHex)) {
+			// Already built. Don't rebuild — return the existing hex so the
+			// wizard advances. Idempotency keeps repeated POSTs cheap.
+			return json({
+				sourceOutputs: session.sourceOutputs,
+				unsignedTxHex: session.unsignedTxHex,
+				alreadyBuilt: true,
+				session
+			});
+		}
+		// Stale draft from an older builder (e.g. sub-dust token output)
+		// — fall through and rebuild rather than serve a tx BCHN will
+		// reject.
+		console.warn('[api/bcmr/build-tx] cached build fails relay rules; rebuilding', {
+			sessionId
 		});
 	}
 

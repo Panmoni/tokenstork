@@ -186,13 +186,30 @@ export function buildBcmrPublishTx(spec: BcmrPublishBuildSpec): BcmrPublishBuild
 		numPlainOutputs * ESTIMATED_OUTPUT_BYTES_PLAIN;
 	let feeSats = Math.ceil(estimatedSize * feeRate);
 
+	// Funding-pool policy: plain-BCH UTXOs are preferred. Same-category
+	// pure-FT UTXOs (no NFT side) are a fallback — their token amount is
+	// merged into the new authNFT output at vout=0, so they add no extra
+	// token output. (The previous passthrough approach emitted a 546-sat
+	// token output, which is below BCHN's token-output dust threshold of
+	// ~650 sats and got the whole tx rejected as dust — and the output
+	// wasn't in the fee math, silently underpaying the fee.) Foreign-
+	// category or NFT-bearing UTXOs are never auto-spent for fees.
+	const authCategoryHex = spec.authNftUtxo.tokenData!.categoryHex.toLowerCase();
+	const isMergeableFtUtxo = (u: WalletUtxo): boolean =>
+		u.tokenData != null &&
+		u.tokenData.categoryHex.toLowerCase() === authCategoryHex &&
+		u.tokenData.capability == null &&
+		!u.tokenData.commitmentHex;
+	const plainFundingPool = spec.availableBchUtxos.filter((u) => !u.tokenData);
+	const mergeableFundingPool = spec.availableBchUtxos.filter(isMergeableFtUtxo);
+
 	const satsNeededWithoutChange = BigInt(authNftOutputSats) + BigInt(feeSats);
 	let satsCovered = spec.authNftUtxo.valueSats;
 	let bchInputs: WalletUtxo[] = [];
 	if (satsCovered < satsNeededWithoutChange) {
 		// Pull BCH funding inputs.
 		const need = satsNeededWithoutChange - satsCovered;
-		bchInputs = pickBchUtxos(spec.availableBchUtxos, need);
+		bchInputs = pickFundingUtxos(plainFundingPool, mergeableFundingPool, need);
 		const bchSum = bchInputs.reduce((s, u) => s + u.valueSats, 0n);
 		satsCovered = spec.authNftUtxo.valueSats + bchSum;
 		// Re-estimate fee with the new input count + a plain change output
@@ -243,21 +260,27 @@ export function buildBcmrPublishTx(spec: BcmrPublishBuildSpec): BcmrPublishBuild
 	// Assemble Outputs.
 	const outputs: Output[] = [];
 	// vout[0]: new authNFT — preserve category + commitment + capability.
+	// Same-category pure-FT funding inputs merge their amount in here, so
+	// no separate token output (and no token-dust pitfall) is needed.
 	const td = spec.authNftUtxo.tokenData!;
+	const mergedFtAmount = bchInputs.reduce((s, u) => s + (u.tokenData?.amount ?? 0n), 0n);
+	const authTokenField = buildAuthNftTokenField(td);
+	authTokenField.amount += mergedFtAmount;
 	outputs.push({
 		lockingBytecode: senderLock,
 		valueSatoshis: BigInt(authNftOutputSats),
-		token: buildAuthNftTokenField(td)
+		token: authTokenField
 	});
 	// vout[1]: BCMR locator OP_RETURN. Zero-value (data carrier).
 	outputs.push({ lockingBytecode: bcmrLocatorScript, valueSatoshis: 0n });
 	for (const u of bchInputs) {
-		if (u.tokenData) {
-			outputs.push({
-				lockingBytecode: senderLock,
-				valueSatoshis: BigInt(DUST_THRESHOLD_SATS),
-				token: buildAuthNftTokenField(u.tokenData)
-			});
+		if (u.tokenData && !isMergeableFtUtxo(u)) {
+			// Unreachable given the funding-pool filter above — but a
+			// non-mergeable token input with no matching output would be
+			// BURNED by this tx, so refuse to build rather than risk it.
+			throw new BcmrPublishBuildError(
+				'internal: non-mergeable token UTXO selected for fee funding'
+			);
 		}
 	}
 	if (createChangeOutput) {
@@ -417,21 +440,28 @@ function concatUint8(parts: Uint8Array[]): Uint8Array {
 	return out;
 }
 
-function pickBchUtxos(available: WalletUtxo[], target: bigint): WalletUtxo[] {
-	// Smallest-first: consolidates dust as a side benefit. Same policy as
-	// airdropBuilder.
-	const sorted = [...available]
-		.sort((a, b) => (a.valueSats < b.valueSats ? -1 : a.valueSats > b.valueSats ? 1 : 0));
+function pickFundingUtxos(
+	plainPool: WalletUtxo[],
+	mergeablePool: WalletUtxo[],
+	target: bigint
+): WalletUtxo[] {
+	// Smallest-first within each pool: consolidates dust as a side
+	// benefit (same policy as airdropBuilder). Plain BCH is exhausted
+	// before any same-category-FT UTXO is touched.
+	const smallestFirst = (pool: WalletUtxo[]) =>
+		[...pool].sort((a, b) => (a.valueSats < b.valueSats ? -1 : a.valueSats > b.valueSats ? 1 : 0));
 	const picked: WalletUtxo[] = [];
 	let sum = 0n;
-	for (const u of sorted) {
+	for (const u of [...smallestFirst(plainPool), ...smallestFirst(mergeablePool)]) {
 		if (sum >= target) break;
 		picked.push(u);
 		sum += u.valueSats;
 	}
 	if (sum < target) {
 		throw new BcmrPublishBuildError(
-			`BCH funding UTXO pool insufficient (need ${target}, have ${sum})`
+			`BCH funding UTXO pool insufficient (need ${target}, have ${sum}; ` +
+				'note: token-bearing UTXOs are only spendable for fees when they hold ' +
+				'same-category fungible tokens with no NFT)'
 		);
 	}
 	return picked;

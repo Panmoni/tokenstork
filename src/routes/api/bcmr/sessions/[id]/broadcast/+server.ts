@@ -100,7 +100,21 @@ export const POST: RequestHandler = async ({ locals, request, params, getClientA
 		// Stamp cooldown on failure (otherwise a bad signed hex burns
 		// one IP slot per retry and locks out the NAT).
 		recentBroadcasts.set(cashaddr, Date.now());
-		error(400, `BCHN rejected: ${e.message ?? 'unknown'}`);
+		// The signed tx is dead — discard the cached build so the next
+		// "Sign with Wallet" click rebuilds fresh instead of re-signing
+		// the same rejected transaction.
+		try {
+			await updateSession(cashaddr, sessionId, {
+				unsignedTxHex: null,
+				sourceOutputs: null
+			});
+		} catch (clearErr) {
+			console.error('[api/bcmr/broadcast] failed to clear stale build:', clearErr);
+		}
+		error(
+			400,
+			`BCHN rejected: ${e.message ?? 'unknown'} — the draft tx was discarded; click "Sign with Wallet" again to rebuild`
+		);
 	}
 
 	// Persist. Append-only guard on publish_txid in updateSession means
