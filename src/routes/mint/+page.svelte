@@ -61,8 +61,8 @@
 	let prepareDone = $state(false);
 
 	// Persistent WC session so repeat clicks don't show a new QR.
-	let _wcClient: any = null;
-	let _wcSession: any = null;
+	// Must use $state() — plain let resets on component re-render.
+	let _wcStore = $state<{ client: any; session: any } | null>(null);
 
 	// Step 4 manual-outpoint validation: when the user pastes a txid
 	// manually, warn if vout=0 of that txid isn't in their wallet.
@@ -577,9 +577,9 @@
 			const BCH_CHAIN = 'bch:bitcoincash';
 			let client: any;
 			let session: { topic: string; namespaces: { bch?: { accounts?: string[] } } };
-			if (_wcClient && _wcSession) {
-				client = _wcClient;
-				session = _wcSession;
+			if (_wcStore) {
+				client = _wcStore.client;
+				session = _wcStore.session;
 			} else {
 				const [{ default: SignClient }, { WalletConnectModal }] = await Promise.all([
 					import('@walletconnect/sign-client'),
@@ -604,10 +604,8 @@
 				if (!uri) { prepareError = 'WalletConnect returned no pairing URI.'; return; }
 				modal.openModal({ uri });
 				try { session = await approval(); } finally { modal.closeModal(); }
-				_wcClient = client;
-				_wcSession = session;
+				_wcStore = { client, session };
 			}
-
 			const accounts = session.namespaces.bch?.accounts ?? [];
 			if (accounts.length === 0) { prepareError = 'Wallet returned no addresses.'; return; }
 			const walletCashaddr = accounts[0].split(':').slice(2).join(':');
