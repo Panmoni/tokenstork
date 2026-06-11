@@ -472,7 +472,9 @@
 							const text = await file.text();
 							const json = JSON.parse(text);
 							const ident = json?.identities?.[Object.keys(json.identities ?? {})[0]]?.[Object.keys(json?.identities?.[Object.keys(json.identities ?? {})[0]] ?? {})[0]];
+							console.log('[bcmr-upload] ident:', ident ? { name: ident.name, token_symbol: ident.token?.symbol } : null);
 							if (ident) {
+								if (ident.name) name = ident.name;
 								if (ident.token?.symbol) ticker = ident.token.symbol;
 								else if (ident.symbol) ticker = ident.symbol;
 								if (typeof ident.token?.decimals === 'number') decimals = ident.token.decimals;
