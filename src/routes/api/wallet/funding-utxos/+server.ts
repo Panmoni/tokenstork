@@ -68,24 +68,15 @@ export const GET: RequestHandler = async ({ locals }) => {
 	const fundingUtxos: FundingUtxo[] = [];
 	const plainUtxos: PlainUtxo[] = [];
 	for (const u of allUtxos) {
-		// Track non-vout-0 FIRST (before token check) so the diag is
-		// mutually exclusive with the vout=0 funding list, not with the
-		// token list.
 		if (u.vout !== 0) { diag.notVout0++; }
-		if (u.tokenData) {
+
+		const isZeroAmountToken = u.tokenData && u.tokenData.amount === 0n;
+		if (u.tokenData && !isZeroAmountToken) {
 			diag.hasTokens++;
-			// BlockBook sometimes reports tokenData on UTXOs that have
-			// zero token amount (dust from airdrops). Treat those as
-			// plain BCH for consolidation purposes.
-			if (u.tokenData.amount === 0n && u.valueSats >= MIN_PLAIN_SATS) {
-				plainUtxos.push({
-					txid: u.txid,
-					vout: u.vout,
-					valueSats: Number(u.valueSats),
-					height: u.height
-				});
-			}
-		} else if (u.valueSats >= MIN_PLAIN_SATS) {
+		}
+
+		// Plain BCH (or zero-amount token dust) for consolidation.
+		if ((!u.tokenData || isZeroAmountToken) && u.valueSats >= MIN_PLAIN_SATS) {
 			plainUtxos.push({
 				txid: u.txid,
 				vout: u.vout,
@@ -94,11 +85,10 @@ export const GET: RequestHandler = async ({ locals }) => {
 			});
 		}
 
-		// Funding-eligible: must be vout=0, no token data, and ≥ min
-		// funding sats. (We already counted notVout0 and hasTokens above;
-		// these continue statements are just for the funding list.)
+		// Funding-eligible: vout=0, plain BCH (or zero token amount),
+		// value ≥ minimum funding sats.
 		if (u.vout !== 0) continue;
-		if (u.tokenData) continue;
+		if (u.tokenData && !isZeroAmountToken) continue;
 		if (u.valueSats < MIN_FUNDING_SATS) { diag.tooSmall++; continue; }
 
 		fundingUtxos.push({
@@ -108,9 +98,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		});
 	}
 	diag.passed = fundingUtxos.length;
-
 	fundingUtxos.sort((a, b) => b.valueSats - a.valueSats);
 	plainUtxos.sort((a, b) => b.valueSats - a.valueSats);
-
 	return json({ utxos: fundingUtxos, plainUtxos, diag });
 };
