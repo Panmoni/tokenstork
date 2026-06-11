@@ -551,18 +551,16 @@
 
 			const TX_OVERHEAD = 10n;
 			const INPUT_BYTES = 41n;
+			const SIG_BYTES_PER_INPUT = 106n; // DER sig(~71) + pubkey(33) + push ops(2)
 			const OUTPUT_BYTES = 34n;
-			const FEE_RATE = 1n;
-			const estimatedBytes = TX_OVERHEAD + BigInt(inputs.length) * INPUT_BYTES + OUTPUT_BYTES;
-			let feeSats = estimatedBytes * FEE_RATE;
+			const estimatedBytes =
+				TX_OVERHEAD + BigInt(inputs.length) * (INPUT_BYTES + SIG_BYTES_PER_INPUT) + OUTPUT_BYTES;
+			let feeSats = estimatedBytes; // 1 sat/byte
 			const outputSats = Number(totalInputSats - feeSats);
-
 			if (outputSats < 546) {
 				prepareError = `Not enough BCH to cover fee. Total: ${totalInputSats} sats, fee: ${feeSats} sats.`;
 				return;
 			}
-			feeSats = BigInt(outputSats > 0 ? Number(totalInputSats) - outputSats : Number(totalInputSats));
-
 			const tx = {
 				version: 2,
 				locktime: 0,
