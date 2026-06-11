@@ -45,6 +45,7 @@ export interface BcmrPublishSession {
 	authchainHeadCapturedAt: number | null;
 	// Tx record
 	unsignedTxHex: string | null;
+			sourceOutputs: unknown | null;
 	signedTxHex: string | null;
 	publishTxidHex: string | null;
 	// Bookkeeping
@@ -68,6 +69,7 @@ interface DbRow {
 	publication_verified_at: Date | null;
 	authchain_head_txid_at_session: Buffer | null;
 	authchain_head_captured_at: Date | null;
+		source_outputs: unknown | null;
 	unsigned_tx_hex: string | null;
 	signed_tx_hex: string | null;
 	publish_txid: Buffer | null;
@@ -96,6 +98,7 @@ function rowToSession(r: DbRow): BcmrPublishSession {
 		authchainHeadCapturedAt: r.authchain_head_captured_at
 			? Math.floor(r.authchain_head_captured_at.getTime() / 1000)
 			: null,
+			sourceOutputs: r.source_outputs,
 		unsignedTxHex: r.unsigned_tx_hex,
 		signedTxHex: r.signed_tx_hex,
 		publishTxidHex: hexFromBytes(r.publish_txid),
@@ -187,6 +190,7 @@ export interface BcmrPublishSessionPatch {
 	contentHashHex?: string | null;
 	publicationUri?: string | null;
 	publicationVerifiedAt?: 'now' | null;
+			sourceOutputs?: unknown | null;
 	authchainHeadTxidHex?: string | null;
 	authchainHeadCapturedAt?: 'now' | null;
 	unsignedTxHex?: string | null;
@@ -261,6 +265,9 @@ export async function updateSession(
 	}
 	if (patch.unsignedTxHex !== undefined) push('unsigned_tx_hex', patch.unsignedTxHex);
 	if (patch.signedTxHex !== undefined) push('signed_tx_hex', patch.signedTxHex);
+	if (patch.sourceOutputs !== undefined) {
+		push('source_outputs', patch.sourceOutputs === null ? null : JSON.stringify(patch.sourceOutputs));
+	}
 	if (patch.publishTxidHex !== undefined) {
 		push('publish_txid', patch.publishTxidHex ? bytesFromHex(patch.publishTxidHex) : null);
 	}

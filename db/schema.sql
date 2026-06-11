@@ -1144,6 +1144,7 @@ CREATE TABLE IF NOT EXISTS bcmr_publish_sessions (
   authchain_head_captured_at  TIMESTAMPTZ,
   -- Tx record
   unsigned_tx_hex             TEXT,
+  source_outputs              JSONB,                                  -- WC2 bch_signTransaction source-outputs payload
   signed_tx_hex               TEXT,
   publish_txid                BYTEA,                                  -- 32-byte txid after broadcast
   -- Bookkeeping

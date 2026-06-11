@@ -56,6 +56,7 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 		// Already built. Don't rebuild — return the existing hex so the
 		// wizard advances. Idempotency keeps repeated POSTs cheap.
 		return json({
+		sourceOutputs: session.sourceOutputs,
 			unsignedTxHex: session.unsignedTxHex,
 			alreadyBuilt: true,
 			session
@@ -180,6 +181,7 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 	// returns null → 409.
 	const updated = await updateSession(cashaddr, sessionId, {
 		unsignedTxHex: build.unsignedTxHex,
+		sourceOutputs: build.sourceOutputs,
 		authchainHeadTxidHex: headTxidHex
 	});
 	if (!updated) {
