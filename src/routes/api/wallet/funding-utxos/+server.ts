@@ -51,7 +51,11 @@ export const GET: RequestHandler = async ({ locals }) => {
 	}
 
 	const allUtxos = await fetchWalletUtxos(locals.user.cashaddr);
-
+	// Temporary diagnostic: log raw tokenData for first 3 UTXOs.
+	for (let i = 0; i < Math.min(3, allUtxos.length); i++) {
+		const u = allUtxos[i];
+		console.log(`[funding-utxos] UTXO #${i} txid=${u.txid.slice(0,16)} vout=${u.vout} value=${u.valueSats} tokenData=${u.tokenData ? `amount=${u.tokenData.amount} category=${u.tokenData.categoryHex?.slice(0,16)}` : 'null'}`);
+	}
 	const diag: FundingUtxoDiag = {
 		total: allUtxos.length,
 		notVout0: 0,
