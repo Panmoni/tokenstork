@@ -60,16 +60,19 @@ export const GET: RequestHandler = async ({ locals }) => {
 		passed: 0
 	};
 
+
 	const fundingUtxos: FundingUtxo[] = [];
 	const plainUtxos: PlainUtxo[] = [];
 	for (const u of allUtxos) {
-		// Track token-bearing UTXOs for diagnostics and exclude from
-		// both funding and plain lists (token UTXOs can't seed a new
-		// category or be consolidated without losing the token).
-		if (u.tokenData) { diag.hasTokens++; continue; }
+		// Track non-vout-0 FIRST (before token check) so the diag is
+		// mutually exclusive with the vout=0 funding list, not with the
+		// token list.
+		if (u.vout !== 0) { diag.notVout0++; }
+		if (u.tokenData)   { diag.hasTokens++; }
 
-		// Collect ALL plain-BCH UTXOs for the consolidation flow.
-		if (u.valueSats >= MIN_PLAIN_SATS) {
+		// Include in plainUtxos if it's plain BCH (no token data) AND
+		// above the minimum value for consolidation.
+		if (!u.tokenData && u.valueSats >= MIN_PLAIN_SATS) {
 			plainUtxos.push({
 				txid: u.txid,
 				vout: u.vout,
@@ -78,8 +81,11 @@ export const GET: RequestHandler = async ({ locals }) => {
 			});
 		}
 
-		// Funding-eligible: must be vout=0 and ≥ min funding sats.
-		if (u.vout !== 0) { diag.notVout0++; continue; }
+		// Funding-eligible: must be vout=0, no token data, and ≥ min
+		// funding sats. (We already counted notVout0 and hasTokens above;
+		// these continue statements are just for the funding list.)
+		if (u.vout !== 0) continue;
+		if (u.tokenData) continue;
 		if (u.valueSats < MIN_FUNDING_SATS) { diag.tooSmall++; continue; }
 
 		fundingUtxos.push({
