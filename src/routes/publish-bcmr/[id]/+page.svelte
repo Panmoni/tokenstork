@@ -473,9 +473,10 @@
 							const json = JSON.parse(text);
 							const ident = json?.identities?.[Object.keys(json.identities ?? {})[0]]?.[Object.keys(json?.identities?.[Object.keys(json.identities ?? {})[0]] ?? {})[0]];
 							if (ident) {
-								if (ident.name) name = ident.name;
-								if (ident.symbol) ticker = ident.symbol;
-								if (typeof ident.decimals === 'number') decimals = ident.decimals;
+								if (ident.token?.symbol) ticker = ident.token.symbol;
+								else if (ident.symbol) ticker = ident.symbol;
+								if (typeof ident.token?.decimals === 'number') decimals = ident.token.decimals;
+								else if (typeof ident.decimals === 'number') decimals = ident.decimals;
 								if (ident.description) description = ident.description;
 								if (ident.uris?.icon) iconUri = ident.uris.icon;
 							}
