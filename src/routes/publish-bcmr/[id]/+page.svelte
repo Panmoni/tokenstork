@@ -268,56 +268,29 @@
 			/* clipboard API failed — silently no-op */
 		}
 	}
-
 	async function runVerify() {
-		verifyResult = null;
 		const raw = publicationUriInput.trim();
-		// Convert ipfs:// to a gateway URL for server-side verification.
-		const url = raw.startsWith('ipfs://')
+		if (!raw) { verifyResult = { ok: false, reason: 'invalid-url', message: 'Enter a URL first' }; return; }
+		const verifyUri = raw.startsWith('ipfs://')
 			? `https://gateway.pinata.cloud/ipfs/${raw.slice(7)}`
 			: raw;
-		if (!url) {
-			verifyResult = { ok: false, reason: 'invalid-url', message: 'Enter your URL first' };
-			return;
-		}
+		verifyResult = null;
+		verifying = true;
 		try {
 			const res = await fetch(`/api/bcmr/sessions/${session.id}/verify-uri`, {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ publicationUri: url })
+				method: 'POST', headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ publicationUri: verifyUri })
 			});
 			if (res.status === 200) {
-				const body = (await res.json()) as
-					| {
-							ok: false;
-							reason: string;
-							message: string;
-							expected?: string;
-							observed?: string;
-					  };
-				if (body.ok) {
-					session = body.session;
-					verifyResult = { ok: true, sizeBytes: body.sizeBytes };
-				} else {
-					verifyResult = body;
-				}
+				const body = await res.json() as { ok: true; session: BcmrPublishSession; sizeBytes: number } | { ok: false; reason: string; message: string };
+				if (body.ok) { session = body.session; verifyResult = { ok: true, sizeBytes: body.sizeBytes }; }
+				else verifyResult = body;
 			} else {
-				const body = (await res.json().catch(() => ({}))) as { message?: string };
-				verifyResult = {
-					ok: false,
-					reason: 'server-error',
-					message: body.message ?? `Verify failed (HTTP ${res.status})`
-				};
+				const body = await res.json().catch(() => ({})) as { message?: string };
+				verifyResult = { ok: false, reason: 'server-error', message: body.message ?? `HTTP ${res.status}` };
 			}
-		} catch (err) {
-			verifyResult = {
-				ok: false,
-				reason: 'network',
-				message: (err as Error).message ?? 'Network error'
-			};
-		} finally {
-			verifying = false;
-		}
+		} catch (e) { verifyResult = { ok: false, reason: 'network', message: (e as Error).message }; }
+		finally { verifying = false; }
 	}
 
 	async function runSubmitBackup() {
