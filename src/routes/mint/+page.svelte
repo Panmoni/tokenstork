@@ -169,11 +169,13 @@
 		}
 	});
 	async function fetchFundingUtxos() {
-		if (fundingUtxosLoading) return;
 		fundingUtxosLoading = true;
 		fundingUtxosError = null;
 		try {
-			const res = await fetch('/api/wallet/funding-utxos');
+			const controller = new AbortController();
+			const timeout = setTimeout(() => controller.abort(), 20_000);
+			const res = await fetch('/api/wallet/funding-utxos', { signal: controller.signal });
+			clearTimeout(timeout);
 			if (!res.ok) {
 				fundingUtxosError = `Could not fetch UTXOs (HTTP ${res.status})`;
 				return;
@@ -181,18 +183,20 @@
 			const body = (await res.json()) as { utxos: typeof fundingUtxos; plainUtxos: typeof plainUtxos; diag: typeof fundingUtxosDiag };
 			fundingUtxos = body.utxos;
 			plainUtxos = body.plainUtxos;
-			// Auto-select the largest UTXO if the user hasn't manually
-			// entered a txid yet.
+			fundingUtxosDiag = body.diag;
 			if (fundingUtxos.length > 0 && !outpointTxid) {
 				const best = fundingUtxos[0];
 				outpointTxid = best.txid;
 				outpointSatoshis = best.valueSats;
 			}
 		} catch (e) {
-			fundingUtxosError = (e as Error).message;
+			if ((e as Error).name === 'AbortError') {
+				fundingUtxosError = 'UTXO fetch timed out after 20 seconds. BlockBook may be slow — try again.';
+			} else {
+				fundingUtxosError = (e as Error).message;
+			}
 		} finally {
 			fundingUtxosLoading = false;
-			fundingUtxosFetched = true;
 		}
 	}
 
@@ -1127,6 +1131,15 @@
 							{fundingUtxosLoading ? 'Checking…' : '🔄 Refresh'}
 						</button>
 					</div>
+				<!-- Funding UTXO selector -->
+				<div class="mb-5 p-4 rounded-lg border ts-border-subtle bg-slate-50 dark:bg-zinc-950">
+					<div class="flex items-center justify-between mb-3">
+						<span class="text-sm font-medium ts-text-strong">Funding UTXO</span>
+						<button type="button" onclick={fetchFundingUtxos}
+							class="text-xs px-2 py-1 rounded border ts-border-strong hover:bg-slate-100 dark:hover:bg-zinc-900">
+							{fundingUtxosLoading ? 'Checking…' : '🔄 Refresh'}
+						</button>
+					</div>
 
 					{#if fundingUtxosLoading}
 						<p class="text-xs ts-text-muted">Checking your wallet for suitable UTXOs…</p>
@@ -1135,88 +1148,51 @@
 						<p class="text-xs mt-1 ts-text-muted">You can still paste a txid manually below.</p>
 					{:else if fundingUtxos.length > 0}
 						<label class="block">
-							<span class="text-xs font-medium ts-text-muted">Select a vout=0 UTXO from your wallet</span>
-							<select
-								bind:value={outpointTxid}
-								class="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-mono ts-border-strong ts-surface-page"
+							<span class="text-xs font-medium ts-text-muted">Select a vout=0 UTXO</span>
+							<select bind:value={outpointTxid} class="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-mono ts-border-strong ts-surface-page"
 								onchange={(e) => {
 									const txid = (e.currentTarget as HTMLSelectElement).value;
 									const match = fundingUtxos.find(u => u.txid === txid);
 									if (match) outpointSatoshis = match.valueSats;
-								}}
-							>
+								}}>
 								{#each fundingUtxos as utxo}
-									<option value={utxo.txid}>
-										{utxo.txid.slice(0, 16)}… — {utxo.valueSats.toLocaleString()} sats{utxo.height < 0 ? ' (mempool)' : ''}
-									</option>
+									<option value={utxo.txid}>{utxo.txid.slice(0,16)}… — {utxo.valueSats.toLocaleString()} sats</option>
 								{/each}
 							</select>
 						</label>
-						<p class="text-xs mt-2 ts-text-muted">
-							Found {fundingUtxos.length} suitable UTXO{fundingUtxos.length === 1 ? '' : 's'} at vout=0 in your wallet.
-						</p>
+						<p class="text-xs mt-2 ts-text-muted">Found {fundingUtxos.length} suitable UTXO{fundingUtxos.length===1?'':'s'} at vout=0.</p>
 					{:else if fundingUtxosDiag}
 						<div class="text-xs space-y-2">
-							<p class="text-amber-700 dark:text-amber-300">
-								<strong>No suitable vout=0 UTXOs found.</strong>
-							</p>
-							<p class="ts-text-muted">
-								Your wallet has <strong>{fundingUtxosDiag.total}</strong> spendable UTXO{fundingUtxosDiag.total === 1 ? '' : 's'} total.
-								{#if fundingUtxosDiag.total === 0}
-									No UTXOs at all — your wallet may be empty, or BlockBook hasn't indexed this address yet.
-								{:else}
-									Breakdown:
-								{/if}
-							</p>
+							<p class="text-amber-700 dark:text-amber-300"><strong>No suitable vout=0 UTXOs found.</strong></p>
+							<p class="ts-text-muted">Your wallet has <strong>{fundingUtxosDiag.total}</strong> UTXOs total.
+								{#if fundingUtxosDiag.total === 0}No UTXOs at all.{:else}Breakdown:{/if}</p>
 							{#if fundingUtxosDiag.total > 0}
 								<ul class="list-disc pl-4 space-y-0.5 ts-text-muted">
 									<li>{fundingUtxosDiag.notVout0} skipped — not at vout=0</li>
-									{#if fundingUtxosDiag.hasTokens > 0}
-										<li>{fundingUtxosDiag.hasTokens} skipped — carry tokens (can't seed a new category)</li>
-									{/if}
-									{#if fundingUtxosDiag.tooSmall > 0}
-										<li>{fundingUtxosDiag.tooSmall} skipped — below {1500} sat minimum</li>
-									{/if}
+									{#if fundingUtxosDiag.hasTokens > 0}<li>{fundingUtxosDiag.hasTokens} skipped — carry tokens</li>{/if}
+									{#if fundingUtxosDiag.tooSmall > 0}<li>{fundingUtxosDiag.tooSmall} skipped — below 1500 sat minimum</li>{/if}
 								</ul>
 							{/if}
 							{#if fundingUtxosDiag.notVout0 > 0}
 								<div class="mt-3 p-3 rounded bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-900">
-									<p class="text-xs text-violet-900 dark:text-violet-200 mb-2">
-										<strong>You have {fundingUtxosDiag.notVout0} plain-BCH UTXO{fundingUtxosDiag.notVout0 === 1 ? '' : 's'}.</strong>
-										We can consolidate them into a single vout=0 UTXO with one wallet approval.
-									</p>
-									<button
-										type="button"
-										onclick={prepareFunding}
-										disabled={prepareInProgress}
-										class="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium"
-									>
-										{prepareInProgress ? 'Connecting to wallet…' : '🚀 Create funding UTXO'}
+									<p class="text-xs text-violet-900 dark:text-violet-200 mb-2"><strong>You have {fundingUtxosDiag.notVout0} plain-BCH UTXOs.</strong> Consolidate into one vout=0 with one wallet tap.</p>
+									<button type="button" onclick={prepareFunding} disabled={prepareInProgress}
+										class="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium">
+										{prepareInProgress ? 'Connecting…' : '🚀 Create funding UTXO'}
 									</button>
-									{#if prepareError}
-										<p class="text-xs text-rose-600 dark:text-rose-400 mt-2">{prepareError}</p>
-									{/if}
-									{#if prepareDone}
-										<p class="text-xs text-emerald-600 dark:text-emerald-400 mt-2">Consolidation broadcast! Refreshing UTXOs…</p>
-									{/if}
+									{#if prepareError}<p class="text-xs text-rose-600 mt-2">{prepareError}</p>{/if}
+									{#if prepareDone}<p class="text-xs text-emerald-600 mt-2">Broadcast! Refreshing…</p>{/if}
 								</div>
 							{:else}
-								<p class="text-amber-700 dark:text-amber-300 mt-1">
-									<strong>No plain-BCH UTXOs available.</strong> To create one:
-								</p>
-								<ol class="list-decimal pl-4 space-y-1 ts-text-muted">
-									<li>Open your BCH wallet</li>
-									<li>Send a small amount (e.g. 0.00002 BCH = 2000 sats) <strong>to yourself</strong></li>
-									<li>Wait for the transaction to confirm (a few seconds on BCH)</li>
-									<li>Click <strong>Refresh</strong> above — the new UTXO should appear</li>
-								</ol>
+								<p class="text-amber-700 dark:text-amber-300 mt-1"><strong>No plain-BCH UTXOs.</strong> Send BCH to yourself first.</p>
 							{/if}
 						</div>
 					{:else}
-						<p class="text-xs ts-text-muted">Click Refresh to scan your wallet for suitable UTXOs.</p>
+						<p class="text-xs ts-text-muted">Click Refresh to scan your wallet.</p>
 					{/if}
+				</div>
 
-				<!-- Manual override / fallback -->
+				<!-- Manual override -->
 				<details class="text-xs mb-5 ts-text-muted">
 					<summary class="cursor-pointer">Or paste a txid manually</summary>
 					<div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1273,7 +1249,6 @@
 							Note: the input's unlocking script is empty here — your wallet fills it during
 							signing. That's why the hex below is shorter than the typical 220+ byte signed tx.
 						</p>
-						<pre class="mt-2 p-3 rounded bg-slate-50 dark:bg-zinc-950 border break-all whitespace-pre-wrap text-[10px] ts-border-subtle">{genesisBuild.unsignedTxHex}</pre>
 					</details>
 				{/if}
 				</div>
