@@ -37,10 +37,12 @@
 	let totalSupply = $state('');
 	let nftCommitmentHex = $state('');
 	let nftCapability = $state<NftCapability>('none');
-
 	// Step 4 inputs (funding outpoint + recipient address).
 	let outpointTxid = $state('');
 	let outpointSatoshis = $state<number>(2000);
+	// Extra funding inputs to supplement a vout=0 UTXO that's too small.
+	let extraInputTxids = $state<string[]>([]);
+
 
 	// Step 4 auto-detected funding UTXOs from the user's wallet.
 	let fundingUtxos = $state<{ txid: string; valueSats: number; height: number }[]>([]);
@@ -154,11 +156,17 @@
 			genesisBuild = buildGenesisTx({
 				outpointTxid,
 				outpointSatoshis,
-				tokenType,
+				tokenType: tokenType as NonNullable<typeof tokenType>,
 				supply: totalSupply ? BigInt(totalSupply) : undefined,
 				nftCommitmentHex: nftCommitmentHex || undefined,
 				nftCapability,
-				recipientCashaddr: data.cashaddr
+				recipientCashaddr: data!.cashaddr,
+				extraInputs: extraInputTxids.length > 0
+					? extraInputTxids.map(txid => {
+							const u = plainUtxos.find(p => p.txid === txid);
+							return u ? { txid: u.txid, vout: u.vout, valueSats: u.valueSats } : null;
+						}).filter((x): x is NonNullable<typeof x> => x !== null)
+					: undefined
 			});
 		} catch (e) {
 			genesisBuildError = (e as Error).message;
@@ -1152,18 +1160,36 @@
 							</select>
 						</label>
 						<p class="text-xs mt-2 ts-text-muted">Found {fundingUtxos.length} suitable UTXO{fundingUtxos.length===1?'':'s'} at vout=0.</p>
+						{#if plainUtxos.filter(u => u.txid !== outpointTxid).length > 0}
+							<details class="text-xs mt-2" open={extraInputTxids.length > 0}>
+								<summary class="cursor-pointer ts-text-muted">+ Add extra funding ({plainUtxos.filter(u => u.txid !== outpointTxid).length} UTXOs)</summary>
+								<div class="mt-2 max-h-32 overflow-y-auto space-y-1">
+									{#each plainUtxos.filter(u => u.txid !== outpointTxid) as u}
+										<label class="flex items-center gap-2 text-xs ts-text-muted cursor-pointer">
+											<input type="checkbox"
+												checked={extraInputTxids.includes(u.txid)}
+												onchange={(e) => {
+													const chk = e.currentTarget as HTMLInputElement;
+													extraInputTxids = chk.checked
+														? [...extraInputTxids, u.txid]
+														: extraInputTxids.filter(t => t !== u.txid);
+												}}
+											/>
+											<span class="font-mono">{u.txid.slice(0,12)}… vout={u.vout}</span>
+											<span class="ml-auto">{u.valueSats.toLocaleString()} sats</span>
+										</label>
+									{/each}
+								</div>
+							</details>
+						{/if}
 					{:else if fundingUtxosDiag}
 						<div class="text-xs space-y-2">
 							<p class="text-amber-700 dark:text-amber-300"><strong>No suitable vout=0 UTXOs found.</strong></p>
-							<p class="ts-text-muted">Your wallet has <strong>{fundingUtxosDiag.total}</strong> UTXOs total.
-								{#if fundingUtxosDiag.total === 0}No UTXOs at all.{:else}Breakdown:{/if}</p>
-							{#if fundingUtxosDiag.total > 0}
-								<ul class="list-disc pl-4 space-y-0.5 ts-text-muted">
-									<li>{fundingUtxosDiag.notVout0} skipped — not at vout=0</li>
-									{#if fundingUtxosDiag.hasTokens > 0}<li>{fundingUtxosDiag.hasTokens} skipped — carry tokens</li>{/if}
-									{#if fundingUtxosDiag.tooSmall > 0}<li>{fundingUtxosDiag.tooSmall} skipped — below 1500 sat minimum</li>{/if}
-								</ul>
-							{/if}
+							<p class="ts-text-muted">Your wallet has <strong>{fundingUtxosDiag.total}</strong> UTXOs total. Breakdown:</p>
+							<ul class="list-disc pl-4 space-y-0.5 ts-text-muted">
+								<li>{fundingUtxosDiag.notVout0} skipped — not at vout=0</li>
+								{#if fundingUtxosDiag.hasTokens > 0}<li>{fundingUtxosDiag.hasTokens} skipped — carry tokens</li>{/if}
+							</ul>
 							{#if plainUtxos.length > 0}
 								<div class="mt-3 p-3 rounded bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-900">
 									<p class="text-xs text-violet-900 dark:text-violet-200 mb-2"><strong>You have {plainUtxos.length} plain-BCH UTXOs.</strong> Consolidate into one vout=0 with one wallet tap.</p>

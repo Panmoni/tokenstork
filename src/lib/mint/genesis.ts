@@ -53,8 +53,11 @@ export interface GenesisSpec {
 	recipientCashaddr: string;
 	/** Sat-per-byte fee rate. Defaults to 1 (BCH standard floor). */
 	feeRateSatPerByte?: number;
-	/** Token-output dust floor in satoshis. CashTokens convention is 1000+. */
 	tokenOutputSats?: number;
+	/** Additional funding inputs (any vout) to cover fees when the
+	 * primary outpoint doesn't have enough value. The first input
+	 * is always the primary outpoint at vout=0 (for the category ID). */
+	extraInputs?: Array<{ txid: string; vout: number; valueSats: number }>;
 }
 
 export interface GenesisTxBuild {
@@ -191,64 +194,62 @@ export function buildGenesisTx(spec: GenesisSpec): GenesisTxBuild {
 		}
 	};
 
-	// Estimate tx size BEFORE finalizing change-output value, because the
-	// change-output value depends on the fee, which depends on the size.
-	// One input + two outputs (token + change). Token output gets the
-	// prefix overhead; change is plain P2PKH.
+	// Build inputs. First input at vout=0 for category ID derivation.
+	const inputs: Input[] = [{
+		outpointTransactionHash: hexToBin(spec.outpointTxid),
+		outpointIndex: 0,
+		sequenceNumber: 0xfffffffe,
+		unlockingBytecode: new Uint8Array(0)
+	}];
+	if (spec.extraInputs) {
+		for (const ei of spec.extraInputs) {
+			inputs.push({
+				outpointTransactionHash: hexToBin(ei.txid),
+				outpointIndex: ei.vout,
+				sequenceNumber: 0xfffffffe,
+				unlockingBytecode: new Uint8Array(0)
+			});
+		}
+	}
+
+	// Estimate tx size BEFORE finalizing change-output value.
+	const INPUT_BYTES = 41;
+	const SIG_BYTES = 106;
+	const OUTPUT_BYTES_PLAIN = 34;
+	const nInputs = 1 + (spec.extraInputs?.length ?? 0);
 	const estimatedTxBytes =
 		TX_OVERHEAD_BYTES +
-		ESTIMATED_INPUT_BYTES +
-		(ESTIMATED_OUTPUT_BYTES_PLAIN + TOKEN_PREFIX_OVERHEAD_BYTES) +
-		ESTIMATED_OUTPUT_BYTES_PLAIN;
+		nInputs * (INPUT_BYTES + SIG_BYTES) +
+		(OUTPUT_BYTES_PLAIN + TOKEN_PREFIX_OVERHEAD_BYTES) +
+		OUTPUT_BYTES_PLAIN;
 	let feeSats = Math.ceil(estimatedTxBytes * feeRate);
 
-	let rawChangeSats = spec.outpointSatoshis - tokenOutputSats - feeSats;
+	const totalInputSats = BigInt(spec.outpointSatoshis) +
+		(spec.extraInputs ? spec.extraInputs.reduce((sum, ei) => sum + BigInt(ei.valueSats), 0n) : 0n);
+	let rawChangeSats = Number(totalInputSats) - tokenOutputSats - feeSats;
 	if (rawChangeSats < 0) {
 		throw new Error(
-			`outpointSatoshis (${spec.outpointSatoshis}) too small to cover token output (${tokenOutputSats}) + fee (${feeSats})`
+			`Total input sats (${totalInputSats}) too small to cover token output (${tokenOutputSats}) + fee (${feeSats})`
 		);
 	}
 
-	// Dust-band handling: if change would be 1..545 sats, BCHN rejects
-	// the tx with `bad-txns-vout-toosmall`. Fold the dust into the fee
-	// and drop the change output entirely. User pays a small premium on
-	// that one UTXO rather than seeing a baffling broadcast failure.
 	let changeOutput: Output | null;
 	let changeSats: number;
 	if (rawChangeSats === 0 || rawChangeSats >= DUST_THRESHOLD_SATS) {
 		changeSats = rawChangeSats;
-		changeOutput =
-			rawChangeSats > 0
-				? {
-						lockingBytecode: recipientLock,
-						valueSatoshis: BigInt(rawChangeSats)
-					}
-				: null;
+		changeOutput = rawChangeSats > 0
+			? { lockingBytecode: recipientLock, valueSatoshis: BigInt(rawChangeSats) }
+			: null;
 	} else {
-		// 1..545 → fold into fee, no change output.
 		feeSats += rawChangeSats;
 		changeSats = 0;
 		changeOutput = null;
 	}
 
-	// Single input — the funding outpoint. unlockingBytecode is left
-	// EMPTY (zero-length) because the wallet will fill it during signing.
-	// `outpointTransactionHash` uses big-endian (UI) byte order per the
-	// libauth Input.outpointTransactionHash docstring.
-	const input: Input = {
-		outpointTransactionHash: hexToBin(spec.outpointTxid),
-		outpointIndex: 0,
-		sequenceNumber: 0xfffffffe, // CSV-allowed, locktime-allowed
-		unlockingBytecode: new Uint8Array(0)
-	};
-
 	const tx: TransactionCommon = {
 		version: 2,
 		locktime: 0,
-		inputs: [input],
-		// Token output FIRST so it's at vout=0 — wallets and explorers
-		// expect the genesis token at output[0]. Change output omitted
-		// in the dust-band case (see above).
+		inputs,
 		outputs: changeOutput ? [tokenOutput, changeOutput] : [tokenOutput]
 	};
 
