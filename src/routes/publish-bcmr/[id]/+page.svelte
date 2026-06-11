@@ -462,6 +462,30 @@
 				the BCMR JSON as the registry's <code class="text-xs">identities[category][revision]</code>
 				entry.
 			</p>
+			<div class="mb-4 flex items-center gap-3">
+				<label class="px-3 py-1.5 text-xs rounded border ts-border-strong hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer">
+					📄 Upload BCMR JSON
+					<input type="file" accept=".json" hidden onchange={async (e) => {
+						const file = (e.currentTarget as HTMLInputElement).files?.[0];
+						if (!file) return;
+						try {
+							const text = await file.text();
+							const json = JSON.parse(text);
+							const ident = json?.identities?.[Object.keys(json.identities ?? {})[0]]?.[Object.keys(json?.identities?.[Object.keys(json.identities ?? {})[0]] ?? {})[0]];
+							if (ident) {
+								if (ident.name) name = ident.name;
+								if (ident.symbol) ticker = ident.symbol;
+								if (typeof ident.decimals === 'number') decimals = ident.decimals;
+								if (ident.description) description = ident.description;
+								if (ident.uris?.icon) iconUri = ident.uris.icon;
+							}
+						} catch (err) {
+							alert('Could not parse BCMR JSON: ' + (err as Error).message);
+						}
+					}} />
+				</label>
+				<span class="text-xs ts-text-muted">Pre-fills the form from an existing BCMR JSON file</span>
+			</div>
 			<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
 				<label class="block">
 					<span class="text-sm font-medium ts-text-strong">Name</span>
