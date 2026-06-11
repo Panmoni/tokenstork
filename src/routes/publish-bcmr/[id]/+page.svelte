@@ -521,11 +521,13 @@
 	async function signAndBroadcastWithWC() {
 		wcSignError = null;
 		wcSigning = true;
+		console.log('[wc-debug] signAndBroadcastWithWC: START — step 1/4 build-tx');
 		try {
 			// 1. Build the unsigned tx server-side.
 			const buildRes = await fetch(`/api/bcmr/sessions/${session.id}/build-tx`, {
 				method: 'POST'
 			});
+			console.log('[wc-debug] build-tx responded', { status: buildRes.status, ok: buildRes.ok });
 			if (!buildRes.ok) {
 				const errBody = (await buildRes.json().catch(() => ({}))) as { message?: string };
 				throw new Error(errBody.message ?? `Build failed (HTTP ${buildRes.status})`);
@@ -543,6 +545,12 @@
 				session: BcmrPublishSession;
 			};
 			session = build.session;
+			console.log('[wc-debug] build-tx body', {
+				alreadyBuilt: build.alreadyBuilt,
+				unsignedTxHexLength: build.unsignedTxHex?.length,
+				sourceOutputCount: build.sourceOutputs?.length,
+				sourceOutputs: build.sourceOutputs
+			});
 
 			// Transform sourceOutputs from server lockingBytecodeHex format
 			// into the WC2/Uint8Array token format Paytaca expects.
@@ -557,9 +565,12 @@
 			}));
 
 			// 2. Connect to wallet via WalletConnect (reuses cached session if available).
+			console.log('[wc-debug] step 2/4 connectWallet — expected addr:', data.session.cashaddr);
 			const { client, topic } = await connectWallet(data.session.cashaddr);
+			console.log('[wc-debug] step 2/4 connectWallet DONE — topic:', topic?.slice(0, 8));
 
 			// 3. Sign the tx.
+			console.log('[wc-debug] step 3/4 signTransaction — approve in wallet now');
 			const signedHex = await signTransaction(
 				client,
 				topic,
@@ -567,13 +578,16 @@
 				wcSourceOutputs,
 				'Sign BCMR publication'
 			);
+			console.log('[wc-debug] step 3/4 signTransaction DONE — signedHex length:', signedHex?.length);
 
 			// 4. Broadcast via server.
+			console.log('[wc-debug] step 4/4 broadcast');
 			const bcRes = await fetch(`/api/bcmr/sessions/${session.id}/broadcast`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ signedTxHex: signedHex })
 			});
+			console.log('[wc-debug] broadcast responded', { status: bcRes.status, ok: bcRes.ok });
 			if (!bcRes.ok) {
 				const errBody = (await bcRes.json().catch(() => ({}))) as { message?: string };
 				throw new Error(errBody.message ?? `Broadcast failed (HTTP ${bcRes.status})`);
@@ -585,11 +599,13 @@
 			};
 			broadcastTxid = bcBody.txid;
 			if (bcBody.session) session = bcBody.session;
+			console.log('[wc-debug] DONE — txid:', bcBody.txid, 'alreadyBroadcast:', bcBody.alreadyBroadcast);
 			step = 6;
 
 			// 5. Cleanup WC session.
 			await disconnectWallet(client, topic);
 		} catch (err) {
+			console.error('[wc-debug] signAndBroadcastWithWC FAILED', err);
 			wcSignError = (err as Error).message || 'WalletConnect signing failed';
 		} finally {
 			wcSigning = false;

@@ -11,6 +11,12 @@
 import { wcSession } from './wc-session';
 import { env as publicEnv } from '$env/dynamic/public';
 
+// [wc-debug] temporary diagnostic logging for the publish-bcmr signing hang.
+// Remove with: grep -rn 'wc-debug' src/
+function wcLog(...args: unknown[]): void {
+	console.log(`[wc-debug ${new Date().toISOString().slice(11, 23)}]`, ...args);
+}
+
 /** Full session bundle returned by connectWallet. */
 export interface WcSessionBundle {
 	client: unknown;
@@ -24,7 +30,10 @@ export interface WcSessionBundle {
  * Throws if PUBLIC_WALLETCONNECT_PROJECT_ID is unset.
  */
 export async function getSignClient(): Promise<unknown> {
-	if (wcSession.client) return wcSession.client;
+	if (wcSession.client) {
+		wcLog('getSignClient: reusing cached SignClient');
+		return wcSession.client;
+	}
 	const projectId = publicEnv.PUBLIC_WALLETCONNECT_PROJECT_ID ?? '';
 	if (!projectId) {
 		throw new Error(
@@ -32,7 +41,10 @@ export async function getSignClient(): Promise<unknown> {
 				'Set PUBLIC_WALLETCONNECT_PROJECT_ID and rebuild.'
 		);
 	}
+	wcLog('getSignClient: importing @walletconnect/sign-client…');
 	const { default: SignClient } = await import('@walletconnect/sign-client');
+	wcLog('getSignClient: import done, SignClient.init() starting (relay connect)…');
+	const t0 = performance.now();
 	const client = await SignClient.init({
 		projectId,
 		metadata: {
@@ -42,6 +54,26 @@ export async function getSignClient(): Promise<unknown> {
 			icons: [`${window.location.origin}/logo-simple-bch.png`]
 		}
 	});
+	wcLog(`getSignClient: init done in ${Math.round(performance.now() - t0)}ms`);
+	// Surface relay/session lifecycle events so hangs are attributable.
+	const evClient = client as unknown as {
+		on?: (ev: string, cb: (payload: unknown) => void) => void;
+	};
+	for (const ev of [
+		'session_proposal',
+		'session_update',
+		'session_delete',
+		'session_expire',
+		'session_event',
+		'proposal_expire',
+		'session_request_sent'
+	]) {
+		try {
+			evClient.on?.(ev, (payload) => wcLog(`client event "${ev}"`, payload));
+		} catch (err) {
+			wcLog(`failed to attach listener for "${ev}"`, err);
+		}
+	}
 	wcSession.client = client;
 	return client;
 }
@@ -69,10 +101,27 @@ export async function connectWallet(
 
 	// Try to reuse a cached session.
 	const cached = wcSession.session?.topic;
+	wcLog('connectWallet: start', {
+		expectedCashaddr,
+		cachedTopic: cached ? `${cached.slice(0, 8)}…` : null
+	});
 	if (cached) {
 		try {
+			const valuesProp = client.session?.values;
+			wcLog('connectWallet: cached topic present — inspecting client.session.values', {
+				type: typeof valuesProp,
+				isArray: Array.isArray(valuesProp),
+				arrayLength: Array.isArray(valuesProp) ? valuesProp.length : undefined
+			});
 			const existingSessions: Array<{ topic: string; namespaces: Record<string, { accounts?: string[] }> }> =
 				client.session?.values?.() ?? [];
+			wcLog(
+				'connectWallet: live sessions',
+				existingSessions.map((s) => ({
+					topic: `${s.topic.slice(0, 8)}…`,
+					bchAccounts: s.namespaces?.bch?.accounts
+				}))
+			);
 			const alive = existingSessions.find((s) => s.topic === cached);
 			if (alive) {
 				const accounts = alive.namespaces.bch?.accounts ?? [];
@@ -80,18 +129,27 @@ export async function connectWallet(
 				const normAddr = (a: string) => a.replace(/^bitcoincash:/, '');
 				if (normAddr(walletCashaddr) === normAddr(expectedCashaddr)) {
 					// Session is alive and address matches — reuse it.
+					wcLog('connectWallet: REUSING cached session', `${alive.topic.slice(0, 8)}…`);
 					return { client, session: alive, topic: alive.topic };
 				}
+				wcLog('connectWallet: cached session alive but address mismatch — fresh connect', {
+					walletCashaddr
+				});
+			} else {
+				wcLog('connectWallet: cached topic not among live sessions — fresh connect');
 			}
-		} catch {
+		} catch (err) {
 			// Cached session stale — fall through to fresh connect.
+			wcLog('connectWallet: cached-session check THREW (falling through to fresh connect)', err);
 		}
 	}
 
+	wcLog('connectWallet: importing @walletconnect/modal…');
 	const { WalletConnectModal } = await import('@walletconnect/modal');
 	const modal: any = new WalletConnectModal({ projectId, themeMode });
 
 	const BCH_CHAIN = 'bch:bitcoincash';
+	wcLog('connectWallet: calling client.connect() for pairing URI…');
 	const { uri, approval } = await client.connect({
 		optionalNamespaces: {
 			bch: {
@@ -101,6 +159,7 @@ export async function connectWallet(
 			}
 		}
 	});
+	wcLog('connectWallet: client.connect() returned', { hasUri: !!uri });
 
 	if (!uri) {
 		modal.closeModal();
@@ -110,9 +169,17 @@ export async function connectWallet(
 	}
 
 	modal.openModal({ uri });
+	wcLog('connectWallet: modal opened — awaiting wallet approval() (no timeout; hangs here if wallet never responds)');
 	let session: { topic: string; namespaces: { bch?: { accounts?: string[] } } };
 	try {
 		session = await approval();
+		wcLog('connectWallet: approval() resolved', {
+			topic: `${session.topic.slice(0, 8)}…`,
+			bchAccounts: session.namespaces.bch?.accounts
+		});
+	} catch (err) {
+		wcLog('connectWallet: approval() REJECTED', err);
+		throw err;
 	} finally {
 		modal.closeModal();
 	}
@@ -125,12 +192,14 @@ export async function connectWallet(
 	const walletCashaddr = accounts[0].split(':').slice(2).join(':');
 	const normAddr = (a: string) => a.replace(/^bitcoincash:/, '');
 	if (normAddr(walletCashaddr) !== normAddr(expectedCashaddr)) {
+		wcLog('connectWallet: address mismatch', { walletCashaddr, expectedCashaddr });
 		throw new Error(
 			`Connected wallet (${walletCashaddr.slice(0, 12)}…) does not match your authenticated address. ` +
 				'Sign in with the same wallet.'
 		);
 	}
 
+	wcLog('connectWallet: connected OK', { topic: `${session.topic.slice(0, 8)}…` });
 	wcSession.session = { topic: session.topic };
 	return { client, session, topic: session.topic };
 }
@@ -163,7 +232,16 @@ export async function signTransaction(
 	const BCH_CHAIN = 'bch:bitcoincash';
 	const WC_SIGN_TIMEOUT_MS = 120_000;
 
-	const result = await Promise.race([
+	wcLog('signTransaction: sending bch_signTransaction request', {
+		topic: `${topic.slice(0, 8)}…`,
+		txHexLength: unsignedTxHex.length,
+		sourceOutputCount: sourceOutputs.length,
+		firstSourceOutput: sourceOutputs[0]
+	});
+	const t0 = performance.now();
+	let result: unknown;
+	try {
+		result = await Promise.race([
 		(client as any).request({
 			chainId: BCH_CHAIN,
 			topic,
@@ -190,7 +268,19 @@ export async function signTransaction(
 				WC_SIGN_TIMEOUT_MS
 			)
 		)
-	]);
+		]);
+	} catch (err) {
+		wcLog(`signTransaction: FAILED after ${Math.round(performance.now() - t0)}ms`, err);
+		throw err;
+	}
+	wcLog(`signTransaction: wallet responded in ${Math.round(performance.now() - t0)}ms`, {
+		resultType: typeof result,
+		resultKeys: result && typeof result === 'object' ? Object.keys(result) : undefined,
+		signedLength:
+			typeof result === 'string'
+				? result.length
+				: (result as { signedTransaction?: string })?.signedTransaction?.length
+	});
 
 	if (!result) {
 		throw new Error('Wallet returned an empty response. Try again.');
@@ -216,11 +306,13 @@ export async function disconnectWallet(
 	topic: string
 ): Promise<void> {
 	try {
+		wcLog('disconnectWallet: disconnecting', `${topic.slice(0, 8)}…`);
 		await (client as any).disconnect({
 			topic,
 			reason: { code: 6000, message: 'Signing complete' }
 		});
-	} catch {
-		/* best-effort */
+		wcLog('disconnectWallet: done');
+	} catch (err) {
+		wcLog('disconnectWallet: failed (best-effort, ignored)', err);
 	}
 }
