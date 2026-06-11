@@ -762,11 +762,25 @@
 			// immediately, without waiting for BlockBook indexing.
 			if (mintedCategoryHex) {
 				try {
-					await fetch('/api/bcmr/sessions', {
+					const sRes = await fetch('/api/bcmr/sessions', {
 						method: 'POST',
 						headers: { 'content-type': 'application/json' },
 						body: JSON.stringify({ categoryHex: mintedCategoryHex })
 					});
+					if (sRes.ok) {
+						const session = (await sRes.json()) as { id: string };
+						// Pre-fill identity from mint wizard.
+						await fetch(`/api/bcmr/sessions/${session.id}`, {
+							method: 'PATCH',
+							headers: { 'content-type': 'application/json' },
+							body: JSON.stringify({
+								name: name || undefined,
+								symbol: ticker || undefined,
+								decimals,
+								description: description || undefined
+							})
+						});
+					}
 				} catch { /* non-blocking */ }
 			}
 			step = 6;
