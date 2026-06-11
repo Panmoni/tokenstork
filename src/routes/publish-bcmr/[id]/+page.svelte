@@ -264,14 +264,41 @@
 				return { key: ipfsKeyInput, provider: 'pinata' };
 			})();
 			if (!key) { ipfsError = 'Enter your Pinata API key below.'; return; }
-			const blob = new Blob([json], { type: 'application/json' });
-			const fd = new FormData(); fd.append('file', blob, 'bcmr.json');
-			const url = provider === 'lighthouse' ? 'https://upload.lighthouse.storage/api/v0/add' : 'https://api.pinata.cloud/pinning/pinFileToIPFS';
-			const res = await fetch(url, { method: 'POST', headers: { authorization: `Bearer ${key}` }, body: fd });
-			if (!res.ok) { const t = await res.text().catch(() => ''); throw new Error(`${provider} HTTP ${res.status}: ${t.slice(0,200)}`); }
-			const body = await res.json();
-			const cid = provider === 'lighthouse' ? body.data?.Hash : body.IpfsHash;
-			if (!cid) throw new Error(`${provider} returned no CID`);
+
+			// Compute content hash from the canonical JSON bytes so we can
+			// check whether this file is already pinned.
+			const jsonBytes = new TextEncoder().encode(json);
+			const hashBuffer = await crypto.subtle.digest('SHA-256', jsonBytes);
+			const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+			// Check Pinata pinList for an existing pin with matching content.
+			let cid: string | null = null;
+			if (provider === 'pinata') {
+				try {
+					const pinListRes = await fetch(
+						`https://api.pinata.cloud/data/pinList?hashContains=${hashHex}&status=pinned&pageLimit=5`,
+						{ headers: { authorization: `Bearer ${key}` } }
+					);
+					if (pinListRes.ok) {
+						const pinList = await pinListRes.json() as { rows?: Array<{ ipfs_pin_hash: string }> };
+						if (pinList.rows && pinList.rows.length > 0) {
+							cid = pinList.rows[0].ipfs_pin_hash;
+							console.log('[bcmr-pin] found existing pin:', cid);
+						}
+					}
+				} catch { /* pinList check is best-effort */ }
+			}
+
+			if (!cid) {
+				const blob = new Blob([json], { type: 'application/json' });
+				const fd = new FormData(); fd.append('file', blob, 'bcmr.json');
+				const url = provider === 'lighthouse' ? 'https://upload.lighthouse.storage/api/v0/add' : 'https://api.pinata.cloud/pinning/pinFileToIPFS';
+				const res = await fetch(url, { method: 'POST', headers: { authorization: `Bearer ${key}` }, body: fd });
+				if (!res.ok) { const t = await res.text().catch(() => ''); throw new Error(`${provider} HTTP ${res.status}: ${t.slice(0,200)}`); }
+				const body = await res.json();
+				cid = provider === 'lighthouse' ? body.data?.Hash : body.IpfsHash;
+				if (!cid) throw new Error(`${provider} returned no CID`);
+			}
 			ipfsCid = cid;
 			publicationUriInput = `ipfs://${cid}`;
 			await patchSession({ publicationUri: publicationUriInput }).catch(() => {});
@@ -382,14 +409,23 @@
 			broadcastError = 'Signed hex must be even-length and hex-only (0-9, a-f).';
 			return;
 		}
+		// Guard: pasting the unsigned tx without signing is the most common error.
+		if (session.unsignedTxHex && trimmed === session.unsignedTxHex) {
+			broadcastError = 'This is the unsigned transaction. Sign it in your wallet first.';
+			return;
+		}
 		broadcasting = true;
 		broadcastError = null;
 		try {
+			const controller = new AbortController();
+			const bcto = setTimeout(() => controller.abort(), 30000);
 			const res = await fetch(`/api/bcmr/sessions/${session.id}/broadcast`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ signedTxHex: trimmed })
+				body: JSON.stringify({ signedTxHex: trimmed }),
+				signal: controller.signal
 			});
+			clearTimeout(bcto);
 			if (!res.ok) {
 				const body = (await res.json().catch(() => ({}))) as { message?: string };
 				broadcastError = body.message ?? `Broadcast failed (HTTP ${res.status})`;
@@ -417,52 +453,63 @@
 		readinessLoading = true;
 		readiness = null;
 		try {
-			const res = await fetch('/api/wallet/funding-utxos');
+			const controller = new AbortController();
+			const timeout = setTimeout(() => controller.abort(), 20000);
+			const res = await fetch(`/api/bcmr/sessions/${session.id}/readiness`, { signal: controller.signal });
+			clearTimeout(timeout);
 			if (!res.ok) {
 				readiness = {
 					ready: false,
-					requirements: [{ label: 'Wallet check', satisfied: false, reason: `Could not fetch UTXOs (HTTP ${res.status})`, fixable: 'refresh' }],
-					summary: 'UTXO check failed'
+					requirements: [{ label: 'Wallet check', satisfied: false, reason: `Readiness check failed (HTTP ${res.status})`, fixable: 'refresh' }],
+					summary: 'Readiness check failed'
 				};
 				return;
 			}
 			const body = (await res.json()) as {
-				utxos: Array<{ txid: string; valueSats: number; height: number }>;
-				plainUtxos: Array<{ txid: string; vout: number; valueSats: number; height: number }>;
+				ownsAuthNft: boolean | null;
+				authNftPresent: boolean;
+				authNftValueSats: number | null;
+				authchainHeadTxidHex: string | null;
+				totalBchSats: string;
+				plainUtxoCount: number;
+				error?: string;
 			};
-			const mapped: WalletUtxo[] = [
-				...body.utxos.map((u) => ({
-					txid: u.txid,
-					vout: 0,
-					valueSats: BigInt(u.valueSats),
-					height: u.height
-				})),
-				...body.plainUtxos.map((u) => ({
-					txid: u.txid,
-					vout: u.vout,
-					valueSats: BigInt(u.valueSats),
-					height: u.height
-				}))
-			];
-			walletUtxos = mapped;
 
-			const authchainHeadHex = session.authchainHeadTxidHex;
-			const authNftPresent = mapped.some(
-				(u) => u.vout === 0 && authchainHeadHex && u.txid.toLowerCase() === authchainHeadHex.toLowerCase()
-			);
+			// Build a minimal WalletUtxo array for the readiness checker.
+			const bchValue = BigInt(body.totalBchSats || '0');
+			const dummyUtxos: WalletUtxo[] = [];
+			if (body.ownsAuthNft && body.authNftValueSats != null) {
+				dummyUtxos.push({
+					txid: body.authchainHeadTxidHex ?? '',
+					vout: 0,
+					valueSats: BigInt(body.authNftValueSats),
+					height: 0
+				});
+			}
+			if (body.plainUtxoCount > 0 && bchValue > 0n) {
+				dummyUtxos.push({
+					txid: '0000000000000000000000000000000000000000000000000000000000000000',
+					vout: 1,
+					valueSats: bchValue,
+					height: 0
+				});
+			}
+			walletUtxos = dummyUtxos;
+
 			readiness = checkBcmrPublishReadiness({
-				walletUtxos: mapped,
-				ownsAuthNft: authchainHeadHex ? true : null,
-				authNftPresent,
-				authNftValueSats: mapped.find(
-					(u) => u.vout === 0 && authchainHeadHex && u.txid.toLowerCase() === authchainHeadHex.toLowerCase()
-				)?.valueSats
+				walletUtxos: dummyUtxos,
+				ownsAuthNft: body.ownsAuthNft,
+				authNftPresent: body.authNftPresent,
+				authNftValueSats: body.authNftValueSats != null ? BigInt(body.authNftValueSats) : undefined
 			});
+			if (body.error) {
+				readiness.summary = `Note: ${body.error}`;
+			}
 		} catch (err) {
 			readiness = {
 				ready: false,
 				requirements: [
-					{ label: 'Wallet check', satisfied: false, reason: (err as Error).message || 'Unknown error', fixable: 'refresh' }
+					{ label: 'Wallet check', satisfied: false, reason: (err as Error).message || 'Readiness check failed', fixable: 'refresh' }
 				],
 				summary: 'Readiness check failed'
 			};
