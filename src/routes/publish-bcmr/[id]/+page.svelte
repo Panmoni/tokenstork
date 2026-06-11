@@ -546,7 +546,7 @@
 
 			// Transform sourceOutputs from server lockingBytecodeHex format
 			// into the WC2/Uint8Array token format Paytaca expects.
-			const wcSourceOutputs = build.sourceOutputs.map((so) => ({
+			const wcSourceOutputs = (build.sourceOutputs || []).map((so) => ({
 				outpointTransactionHash: `<Uint8Array: 0x${so.outpointTransactionHash}>`,
 				outpointIndex: so.outpointIndex,
 				sequenceNumber: 0xfffffffe,

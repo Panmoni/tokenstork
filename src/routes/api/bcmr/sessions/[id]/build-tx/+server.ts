@@ -52,11 +52,11 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 	if (!session.contentHashHex) error(409, 'Canonicalize first (step 3)');
 	if (!session.publicationVerifiedAt) error(409, 'Verify your host first (step 4)');
 	if (!session.publicationUri) error(409, 'No verified publication URI on session');
-	if (session.unsignedTxHex) {
+	if (session.unsignedTxHex && session.sourceOutputs) {
 		// Already built. Don't rebuild — return the existing hex so the
 		// wizard advances. Idempotency keeps repeated POSTs cheap.
 		return json({
-		sourceOutputs: session.sourceOutputs,
+			sourceOutputs: session.sourceOutputs,
 			unsignedTxHex: session.unsignedTxHex,
 			alreadyBuilt: true,
 			session
