@@ -234,10 +234,10 @@
 	}
 
 	async function pinCanonicalJson() {
-		// Use compact JSON (session.bcmrJson) not pretty-printed (canonicalJson)
-		// because the sha256 content hash was computed from compact bytes.
-		const json = session.bcmrJson ? JSON.stringify(session.bcmrJson) : null;
-		if (!json) return;
+		// Use canonicalJson (the canonicalized string from the server)
+		// because the sha256 hash is computed from these exact bytes.
+		const json = canonicalJson;
+		if (!json) { ipfsError = 'Generate the canonical JSON first (step 3).'; return; }
 		ipfsUploading = true; ipfsError = null;
 		try {
 			let { key, provider } = (() => {
@@ -659,7 +659,7 @@
 			</p>
 
 			<label class="block">
-				<span class="text-sm font-medium ts-text-strong">Publication URL (https://)</span>
+				<span class="text-sm font-medium ts-text-strong">Publication URL (https:// or ipfs://)</span>
 				<input
 					type="url"
 					maxlength="2048"
@@ -669,7 +669,7 @@
 					disabled={!!session.publicationVerifiedAt}
 				/>
 				<span class="block mt-1 text-xs ts-text-muted">
-					HTTPS only. If your host uses redirects, paste the final URL. Maximum 8 MiB body.
+					HTTPS or ipfs:// accepted. If your host uses redirects, paste the final URL. Maximum 8 MiB body.
 				</span>
 			</label>
 
