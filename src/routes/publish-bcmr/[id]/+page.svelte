@@ -234,7 +234,9 @@
 	}
 
 	async function pinCanonicalJson() {
-		const json = canonicalJson ?? (session.bcmrJson ? JSON.stringify(session.bcmrJson) : null);
+		// Use compact JSON (session.bcmrJson) not pretty-printed (canonicalJson)
+		// because the sha256 content hash was computed from compact bytes.
+		const json = session.bcmrJson ? JSON.stringify(session.bcmrJson) : null;
 		if (!json) return;
 		ipfsUploading = true; ipfsError = null;
 		try {
@@ -253,8 +255,6 @@
 			const cid = provider === 'lighthouse' ? body.data?.Hash : body.IpfsHash;
 			if (!cid) throw new Error(`${provider} returned no CID`);
 			ipfsCid = cid;
-			// Save key to localStorage for future use.
-			try { localStorage.setItem('mint-ipfs-key', JSON.stringify({ key, provider })); } catch {}
 			publicationUriInput = `ipfs://${cid}`;
 			await patchSession({ publicationUri: publicationUriInput }).catch(() => {});
 		} catch (e) { ipfsError = (e as Error).message; }
