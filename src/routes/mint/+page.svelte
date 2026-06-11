@@ -99,6 +99,25 @@
 	let ipfsCid = $state<string | null>(null);
 	let ipfsError = $state<string | null>(null);
 
+	// Restore saved IPFS key from localStorage on mount.
+	onMount(() => {
+		try {
+			const saved = localStorage.getItem('mint-ipfs-key');
+			if (saved) {
+				const p = JSON.parse(saved) as { key: string; provider: string };
+				if (p.key) ipfsApiKey = p.key;
+				if (p.provider === 'pinata' || p.provider === 'lighthouse') ipfsProvider = p.provider;
+			}
+		} catch { /* ignore */ }
+	});
+	// Persist IPFS key to localStorage whenever it changes.
+	$effect(() => {
+		if (ipfsApiKey) {
+			try { localStorage.setItem('mint-ipfs-key', JSON.stringify({ key: ipfsApiKey, provider: ipfsProvider })); }
+			catch { /* quota exceeded */ }
+		}
+	});
+
 	// Icon URI for the BCMR. Either pasted as `ipfs://<cid>` /
 	// `https://...` OR pinned via the upload widget below. Travels
 	// straight into the generated BCMR JSON's `uris.icon`.
@@ -106,7 +125,6 @@
 	let iconFile = $state<File | null>(null);
 	let iconUploading = $state(false);
 	let iconError = $state<string | null>(null);
-
 	// Per-step validation. null = good to advance.
 	const step1Error = $derived.by(() => (tokenType ? null : 'Pick a token type to continue.'));
 	const step2Error = $derived.by(() => {
@@ -487,6 +505,8 @@
 				return;
 			}
 			signedTxHex = signed;
+			// Transition state: WC signing is done, now broadcasting.
+			wcSigning = false;
 			await broadcast();
 
 			// Clean up the WC session.
@@ -739,6 +759,12 @@
 				}
 			}
 			step = 6;
+			// Auto-redirect to token page after 3 seconds.
+			if (mintedCategoryHex) {
+				setTimeout(() => {
+					window.location.href = `/token/${mintedCategoryHex}`;
+				}, 3000);
+			}
 		} finally {
 			broadcasting = false;
 		}
