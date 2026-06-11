@@ -279,7 +279,6 @@
 			nftCommitmentHex = r.nftCommitmentHex ?? '';
 			nftCapability = (r.nftCapability as NftCapability | null) ?? 'none';
 			iconUri = r.iconUri ?? '';
-			outpointTxid = r.outpointTxid ?? '';
 			outpointSatoshis = r.outpointSatoshis ?? 2000;
 			return;
 		}
