@@ -271,12 +271,15 @@
 
 	async function runVerify() {
 		verifyResult = null;
-		const url = publicationUriInput.trim();
+		const raw = publicationUriInput.trim();
+		// Convert ipfs:// to a gateway URL for server-side verification.
+		const url = raw.startsWith('ipfs://')
+			? `https://gateway.pinata.cloud/ipfs/${raw.slice(7)}`
+			: raw;
 		if (!url) {
 			verifyResult = { ok: false, reason: 'invalid-url', message: 'Enter your URL first' };
 			return;
 		}
-		verifying = true;
 		try {
 			const res = await fetch(`/api/bcmr/sessions/${session.id}/verify-uri`, {
 				method: 'POST',
@@ -285,7 +288,6 @@
 			});
 			if (res.status === 200) {
 				const body = (await res.json()) as
-					| { ok: true; session: BcmrPublishSession; sizeBytes: number }
 					| {
 							ok: false;
 							reason: string;
