@@ -84,6 +84,11 @@
 	let canonicalJson = $state<string | null>(null);
 	let canonicalizing = $state(false);
 	let canonicalizeError = $state<string | null>(null);
+	let ipfsUploading = $state(false);
+	let ipfsCid = $state<string | null>(null);
+	let ipfsError = $state<string | null>(null);
+
+	// Step 4: publication verification + optional tokenstork backup.
 
 	// Step 4: publication verification + optional tokenstork backup.
 	let publicationUriInput = $state<string>(initialPublicationUri());
@@ -147,9 +152,9 @@
 		description: string | null;
 		decimals: number | null;
 		iconUri: string | null;
+		publicationUri: string | null;
 	}>) {
 		saveError = null;
-		saving = true;
 		try {
 			const res = await fetch(`/api/bcmr/sessions/${session.id}`, {
 				method: 'PATCH',
@@ -224,8 +229,29 @@
 		a.download = `${session.categoryHex.slice(0, 12)}-bcmr.json`;
 		document.body.appendChild(a);
 		a.click();
-		document.body.removeChild(a);
-		URL.revokeObjectURL(url);
+	}
+
+	async function pinCanonicalJson() {
+		const json = canonicalJson ?? (session.bcmrJson ? JSON.stringify(session.bcmrJson) : null);
+		if (!json) return;
+		ipfsUploading = true; ipfsError = null;
+		try {
+			const saved = localStorage.getItem('mint-ipfs-key');
+			if (!saved) { ipfsError = 'No Pinata key saved. Paste it in the mint step 6 first.'; return; }
+			const { key, provider } = JSON.parse(saved) as { key: string; provider: string };
+			const blob = new Blob([json], { type: 'application/json' });
+			const fd = new FormData(); fd.append('file', blob, 'bcmr.json');
+			const url = provider === 'lighthouse' ? 'https://upload.lighthouse.storage/api/v0/add' : 'https://api.pinata.cloud/pinning/pinFileToIPFS';
+			const res = await fetch(url, { method: 'POST', headers: { authorization: `Bearer ${key}` }, body: fd });
+			if (!res.ok) { const t = await res.text().catch(() => ''); throw new Error(`${provider} HTTP ${res.status}: ${t.slice(0,200)}`); }
+			const body = await res.json();
+			const cid = provider === 'lighthouse' ? body.data?.Hash : body.IpfsHash;
+			if (!cid) throw new Error(`${provider} returned no CID`);
+			ipfsCid = cid;
+			publicationUriInput = `ipfs://${cid}`;
+			await patchSession({ publicationUri: publicationUriInput }).catch(() => {});
+		} catch (e) { ipfsError = (e as Error).message; }
+		finally { ipfsUploading = false; }
 	}
 
 	async function copyToClipboard(text: string) {
@@ -619,10 +645,17 @@
 						>{canonicalJson ?? JSON.stringify(session.bcmrJson, null, 2)}</pre>
 					</div>
 
-					<div class="p-3 rounded-md bg-amber-50 dark:bg-amber-950/30 text-sm">
-						<strong class="text-amber-700 dark:text-amber-300">Next step:</strong> upload these exact
-						bytes to your own IPFS / Pinata / Lighthouse / HTTPS host. We'll fetch your URL on
-						step 4 and verify the sha256 matches before allowing the on-chain broadcast.
+
+					<div class="p-3 rounded-md bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-900">
+						{#if ipfsCid}
+							<p class="text-xs text-emerald-700 dark:text-emerald-300">Pinned ✓ <code>ipfs://{ipfsCid}</code></p>
+						{:else}
+							<button type="button" onclick={pinCanonicalJson} disabled={ipfsUploading}
+								class="px-4 py-2 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold disabled:opacity-50">
+								{ipfsUploading ? 'Pinning…' : '🚀 Pin to IPFS'}
+							</button>
+							{#if ipfsError}<p class="text-xs text-rose-600 mt-2">{ipfsError}</p>{/if}
+						{/if}
 					</div>
 				</div>
 			{/if}
