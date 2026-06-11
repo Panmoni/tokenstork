@@ -1165,9 +1165,9 @@
 									{#if fundingUtxosDiag.tooSmall > 0}<li>{fundingUtxosDiag.tooSmall} skipped — below 1500 sat minimum</li>{/if}
 								</ul>
 							{/if}
-							{#if fundingUtxosDiag.notVout0 > 0}
+							{#if plainUtxos.length > 0}
 								<div class="mt-3 p-3 rounded bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-900">
-									<p class="text-xs text-violet-900 dark:text-violet-200 mb-2"><strong>You have {fundingUtxosDiag.notVout0} plain-BCH UTXOs.</strong> Consolidate into one vout=0 with one wallet tap.</p>
+									<p class="text-xs text-violet-900 dark:text-violet-200 mb-2"><strong>You have {plainUtxos.length} plain-BCH UTXOs.</strong> Consolidate into one vout=0 with one wallet tap.</p>
 									<button type="button" onclick={prepareFunding} disabled={prepareInProgress}
 										class="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium">
 										{prepareInProgress ? 'Connecting…' : '🚀 Create funding UTXO'}
