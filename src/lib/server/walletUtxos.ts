@@ -126,12 +126,25 @@ export async function verifyUtxoTokenData(utxos: WalletUtxo[]): Promise<WalletUt
 	const voutTokens = new Map<string, Map<number, WalletUtxo['tokenData']>>();
 	await Promise.all(
 		txids.map(async (txid) => {
-			const res = await timedFetch(`${blockbookUrl()}/api/v2/tx/${encodeURIComponent(txid)}`, {
-				timeoutMs: 15_000
-			});
-			if (!res.ok) throw new Error(`BlockBook tx HTTP ${res.status} for ${txid}`);
+			// /api/v2/tx-specific is BlockBook's raw BCHN getrawtransaction
+			// passthrough. Use it (not /api/v2/tx): BlockBook's own tx
+			// endpoint omits tokenData for MEMPOOL transactions, which would
+			// make this verifier strip real token data from unconfirmed
+			// UTXOs — the exact burn scenario it exists to prevent.
+			const res = await timedFetch(
+				`${blockbookUrl()}/api/v2/tx-specific/${encodeURIComponent(txid)}`,
+				{ timeoutMs: 15_000 }
+			);
+			if (!res.ok) throw new Error(`BlockBook tx-specific HTTP ${res.status} for ${txid}`);
 			const body = (await res.json()) as {
-				vout?: Array<{ n: number; tokenData?: BlockBookUtxoResponse['tokenData'] }>;
+				vout?: Array<{
+					n: number;
+					tokenData?: {
+						category: string;
+						amount: string;
+						nft?: { capability: 'none' | 'mutable' | 'minting'; commitment: string };
+					};
+				}>;
 			};
 			const byVout = new Map<number, WalletUtxo['tokenData']>();
 			for (const v of body.vout ?? []) {
@@ -139,8 +152,8 @@ export async function verifyUtxoTokenData(utxos: WalletUtxo[]): Promise<WalletUt
 					byVout.set(v.n, {
 						categoryHex: v.tokenData.category,
 						amount: BigInt(v.tokenData.amount),
-						commitmentHex: v.tokenData.commitment,
-						capability: v.tokenData.capability
+						commitmentHex: v.tokenData.nft?.commitment,
+						capability: v.tokenData.nft?.capability
 					});
 				}
 			}
