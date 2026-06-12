@@ -320,10 +320,14 @@ impl BlockbookClient {
     /// primitive the on-chain BCMR walker uses to follow an authchain
     /// forward: hop = `vout[0].spentTxId` until None (current head).
     ///
-    /// Endpoint: `/api/v2/tx/<txid>` on mainnet-pat's BlockBook fork.
+    /// Endpoint: `/api/v2/tx/<txid>?spending=true` on mainnet-pat's
+    /// BlockBook fork. The `spending=true` param is required for BlockBook
+    /// to populate the `spentTxId` pointers — without it a freshly spent
+    /// vout returns `spent: true` with no spender txid and the authchain
+    /// walk dead-ends at a stale head (observed 2026-06-12).
     pub async fn get_tx(&self, txid_hex: &str) -> Result<BlockbookTx> {
         let encoded = percent_encode(txid_hex);
-        self.get(&format!("/api/v2/tx/{}", encoded))
+        self.get(&format!("/api/v2/tx/{}?spending=true", encoded))
             .await
             .with_context(|| format!("get_tx({})", &txid_hex[..16.min(txid_hex.len())]))
     }

@@ -48,7 +48,11 @@ async function getTx(txid: string): Promise<BlockBookTx> {
 	if (!HEX64_REGEX.test(txid)) {
 		throw new Error(`invalid txid hex: ${txid}`);
 	}
-	const url = `${blockbookUrl()}/api/v2/tx/${txid}`;
+	// ?spending=true is required for BlockBook to populate vout[].spentTxId
+	// (observed 2026-06-12: a freshly spent vout=0 returned spent=true with
+	// NO spentTxId without the param, so the walk dead-ended at a stale
+	// head and walletOwnsAuthNft treated the spent head as live).
+	const url = `${blockbookUrl()}/api/v2/tx/${txid}?spending=true`;
 	const res = await timedFetch(url, { timeoutMs: 10_000 });
 	if (!res.ok) {
 		throw new Error(`BlockBook tx HTTP ${res.status} for ${txid}`);
