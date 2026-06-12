@@ -22,7 +22,32 @@ import { sendRawTransaction } from '$lib/server/bchn';
 import { clientIp } from '$lib/server/clientIp';
 import { createRateLimiter } from '$lib/server/rateLimit';
 import { getSession, updateSession } from '$lib/server/bcmrPublishSessions';
+import { query } from '$lib/server/db';
 import type { RequestHandler } from './$types';
+
+/**
+ * Tell the indexer the authchain just advanced: update the cached head
+ * and backdate token_metadata.fetched_at so the next hourly
+ * sync-bcmr-onchain run re-walks this category immediately instead of
+ * waiting out the 72h staleness window. Best-effort — the walker
+ * self-heals on its own schedule if this fails.
+ */
+async function nudgeBcmrIndexer(categoryHex: string, newHeadTxid: string): Promise<void> {
+	try {
+		await query(
+			`UPDATE tokens SET authchain_head_txid = decode($1, 'hex')
+			  WHERE encode(category, 'hex') = $2`,
+			[newHeadTxid, categoryHex]
+		);
+		await query(
+			`UPDATE token_metadata SET fetched_at = now() - interval '10 years'
+			  WHERE encode(category, 'hex') = $1`,
+			[categoryHex]
+		);
+	} catch (err) {
+		console.error('[api/bcmr/broadcast] indexer nudge failed (walker will self-heal):', err);
+	}
+}
 
 // Per-cashaddr cooldown: in-memory module-scope Map. Stored across
 // requests but not across restarts (a restart is itself a 1-minute
@@ -140,6 +165,7 @@ export const POST: RequestHandler = async ({ locals, request, params, getClientA
 		// just broadcast so the wizard can record it client-side even
 		// if the DB row is stale.
 		recentBroadcasts.set(cashaddr, Date.now());
+		await nudgeBcmrIndexer(session.categoryHex, txid);
 		return json(
 			{ txid, alreadyBroadcast: false, persistRace: true },
 			{ status: 200 }
@@ -147,6 +173,7 @@ export const POST: RequestHandler = async ({ locals, request, params, getClientA
 	}
 
 	recentBroadcasts.set(cashaddr, Date.now());
+	await nudgeBcmrIndexer(session.categoryHex, txid);
 	console.info('[api/bcmr/broadcast] success', {
 		sessionId,
 		txid,
