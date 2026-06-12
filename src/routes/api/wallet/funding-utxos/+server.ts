@@ -13,7 +13,7 @@
 //   401  if no authenticated session
 
 import { error, json } from '@sveltejs/kit';
-import { fetchWalletUtxos } from '$lib/server/walletUtxos';
+import { fetchWalletUtxos, verifyUtxoTokenData } from '$lib/server/walletUtxos';
 import type { RequestHandler } from './$types';
 
 /** Minimum satoshi value for a funding UTXO to be viable. Covers:
@@ -50,7 +50,10 @@ export const GET: RequestHandler = async ({ locals }) => {
 		throw error(401, 'sign in required');
 	}
 
-	const allUtxos = await fetchWalletUtxos(locals.user.cashaddr);
+	// Cross-check tokenData against the per-tx endpoint: a token UTXO
+	// misreported as plain here would get consolidated into a plain
+	// output and BURN the tokens. See verifyUtxoTokenData docs.
+	const allUtxos = await verifyUtxoTokenData(await fetchWalletUtxos(locals.user.cashaddr));
 	// Temporary diagnostic: log raw tokenData for first 3 UTXOs.
 	for (let i = 0; i < Math.min(3, allUtxos.length); i++) {
 		const u = allUtxos[i];

@@ -25,7 +25,7 @@
 import { json, error, isHttpError } from '@sveltejs/kit';
 import { decodeTransaction, encodeTransactionOutput, hexToBin } from '@bitauth/libauth';
 import { getSession, updateSession } from '$lib/server/bcmrPublishSessions';
-import { fetchWalletUtxos } from '$lib/server/walletUtxos';
+import { fetchWalletUtxos, verifyUtxoTokenData } from '$lib/server/walletUtxos';
 import { findAuthchainHead, isOwnerOfHeadVout0 } from '$lib/server/authchain';
 import { buildBcmrPublishTx, BcmrPublishBuildError } from '$lib/server/bcmrPublishBuilder';
 import { query } from '$lib/server/db';
@@ -158,6 +158,11 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 	let walletUtxos: Awaited<ReturnType<typeof fetchWalletUtxos>>;
 	try {
 		walletUtxos = await fetchWalletUtxos(cashaddr);
+		// BlockBook's utxo endpoint can report wrong tokenData (observed
+		// smearing one output's token across sibling UTXOs); cross-check
+		// against the per-tx endpoint so the builder's token math matches
+		// consensus. See verifyUtxoTokenData docs.
+		walletUtxos = await verifyUtxoTokenData(walletUtxos);
 	} catch (err) {
 		console.error('[api/bcmr/build-tx] fetchWalletUtxos error:', err);
 		error(502, `BlockBook UTXO fetch failed: ${(err as Error).message}`);
