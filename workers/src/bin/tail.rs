@@ -35,11 +35,14 @@ use tracing_subscriber::EnvFilter;
 use workers::bchn::{BchnClient, Block, HashBlockSubscriber, zmq_url_from_env};
 use workers::blocks::{ACTIVATION_HEIGHT, summarize_block};
 use workers::crc20::detect_in_tx;
+use workers::enrich_core::aggregate;
+use workers::enrich_walker::derive_block_deltas;
 use workers::pg::{
     self, BlockWrite, FoundCategory, OfferWrite, TokenType,
-    crc20_canonical_resolve, load_sync_state, mark_blocks_run, mark_crc20_run,
-    mark_tail_run, mark_tapswap_run, pool_from_env, save_tail_last_block,
-    upsert_block, upsert_tapswap_offers_batch, upsert_tokens, write_crc20_detection,
+    apply_live_utxo_deltas, crc20_canonical_resolve, load_live_utxos_for_category,
+    load_sync_state, mark_blocks_run, mark_crc20_run, mark_tail_run, mark_tapswap_run,
+    pool_from_env, read_token_state_summary, save_tail_last_block, upsert_block,
+    upsert_tapswap_offers_batch, upsert_tokens, write_crc20_detection,
 };
 use workers::tapswap::try_decode_tx;
 use workers::tapswap_walker::process_block_spends;
@@ -68,6 +71,9 @@ struct BlockStats {
     blocks_written: usize,
     /// Count of CRC-20 reveals detected and upserted in this block.
     crc20_written: usize,
+    /// Categories whose event-driven aggregate was checked this block (shadow
+    /// mode only; 0 when ENRICH_SHADOW is unset).
+    enrich_shadow_checked: usize,
 }
 
 /// Walk one block's transactions:
@@ -270,13 +276,87 @@ async fn process_block(
         }
     }
 
+    // --- Pass 6: event-driven enrichment (SHADOW, gated by ENRICH_SHADOW) ---
+    //
+    // Maintains `live_token_utxo` from this block's token-UTXO deltas and, for
+    // each touched category, re-aggregates and compares against the current
+    // `token_state` (written by the legacy `enrich` path) WITHOUT writing
+    // token_state/holders/nfts — validating the event-driven model before
+    // cutover (docs/enrich-event-driven-design.md).
+    //
+    // SOFT-failed: this is experimental observability. A bug here must never
+    // pin the tail checkpoint or drop a block. (At cutover this becomes the
+    // authoritative writer and flips to hard-fail, like Pass 5.)
+    //
+    // NOTE: comparison only means anything once `live_token_utxo` is seeded by
+    // the one-shot bootstrap — until then a touched category's historical
+    // UTXOs are absent and a mismatch is expected, not a bug.
+    let enrich_shadow_checked = if std::env::var("ENRICH_SHADOW").is_ok() {
+        match run_enrich_shadow(pool, block).await {
+            Ok(n) => n,
+            Err(e) => {
+                warn!(height, error = %e, "enrich shadow pass failed; soft-skipping");
+                0
+            }
+        }
+    } else {
+        0
+    };
+
     Ok(BlockStats {
         tokens_touched,
         tapswap_written,
         tapswap_closed,
         blocks_written,
         crc20_written,
+        enrich_shadow_checked,
     })
+}
+
+/// Shadow-mode event-driven enrichment for one block: apply the token-UTXO
+/// deltas to `live_token_utxo`, then for each touched category re-aggregate
+/// from the live set and log any divergence from the stored `token_state`.
+/// Read-only w.r.t. token_state/token_holders/nft_instances. Returns the
+/// number of categories checked.
+async fn run_enrich_shadow(pool: &pg::PgPool, block: &Block) -> Result<usize> {
+    let deltas = derive_block_deltas(block)?;
+    let touched = apply_live_utxo_deltas(pool, &deltas).await?;
+
+    for category in &touched {
+        let inputs = load_live_utxos_for_category(pool, category).await?;
+        let agg = aggregate(&inputs);
+        let derived_supply = agg.current_supply.to_string();
+        let derived_holders = agg.holders.len() as i32;
+
+        match read_token_state_summary(pool, category).await? {
+            Some(state) => {
+                let mismatch = state.current_supply != derived_supply
+                    || state.live_utxo_count != agg.live_utxo_count
+                    || state.live_nft_count != agg.live_nft_count
+                    || state.holder_count != derived_holders;
+                if mismatch {
+                    warn!(
+                        category = %pg::bytes_to_hex(category),
+                        stored_supply = %state.current_supply,
+                        derived_supply = %derived_supply,
+                        stored_utxos = state.live_utxo_count,
+                        derived_utxos = agg.live_utxo_count,
+                        stored_nfts = state.live_nft_count,
+                        derived_nfts = agg.live_nft_count,
+                        stored_holders = state.holder_count,
+                        derived_holders,
+                        "enrich shadow mismatch (expected pre-bootstrap)"
+                    );
+                }
+            }
+            None => {
+                // No token_state row yet (brand-new category this block) —
+                // nothing to compare against.
+            }
+        }
+    }
+
+    Ok(touched.len())
 }
 
 fn merge_into_found(
@@ -306,6 +386,7 @@ async fn catch_up(pool: &pg::PgPool, bchn: &BchnClient, from: i32, to: i32) -> R
             || stats.tapswap_written > 0
             || stats.tapswap_closed > 0
             || stats.crc20_written > 0
+            || stats.enrich_shadow_checked > 0
         {
             info!(
                 height = h,
@@ -314,6 +395,7 @@ async fn catch_up(pool: &pg::PgPool, bchn: &BchnClient, from: i32, to: i32) -> R
                 tapswap_closed = stats.tapswap_closed,
                 crc20_written = stats.crc20_written,
                 blocks_written = stats.blocks_written,
+                enrich_shadow_checked = stats.enrich_shadow_checked,
                 "block processed"
             );
         } else {

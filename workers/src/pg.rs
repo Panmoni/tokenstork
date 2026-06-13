@@ -544,6 +544,38 @@ pub async fn load_live_utxos_for_category(
         .collect()
 }
 
+/// Current `token_state` headline fields, for shadow-comparing the
+/// event-driven aggregate against the value the legacy path wrote.
+pub struct TokenStateSummary {
+    pub current_supply: String,
+    pub live_utxo_count: i32,
+    pub live_nft_count: i32,
+    pub holder_count: i32,
+}
+
+/// Read a category's current `token_state` summary; `None` if no row yet.
+pub async fn read_token_state_summary(
+    pool: &PgPool,
+    category: &[u8],
+) -> Result<Option<TokenStateSummary>> {
+    let row: Option<(String, i32, i32, Option<i32>)> = sqlx::query_as(
+        "SELECT current_supply::text, live_utxo_count, live_nft_count, holder_count
+           FROM token_state WHERE category = $1",
+    )
+    .bind(category)
+    .fetch_optional(pool)
+    .await
+    .with_context(|| format!("read token_state for {}", bytes_to_hex(category)))?;
+    Ok(row.map(|(current_supply, live_utxo_count, live_nft_count, holder_count)| {
+        TokenStateSummary {
+            current_supply,
+            live_utxo_count,
+            live_nft_count,
+            holder_count: holder_count.unwrap_or(0),
+        }
+    }))
+}
+
 /// Set `sync_state.last_enrich_run_at = now()`.
 pub async fn mark_enrich_run(pool: &PgPool) -> Result<()> {
     sqlx::query(
