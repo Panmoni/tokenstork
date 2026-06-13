@@ -105,6 +105,42 @@ CREATE TABLE IF NOT EXISTS nft_instances (
 CREATE INDEX IF NOT EXISTS nft_instances_owner_idx ON nft_instances (owner_address);
 
 -- ============================================================================
+-- Live token-UTXO set — the authoritative source for token_state /
+-- token_holders / nft_instances under the EVENT-DRIVEN enrichment model.
+--
+-- Background: the legacy `enrich` worker re-derived enrichment from scratch
+-- every run by walking each category's full BlockBook tx-history (GetAddress).
+-- That re-pays O(total history) per run and on 2026-06-13 thrashed BlockBook
+-- into swap for 33h (see docs/enrich-event-driven-design.md). Instead, we
+-- persist the live token-UTXO set here and mutate it per block from `sync-tail`:
+--   + a row per token-bearing output created in a block
+--   - delete the row when that outpoint is later spent
+-- token_state / token_holders / nft_instances are then recomputed cheaply for
+-- only the categories touched in each block.
+--
+-- `address` is the owner cashaddr WITHOUT the `bitcoincash:` prefix (same form
+-- token_holders.address uses), encoded locally from the output's scriptPubKey
+-- via crate::cashaddr; NULL for nonstandard / non-address-bearing scripts
+-- (the amount still counts toward supply, just not toward any holder).
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS live_token_utxo (
+  txid           BYTEA   NOT NULL,                                       -- 32-byte spending-tx id (raw)
+  vout           INTEGER NOT NULL,                                       -- output index
+  category       BYTEA   NOT NULL REFERENCES tokens(category) ON DELETE CASCADE,
+  address        TEXT,                                                   -- owner cashaddr (no prefix); NULL if nonstandard
+  amount         NUMERIC(78,0) NOT NULL DEFAULT 0,                       -- fungible amount in base units (0 for pure-NFT)
+  nft_commitment BYTEA,                                                  -- present iff this output carries an NFT
+  nft_capability TEXT CHECK (nft_capability IN ('none','mutable','minting')),
+  created_height INTEGER NOT NULL,                                       -- block height the output was created in (for reorg unwind)
+  PRIMARY KEY (txid, vout)
+);
+
+-- Per-category aggregation (supply, holders, counts) is the hot read path.
+CREATE INDEX IF NOT EXISTS live_token_utxo_category_idx ON live_token_utxo (category);
+-- Reorg unwind deletes/repairs everything created at/above the forked height.
+CREATE INDEX IF NOT EXISTS live_token_utxo_height_idx ON live_token_utxo (created_height);
+
+-- ============================================================================
 -- Per-venue listings: which DEXs / indexers currently list each token and
 -- what price / TVL they report. Populated by `sync-cauldron` (and future
 -- `sync-fex`, `sync-tapswap`, ...). Raw values from the venue — BCH / USD

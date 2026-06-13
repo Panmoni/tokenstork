@@ -12,6 +12,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow};
 use chrono::{DateTime, TimeZone, Utc};
+use num_bigint::BigInt;
 use sqlx::postgres::PgPoolOptions;
 pub use sqlx::{PgPool, Postgres, Transaction};
 
@@ -435,6 +436,112 @@ pub async fn write_token_state(pool: &PgPool, w: &TokenStateWrite) -> Result<()>
 
     tx.commit().await.context("commit enrichment tx")?;
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Event-driven enrichment: live_token_utxo apply + read.
+// See docs/enrich-event-driven-design.md and crate::enrich_walker.
+// ---------------------------------------------------------------------------
+
+/// Apply one block's token-UTXO deltas to `live_token_utxo` in a single
+/// transaction and return the categories needing re-aggregation.
+///
+/// Touched = categories of created outputs ∪ categories of rows actually
+/// removed by a spend (the block input alone doesn't reveal a spend's
+/// category — the `DELETE … RETURNING category` does). Idempotent: creates
+/// upsert on `(txid, vout)`; deleting an already-gone outpoint no-ops — so a
+/// re-processed block (tail checkpoint didn't advance) converges. The caller
+/// (sync-tail) propagates any error so the block isn't checkpointed and re-runs.
+pub async fn apply_live_utxo_deltas(
+    pool: &PgPool,
+    deltas: &crate::enrich_walker::BlockDeltas,
+) -> Result<std::collections::HashSet<[u8; 32]>> {
+    let mut touched = deltas.touched_by_creates.clone();
+    let mut tx: Transaction<'_, Postgres> =
+        pool.begin().await.context("begin live_token_utxo tx")?;
+
+    for u in &deltas.creates {
+        let capability = u.nft_capability.map(crate::enrich_walker::nft_capability_str);
+        sqlx::query(
+            r#"
+            INSERT INTO live_token_utxo
+                (txid, vout, category, address, amount, nft_commitment, nft_capability, created_height)
+            VALUES ($1, $2, $3, $4, $5::numeric, $6, $7, $8)
+            ON CONFLICT (txid, vout) DO UPDATE SET
+                category       = EXCLUDED.category,
+                address        = EXCLUDED.address,
+                amount         = EXCLUDED.amount,
+                nft_commitment = EXCLUDED.nft_commitment,
+                nft_capability = EXCLUDED.nft_capability,
+                created_height = EXCLUDED.created_height
+            "#,
+        )
+        .bind(u.txid.as_slice())
+        .bind(u.vout)
+        .bind(u.category.as_slice())
+        .bind(u.address.as_deref())
+        .bind(u.amount.to_string())
+        .bind(u.nft_commitment.as_deref())
+        .bind(capability)
+        .bind(u.created_height)
+        .execute(&mut *tx)
+        .await
+        .with_context(|| format!("insert live_token_utxo {}:{}", bytes_to_hex(&u.txid), u.vout))?;
+    }
+
+    for sp in &deltas.spends {
+        let row: Option<(Vec<u8>,)> = sqlx::query_as(
+            "DELETE FROM live_token_utxo WHERE txid = $1 AND vout = $2 RETURNING category",
+        )
+        .bind(sp.txid.as_slice())
+        .bind(sp.vout)
+        .fetch_optional(&mut *tx)
+        .await
+        .with_context(|| format!("delete live_token_utxo {}:{}", bytes_to_hex(&sp.txid), sp.vout))?;
+        if let Some((cat,)) = row {
+            if let Ok(c) = <[u8; 32]>::try_from(cat.as_slice()) {
+                touched.insert(c);
+            }
+        }
+    }
+
+    tx.commit().await.context("commit live_token_utxo deltas")?;
+    Ok(touched)
+}
+
+/// Load a category's live token-UTXO set as [`crate::enrich_core::AggInput`]s,
+/// for re-aggregation in the event-driven path (and shadow comparison against
+/// the BlockBook path). A row with non-null `nft_capability` is an NFT (its
+/// `nft_commitment` may be empty bytes for a malformed/empty-commitment NFT).
+pub async fn load_live_utxos_for_category(
+    pool: &PgPool,
+    category: &[u8],
+) -> Result<Vec<crate::enrich_core::AggInput>> {
+    let rows: Vec<(Option<String>, String, Option<Vec<u8>>, Option<String>)> = sqlx::query_as(
+        "SELECT address, amount::text, nft_commitment, nft_capability
+           FROM live_token_utxo
+          WHERE category = $1",
+    )
+    .bind(category)
+    .fetch_all(pool)
+    .await
+    .with_context(|| format!("load live_token_utxo for {}", bytes_to_hex(category)))?;
+
+    rows.into_iter()
+        .map(|(address, amount, commitment, capability)| {
+            let amount: BigInt = amount
+                .parse()
+                .with_context(|| format!("live_token_utxo.amount {amount:?}"))?;
+            let nft = match capability {
+                Some(cap) => Some(crate::enrich_core::AggNft {
+                    capability: crate::enrich_walker::nft_capability_from_str(&cap)?,
+                    commitment: commitment.unwrap_or_default(),
+                }),
+                None => None,
+            };
+            Ok(crate::enrich_core::AggInput { address, amount, nft })
+        })
+        .collect()
 }
 
 /// Set `sync_state.last_enrich_run_at = now()`.
