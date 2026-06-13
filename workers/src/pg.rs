@@ -443,6 +443,42 @@ pub async fn write_token_state(pool: &PgPool, w: &TokenStateWrite) -> Result<()>
 // See docs/enrich-event-driven-design.md and crate::enrich_walker.
 // ---------------------------------------------------------------------------
 
+/// Upsert one `live_token_utxo` row inside an open transaction. Shared by the
+/// per-block apply and the bootstrap/reorg seed so the row shape stays in one
+/// place. Idempotent on the `(txid, vout)` PK.
+async fn insert_live_utxo(
+    tx: &mut Transaction<'_, Postgres>,
+    u: &crate::enrich_walker::LiveUtxo,
+) -> Result<()> {
+    let capability = u.nft_capability.map(crate::enrich_walker::nft_capability_str);
+    sqlx::query(
+        r#"
+        INSERT INTO live_token_utxo
+            (txid, vout, category, address, amount, nft_commitment, nft_capability, created_height)
+        VALUES ($1, $2, $3, $4, $5::numeric, $6, $7, $8)
+        ON CONFLICT (txid, vout) DO UPDATE SET
+            category       = EXCLUDED.category,
+            address        = EXCLUDED.address,
+            amount         = EXCLUDED.amount,
+            nft_commitment = EXCLUDED.nft_commitment,
+            nft_capability = EXCLUDED.nft_capability,
+            created_height = EXCLUDED.created_height
+        "#,
+    )
+    .bind(u.txid.as_slice())
+    .bind(u.vout)
+    .bind(u.category.as_slice())
+    .bind(u.address.as_deref())
+    .bind(u.amount.to_string())
+    .bind(u.nft_commitment.as_deref())
+    .bind(capability)
+    .bind(u.created_height)
+    .execute(&mut **tx)
+    .await
+    .with_context(|| format!("insert live_token_utxo {}:{}", bytes_to_hex(&u.txid), u.vout))?;
+    Ok(())
+}
+
 /// Apply one block's token-UTXO deltas to `live_token_utxo` in a single
 /// transaction and return the categories needing re-aggregation.
 ///
@@ -461,32 +497,7 @@ pub async fn apply_live_utxo_deltas(
         pool.begin().await.context("begin live_token_utxo tx")?;
 
     for u in &deltas.creates {
-        let capability = u.nft_capability.map(crate::enrich_walker::nft_capability_str);
-        sqlx::query(
-            r#"
-            INSERT INTO live_token_utxo
-                (txid, vout, category, address, amount, nft_commitment, nft_capability, created_height)
-            VALUES ($1, $2, $3, $4, $5::numeric, $6, $7, $8)
-            ON CONFLICT (txid, vout) DO UPDATE SET
-                category       = EXCLUDED.category,
-                address        = EXCLUDED.address,
-                amount         = EXCLUDED.amount,
-                nft_commitment = EXCLUDED.nft_commitment,
-                nft_capability = EXCLUDED.nft_capability,
-                created_height = EXCLUDED.created_height
-            "#,
-        )
-        .bind(u.txid.as_slice())
-        .bind(u.vout)
-        .bind(u.category.as_slice())
-        .bind(u.address.as_deref())
-        .bind(u.amount.to_string())
-        .bind(u.nft_commitment.as_deref())
-        .bind(capability)
-        .bind(u.created_height)
-        .execute(&mut *tx)
-        .await
-        .with_context(|| format!("insert live_token_utxo {}:{}", bytes_to_hex(&u.txid), u.vout))?;
+        insert_live_utxo(&mut tx, u).await?;
     }
 
     for sp in &deltas.spends {
@@ -542,6 +553,51 @@ pub async fn load_live_utxos_for_category(
             Ok(crate::enrich_core::AggInput { address, amount, nft })
         })
         .collect()
+}
+
+/// Replace a category's `live_token_utxo` rows wholesale (delete-then-insert,
+/// one transaction). The clean-rebuild primitive for the one-shot bootstrap
+/// seed and for reorg re-seeding. Returns the number of rows written.
+///
+/// Bootstrap rows carry a sentinel `created_height` (the caller passes 0 for
+/// BlockBook-sourced rows whose origin height we don't track) — safe because
+/// reorg unwind only deletes rows at/above a recent forked height, never
+/// reaching height 0.
+pub async fn seed_category_live_utxos(
+    pool: &PgPool,
+    category: &[u8],
+    rows: &[crate::enrich_walker::LiveUtxo],
+) -> Result<usize> {
+    let mut tx: Transaction<'_, Postgres> = pool.begin().await.context("begin seed tx")?;
+    sqlx::query("DELETE FROM live_token_utxo WHERE category = $1")
+        .bind(category)
+        .execute(&mut *tx)
+        .await
+        .with_context(|| format!("wipe live_token_utxo for {}", bytes_to_hex(category)))?;
+    for u in rows {
+        insert_live_utxo(&mut tx, u).await?;
+    }
+    tx.commit().await.context("commit seed")?;
+    Ok(rows.len())
+}
+
+/// Keyset page over `tokens.category` for the bootstrap sweep: the categories
+/// strictly greater than `after` (pass `&[]` to start), ascending, capped at
+/// `limit`. Returns raw category bytes.
+pub async fn pick_categories_after(
+    pool: &PgPool,
+    after: &[u8],
+    limit: i64,
+) -> Result<Vec<Vec<u8>>> {
+    let rows: Vec<(Vec<u8>,)> = sqlx::query_as(
+        "SELECT category FROM tokens WHERE category > $1 ORDER BY category LIMIT $2",
+    )
+    .bind(after)
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+    .context("pick_categories_after")?;
+    Ok(rows.into_iter().map(|(c,)| c).collect())
 }
 
 /// Current `token_state` headline fields, for shadow-comparing the

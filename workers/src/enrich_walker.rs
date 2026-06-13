@@ -61,12 +61,16 @@ fn decode_id32(hex_str: &str) -> Result<[u8; 32]> {
         .map_err(|_| anyhow::anyhow!("expected 32-byte id, got {} bytes", hex_str.len() / 2))
 }
 
-fn parse_amount(a: &TokenAmount) -> BigInt {
+fn parse_amount(a: &TokenAmount) -> Result<BigInt> {
     match a {
-        TokenAmount::Number(n) => BigInt::from(*n),
-        // BCHN emits the canonical string form; fall back to 0 on the
-        // (spec-impossible) unparseable case rather than poisoning supply.
-        TokenAmount::Text(s) => s.parse::<BigInt>().unwrap_or_else(|_| BigInt::from(0)),
+        TokenAmount::Number(n) => Ok(BigInt::from(*n)),
+        // Propagate, never coerce: an unparseable amount silently undercounts
+        // supply + the owner's balance. It's spec-impossible from BCHN, which
+        // is exactly why we fail loud — matching the legacy enrich path and the
+        // strict read-back in pg::load_live_utxos_for_category.
+        TokenAmount::Text(s) => s
+            .parse::<BigInt>()
+            .with_context(|| format!("parsing token amount {s:?}")),
     }
 }
 
@@ -120,7 +124,10 @@ pub fn derive_block_deltas(block: &Block) -> Result<BlockDeltas> {
             let Some(td) = &vout.token_data else { continue };
             let category = decode_id32(&td.category)
                 .with_context(|| format!("category in tx {}", &tx.txid))?;
-            let amount = td.amount.as_ref().map(parse_amount).unwrap_or_else(|| BigInt::from(0));
+            let amount = match &td.amount {
+                Some(a) => parse_amount(a)?,
+                None => BigInt::from(0),
+            };
             let (nft_commitment, nft_capability) = match &td.nft {
                 Some(nft) => (
                     Some(hex::decode(&nft.commitment).unwrap_or_default()),

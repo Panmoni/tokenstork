@@ -137,6 +137,14 @@ fn extract_p2sh(script: &[u8]) -> Option<(u8, &[u8])> {
 
 /// Encode a locking script to its CashAddr body (no `bitcoincash:` prefix),
 /// or `None` for non-address-bearing / nonstandard scripts.
+///
+/// KNOWN DIVERGENCE (accepted): BlockBook's decoder also assigns an address to
+/// bare-pubkey (P2PK) outputs; this returns `None` for them. P2PK-locked token
+/// outputs are vanishingly rare on CashTokens, and the shadow comparison
+/// (sync-tail Pass 6) surfaces any such case as a *logged* holder-count
+/// mismatch — never silent corruption. Revisit at cutover with a real P2PK
+/// example to match BlockBook's exact representation before this path becomes
+/// the authoritative holder source.
 pub fn script_to_cashaddr_body(script: &[u8]) -> Option<String> {
     if let Some(pkh) = extract_p2pkh_pkh(script) {
         return Some(encode_body(VER_P2PKH, &pkh));
