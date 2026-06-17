@@ -1,5 +1,4 @@
 {
-  "extends": "../tsconfig.json",
   "compilerOptions": {
     "target": "ES2022",
     "module": "nodenext",
@@ -8,7 +7,11 @@
     "verbatimModuleSyntax": false,
     "isolatedModules": false,
     "jsx": "preserve",
-    "types": ["node"]
+    "types": ["node"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
   },
   "include": ["./**/*.ts", "../lib/**/*.ts"],
   "exclude": ["../node_modules", "../.next"]
