@@ -143,7 +143,7 @@
 			</div>
 			{#each data.rows as r (r.id)}
 				<div class="grid grid-cols-[2.4fr_0.9fr_0.9fr_0.9fr_0.7fr_0.8fr_1.4fr] gap-2 px-4 py-3 border-b last:border-b-0 items-center hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors ts-border-subtle">
-					<a href={`/token/${r.id}`} class="flex items-center gap-3 min-w-0 no-underline group">
+					<a href={`/token/${r.id}`} data-sveltekit-preload-data="hover" class="flex items-center gap-3 min-w-0 no-underline group">
 						<img src={iconHrefFor(r.icon, r.iconClearedHash)} alt="" class="w-8 h-8 rounded-full shrink-0 ts-surface-chip" loading="lazy" />
 						<div class="min-w-0">
 							<div class="font-semibold text-slate-900 dark:text-white truncate group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
@@ -208,7 +208,7 @@
 		<div class="md:hidden space-y-3">
 			{#each data.rows as r (r.id)}
 				<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
-					<a href={`/token/${r.id}`} class="flex items-center gap-3 mb-3 no-underline">
+					<a href={`/token/${r.id}`} data-sveltekit-preload-data="hover" class="flex items-center gap-3 mb-3 no-underline">
 						<img src={iconHrefFor(r.icon, r.iconClearedHash)} alt="" class="w-10 h-10 rounded-full ts-surface-chip" />
 						<div class="min-w-0 flex-1">
 							<div class="font-semibold text-slate-900 dark:text-white truncate">

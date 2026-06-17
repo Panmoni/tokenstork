@@ -89,7 +89,7 @@
 				<div class="grid grid-cols-[2fr_0.8fr_0.8fr_0.8fr_0.5fr] gap-3 px-4 py-3 border-b last:border-b-0 items-center hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors ts-border-subtle">
 					<div class="flex items-center gap-2 min-w-0">
 						<StarButton categoryHex={r.id} />
-						<a href={`/token/${r.id}`} class="flex items-center gap-3 min-w-0 no-underline group flex-1">
+						<a href={`/token/${r.id}`} data-sveltekit-preload-data="hover" class="flex items-center gap-3 min-w-0 no-underline group flex-1">
 							<img src={iconHrefFor(r.icon, r.iconClearedHash)} alt="" class="w-8 h-8 rounded-full shrink-0 ts-surface-chip" loading="lazy" />
 							<div class="min-w-0">
 								<div class="font-semibold text-slate-900 dark:text-white truncate group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">

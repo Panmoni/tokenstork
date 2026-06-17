@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import { onDestroy } from 'svelte';
 	import {
 		humanizeNumericSupply,
 		formatVenuePriceUSD,
@@ -42,10 +43,30 @@
 		if (n < 0) return 'text-rose-600 dark:text-rose-400';
 		return 'text-slate-500 dark:text-zinc-300';
 	}
-
 // Local input value, bound to the search box; URL is the source of truth.
-	let searchInput = $state(page.url.searchParams.get('search') ?? '');
-	let searchDebounce: ReturnType<typeof setTimeout> | null = null;
+// Initialised from the current URL on mount. Browser back/forward navigation
+// does NOT remount this component (SvelteKit reuses instances for same-route
+// param changes), so we sync from page.url reactively — but only when our
+// own goto() isn't the cause. `committedSearch` tracks what we last wrote
+// to the URL so we can distinguish external vs internal updates.
+let searchInput = $state(page.url.searchParams.get('search') ?? '');
+let committedSearch = $state(page.url.searchParams.get('search') ?? '');
+let searchDebounce: ReturnType<typeof setTimeout> | null = null;
+
+// Sync searchInput from URL when it changes externally (back/forward, another
+// component's navigation). Skip when committedSearch already matches — that
+// means our own goto() was the cause.
+$effect(() => {
+	const current = page.url.searchParams.get('search') ?? '';
+	if (current !== committedSearch) {
+		searchInput = current;
+		committedSearch = current;
+	}
+});
+
+onDestroy(() => {
+	if (searchDebounce) clearTimeout(searchDebounce);
+});
 
 	const typeFilter = $derived<TokenType | 'all'>(
 		(page.url.searchParams.get('type') as TokenType) ?? 'all'
@@ -54,15 +75,9 @@
 	const onlyCauldron = $derived(page.url.searchParams.get('cauldron') === '1');
 	const onlyTapswap = $derived(page.url.searchParams.get('tapswap') === '1');
 	const onlyFex = $derived(page.url.searchParams.get('fex') === '1');
-
 	function navigateWith(mutate: (params: URLSearchParams) => void) {
 		const params = new URLSearchParams(page.url.searchParams);
 		mutate(params);
-		// Build an absolute-path URL explicitly. `goto('?foo=bar')` worked in
-		// older SvelteKit but in 5.x / Svelte 5 the query-only form is
-		// inconsistent — it sometimes no-ops without re-running the server
-		// load. Passing `${pathname}?${query}` is unambiguous. `invalidateAll`
-		// guarantees the +page.server.ts load re-runs.
 		const qs = params.toString();
 		const url = qs ? `${page.url.pathname}?${qs}` : page.url.pathname;
 		goto(url, { keepFocus: true, noScroll: true, invalidateAll: true });
@@ -74,6 +89,9 @@
 			else p.set(key, value);
 			p.delete('offset');
 		});
+		// Track committed search so the $effect doesn't overwrite
+		// searchInput when page.url updates from our own goto.
+		if (key === 'search') committedSearch = value ?? '';
 	}
 
 	function onSearchInput() {
@@ -82,6 +100,8 @@
 			pushParam('search', searchInput.trim() || null);
 		}, 250);
 	}
+
+
 
 	function setSort(key: string) {
 		pushParam('sort', key === 'name' ? null : key);
@@ -218,7 +238,7 @@
 				<div class="flex items-center gap-2 min-w-0">
 					<StarButton categoryHex={token.id} />
 					<VoteButton categoryHex={token.id} upCount={token.upCount} downCount={token.downCount} />
-					<a href={`/token/${token.id}`} class="flex items-center gap-3 min-w-0 no-underline group flex-1">
+					<a href={`/token/${token.id}`} data-sveltekit-preload-data="hover" class="flex items-center gap-3 min-w-0 no-underline group flex-1">
 					<img src={iconHrefFor(token.icon, token.iconClearedHash)} alt="" class="w-8 h-8 rounded-full ts-surface-chip" loading="lazy" />
 					<div class="min-w-0">
 						<div class="font-semibold text-slate-900 dark:text-white truncate group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
@@ -302,7 +322,7 @@
 					<VoteButton categoryHex={token.id} upCount={token.upCount} downCount={token.downCount} size="md" />
 					<StarButton categoryHex={token.id} size="md" />
 				</div>
-				<a href={`/token/${token.id}`} class="block no-underline">
+				<a href={`/token/${token.id}`} data-sveltekit-preload-data="hover" class="block no-underline">
 					<div class="flex items-start justify-between mb-3 pr-8">
 						<div class="flex items-center gap-3 min-w-0">
 							<img src={iconHrefFor(token.icon, token.iconClearedHash)} alt="" class="w-10 h-10 rounded-full ts-surface-chip" />

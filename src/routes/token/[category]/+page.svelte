@@ -576,6 +576,7 @@
 						{#if validSplitId}
 							<a
 								href={`/token/${bcmr.splitId.toLowerCase()}`}
+								data-sveltekit-preload-data="hover"
 								class="font-mono text-violet-600 dark:text-violet-400 hover:underline truncate"
 								title={bcmr.splitId}
 							>
@@ -718,7 +719,7 @@
 									<span class="font-mono ts-text-strong">{cont.categoryHex.slice(0, 12)}…{cont.categoryHex.slice(-6)}</span>
 									<span class="text-amber-700 dark:text-amber-400 font-medium">(this token)</span>
 								{:else}
-									<a href={`/token/${cont.categoryHex}`} class="font-mono text-violet-600 dark:text-violet-400 hover:underline">
+									<a href={`/token/${cont.categoryHex}`} data-sveltekit-preload-data="hover" class="font-mono text-violet-600 dark:text-violet-400 hover:underline">
 										{cont.categoryHex.slice(0, 12)}…{cont.categoryHex.slice(-6)}
 									</a>
 								{/if}

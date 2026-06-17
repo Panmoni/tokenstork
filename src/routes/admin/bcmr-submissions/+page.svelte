@@ -160,6 +160,7 @@
 							</button>
 							<a
 								href={`/token/${s.categoryHex}`}
+								data-sveltekit-preload-data="hover"
 								class="ml-auto text-xs ts-text-muted hover:text-violet-600"
 								target="_blank"
 								rel="noopener noreferrer"

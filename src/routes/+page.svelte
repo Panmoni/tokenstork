@@ -73,7 +73,7 @@
 							<ol class="divide-y divide-slate-100 dark:divide-zinc-800">
 								{#each col.items as t, i (t.id)}
 									<li>
-										<a href={`/token/${t.id}`} class="flex items-center gap-3 px-4 py-2 hover:bg-slate-50 dark:hover:bg-zinc-800/50 transition-colors no-underline">
+										<a href={`/token/${t.id}`} data-sveltekit-preload-data="hover" class="flex items-center gap-3 px-4 py-2 hover:bg-slate-50 dark:hover:bg-zinc-800/50 transition-colors no-underline">
 											<span class="w-5 text-xs font-mono text-slate-400 tabular-nums">{i + 1}</span>
 											<img src={iconHrefFor(t.icon, t.iconClearedHash)} alt="" class="w-7 h-7 rounded-full ts-surface-chip" loading="lazy" />
 											<span class="flex-1 min-w-0 truncate text-sm text-slate-900 dark:text-white">

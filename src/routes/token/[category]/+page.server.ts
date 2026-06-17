@@ -230,9 +230,15 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 	// no Paytaca dependency at render time.
 	const bcmr = bcmrFromBody(row.bcmr_body, category);
 
+	// Resolve decimals + BCH price BEFORE the main batch so fetchCauldron
+	// (which needs both) can fire concurrently with all the DB queries
+	// instead of serialising after them. The BCH price call hits our own
+	// /api/bchPrice endpoint — typically ~50ms.
+	const decimals = row.decimals ?? bcmr?.decimals ?? 0;
+	const bchPriceUSD = await fetchBchPrice(fetch);
+
 	const [
 		holdersRes,
-		bchPriceUSD,
 		tapswapRes,
 		fexRes,
 		mcapTvlThresholdSats,
@@ -248,11 +254,11 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 		tvlRankRes,
 		holdersRankRes,
 		crc20Detail,
-		herfindahlRes
+		herfindahlRes,
+		cauldron,
+		cauldronGlobalRes
 	] = await Promise.all([
-		query<HolderRow>(
-			// `balance::text AS balance` aliases the text cast under the
-			// same name as the underlying NUMERIC column, so a bare
+			query<HolderRow>(
 			// `ORDER BY balance` resolves to the alias and sorts the
 			// digits lexicographically — putting "978000" above "9376000"
 			// and scrambling the holders list. Qualify with the table
@@ -264,7 +270,7 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 			  LIMIT 10`,
 			[categoryBytes]
 		),
-		fetchBchPrice(fetch),
+
 		// Open Tapswap offers with this category on the "has" side
 		// (someone selling this token). Sorted by want_sats ASC so the
 		// cheapest asks render first. Limit 20 — detail page doesn't need
@@ -537,11 +543,11 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 		).catch((err) => {
 			console.error('[token detail] Herfindahl query failed:', err);
 			return { rows: [] as Array<{ hhi: string | null }> };
-		})
-	]);
-
-	const decimals = row.decimals ?? bcmr?.decimals ?? 0;
-	const [cauldron, cauldronGlobalRes] = await Promise.all([
+		}),
+		// Cauldron live price + TVL. External API calls with 5s timeouts;
+		// fired concurrently with all DB queries now that bchPriceUSD and
+		// decimals are resolved up-front. Degrades gracefully (priceUSD=0,
+		// tvlUSD=0) on timeout or error.
 		fetchCauldron(category, decimals, bchPriceUSD),
 		// Exchange-wide Cauldron TVL — singleton row populated by the
 		// `sync-cauldron-stats` worker. We don't fail the page if it's

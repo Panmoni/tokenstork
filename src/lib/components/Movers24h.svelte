@@ -71,6 +71,7 @@
 						<li>
 							<a
 								href={`/token/${m.categoryHex}`}
+								data-sveltekit-preload-data="hover"
 								class="flex items-baseline justify-between gap-3 hover:text-violet-600 dark:hover:text-violet-400"
 							>
 								<span class="truncate text-sm font-medium text-slate-900 dark:text-white">
@@ -105,6 +106,7 @@
 						<li>
 							<a
 								href={`/token/${m.categoryHex}`}
+								data-sveltekit-preload-data="hover"
 								class="flex items-baseline justify-between gap-3 hover:text-violet-600 dark:hover:text-violet-400"
 							>
 								<span class="truncate text-sm font-medium text-slate-900 dark:text-white">
@@ -139,6 +141,7 @@
 						<li>
 							<a
 								href={`/token/${m.categoryHex}`}
+								data-sveltekit-preload-data="hover"
 								class="flex items-baseline justify-between gap-3 hover:text-violet-600 dark:hover:text-violet-400"
 							>
 								<span class="truncate text-sm font-medium text-slate-900 dark:text-white">

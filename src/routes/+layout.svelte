@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import { onMount, type Snippet } from 'svelte';
+	import { navigating } from '$app/state';
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import MetricsBar from '$lib/components/MetricsBar.svelte';
@@ -58,8 +59,14 @@
 	<meta name="twitter:image:alt" content="Token Stork" />
 </svelte:head>
 
+
 <TooltipProvider>
 	<div class="min-h-screen ts-surface-page">
+		{#if navigating.to}
+			<div class="fixed top-0 left-0 right-0 z-[9999] h-0.5 bg-violet-200/30 dark:bg-violet-800/30">
+				<div class="h-full bg-violet-600 dark:bg-violet-400 animate-nav-progress"></div>
+			</div>
+		{/if}
 		<MetricsBar
 			tokensTracked={data.tokensTracked}
 			tailLastBlock={data.tailLastBlock}
@@ -74,3 +81,16 @@
 		<Footer />
 	</div>
 </TooltipProvider>
+
+<style>
+	@keyframes nav-progress {
+		0%   { width: 0%; margin-left: 0%; }
+		30%  { width: 40%; margin-left: 0%; }
+		60%  { width: 60%; margin-left: 30%; }
+		90%  { width: 30%; margin-left: 70%; }
+		100% { width: 0%; margin-left: 100%; }
+	}
+	.animate-nav-progress {
+		animation: nav-progress 2s ease-in-out infinite;
+	}
+</style>

@@ -114,6 +114,7 @@
 									{#if bucket.canonicalCategory}
 										<a
 											href={`/token/${bucket.canonicalCategory}`}
+											data-sveltekit-preload-data="hover"
 											class="font-mono text-violet-600 dark:text-violet-400 hover:underline"
 										>
 											{bucket.canonicalCategory.slice(0, 12)}…{bucket.canonicalCategory.slice(-6)}
@@ -163,6 +164,7 @@
 									{#if bucket.canonicalCategory}
 										<a
 											href={`/token/${bucket.canonicalCategory}`}
+											data-sveltekit-preload-data="hover"
 											class="font-mono text-violet-600 dark:text-violet-400 hover:underline"
 										>
 											{bucket.canonicalCategory.slice(0, 12)}…{bucket.canonicalCategory.slice(-6)}
