@@ -22,6 +22,15 @@
 //! - BCHN_ZMQ_URL                  — default `tcp://127.0.0.1:28332`
 //! - DATABASE_URL                  — Postgres (Unix socket peer auth)
 //! - RUST_LOG
+//!
+//! Reorg detection (TODO P1 "Phase 4: reorg unwind + cutover"):
+//! The tail currently accepts every block BCHN returns as canonical. On a
+//! chain reorg (1-2 blocks, occasional on BCH), stale `live_token_utxo` rows
+//! persist and enrichment drifts until the next full re-derive or manual
+//! reseed. Fix: detect a fork by comparing `getblockhash(height)` against
+//! the stored hash in `blocks`, then call the existing unwind helpers in
+//! `pg.rs` (`unwind_live_utxo`, `delete_crc20_at_height`) to remove stale
+//! rows before reprocessing the replacement block(s).
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};

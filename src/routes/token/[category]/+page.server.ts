@@ -14,6 +14,7 @@ import { getMovers24h } from '$lib/server/movers';
 import { resolveIconStatus } from '$lib/icons';
 import type { PageServerLoad } from './$types';
 import type { TokenType } from '$lib/types';
+import { fetchBchPrice } from '$lib/server/bchPrice';
 
 const HEX_REGEX = /^[0-9a-fA-F]{64}$/;
 
@@ -75,18 +76,6 @@ interface TapswapOfferRow {
 	maker_pkh: Buffer;
 	listed_block: number;
 	listed_at: Date;
-}
-
-async function fetchBchPrice(fetch: typeof globalThis.fetch): Promise<number> {
-	try {
-		const res = await fetch('/api/bchPrice', {
-			signal: AbortSignal.timeout(4000)
-		});
-		const data = await res.json();
-		return typeof data?.USD === 'number' ? data.USD : 0;
-	} catch {
-		return 0;
-	}
 }
 
 // Range-to-bucket mapping for the price chart. Each window picks a bucket

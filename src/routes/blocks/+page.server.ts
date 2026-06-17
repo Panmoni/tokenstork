@@ -11,6 +11,7 @@
 
 import { query } from '$lib/server/db';
 import type { PageServerLoad } from './$types';
+import { fetchBchPrice } from '$lib/server/bchPrice';
 
 interface BlockRow {
 	height: number;
@@ -256,12 +257,3 @@ export const load: PageServerLoad = async ({ url, fetch }) => {
 	};
 };
 
-async function fetchBchPrice(fetch: typeof globalThis.fetch): Promise<number> {
-	try {
-		const res = await fetch('/api/bchPrice', { signal: AbortSignal.timeout(4000) });
-		const data = await res.json();
-		return typeof data?.USD === 'number' ? data.USD : 0;
-	} catch {
-		return 0;
-	}
-}

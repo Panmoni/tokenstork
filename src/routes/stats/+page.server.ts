@@ -26,6 +26,7 @@ import type { CauldronGlobalStats } from '$lib/server/external';
 import { getIconModerationStats } from '$lib/server/iconStats';
 import { getMovers24h } from '$lib/server/movers';
 import type { PageServerLoad } from './$types';
+import { fetchBchPrice } from '$lib/server/bchPrice';
 
 // Vote leaderboards live on the homepage now — see
 // `getVoteLeaderboards` in `$lib/server/votes`.
@@ -81,15 +82,6 @@ interface CauldronStatsRow {
 	unique_addresses_by_month: Array<{ month: string; count: number }>;
 }
 
-async function fetchBchPrice(fetch: typeof globalThis.fetch): Promise<number> {
-	try {
-		const res = await fetch('/api/bchPrice', { signal: AbortSignal.timeout(4000) });
-		const data = await res.json();
-		return typeof data?.USD === 'number' ? data.USD : 0;
-	} catch {
-		return 0;
-	}
-}
 
 const EMPTY_CAULDRON_STATS: CauldronGlobalStats = {
 	tvlSats: 0,

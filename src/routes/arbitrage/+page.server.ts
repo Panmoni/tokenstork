@@ -31,6 +31,7 @@
 import { query, hexFromBytes } from '$lib/server/db';
 import { NOT_MODERATED_CLAUSE } from '$lib/moderation';
 import type { PageServerLoad } from './$types';
+import { fetchBchPrice } from '$lib/server/bchPrice';
 
 interface DbRow {
 	category: Buffer;
@@ -83,15 +84,6 @@ export interface ArbitrageRow {
 	mostExpensiveVenue: VenueId; // sell here
 }
 
-async function fetchBchPrice(fetch: typeof globalThis.fetch): Promise<number> {
-	try {
-		const res = await fetch('/api/bchPrice', { signal: AbortSignal.timeout(4000) });
-		const data = await res.json();
-		return typeof data?.USD === 'number' ? data.USD : 0;
-	} catch {
-		return 0;
-	}
-}
 
 // Per-venue taker fees (% spread cost on a single leg). See header
 // comment for rationale on the asymmetric Tapswap entries.

@@ -19,6 +19,7 @@
 	// hydrates everything from the session row.
 
 	import { goto } from '$app/navigation';
+	import { dev } from '$app/environment';
 	import type { BcmrPublishSession } from '$lib/server/bcmrPublishSessions';
 	import type { WalletUtxo } from '$lib/server/walletUtxos';
 	import type { TxReadinessReport } from '$lib/client/txReadiness';
@@ -283,7 +284,7 @@
 						const pinList = await pinListRes.json() as { rows?: Array<{ ipfs_pin_hash: string }> };
 						if (pinList.rows && pinList.rows.length > 0) {
 							cid = pinList.rows[0].ipfs_pin_hash;
-							console.log('[bcmr-pin] found existing pin:', cid);
+							if (dev) console.log('[bcmr-pin] found existing pin:', cid);
 						}
 					}
 				} catch { /* pinList check is best-effort */ }
@@ -770,7 +771,7 @@
 							const text = await file.text();
 							const json = JSON.parse(text);
 							const ident = json?.identities?.[Object.keys(json.identities ?? {})[0]]?.[Object.keys(json?.identities?.[Object.keys(json.identities ?? {})[0]] ?? {})[0]];
-							console.log('[bcmr-upload] ident:', ident ? { name: ident.name, token_symbol: ident.token?.symbol } : null);
+							if (dev) console.log('[bcmr-upload] ident:', ident ? { name: ident.name, token_symbol: ident.token?.symbol } : null);
 							if (ident) {
 								if (ident.name) name = ident.name;
 								if (ident.token?.symbol) ticker = ident.token.symbol;
