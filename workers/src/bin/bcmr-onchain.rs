@@ -29,7 +29,7 @@
 //! - BCMR_ONCHAIN_STALE_HOURS      default 72 (revisit cadence)
 //! - BCMR_ONCHAIN_FETCH_TIMEOUT_S  default 10 (per-URI fetch budget)
 //! - BCMR_ONCHAIN_MAX_BODY_BYTES   default 8388608 (8 MiB)
-//! - BCMR_ONCHAIN_MAX_HOPS         default 50 (walk safety bound)
+//! - BCMR_ONCHAIN_MAX_HOPS         default 15 (walk safety bound; legit authchains are 1-5)
 //! - RUST_LOG                      default info
 
 use std::time::{Duration, Instant};
@@ -55,7 +55,7 @@ const DEFAULT_BATCH: i32 = 200;
 const DEFAULT_STALE_HOURS: i32 = 72;
 const DEFAULT_FETCH_TIMEOUT_S: u64 = 10;
 const DEFAULT_MAX_BODY_BYTES: usize = 8 * 1024 * 1024;
-const DEFAULT_MAX_HOPS: usize = 50;
+const DEFAULT_MAX_HOPS: usize = 15;
 
 fn init_tracing() {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
