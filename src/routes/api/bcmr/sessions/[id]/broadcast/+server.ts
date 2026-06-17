@@ -52,6 +52,10 @@ async function nudgeBcmrIndexer(categoryHex: string, newHeadTxid: string): Promi
 // Per-cashaddr cooldown: in-memory module-scope Map. Stored across
 // requests but not across restarts (a restart is itself a 1-minute
 // outage — equivalent to clearing).
+//
+// SCALING NOTE: same per-process Map limitation as mint/broadcast.
+// In multi-process deployments, each process has an independent Map;
+// migrate to a shared store (Redis or DB advisory lock) when scaling.
 const recentBroadcasts = new Map<string, number>();
 const BROADCAST_COOLDOWN_MS = 60_000;
 

@@ -13,16 +13,17 @@ import { createHmac } from 'node:crypto';
 import { env } from '$env/dynamic/private';
 
 // Server-side HMAC key used to tag cashaddrs (and other moderately-
-// sensitive identifiers) in logs. Falling back to a non-secret default
-// is a defense-in-depth nicety — the logs still get per-deployment
-// unlinkability without operator action; an operator who wants strict
-// per-user unlinkability sets LOG_SALT to a random string and rotates
-// it on incident.
+// sensitive identifiers) in logs. The default is a known non-secret
+// string — it provides per-deployment unlinkability (log entries from
+// different tokenstork instances won't collide), but anyone with source
+// access can compute HMAC-SHA256 with this key and reverse the 12-char
+// hex prefix back to a cashaddr by trial against known on-chain addresses.
 //
-// HMAC (rather than salted SHA-256) defends against precomputation
-// even when the key is known: an attacker who reads the source and
-// learns the default `LOG_SALT` cannot precompute a rainbow table
-// keyed on cashaddr without the HMAC's per-block keying.
+// For production deployments where the logs are accessible to
+// untrusted readers, set LOG_SALT to a random 256-bit hex string.
+// HMAC still defends against precomputation (rainbow tables don't work
+// without knowing the key), so the default is a reasonable defense-in-depth
+// baseline for deployments where log access implies some operator trust.
 const LOG_SALT = env.LOG_SALT ?? 'tokenstork-default-log-salt';
 
 /** Tag a cashaddr (or other moderately-sensitive identifier) for safe

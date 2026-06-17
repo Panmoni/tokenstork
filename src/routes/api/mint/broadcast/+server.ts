@@ -24,6 +24,13 @@ import type { RequestHandler } from './$types';
 // Per-cashaddr rate limiter: in-memory Map of last-broadcast timestamps.
 // Survives across requests (module-scope) but not across restarts —
 // acceptable since a restart is itself a 1-minute outage.
+//
+// SCALING NOTE: this Map is per-process. In a multi-process deployment
+// (cluster mode, multiple container replicas, or pm2 with instances > 1),
+// each process has an independent cooldown — a single wallet can broadcast
+// N × processes transactions per window. The per-IP limiter (`broadcastIpLimiter`
+// below) provides a partial defense. To scale, move the cooldown to a shared
+// store (Redis SETNX, or a DB table with `pg_try_advisory_lock`).
 const recentBroadcasts = new Map<string, number>();
 const BROADCAST_COOLDOWN_MS = 60_000;
 
