@@ -23,19 +23,17 @@
 //! - DATABASE_URL                  — Postgres (Unix socket peer auth)
 //! - RUST_LOG
 //!
-//! Reorg detection (TODO P1 "Phase 4: reorg unwind + cutover"):
-//! The tail currently accepts every block BCHN returns as canonical. On a
-//! chain reorg (1-2 blocks, occasional on BCH), stale `live_token_utxo` rows
-//! persist and enrichment drifts until the next full re-derive or manual
-//! reseed. Fix: detect a fork by comparing `getblockhash(height)` against
-//! the stored hash in `blocks`, then call the existing unwind helpers in
-//! `pg.rs` (`unwind_live_utxo`, `delete_crc20_at_height`) to remove stale
-//! rows before reprocessing the replacement block(s).
+//! Reorg detection (Phase 4):
+//! Before processing each block, compare BCHN's `getblockhash(height)` against
+//! the hash stored in `blocks`. On mismatch, unwind `live_token_utxo` at/above
+//! the forked height and `token_crc20` at the height, then re-process. This
+//! keeps enrichment correct across 1-2 block reorgs (occasional on BCH).
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
+use hex;
 use sd_notify::NotifyState;
 use tokio::signal;
 use tracing::{error, info, warn};
@@ -48,10 +46,11 @@ use workers::enrich_core::aggregate;
 use workers::enrich_walker::derive_block_deltas;
 use workers::pg::{
     self, BlockWrite, FoundCategory, OfferWrite, TokenType,
-    apply_live_utxo_deltas, crc20_canonical_resolve, load_live_utxos_for_category,
+    apply_live_utxo_deltas, crc20_canonical_resolve, delete_crc20_at_height,
+    load_block_hash, load_live_utxos_for_category,
     load_sync_state, mark_blocks_run, mark_crc20_run, mark_tail_run, mark_tapswap_run,
-    pool_from_env, read_token_state_summary, save_tail_last_block, upsert_block,
-    upsert_tapswap_offers_batch, upsert_tokens, write_crc20_detection,
+    pool_from_env, read_token_state_summary, save_tail_last_block, unwind_live_utxo,
+    upsert_block, upsert_tapswap_offers_batch, upsert_tokens, write_crc20_detection,
 };
 use workers::tapswap::try_decode_tx;
 use workers::tapswap_walker::process_block_spends;
@@ -382,9 +381,42 @@ fn merge_into_found(
 }
 
 /// Catch up from `from` through `to` inclusive, one block at a time, with a
-/// DB checkpoint after each. Logs per block.
+/// DB checkpoint after each. Before processing each block, compares BCHN's
+/// `getblockhash(height)` against the hash stored in `blocks`; on mismatch
+/// (reorg), unwinds `live_token_utxo` and `token_crc20` at the forked height
+/// before re-processing. Logs per block.
 async fn catch_up(pool: &pg::PgPool, bchn: &BchnClient, from: i32, to: i32) -> Result<()> {
     for h in from..=to {
+        // Reorg detection: if a block hash is already stored for this height
+        // and BCHN now serves a different one, a fork occurred. Unwind the
+        // stale event-driven state before re-processing the new branch.
+        // `load_block_hash` returns `None` when no row exists (fresh catch-up
+        // or pre-activation height) — skip the check in that case.
+        if let Some(stored) = load_block_hash(pool, h).await? {
+            let bchn_hash_hex = bchn
+                .get_block_hash(h as u64)
+                .await
+                .with_context(|| format!("getblockhash {h} for reorg check"))?;
+            let bchn_hash = hex::decode(&bchn_hash_hex)
+                .with_context(|| format!("decoding block hash at {h}"))?;
+            if stored != bchn_hash {
+                warn!(
+                    height = h,
+                    stored = %hex::encode(&stored),
+                    bchn = %bchn_hash_hex,
+                    "reorg detected — unwinding live_token_utxo and CRC-20 at this height"
+                );
+                let utxo_deleted = unwind_live_utxo(pool, h).await?;
+                let crc20_deleted = delete_crc20_at_height(pool, h).await?;
+                info!(
+                    height = h,
+                    utxo_deleted,
+                    crc20_deleted,
+                    "reorg unwind complete; re-processing from height"
+                );
+            }
+        }
+
         let block = bchn
             .get_block_by_height(h as u64)
             .await

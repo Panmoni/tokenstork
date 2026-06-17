@@ -1054,6 +1054,38 @@ pub async fn delete_crc20_at_height(pool: &PgPool, height: i32) -> Result<u64> {
     Ok(result.rows_affected())
 }
 
+// ---------------------------------------------------------------------------
+// Reorg helpers. Used by sync-tail's fork-detection path (Phase 4).
+// ---------------------------------------------------------------------------
+
+/// Load the stored block hash for a given height from the `blocks` table.
+/// Returns `None` when no row exists (height before CashTokens activation,
+/// or before the blocks backfill has run).
+pub async fn load_block_hash(pool: &PgPool, height: i32) -> Result<Option<Vec<u8>>> {
+    sqlx::query_scalar("SELECT hash FROM blocks WHERE height = $1")
+        .bind(height)
+        .fetch_optional(pool)
+        .await
+        .context("load_block_hash")
+}
+
+/// Delete `live_token_utxo` rows at or above `height`. Called from sync-tail's
+/// reorg-unwind path when a fork is detected so stale rows from the orphaned
+/// branch don't persist and drift enrichment. The replacement block(s) on the
+/// new branch re-populate the table via the normal per-block delta apply.
+///
+/// Rows with `created_height = 0` (bootstrap sentinel — seeded by enrich-seed
+/// from BlockBook history) are never deleted because no real fork reaches
+/// height 0. Returns the number of rows deleted.
+pub async fn unwind_live_utxo(pool: &PgPool, height: i32) -> Result<u64> {
+    let result = sqlx::query("DELETE FROM live_token_utxo WHERE created_height >= $1")
+        .bind(height)
+        .execute(pool)
+        .await
+        .context("unwind_live_utxo")?;
+    Ok(result.rows_affected())
+}
+
 /// Recompute `is_canonical` per symbol bucket. Picks the row with the
 /// lowest `(fair_genesis_height, category, reveal_input_index)` tuple
 /// per `symbol_bytes` group as the winner. Wraps the recompute in a
