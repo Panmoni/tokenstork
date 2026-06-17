@@ -1,0 +1,17 @@
+[Unit]
+Description=Run tokenstork load-watchdog every 2 minutes
+Documentation=https://github.com/Panmoni/tokenstork
+
+[Timer]
+# 2-min cadence so a pegged box is detected quickly. The watchdog's
+# internal cooldown (COOLDOWN_SECS, default 300s) prevents spam during
+# sustained incidents — this interval sets the sampling rate, not the
+# alert rate. Cheap to run: one /proc/loadavg read + fs::read_to_string
+# per tick; no DB, no network unless threshold is crossed.
+OnBootSec=2min
+OnUnitActiveSec=2min
+Persistent=true
+Unit=load-watchdog.service
+
+[Install]
+WantedBy=timers.target

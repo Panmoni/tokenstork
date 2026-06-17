@@ -1,0 +1,48 @@
+[Unit]
+Description=tokenstork load-watchdog — alert when system load exceeds threshold
+Documentation=https://github.com/Panmoni/tokenstork
+After=network.target
+
+[Service]
+Type=oneshot
+User=tokenstork
+Group=tokenstork
+WorkingDirectory=/opt/tokenstork
+ExecStart=/opt/tokenstork/workers/target/release/load-watchdog
+
+Environment="RUST_LOG=info"
+EnvironmentFile=-/etc/tokenstork/env
+
+# StateDirectory gives us a writable /var/lib/tokenstork for the cooldown
+# file (load-watchdog.state) despite ProtectSystem=strict below.
+StateDirectory=tokenstork
+
+# Needs /proc/loadavg (always readable) and /proc/sys/kernel/hostname.
+# ProtectProc=invisible would hide these — omit it so the watchdog can
+# read /proc entries. The hardening profile is otherwise identical to
+# the other workers.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallArchitectures=native
+UMask=0077
+
+# Alert or no-op; should complete in seconds.
+TimeoutStartSec=30s

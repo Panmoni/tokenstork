@@ -3567,6 +3567,7 @@ dependencies = [
  "futures-util",
  "hex",
  "hickory-resolver",
+ "hmac",
  "image",
  "num-bigint",
  "num-traits",
