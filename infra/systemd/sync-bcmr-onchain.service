@@ -42,3 +42,4 @@ SystemCallFilter=@system-service
 SystemCallFilter=~@privileged @resources
 SystemCallArchitectures=native
 UMask=0077
+CPUQuota=200%

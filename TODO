@@ -15,7 +15,7 @@ working set sits at the 32G box ceiling, so any sustained load tips it. One cron
 worker must never be able to monopolize the box.
 
 Quick wins (do first — small, reversible systemd drop-ins):
-- [ ] **CPUQuota cap on heavy workers** (sync-enrich, sync-bcmr-onchain,
+- [x] **CPUQuota cap on heavy workers** (sync-enrich, sync-bcmr-onchain,
       enrich-seed): `CPUQuota=200%` so no single worker can take the whole box.
 - [ ] **Load/iowait watchdog → REPORT_WEBHOOK** so a pegged box alerts in minutes,
       not discovered via `top` hours later. (Pairs with the REPORT_WEBHOOK_URL

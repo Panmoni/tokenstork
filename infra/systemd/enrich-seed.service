@@ -1,5 +1,5 @@
 [Unit]
-Description=tokenstork sync-enrich — refresh holder/NFT/supply state from BlockBook
+Description=tokenstork enrich-seed — one-shot bootstrap of live_token_utxo from BlockBook
 Documentation=https://github.com/Panmoni/tokenstork
 After=network.target postgresql.service blockbook.service
 Wants=postgresql.service blockbook.service
@@ -9,15 +9,19 @@ Type=oneshot
 User=tokenstork
 Group=tokenstork
 WorkingDirectory=/opt/tokenstork
-ExecStart=/opt/tokenstork/workers/target/release/enrich
+ExecStart=/opt/tokenstork/workers/target/release/enrich-seed
 
 Environment="RUST_LOG=info"
 # `-` prefix: start even if /etc/tokenstork/env is missing. The binary will
 # then exit with an anyhow chain naming the first missing env var — operator
-# sees the failure in journalctl. Timer unit retries on the next tick.
+# sees the failure in journalctl.
 EnvironmentFile=-/etc/tokenstork/env
 
-# Hardening — same profile as sync-tail.
+# CPU containment — a full 17.5k-category sweep pins BlockBook hard.
+# 200% (2 cores) keeps the box responsive during the seed run.
+CPUQuota=200%
+
+# Hardening — same profile as sync-enrich / sync-bcmr-onchain / sync-verify / sync-tail.
 NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true
@@ -42,4 +46,3 @@ SystemCallFilter=@system-service
 SystemCallFilter=~@privileged @resources
 SystemCallArchitectures=native
 UMask=0077
-CPUQuota=200%
