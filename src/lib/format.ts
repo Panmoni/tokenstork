@@ -72,8 +72,31 @@ export function getIPFSUrl(iconUrl: string | null | undefined): string {
 export const PLACEHOLDER_ICON =
 	'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" fill="%23e2e8f0"/></svg>';
 
+/**
+ * Convert integer satoshis to BCH as a JS number.
+ *
+ * WARNING: JavaScript `number` (IEEE 754 double) has 53 bits of mantissa
+ * (~9×10¹⁵). BCH total supply is 2.1×10¹⁵ sats — current single-token
+ * values are safe, but aggregate Cauldron TVL across all pools may
+ * approach the boundary. Callers passing values above Number.MAX_SAFE_INTEGER
+ * (9_007_199_254_740_991) will lose precision.
+ *
+ * TODO: when aggregate TVL exceeds ~10^14 sats (~1M BCH), switch callers
+ * to `satoshisToBCHBigint()` which returns a string via BigInt division.
+ */
 export function satoshisToBCH(sats: number): number {
 	return sats / 100_000_000;
+}
+
+/** Lossless satoshi→BCH conversion via BigInt. Returns a decimal string
+ *  suitable for display. Prefer this for aggregate TVL or any value that
+ *  may exceed Number.MAX_SAFE_INTEGER. */
+export function satoshisToBCHBigint(sats: bigint): string {
+	const BCH = sats / 100_000_000n;
+	const remainder = sats % 100_000_000n;
+	if (remainder === 0n) return BCH.toString();
+	const frac = remainder.toString().padStart(8, '0').replace(/0+$/, '');
+	return `${BCH}.${frac}`;
 }
 
 export function humanizeBigNumber(value: number): string {

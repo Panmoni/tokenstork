@@ -229,7 +229,7 @@ export async function fetchCauldron(
 		);
 		if (priceRes.ok) {
 			const priceData = await priceRes.json();
-			if (priceData?.price) {
+			if (priceData?.price != null) {
 				priceUSD =
 					satoshisToBCH(priceData.price * Math.pow(10, decimals)) * bchPriceUSD;
 			}
@@ -244,7 +244,7 @@ export async function fetchCauldron(
 		);
 		if (tvlRes.ok) {
 			const tvlData = await tvlRes.json();
-			if (tvlData?.satoshis) {
+			if (tvlData?.satoshis != null) {
 				// Double-sided pool — multiply by 2 to reflect the combined value,
 				// matching the calculation in app/utils/getTokenData.ts.
 				tvlUSD = satoshisToBCH(tvlData.satoshis) * bchPriceUSD * 2;

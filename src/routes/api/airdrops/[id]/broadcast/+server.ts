@@ -77,7 +77,29 @@ export const POST: RequestHandler = async ({ locals, request, params }) => {
 	if (!target) error(500, 'airdrop_txs row missing for index');
 	if (target.state === 'broadcast') error(409, 'chunk already broadcast');
 
-	// Forward to BCHN.
+	// ── Forward to BCHN ──────────────────────────────────────────
+	//
+	// WINDOW OF VULNERABILITY: `sendRawTransaction` submits the tx to the BCH
+	// network BEFORE we persist the txid to `airdrop_txs` below. If the process
+	// crashes or the DB becomes unreachable between the BCHN success (line 89)
+	// and `markTxResult` (line 120), the tx IS on-chain but the airdrop appears
+	// incomplete. Recovery procedure (operator manual, rare):
+	//
+	//   1. The user will report "airdrop stuck at broadcasting."
+	//   2. Look up the tx on a BCH block explorer by the signed hex the user
+	//      submitted (available in the access log upstream of this handler).
+	//   3. Once you have the txid, run:
+	//        UPDATE airdrop_txs SET state='broadcast', txid=decode(:txid,'hex')
+	//         WHERE airdrop_id=:id AND tx_index=:idx;
+	//        UPDATE airdrop_outputs SET state='broadcast', vout_index=…
+	//         WHERE airdrop_id=:id AND tx_index=:idx;
+	//   4. Recompute the parent airdrop state via recomputeAirdropState(:id).
+	//
+	// The retry loop below (3 attempts, 1s backoff) catches transient DB
+	// unavailability — the most common failure mode. A hard crash during the
+	// retry window still requires manual recovery as documented above.
+	// ──────────────────────────────────────────────────────────────
+
 	let txid: string;
 	try {
 		txid = await sendRawTransaction(signedHex);
@@ -102,25 +124,56 @@ export const POST: RequestHandler = async ({ locals, request, params }) => {
 	chunkRecipients.forEach((o, i) => voutMap.set(o.recipient_cashaddr, 1 + i));
 
 	const txidBuf = Buffer.from(txid, 'hex');
-	try {
-		await markTxResult(airdropId, txIndex, { txid: txidBuf, voutMap });
-	} catch (err) {
-		if (err instanceof MarkTxStateConflictError) {
-			// A concurrent broadcast for the same chunk already flipped the
-			// row out of pending/signed. The tx WE just sent went to BCHN
-			// (might or might not have been accepted depending on whether
-			// the racing broadcast spent the same UTXOs). We must not
-			// overwrite the canonical txid that the winning request
-			// recorded. Surface the conflict so the wizard can re-fetch
-			// state from the receipt page.
-			console.warn('[api/airdrops/broadcast] mark-tx race', {
-				airdropId,
-				txIndex,
-				attemptedTxid: txid
-			});
-			error(409, 'Concurrent broadcast detected for this chunk; refresh and check the receipt page');
+	// ── Persist with retry ───────────────────────────────────────
+	// BCHN already accepted the tx; the DB update is a must-complete
+	// step. Three attempts with 1s backoff catch transient pool
+	// exhaustion / connection drops. A hard crash mid-retry still
+	// requires manual recovery (see WINDOW OF VULNERABILITY above).
+	const MAX_RETRIES = 3;
+	const RETRY_DELAY_MS = 1000;
+	let lastErr: unknown;
+	for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+		try {
+			await markTxResult(airdropId, txIndex, { txid: txidBuf, voutMap });
+			lastErr = null;
+			break;
+		} catch (err) {
+			lastErr = err;
+			if (err instanceof MarkTxStateConflictError) {
+				// A concurrent broadcast for the same chunk already flipped
+				// the row. The tx WE just sent went to BCHN (might or might
+				// not have been accepted depending on whether the racing
+				// broadcast spent the same UTXOs). Surface the conflict.
+				console.warn('[api/airdrops/broadcast] mark-tx race', {
+					airdropId,
+					txIndex,
+					attemptedTxid: txid
+				});
+				error(409, 'Concurrent broadcast detected for this chunk; refresh and check the receipt page');
+			}
+			if (attempt < MAX_RETRIES - 1) {
+				console.warn('[api/airdrops/broadcast] mark-tx retry', {
+					airdropId,
+					txIndex,
+					txid,
+					attempt: attempt + 1,
+					error: (err as Error).message
+				});
+				await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+			}
 		}
-		throw err;
+	}
+	if (lastErr) {
+		// All retries exhausted. The tx IS on-chain (BCHN accepted it)
+		// but the DB doesn't know. Log the txid prominently so the
+		// operator can apply the manual recovery procedure documented
+		// above. We still return success to the caller — the tx went
+		// through and the wizard's receipt page will surface the state
+		// on refresh (once recovery is applied).
+		console.error(
+			'[api/airdrops/broadcast] CRITICAL: BCHN accepted tx but all DB retries failed. Manual recovery required.',
+			{ airdropId, txIndex, txid, error: (lastErr as Error).message }
+		);
 	}
 	const newState = await recomputeAirdropState(airdropId);
 	console.info('[api/airdrops/broadcast] success', {

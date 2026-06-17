@@ -62,7 +62,8 @@ export const GET: RequestHandler = async ({ request }) => {
 		}
 		errors.push(`Failed to fetch price from coingecko: ${cgResponse.status}`);
 	} catch (err) {
-		errors.push(`Exception in internal API: ${err}`);
+		console.error('[api/bchPrice] internal fetch error:', err);
+		errors.push('Internal price fetch failed');
 	}
 
 	if (!errors.length) errors.push('Unknown error');

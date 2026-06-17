@@ -383,28 +383,34 @@ export async function markTxResult(
  *  returning a 'partial' string that doesn't match the DB.
  *
  *  Idempotent: re-runs do nothing because the state filter excludes
- *  already-finalized rows. */
+ *  already-finalized rows.
+ *
+ *  Wrapped in a transaction so the airdrop_txs UPDATE and airdrop_outputs
+ *  UPDATE stay atomic — a partial failure won't leave one table marked
+ *  'failed' while the other still shows 'pending'. */
 export async function markRemainingTxsSnapshotHalted(
 	airdropId: string,
 	fromTxIndex: number,
 	fail_reason = 'holder snapshot advanced; airdrop halted'
 ): Promise<number> {
-	const result = await query<{ tx_index: number }>(
-		`UPDATE airdrop_txs SET state = 'failed', fail_reason = $1
-		  WHERE airdrop_id = $2
-		    AND tx_index >= $3
-		    AND state IN ('pending', 'signed')
-		  RETURNING tx_index`,
-		[fail_reason, airdropId, fromTxIndex]
-	);
-	if (result.rows.length > 0) {
-		await query(
-			`UPDATE airdrop_outputs SET state = 'failed'
-			  WHERE airdrop_id = $1 AND tx_index = ANY($2::int[])`,
-			[airdropId, result.rows.map((r) => r.tx_index)]
+	return withTransaction(async (client) => {
+		const result = await client.query<{ tx_index: number }>(
+			`UPDATE airdrop_txs SET state = 'failed', fail_reason = $1
+			  WHERE airdrop_id = $2
+			    AND tx_index >= $3
+			    AND state IN ('pending', 'signed')
+			  RETURNING tx_index`,
+			[fail_reason, airdropId, fromTxIndex]
 		);
-	}
-	return result.rows.length;
+		if (result.rows.length > 0) {
+			await client.query(
+				`UPDATE airdrop_outputs SET state = 'failed'
+				  WHERE airdrop_id = $1 AND tx_index = ANY($2::int[])`,
+				[airdropId, result.rows.map((r) => r.tx_index)]
+			);
+		}
+		return result.rows.length;
+	});
 }
 
 /** Roll the parent airdrop state forward. Computed from `airdrop_txs`

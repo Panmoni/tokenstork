@@ -234,6 +234,19 @@ ALTER TABLE token_venue_listings
 ALTER TABLE token_price_history
   ALTER COLUMN tvl_satoshis TYPE NUMERIC(30,0);
 
+-- Convert price columns from DOUBLE PRECISION to NUMERIC(30,0) for
+-- exact monetary arithmetic. DOUBLE PRECISION (IEEE 754) has 53 bits
+-- of mantissa (~15-16 decimal digits) — satoshi-denominated prices
+-- from Cauldron/Fex are whole numbers well within this range today,
+-- but floating-point comparison and aggregation risk accumulates
+-- silently. NUMERIC(30,0) stores exact integers up to 10^30 sats
+-- (~10^22 BCH), matching the tvl_satoshis column type.
+-- Idempotent: re-running on already-NUMERIC columns is a no-op.
+ALTER TABLE token_venue_listings
+  ALTER COLUMN price_sats TYPE NUMERIC(30,0);
+ALTER TABLE token_price_history
+  ALTER COLUMN price_sats TYPE NUMERIC(30,0);
+
 -- Seed a single initial data point per currently-listed category from
 -- `token_venue_listings`, but only once. Without this the sparklines are
 -- empty until the sync-cauldron timer has fired enough times — boring for
