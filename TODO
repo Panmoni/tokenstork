@@ -14,10 +14,7 @@ walks). Systemic root: no shared budget on BlockBook load, and BlockBook's ~24G
 working set sits at the 32G box ceiling, so any sustained load tips it. One cron
 worker must never be able to monopolize the box.
 
-Quick wins (do first — small, reversible systemd drop-ins):
-- [x] **CPUQuota cap on heavy workers** (sync-enrich, sync-bcmr-onchain,
-      enrich-seed): `CPUQuota=200%` so no single worker can take the whole box.
-- [ ] **Load/iowait watchdog → REPORT_WEBHOOK** so a pegged box alerts in minutes,
+- [x] **Load/iowait watchdog → REPORT_WEBHOOK** so a pegged box alerts in minutes,
       not discovered via `top` hours later. (Pairs with the REPORT_WEBHOOK_URL
       operator task below.)
 - [ ] **Serialize heavy workers** — systemd `Conflicts=`/`After=` or a shared
@@ -41,8 +38,9 @@ Built, shadow-running, delta-validated vs BCHN; authoritative `token_state` path
 untouched (enrich timer disabled). Context: docs/enrich-event-driven-design.md,
 memory `project_blockbook_swap_thrash`.
 
-- [ ] **Phase 4: reorg unwind + cutover.** On reorg, mark-dirty + subset re-seed
-      affected categories. Then flip the authoritative writer from `enrich` to the
+- [x] **Phase 4: reorg unwind** — fork detection in sync-tail unwinds
+      `live_token_utxo` + CRC-20 on mismatch.
+- [ ] **Phase 4: cutover** — flip the authoritative writer from `enrich` to the
       Pass-6 delta path (hard-fail; write token_state/holders/nfts). Gate on a few
       days of clean shadow bake.
 - [ ] **Rework reconciliation/bootstrap to SUBSET-based walks** — NEVER full-sweep
@@ -70,10 +68,9 @@ per category, re-walked every >72h-stale tick. Context: memory
 - [ ] **Persist a per-category max_hops / last-known-head marker** so a known
       runaway authchain is skipped or resumed-from-head, not re-walked from genesis
       every tick.
-- [ ] **Lower `BCMR_ONCHAIN_MAX_HOPS`** 50 → ~10-15 (legit authchains are 1-5).
+- [x] **Lower `BCMR_ONCHAIN_MAX_HOPS`** 50 → 15 (legit authchains are 1-5).
 - [ ] **Investigate a cheaper spending lookup** — the walk only needs
       `vout[0].spentTxId` but `?spending=true` computes it for all outputs.
-
 ---
 
 ## Product backlog
