@@ -1,40 +1,115 @@
 # TODO
 
-docs/cashtoken-index-plan.md
-docs/bcmr-publish-plan.md
+Planning docs: docs/cashtoken-index-plan.md · docs/bcmr-publish-plan.md ·
+docs/tokenization-mega-plan.md · docs/enrich-event-driven-design.md
 
-1. Operational hardening
-2. Long-horizon charts on the token detail page
-3. Token claim / management
-4. One-click "submit to TokenStork BCMR registry" (replacement for OTR mirror)
-5. BCMR support workflow for existing-but-unregistered tokens
-6. Regular sync of TokenStork BCMR with OTR
-7. Better Tapswap / Fex / Cauldron logos
-8. Transfer `tokenstork.com` to Cloudflare as registrar.
-9. `docs/runbook.md` — failure-mode recipes for the tired-3am self.
-10. Bump `package.json` version to `0.2.0` once accounts + persistence ships.
-11. SEO, content operation?
-12. i18n
-13. commenting and discussions?
-14. guidance on where to buy bch and what wallet to use
-15. docs/tokenization-mega-plan.md
+---
+
+## P0 — Tame carson resource usage (stop workers jamming the box)
+
+Recurring problem: background workers peg BlockBook + the whole box at ~1000% CPU
+/ swap-thrash for HOURS, with no guardrail and no alert (3 incidents in 2 days:
+sync-enrich full re-derive, enrich-seed full sweep ×2, sync-bcmr-onchain 50-hop
+walks). Systemic root: no shared budget on BlockBook load, and BlockBook's ~24G
+working set sits at the 32G box ceiling, so any sustained load tips it. One cron
+worker must never be able to monopolize the box.
+
+Quick wins (do first — small, reversible systemd drop-ins):
+- [ ] **CPUQuota cap on heavy workers** (sync-enrich, sync-bcmr-onchain,
+      enrich-seed): `CPUQuota=200%` so no single worker can take the whole box.
+- [ ] **Load/iowait watchdog → REPORT_WEBHOOK** so a pegged box alerts in minutes,
+      not discovered via `top` hours later. (Pairs with the REPORT_WEBHOOK_URL
+      operator task below.)
+- [ ] **Serialize heavy workers** — systemd `Conflicts=`/`After=` or a shared
+      lock so enrich-seed / bcmr-onchain / reconciliation never overlap; off-peak.
+
+Proper fix:
+- [ ] **Global BlockBook query budget across ALL workers** (shared token-bucket /
+      semaphore) — replaces today's independent per-worker BLOCKBOOK_MAX_RPS that
+      collectively overwhelms it.
+- [ ] **Right-size BlockBook** — cap RocksDB/working set, add RAM, or accept heavy
+      bursts must be gentle. `MemorySwapMax=4G` is containment, not a fix.
+- [ ] **Keep moving heavy derivation OFF BlockBook** — event-driven enrichment did
+      it (reads BCHN blocks); audit bcmr-onchain `get_tx?spending` + app
+      wallet/authchain calls next.
+
+---
+
+## P1 — Event-driven enrichment: cutover + follow-ups
+
+Built, shadow-running, delta-validated vs BCHN; authoritative `token_state` path
+untouched (enrich timer disabled). Context: docs/enrich-event-driven-design.md,
+memory `project_blockbook_swap_thrash`.
+
+- [ ] **Phase 4: reorg unwind + cutover.** On reorg, mark-dirty + subset re-seed
+      affected categories. Then flip the authoritative writer from `enrich` to the
+      Pass-6 delta path (hard-fail; write token_state/holders/nfts). Gate on a few
+      days of clean shadow bake.
+- [ ] **Rework reconciliation/bootstrap to SUBSET-based walks** — NEVER full-sweep
+      (a full 17.5k-category BlockBook walk churns BlockBook till restart, 2×
+      confirmed). Bounded subset per run, paced. (Overlaps P0.)
+- [ ] **Completeness check** — confirm `live_token_utxo` isn't MISSING live UTXOs
+      (gettxout only proved no STALE rows). Oracle = BCHN `gettxout`, NOT BlockBook
+      (its spent index lags ~20min post-restart).
+- [ ] **Post-cutover cleanup** — drop `sync-tail.service.d/shadow.conf`, remove the
+      Pass-6 shadow-compare branch, delete/repurpose the disabled
+      `sync-enrich.timer`.
+- [ ] **Seed the ~560 categories the 2026-06-15 bootstrap stall skipped** (subset
+      run). Most no-row categories are correctly fully-burned; seed the genuine
+      remainder only.
+
+---
+
+## P1 — BCMR authchain walker (sync-bcmr-onchain) CPU
+
+While running it pins BlockBook at ~6 cores: many authchain walks hit
+`max_hops=50` (dust-attacked/runaway chains) → 50 `get_tx?spending=true` calls
+per category, re-walked every >72h-stale tick. Context: memory
+`project_bcmr_walker_staleness`, `project_blockbook_quirks`.
+
+- [ ] **Persist a per-category max_hops / last-known-head marker** so a known
+      runaway authchain is skipped or resumed-from-head, not re-walked from genesis
+      every tick.
+- [ ] **Lower `BCMR_ONCHAIN_MAX_HOPS`** 50 → ~10-15 (legit authchains are 1-5).
+- [ ] **Investigate a cheaper spending lookup** — the walk only needs
+      `vout[0].spentTxId` but `?spending=true` computes it for all outputs.
+
+---
+
+## Product backlog
+
+- [ ] Operational hardening (see P0 above for the concrete version)
+- [ ] Long-horizon charts on the token detail page
+- [ ] Token claim / management
+- [ ] One-click "submit to TokenStork BCMR registry" (replacement for OTR mirror)
+- [ ] BCMR support workflow for existing-but-unregistered tokens
+- [ ] Regular sync of TokenStork BCMR with OTR
+- [ ] Better Tapswap / Fex / Cauldron logos
+- [ ] Transfer `tokenstork.com` to Cloudflare as registrar
+- [ ] `docs/runbook.md` — failure-mode recipes for the tired-3am self
+- [ ] Bump `package.json` to `0.2.0` once accounts + persistence ships
+- [ ] SEO / content operation?
+- [ ] i18n
+- [ ] Commenting and discussions?
+- [ ] Guidance on where to buy BCH and what wallet to use
+
+---
 
 ## Operator (carson)
 
-- test minting page, all 3 modes
-- test airdrops
-
-- smoke-test the airdrop wizard end-to-end on mainnet with the operator
-  wallet: pick a low-stakes test category, 5-10 holders, sign-and-broadcast,
-  confirm recipients show up in token_holders after the next sync-enrich
-  tick. Confirm the multi-tx case too — pick a 600+ holder category and
-  verify chunk K+1 builds against fresh BlockBook UTXOs after K confirms.
-
-- Pick `REPORT_WEBHOOK_URL` (Discord / ntfy / TG bot) + add to
-  `/etc/tokenstork/env`; redeploy. Optional `REPORT_WEBHOOK_SECRET`.
-- Dismiss the deploy-smoke test report:
-  ```sql
-  UPDATE token_reports SET status='dismissed', reviewed_at=now(),
-                            moderator_note='deploy smoke test'
-   WHERE details = 'deploy smoke test — please ignore';
-  ```
+- [ ] Test minting page, all 3 modes
+- [ ] Test airdrops
+- [ ] Smoke-test the airdrop wizard end-to-end on mainnet with the operator
+      wallet: low-stakes test category, 5-10 holders, sign-and-broadcast, confirm
+      recipients land in token_holders. Confirm the multi-tx case too — a 600+
+      holder category, verify chunk K+1 builds against fresh BlockBook UTXOs after
+      K confirms. (NOTE: token_holders refresh path is changing — enrich timer is
+      disabled pending the event-driven cutover; adjust this test accordingly.)
+- [ ] Pick `REPORT_WEBHOOK_URL` (Discord / ntfy / TG bot) + add to
+      `/etc/tokenstork/env`; redeploy. Optional `REPORT_WEBHOOK_SECRET`.
+- [ ] Dismiss the deploy-smoke test report:
+      ```sql
+      UPDATE token_reports SET status='dismissed', reviewed_at=now(),
+                                moderator_note='deploy smoke test'
+       WHERE details = 'deploy smoke test — please ignore';
+      ```
