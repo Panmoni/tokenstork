@@ -18,7 +18,7 @@
 // or directly:
 //   tsx scripts/snapshot-leaderboards.ts
 
-import { closePool, withTransaction } from "../lib/pg";
+import { closePool, withTransaction } from "../lib/pg.js";
 
 const TOP_N = Number(process.env.LEADERBOARD_TOP_N ?? "10");
 

@@ -2,9 +2,10 @@
   "extends": "../tsconfig.json",
   "compilerOptions": {
     "target": "ES2022",
-    "module": "commonjs",
-    "moduleResolution": "node",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
     "noEmit": true,
+    "verbatimModuleSyntax": false,
     "isolatedModules": false,
     "jsx": "preserve",
     "types": ["node"]
