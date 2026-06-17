@@ -142,6 +142,52 @@ export interface PriceBucket {
 	volumeSats: number | null;
 }
 
+/**
+ * Check whether the authenticated wallet can publish a BCMR for this
+ * category. Soft-fail: returns false on any error (BlockBook unreachable,
+ * authchain walk timeout, etc.) — the "Publish BCMR" CTA just doesn't
+ * appear.
+ *
+ * Extracted from the main load function so it can be fired as a Promise
+ * inside the main batch rather than serialising after 17+ DB queries.
+ * The check makes 1–N BlockBook RPCs (one for the cached head, plus a
+ * cold authchain walk if the cache is stale). BlockBook `tx?spending=true`
+ * calls can take 500ms–10s depending on tx size and RocksDB load, so
+ * running this concurrently with the DB batch saves ~1–2s of serial
+ * latency on the critical path.
+ */
+async function checkBcmrPublishEligibility(
+	row: { authchain_head_txid: Buffer | null; genesis_txid: Buffer },
+	cashaddr: string
+): Promise<boolean> {
+	try {
+		const { isOwnerOfHeadVout0, findAuthchainHead } = await import(
+			'$lib/server/authchain'
+		);
+		let headTxidHex: string | null = row.authchain_head_txid
+			? hexFromBytes(row.authchain_head_txid)
+			: null;
+		let owns: boolean | null = null;
+		if (headTxidHex) {
+			owns = await isOwnerOfHeadVout0(headTxidHex, cashaddr);
+		}
+		if (owns === null) {
+			// Cached head is stale OR no cache at all — fall back to a
+			// cold walk. This is the common case for freshly-minted
+			// categories the BCMR walker hasn't visited yet.
+			const cold = await findAuthchainHead(hexFromBytes(row.genesis_txid)!);
+			owns = cold.headVout0Addresses.includes(cashaddr);
+		}
+		return !!owns;
+	} catch (err) {
+		console.warn(
+			'[token detail] BCMR-publish eligibility check failed:',
+			(err as Error).message
+		);
+		return false;
+	}
+}
+
 export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 	const category = params.category.toLowerCase();
 	if (!HEX_REGEX.test(category)) {
@@ -256,7 +302,9 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 		crc20Detail,
 		herfindahlRes,
 		cauldron,
-		cauldronGlobalRes
+		cauldronGlobalRes,
+		bcmrEligibility,
+		firstNRankResult
 	] = await Promise.all([
 			query<HolderRow>(
 			// `ORDER BY balance` resolves to the alias and sorts the
@@ -554,7 +602,17 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 		// unreachable; the >10% share badge simply doesn't render.
 		query<{ tvl_sats: string }>(
 			`SELECT tvl_sats::text AS tvl_sats FROM cauldron_global_stats WHERE id = 1`
-		)
+		),
+		// BCMR publish eligibility — fire the BlockBook call(s) concurrently
+		// with the DB batch instead of serialising after it. The check is
+		// best-effort (soft-fail returns false) so a slow BlockBook doesn't
+		// block the page — it just hides the "Publish BCMR" CTA.
+		locals.user
+			? checkBcmrPublishEligibility(row, locals.user.cashaddr)
+			: Promise.resolve(false),
+		// Permanent ordinal rank — a simple DB query that should run in
+		// parallel, not serial after 17 other queries.
+		firstNRankFor(category)
 	]);
 
 	// Per-venue first_listed_at lookup. Cauldron-side entry is what the
@@ -781,42 +839,11 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 			? holdersRankRaw
 			: null;
 
-	// BCMR publish eligibility (#33). Only authenticated wallets get the
-	// check; unauthenticated visitors save the BlockBook round-trip. The
-	// check is best-effort: if it fails (BlockBook unreachable, stale
-	// cache, etc.) we surface canPublishBcmr=false rather than failing
-	// the page — the CTA just doesn't appear.
-	let canPublishBcmr = false;
-	if (locals.user) {
-		try {
-			const { isOwnerOfHeadVout0, findAuthchainHead } = await import(
-				'$lib/server/authchain'
-			);
-			let headTxidHex: string | null = row.authchain_head_txid
-				? hexFromBytes(row.authchain_head_txid)
-				: null;
-			let owns: boolean | null = null;
-			if (headTxidHex) {
-				owns = await isOwnerOfHeadVout0(headTxidHex, locals.user.cashaddr);
-			}
-			if (owns === null) {
-				// Cached head is stale OR no cache at all — fall back to a
-				// cold walk. This is the common case for freshly-minted
-				// categories the BCMR walker hasn't visited yet.
-				const cold = await findAuthchainHead(hexFromBytes(row.genesis_txid)!);
-				headTxidHex = cold.headTxid;
-				owns = cold.headVout0Addresses.includes(locals.user.cashaddr);
-			}
-			canPublishBcmr = !!owns;
-		} catch (err) {
-			// Soft-fail. The CTA is convenience — a network blip shouldn't
-			// 500 the detail page.
-			console.warn(
-				'[token detail] BCMR-publish eligibility check failed:',
-				(err as Error).message
-			);
-		}
-	}
+	// BCMR publish eligibility — already resolved in the main Promise.all
+	// batch (see `checkBcmrPublishEligibility` helper above). The check
+	// fires concurrently with all DB queries instead of serialising after
+	// them, cutting ~1–2s of BlockBook latency from the page load.
+	const canPublishBcmr = bcmrEligibility;
 
 	return {
 		token: {
@@ -825,7 +852,7 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 			genesisBlock: row.genesis_block,
 			genesisTime: Math.floor(row.genesis_time.getTime() / 1000),
 			firstSeenAt: Math.floor(row.first_seen_at.getTime() / 1000),
-			firstNRank: await firstNRankFor(category),
+			firstNRank: firstNRankResult,
 			// Name / symbol / decimals fall back through BCMR (already
 			// applied above) and finally to the on-chain CRC-20 covenant
 			// reveal — the chain carries authoritative bytes even when no
