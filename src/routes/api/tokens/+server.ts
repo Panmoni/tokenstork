@@ -271,16 +271,21 @@ export const GET: RequestHandler = async ({ url, request, getClientAddress, setH
 			// Sub-min-length searches are silently dropped — better than
 			// returning the full table for a single-character query.
 		}
-		if (minSupplyRaw) {
-			push('s.current_supply >= $$', minSupplyRaw);
+	if (minSupplyRaw) {
+		try {
+			BigInt(minSupplyRaw);
+		} catch {
+			error(400, 'minSupply must be an integer');
 		}
-		if (crc20Param === 'true') {
-			where.push('c.category IS NOT NULL');
-		} else if (crc20Param === 'canonical') {
-			where.push('c.is_canonical = true');
-		} else if (crc20Param === 'noncanonical') {
-			where.push('c.category IS NOT NULL AND c.is_canonical = false');
-		}
+		push('s.current_supply >= $$', minSupplyRaw);
+	}
+	if (crc20Param === 'true') {
+		where.push('c.category IS NOT NULL');
+	} else if (crc20Param === 'canonical') {
+		where.push('c.is_canonical = true');
+	} else if (crc20Param === 'noncanonical') {
+		where.push('c.category IS NOT NULL AND c.is_canonical = false');
+	}
 
 		const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
 

@@ -8,6 +8,7 @@ import { error, isHttpError, json } from '@sveltejs/kit';
 import { bytesFromHex, query } from '$lib/server/db';
 import { dispatchReportAlert } from '$lib/server/reportAlert';
 import { REPORT_REASONS_SET } from '$lib/moderation';
+import { clientIp } from '$lib/server/clientIp';
 import type { RequestHandler } from './$types';
 
 const HEX_REGEX = /^[0-9a-fA-F]{64}$/;
@@ -68,21 +69,6 @@ function checkRateLimit(key: string, cap: number): boolean {
 	return true;
 }
 
-function clientIp(request: Request, getClientAddress: () => string): string {
-	// Behind Cloudflare on carson, so prefer CF-Connecting-IP; fall back
-	// through the standard forwarded-for chain; finally SvelteKit's own
-	// getClientAddress(). No header is trusted enough to authenticate on,
-	// but they're all fine for rate-limit bucketing.
-	const cf = request.headers.get('cf-connecting-ip');
-	if (cf) return cf.trim();
-	const xff = request.headers.get('x-forwarded-for');
-	if (xff) return xff.split(',')[0].trim();
-	try {
-		return getClientAddress();
-	} catch {
-		return 'unknown';
-	}
-}
 
 export const POST: RequestHandler = async ({ params, request, getClientAddress }) => {
 	const category = params.category;
@@ -122,7 +108,7 @@ export const POST: RequestHandler = async ({ params, request, getClientAddress }
 			error(400, `reporter_email must be at most ${MAX_EMAIL_LEN} characters`);
 	}
 
-	const ip = clientIp(request, getClientAddress);
+	const ip = clientIp({ request, getClientAddress });
 
 	// Rate-limit in two buckets. Per-IP first so a noisy visitor doesn't
 	// consume a category's quota; per-category second so a hundred
@@ -187,10 +173,10 @@ export const POST: RequestHandler = async ({ params, request, getClientAddress }
 		);
 		const reportId = Number(insertRes.rows[0]?.id);
 
-		// Fire-and-forget alert. The DB insert above is the durable record;
+		// Best-effort alert. The DB insert above is the durable record;
 		// alert dispatch failure is logged but doesn't bubble to the user.
-		// `void` ensures we don't accidentally await and hold the response.
-		void dispatchReportAlert({
+		// Await so the HTTP response isn't sent before the webhook fires.
+		await dispatchReportAlert({
 			reportId,
 			category: category.toLowerCase(),
 			tokenName: meta.name,

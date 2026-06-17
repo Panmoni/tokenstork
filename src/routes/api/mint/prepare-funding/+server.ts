@@ -16,6 +16,7 @@ import {
 	binToHex
 } from '@bitauth/libauth';
 import type { TransactionCommon, Input, Output } from '@bitauth/libauth';
+import { hashForLog } from '$lib/server/logRedact';
 import { fetchWalletUtxos, verifyUtxoTokenData } from '$lib/server/walletUtxos';
 import type { RequestHandler } from './$types';
 
@@ -49,7 +50,7 @@ export const POST: RequestHandler = async ({ locals }) => {
 	// misreported as plain would be consolidated into a plain output and
 	// BURN the tokens. See verifyUtxoTokenData docs.
 	const allUtxos = await verifyUtxoTokenData(await fetchWalletUtxos(locals.user.cashaddr));
-	console.log('[prepare-funding] total UTXOs:', allUtxos.length, 'cashaddr:', locals.user.cashaddr);
+	console.log('[prepare-funding] total UTXOs:', allUtxos.length, 'tag:', hashForLog(locals.user.cashaddr));
 
 	// Filter: plain BCH only (no token data), any vout, enough value
 	// to be worth including in the consolidation.

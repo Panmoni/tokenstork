@@ -15,6 +15,7 @@
 // RPC error and we surface that to the caller.
 
 import { json, error, isHttpError } from '@sveltejs/kit';
+import { decodeTransaction, hexToBin } from '@bitauth/libauth';
 import { sendRawTransaction } from '$lib/server/bchn';
 import { clientIp } from '$lib/server/clientIp';
 import { createRateLimiter } from '$lib/server/rateLimit';
@@ -25,6 +26,25 @@ import type { RequestHandler } from './$types';
 // acceptable since a restart is itself a 1-minute outage.
 const recentBroadcasts = new Map<string, number>();
 const BROADCAST_COOLDOWN_MS = 60_000;
+
+// Periodic pruner: clean up stale entries so the Map doesn't grow unboundedly
+// over the process lifetime. Runs every 30 min; entries older than 2× the
+// cooldown window are deleted. `.unref()` so it doesn't keep the event loop
+// alive at shutdown.
+const MINT_BC_PRUNE_KEY = Symbol.for('tokenstork.mintBroadcastCooldownPruner');
+type MintBcPrunerGlobal = typeof globalThis & { [MINT_BC_PRUNE_KEY]?: NodeJS.Timeout };
+{
+	const g = globalThis as MintBcPrunerGlobal;
+	if (g[MINT_BC_PRUNE_KEY]) clearInterval(g[MINT_BC_PRUNE_KEY]);
+	const handle: NodeJS.Timeout = setInterval(() => {
+		const cutoff = Date.now() - BROADCAST_COOLDOWN_MS * 2;
+		for (const [key, ts] of recentBroadcasts) {
+			if (ts <= cutoff) recentBroadcasts.delete(key);
+		}
+	}, 30 * 60 * 1000);
+	handle.unref?.();
+	g[MINT_BC_PRUNE_KEY] = handle;
+}
 
 // Per-IP cap on broadcasts. Sized to allow a couple of legitimate
 // multi-wallet retries from a single household / office NAT but
@@ -76,6 +96,16 @@ export const POST: RequestHandler = async ({ locals, request, getClientAddress }
 	// bytes) here, BCHN will reject over-budget txs anyway.
 	if (rawHex.length > 200_000) {
 		error(400, 'rawHex exceeds 100 KB tx size cap');
+	}
+
+	// Minimal structural validation: decode the tx and confirm it's a
+	// well-formed BCH transaction. Malformed hex that passes the regex
+	// but isn't a valid tx is caught here instead of forwarded to BCHN.
+	// Full genesis-tx validation (category derivation, token output check)
+	// is done client-side in the mint wizard before signing.
+	const decoded = decodeTransaction(hexToBin(rawHex));
+	if (typeof decoded === 'string') {
+		error(400, `rawHex is not a valid BCH transaction: ${decoded}`);
 	}
 
 	try {

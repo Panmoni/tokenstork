@@ -33,6 +33,6 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 	} catch (err) {
 		if (isHttpError(err)) throw err;
 		console.error('[api/admin/bcmr/approve] error:', err);
-		error(500, `Approve failed: ${(err as Error).message}`);
+		error(500, 'Internal error');
 	}
 };

@@ -55,6 +55,25 @@ async function nudgeBcmrIndexer(categoryHex: string, newHeadTxid: string): Promi
 const recentBroadcasts = new Map<string, number>();
 const BROADCAST_COOLDOWN_MS = 60_000;
 
+
+// Periodic pruner: clean up stale entries so the Map doesn't grow unboundedly
+// over the process lifetime. Runs every 30 min; entries older than 2× the
+// cooldown window are deleted. `.unref()` so it doesn't keep the event loop
+// alive at shutdown.
+const BCMR_BC_PRUNE_KEY = Symbol.for('tokenstork.bcmrBroadcastCooldownPruner');
+type BcmrBcPrunerGlobal = typeof globalThis & { [BCMR_BC_PRUNE_KEY]?: NodeJS.Timeout };
+{
+	const g = globalThis as BcmrBcPrunerGlobal;
+	if (g[BCMR_BC_PRUNE_KEY]) clearInterval(g[BCMR_BC_PRUNE_KEY]);
+	const handle: NodeJS.Timeout = setInterval(() => {
+		const cutoff = Date.now() - BROADCAST_COOLDOWN_MS * 2;
+		for (const [key, ts] of recentBroadcasts) {
+			if (ts <= cutoff) recentBroadcasts.delete(key);
+		}
+	}, 30 * 60 * 1000);
+	handle.unref?.();
+	g[BCMR_BC_PRUNE_KEY] = handle;
+}
 const bcmrBroadcastIpLimiter = createRateLimiter({
 	maxPerWindow: 5,
 	windowMs: 60_000
