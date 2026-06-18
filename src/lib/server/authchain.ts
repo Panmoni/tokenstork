@@ -16,15 +16,16 @@
 //
 // All BlockBook calls go through `timedFetch` with explicit timeouts —
 // matching the worker-side hardening. Local-network latency is fine
-// (~50ms per hop on carson); we cap at 50 hops as a safety bound matching
-// the Rust walker's default.
+// (~50ms per hop on carson); we cap at 15 hops as a safety bound matching
+// the Rust worker's BCMR_ONCHAIN_MAX_HOPS default. Legitimate authchains
+// are 1-5 hops; chains longer than 15 are dust-attacks or runaway.
 //
 // Env: BLOCKBOOK_URL (default http://127.0.0.1:9131).
 
 import { env } from '$env/dynamic/private';
-import { timedFetch } from './fetch';
+import { pacedBlockbookFetch } from './blockbookPacer';
 
-const MAX_HOPS = 50;
+const MAX_HOPS = 15;
 const HEX64_REGEX = /^[0-9a-fA-F]{64}$/;
 
 function blockbookUrl(): string {
@@ -53,7 +54,7 @@ async function getTx(txid: string): Promise<BlockBookTx> {
 	// NO spentTxId without the param, so the walk dead-ended at a stale
 	// head and walletOwnsAuthNft treated the spent head as live).
 	const url = `${blockbookUrl()}/api/v2/tx/${txid}?spending=true`;
-	const res = await timedFetch(url, { timeoutMs: 10_000 });
+	const res = await pacedBlockbookFetch(url, { timeoutMs: 10_000 });
 	if (!res.ok) {
 		throw new Error(`BlockBook tx HTTP ${res.status} for ${txid}`);
 	}

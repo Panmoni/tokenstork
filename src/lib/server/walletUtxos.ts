@@ -12,7 +12,7 @@
 // Env: BLOCKBOOK_URL (default http://127.0.0.1:9131).
 
 import { env } from '$env/dynamic/private';
-import { timedFetch } from './fetch';
+import { pacedBlockbookFetch } from './blockbookPacer';
 
 export interface WalletUtxo {
 	/** UI / big-endian txid hex. */
@@ -75,7 +75,7 @@ export async function fetchWalletUtxos(cashaddr: string): Promise<WalletUtxo[]> 
 	// BlockBook accepts either bare or canonical cashaddr; canonical is
 	// what we have from event.locals.user.cashaddr, so pass it through.
 	const url = `${blockbookUrl()}/api/v2/utxo/${encodeURIComponent(cashaddr)}`;
-	const res = await timedFetch(url, { timeoutMs: 15_000 });
+	const res = await pacedBlockbookFetch(url, { timeoutMs: 15_000 });
 	if (!res.ok) {
 		throw new Error(`BlockBook utxo HTTP ${res.status}`);
 	}
@@ -131,7 +131,7 @@ export async function verifyUtxoTokenData(utxos: WalletUtxo[]): Promise<WalletUt
 			// endpoint omits tokenData for MEMPOOL transactions, which would
 			// make this verifier strip real token data from unconfirmed
 			// UTXOs — the exact burn scenario it exists to prevent.
-			const res = await timedFetch(
+			const res = await pacedBlockbookFetch(
 				`${blockbookUrl()}/api/v2/tx-specific/${encodeURIComponent(txid)}`,
 				{ timeoutMs: 15_000 }
 			);
