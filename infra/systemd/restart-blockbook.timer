@@ -1,0 +1,14 @@
+[Unit]
+Description=Restart BlockBook weekly to prevent swap accumulation
+
+[Timer]
+# Sunday 03:00 UTC — off-peak. TimeoutStopSec=900s on blockbook-bcash
+# gives it up to 15 min; in practice shutdown is <30s when not under
+# heavy swap pressure, and RocksDB cache rebuild takes ~10 min.
+OnCalendar=Sun *-*-* 03:00:00 UTC
+Persistent=true
+RandomizedDelaySec=10min
+Unit=restart-blockbook.service
+
+[Install]
+WantedBy=timers.target

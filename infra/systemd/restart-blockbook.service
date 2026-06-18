@@ -1,0 +1,8 @@
+[Unit]
+Description=Weekly BlockBook restart to clear swap and RocksDB cache fragmentation
+Documentation=https://github.com/Panmoni/tokenstork
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/bin/systemctl restart blockbook-bcash.service

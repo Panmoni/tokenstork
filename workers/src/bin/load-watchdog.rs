@@ -43,6 +43,7 @@ use workers::env::parse_or_default;
 type HmacSha256 = Hmac<Sha256>;
 
 const DEFAULT_THRESHOLD: f64 = 8.0;
+const DEFAULT_SWAP_ALERT_GB: f64 = 2.0;
 const DEFAULT_COOLDOWN_SECS: u64 = 300;
 const DEFAULT_STATE_DIR: &str = "/var/lib/tokenstork";
 const WEBHOOK_TIMEOUT_S: u64 = 10;
@@ -63,6 +64,10 @@ struct LoadAlert {
     load_5min: f64,
     load_15min: f64,
     threshold: f64,
+    /// Swap used in GB — included only when swap exceeds the
+    /// SWAP_ALERT_GB threshold (default 2.0). null when below.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    swap_used_gb: Option<f64>,
     host: String,
 }
 
@@ -90,6 +95,25 @@ fn read_loadavg() -> Result<(f64, f64, f64)> {
         .parse()
         .context("parsing load15")?;
     Ok((l1, l5, l15))
+}
+
+/// Read swap usage in GB from /proc/meminfo. Returns None if parsing fails.
+fn read_swap_gb() -> Option<f64> {
+    let raw = fs::read_to_string("/proc/meminfo").ok()?;
+    let mut total_kb: Option<u64> = None;
+    let mut free_kb: Option<u64> = None;
+    for line in raw.lines() {
+        if line.starts_with("SwapTotal:") {
+            total_kb = line.split_ascii_whitespace().nth(1)?.parse().ok();
+        } else if line.starts_with("SwapFree:") {
+            free_kb = line.split_ascii_whitespace().nth(1)?.parse().ok();
+        }
+        if total_kb.is_some() && free_kb.is_some() {
+            break;
+        }
+    }
+    let used_kb = total_kb?.checked_sub(free_kb?)?;
+    Some(used_kb as f64 / (1024.0 * 1024.0))
 }
 
 fn now_secs() -> u64 {
@@ -124,6 +148,7 @@ async fn main() -> Result<()> {
     init_tracing();
 
     let threshold: f64 = parse_or_default("LOAD_THRESHOLD", DEFAULT_THRESHOLD);
+    let swap_alert_gb: f64 = parse_or_default("SWAP_ALERT_GB", DEFAULT_SWAP_ALERT_GB);
     let cooldown_secs: u64 = parse_or_default("COOLDOWN_SECS", DEFAULT_COOLDOWN_SECS);
     let state_dir = std::env::var("STATE_DIR").unwrap_or_else(|_| DEFAULT_STATE_DIR.to_string());
     let state_path = format!("{state_dir}/load-watchdog.state");
@@ -134,17 +159,21 @@ async fn main() -> Result<()> {
     let _ = fs::create_dir_all(&state_dir);
 
     let (l1, l5, l15) = read_loadavg().context("reading loadavg")?;
+    let swap_gb = read_swap_gb();
 
-    info!(load_1min = l1, load_5min = l5, load_15min = l15, threshold, "load check");
+    info!(load_1min = l1, load_5min = l5, load_15min = l15, threshold, ?swap_gb, "load check");
 
-    if l1 <= threshold {
-        // Load is fine. Clear any stale cooldown so a future spike alerts
-        // immediately rather than being suppressed by an old timestamp.
+    // Alert if EITHER load or swap exceeds its threshold. Swap is a
+    // leading indicator — when RocksDB gets pushed past MemoryHigh,
+    // swap fills before load spikes. Alerting on swap catches the
+    // thrash spiral before it fully develops.
+    let load_exceeded = l1 > threshold;
+    let swap_exceeded = swap_gb.map_or(false, |s| s > swap_alert_gb);
+    if !load_exceeded && !swap_exceeded {
         let _ = fs::remove_file(&state_path);
         return Ok(());
     }
-
-    // Load exceeds threshold — check cooldown.
+    // Load or swap exceeds threshold — check cooldown.
     let webhook_url = std::env::var("REPORT_WEBHOOK_URL").unwrap_or_default();
     if webhook_url.is_empty() {
         warn!(
@@ -180,6 +209,7 @@ async fn main() -> Result<()> {
         load_5min: (l5 * 100.0).round() / 100.0,
         load_15min: (l15 * 100.0).round() / 100.0,
         threshold,
+        swap_used_gb: swap_gb.filter(|&s| s > swap_alert_gb).map(|s| (s * 100.0).round() / 100.0),
         host,
     };
 

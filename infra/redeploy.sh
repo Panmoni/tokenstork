@@ -90,7 +90,7 @@ echo "==> [5/7] systemd units: install/refresh from infra/systemd/"
 # start new units — that's deliberate (see header comment).
 UNIT_SRC_DIR="${REPO_DIR}/infra/systemd"
 UNIT_DST_DIR="/etc/systemd/system"
-UNITS_CHANGED=0
+CHANGED_UNITS=""
 shopt -s nullglob
 for unit in "${UNIT_SRC_DIR}"/*.service "${UNIT_SRC_DIR}"/*.timer; do
 	fname=$(basename "${unit}")
@@ -98,11 +98,11 @@ for unit in "${UNIT_SRC_DIR}"/*.service "${UNIT_SRC_DIR}"/*.timer; do
 	if ! cmp -s "${unit}" "${dest}" 2>/dev/null; then
 		install -m 0644 -o root -g root "${unit}" "${dest}"
 		echo "    installed ${fname}"
-		UNITS_CHANGED=1
+		CHANGED_UNITS="${CHANGED_UNITS} ${fname}"
 	fi
 done
 shopt -u nullglob
-if [ "${UNITS_CHANGED}" -eq 1 ]; then
+if [ -n "${CHANGED_UNITS}" ]; then
 	systemctl daemon-reload
 	echo "    systemctl daemon-reload"
 else
@@ -140,6 +140,17 @@ echo "==> [7/7] restart ${APP_SERVICE}; restart always-on workers if running"
 systemctl restart "${APP_SERVICE}"
 sleep 1
 systemctl status "${APP_SERVICE}" --no-pager --lines=0 | head -6
+
+# BlockBook: restart only when its unit file changed (to pick up
+# CPUQuota/MemoryHigh changes and clear accumulated swap/RocksDB cache
+# fragmentation from prior thrash episodes). TimeoutStopSec=900s gives
+# it up to 15 min to flush; in practice <30s.
+if echo " ${CHANGED_UNITS} " | grep -q ' blockbook-bcash.service '; then
+	echo "    blockbook-bcash.service changed — restarting (this may take ~30s)"
+	systemctl restart blockbook-bcash.service
+	sleep 2
+	systemctl status blockbook-bcash.service --no-pager --lines=0 | head -4
+fi
 for svc in "${DAEMON_SERVICES[@]}"; do
 	if systemctl is-active --quiet "${svc}"; then
 		echo "    restarting ${svc}"
