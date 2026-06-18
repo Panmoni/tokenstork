@@ -63,6 +63,26 @@ MemoryHigh=24G
 MemoryMax=26G
 OOMPolicy=stop
 
+# ── Thrash risk ──
+# RocksDB's working set sits at ~24 GB on this 32 GB box. During an
+# enrichment sweep or BCMR authchain walk, query concurrency pushes the
+# cache past MemoryHigh → cgroup v2 reclaim pressure kicks in → RocksDB
+# evicts pages → next query cache-misses and re-reads from disk → query
+# latency spikes → workers retry (3× backoff) → MORE concurrent queries
+# pile up. This is the death spiral observed on 2026-06-13. Mitigations
+# in place: CPUQuota=600% (caps the CPU dimension), worker Conflicts=
+# (no overlapping sweeps), BLOCKBOOK_MAX_RPS=5 (halved query rate). If
+# the box still thrashes during heavy enrichment, the next step is
+# either more RAM (64 GB) or a shared token-bucket across ALL workers.
+
+# CPUQuota caps BlockBook to 6 full cores (600%). Without this, a
+# RocksDB thrash cycle under memory pressure can consume every core
+# on the box, starving BCHN, Postgres, SvelteKit, and the workers
+# — making even non-BlockBook pages time out. 600% leaves 2 cores
+# for the rest of the system even in the worst case. Combined with
+# MemoryHigh=24G, this bounds both dimensions of the thrash spiral.
+CPUQuota=600%
+
 # Hardening profile matching sync-tail / sync-cauldron / tokenstork.service.
 NoNewPrivileges=true
 PrivateTmp=true

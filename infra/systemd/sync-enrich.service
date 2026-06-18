@@ -1,7 +1,48 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# CUTOVER CHECKLIST — disable this timer when event-driven enrichment ships.
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# This worker walks stale categories through BlockBook (per-category
+# warm-up: N+1 pages for N-page categories) to rebuild token_state /
+# token_holders / nft_instances. It is the single largest BlockBook
+# load source on the box (every 6 h, up to 200 categories).
+#
+# The event-driven path (`sync-tail` Pass 6, workers/src/enrich_walker.rs)
+# derives the same data from BCHN blocks directly — ZERO BlockBook load.
+# It has been shadow-running since 2026-06. Once cut over, this timer and
+# the `enrich` binary become dead code.
+#
+# Before disabling:
+#
+#   [ ] 1. Cutover sync-tail to authoritative writes (remove shadow-compare
+#          branch; flip Pass 6 from shadow to real). Gating: several days of
+#          clean shadow bake with no token_state / token_holders mismatches.
+#
+#   [ ] 2. Bootstrap `live_token_utxo` for existing categories via
+#          `enrich-seed` (oneshot, done once). Categories minted after
+#          cutover are seeded by sync-tail Pass 6 automatically.
+#
+#   [ ] 3. Verify `live_token_utxo` completeness: run `verify` worker
+#          and confirm zero live-UTXO coverage gaps across a sample.
+#
+#   [ ] 4. Confirm token_state / token_holders / nft_instances rows match
+#          between this legacy path and the event-driven path for a
+#          representative sample of active categories.
+#
+#   [ ] 5. `systemctl disable --now sync-enrich.timer`
+#          Keep the .service + .timer files on disk for reference.
+#
+#   [ ] 6. After one week of clean event-driven enrichment, delete the
+#          `sync-enrich.service` / `sync-enrich.timer` files and the
+#          `enrich` binary. Keep `enrich_core.rs` (shared aggregation
+#          logic used by both paths).
+#
+#   [ ] 7. Delete/repurpose the disabled `sync-enrich.timer` and the
+#          `sync-tail.service.d/shadow.conf` drop-in.
 [Unit]
 Description=tokenstork sync-enrich — refresh holder/NFT/supply state from BlockBook
-Documentation=https://github.com/Panmoni/tokenstork
 After=network.target postgresql.service blockbook.service
+Conflicts=enrich-seed.service
 Wants=postgresql.service blockbook.service
 
 [Service]

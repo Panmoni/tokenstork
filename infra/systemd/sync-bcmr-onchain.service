@@ -1,7 +1,7 @@
 [Unit]
 Description=tokenstork sync-bcmr-onchain — walk on-chain authchain for BCMR locators (Phase 4c)
-Documentation=https://github.com/Panmoni/tokenstork
 After=network.target postgresql.service
+Conflicts=enrich-seed.service
 Wants=postgresql.service
 
 [Service]

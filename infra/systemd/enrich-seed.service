@@ -1,7 +1,7 @@
 [Unit]
 Description=tokenstork enrich-seed — one-shot bootstrap of live_token_utxo from BlockBook
-Documentation=https://github.com/Panmoni/tokenstork
-After=network.target postgresql.service blockbook.service
+After=network.target postgresql.service blockbook.service sync-enrich.service sync-bcmr-onchain.service
+Conflicts=sync-enrich.service sync-bcmr-onchain.service
 Wants=postgresql.service blockbook.service
 
 [Service]
