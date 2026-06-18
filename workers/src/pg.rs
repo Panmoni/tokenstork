@@ -41,6 +41,86 @@ pub async fn pool_from_env() -> Result<PgPool> {
 }
 
 // ---------------------------------------------------------------------------
+// Global BlockBook access semaphore (Postgres advisory lock)
+// ---------------------------------------------------------------------------
+//
+// Advisory lock key 987654321 serialises BlockBook HTTP calls across ALL
+// processes on the box — Rust workers, SvelteKit server, and any ad-hoc
+// scripts. Without this, each process paces independently at
+// BLOCKBOOK_MAX_RPS (default 5) and N concurrent processes deliver N×5
+// req/s to a RocksDB that's already at its memory ceiling.
+//
+// Mechanism: `pg_try_advisory_lock` on a dedicated pool connection, with
+// 100ms spin-wait. The connection is held for the duration of one
+// BlockBook HTTP call and returned to the pool on drop. A process crash
+// closes the socket → Postgres auto-releases the lock. Starvation is
+// bounded: the spin-wait yields to the tokio runtime on every iteration,
+// so a long-running holder doesn't block the event loop — it just makes
+// every other caller wait 100ms × (lock-hold-time / 100ms) extra.
+//
+// The SvelteKit server uses the same key via its own Postgres connection
+// (see src/lib/server/blockbookPacer.ts), so user-facing authchain walks
+// and wallet-UTXO fetches are serialised into the same budget as worker
+// sweeps.
+
+/// A guard that holds the global BlockBook advisory lock. The lock is
+/// released when the guard is dropped (via `tokio::spawn` so it works
+/// even during task cancellation).
+#[must_use = "BlockBook slot guard must be held for the duration of the HTTP call"]
+pub struct BlockbookSlotGuard {
+    conn: Option<sqlx::pool::PoolConnection<Postgres>>,
+}
+
+impl BlockbookSlotGuard {
+    /// Manually release the lock and return the connection to the pool.
+    /// Safe to call multiple times (idempotent after first call).
+    pub async fn release(mut self) {
+        if let Some(mut conn) = self.conn.take() {
+            if let Err(e) = sqlx::query("SELECT pg_advisory_unlock(987654321)")
+                .execute(&mut *conn)
+                .await
+            {
+                tracing::warn!(error = %e, "pg_advisory_unlock failed; lock released on connection close");
+            }
+            // conn dropped → returns to pool
+        }
+    }
+}
+
+impl Drop for BlockbookSlotGuard {
+    fn drop(&mut self) {
+        if let Some(mut conn) = self.conn.take() {
+            tokio::spawn(async move {
+                if let Err(e) = sqlx::query("SELECT pg_advisory_unlock(987654321)")
+                    .execute(&mut *conn)
+                    .await
+                {
+                    tracing::warn!(error = %e, "pg_advisory_unlock in Drop failed; lock released on connection close");
+                }
+            });
+        }
+    }
+}
+
+/// Try to acquire the global BlockBook advisory lock. Spins with 100ms
+/// sleeps until the lock is acquired. Returns a guard that MUST be held
+/// for the duration of the BlockBook call.
+pub async fn acquire_blockbook_slot(pool: &PgPool) -> Result<BlockbookSlotGuard> {
+    loop {
+        let mut conn = pool.acquire().await.context("acquiring pool connection for BlockBook slot")?;
+        let got: bool = sqlx::query_scalar("SELECT pg_try_advisory_lock(987654321)")
+            .fetch_one(&mut *conn)
+            .await
+            .context("pg_try_advisory_lock")?;
+        if got {
+            return Ok(BlockbookSlotGuard { conn: Some(conn) });
+        }
+        // conn dropped here → returns to pool. Sleep, then retry.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Hex <-> BYTEA helpers. Category ids are 32 bytes; commitments up to 40.
 // Accept optional `0x` / `\x` prefixes (we sometimes see them in logs).
 // ---------------------------------------------------------------------------

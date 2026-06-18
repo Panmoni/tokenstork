@@ -16,7 +16,7 @@
 //!
 //! Env vars:
 //! - BLOCKBOOK_URL       (default http://127.0.0.1:9131)
-//! - BLOCKBOOK_MAX_RPS   (default 10)
+//! - BLOCKBOOK_MAX_RPS   (default 5)
 //! - DATABASE_URL
 //! - ENRICH_BATCH        (default 200)
 //! - RUST_LOG
@@ -144,6 +144,7 @@ async fn main() -> Result<()> {
 
     let bb = BlockbookClient::from_env().context("building BlockBook client")?;
     let pool = pool_from_env().await.context("connecting to Postgres")?;
+    let bb = bb.with_slot(pool.clone());
     let batch_size: i32 = parse_or_default("ENRICH_BATCH", DEFAULT_BATCH);
 
     // Sanity-check BlockBook is alive + in sync.
@@ -192,16 +193,25 @@ async fn main() -> Result<()> {
         }
     }
 
-    mark_enrich_run(&pool).await?;
-    let elapsed = started.elapsed().as_secs_f64();
-    info!(
-        total = batch.len(),
-        ok = ok_count,
-        errors = err_count,
-        newly_burned = burned_count,
-        elapsed_s = format!("{:.1}", elapsed),
-        "enrich run complete"
-    );
+    if err_count > 0 {
+        error!(
+            total = batch.len(),
+            ok = ok_count,
+            errors = err_count,
+            newly_burned = burned_count,
+            "enrich run had failures — some categories left stale; NOT bumping run timestamp so staleness watchdog re-fires"
+        );
+    } else {
+        mark_enrich_run(&pool).await?;
+        let elapsed = started.elapsed().as_secs_f64();
+        info!(
+            total = batch.len(),
+            ok = ok_count,
+            newly_burned = burned_count,
+            elapsed_s = format!("{:.1}", elapsed),
+            "enrich run complete"
+        );
+    }
 
     pg::shutdown(pool).await;
     Ok(())

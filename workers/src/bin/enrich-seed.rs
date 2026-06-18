@@ -17,7 +17,7 @@
 //! This puts the SAME sustained BlockBook query load on the box that the old
 //! `enrich` did (the 2026-06-13 incident). It is now safe to run because
 //! `blockbook-bcash` has `MemorySwapMax=0` (can't swap-thrash the host) and the
-//! BlockBook client paces at `BLOCKBOOK_MAX_RPS` (default 10). Run it
+//! BlockBook client paces at `BLOCKBOOK_MAX_RPS` (default 5). Run it
 //! deliberately, off-peak, and consider lowering `BLOCKBOOK_MAX_RPS` for the
 //! seed run. Bootstrapped rows get `created_height = 0` (sentinel; reorg unwind
 //! only touches recent heights — see `seed_category_live_utxos`).
@@ -98,6 +98,7 @@ async fn main() -> Result<()> {
 
     let bb = BlockbookClient::from_env().context("building BlockBook client")?;
     let pool = pool_from_env().await.context("connecting to Postgres")?;
+    let bb = bb.with_slot(pool.clone());
     let batch: i64 = parse_or_default("ENRICH_SEED_BATCH", DEFAULT_BATCH);
 
     // Sanity-check BlockBook is alive + in sync before a long sweep.

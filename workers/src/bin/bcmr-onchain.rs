@@ -24,7 +24,7 @@
 //! Env vars:
 //! - DATABASE_URL                  (required)
 //! - BLOCKBOOK_URL                 (required, e.g. http://127.0.0.1:9131)
-//! - BLOCKBOOK_MAX_RPS             default 10 (used by BlockbookClient)
+//! - BLOCKBOOK_MAX_RPS             default 5 (used by BlockbookClient)
 //! - BCMR_ONCHAIN_BATCH            default 200
 //! - BCMR_ONCHAIN_STALE_HOURS      default 72 (revisit cadence)
 //! - BCMR_ONCHAIN_FETCH_TIMEOUT_S  default 10 (per-URI fetch budget)
@@ -96,6 +96,7 @@ async fn main() -> Result<()> {
 
     let pool = pool_from_env().await.context("connecting to Postgres")?;
     let bb = BlockbookClient::from_env().context("building BlockBook client")?;
+    let bb = bb.with_slot(pool.clone());
 
     let batch_size: i32 = parse_or_default("BCMR_ONCHAIN_BATCH", DEFAULT_BATCH);
     let stale_hours: i32 = parse_or_default("BCMR_ONCHAIN_STALE_HOURS", DEFAULT_STALE_HOURS);
@@ -120,6 +121,11 @@ async fn main() -> Result<()> {
     .context("building safe HTTP client")?;
 
     let batch = pick_bcmr_onchain_batch(&pool, stale_hours, batch_size).await?;
+
+    // Absorb the first-HTTP-after-sqlx truncation bug before the
+    // walk loop (walk_authchain calls get_tx, which has no internal
+    // warm-up unlike walk_category_utxos).
+    bb.warm_up().await.context("BlockBook warm-up")?;
     if batch.is_empty() {
         info!("nothing to walk; exiting");
         mark_bcmr_onchain_run(&pool).await?;
@@ -261,7 +267,7 @@ async fn walk_one(
         let outcome = fetch_and_verify_bcmr(http, &locator.uri, &locator.content_hash, max_body_bytes).await;
         let now = Utc::now();
         let block_time = hop.block_time.and_then(|t| Utc.timestamp_opt(t, 0).single());
-        let block_height_i32 = hop.block_height.map(|h| h as i32);
+        let block_height_i32 = hop.block_height.and_then(|h| i32::try_from(h).ok());
 
         let (body_verified, body_size, parsed) = match &outcome {
             FetchedBody::Verified { bytes, size } => {

@@ -7,8 +7,9 @@
 //! directly from the binaries.
 //!
 //! Ships a simple per-process rate limiter (min-gap pacing) since we share a
-//! local BlockBook between the enricher and possible UI probes. Start at 10
-//! req/s and tune against what the box sustains.
+//! local BlockBook between workers and the SvelteKit server. Default 5 req/s
+//! (down from 10); lower is safer when multiple workers can overlap. Tune via
+//! `BLOCKBOOK_MAX_RPS` in /etc/tokenstork/env.
 //!
 //! ## Per-category enrichment quirk
 //!
@@ -36,6 +37,7 @@ use tracing::warn;
 
 use crate::bchn::NftCapability;
 use crate::safe_http::read_body_capped;
+use crate::pg::{self, PgPool};
 
 const USER_AGENT: &str = "tokenstork-workers/0.1";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
@@ -61,19 +63,22 @@ pub struct BlockbookClient {
     min_gap: Duration,
     /// Shared clock across cloned clients.
     last_request: Arc<Mutex<Instant>>,
+    /// Postgres pool used for the cross-process advisory-lock slot.
+    /// `None` disables the semaphore (tests, single-process runs).
+    slot_pool: Option<Arc<PgPool>>,
 }
 
 impl BlockbookClient {
     /// Construct from env vars:
     /// - `BLOCKBOOK_URL` (default `http://127.0.0.1:9131`)
-    /// - `BLOCKBOOK_MAX_RPS` (default 10)
+    /// - `BLOCKBOOK_MAX_RPS` (default 5)
     pub fn from_env() -> Result<Self> {
         let base = std::env::var("BLOCKBOOK_URL")
             .unwrap_or_else(|_| "http://127.0.0.1:9131".to_string());
         let max_rps: u32 = std::env::var("BLOCKBOOK_MAX_RPS")
             .ok()
             .and_then(|s| s.parse().ok())
-            .unwrap_or(10);
+            .unwrap_or(5);
         Self::new(&base, max_rps)
     }
 
@@ -97,7 +102,31 @@ impl BlockbookClient {
                     .checked_sub(Duration::from_secs(1))
                     .unwrap_or_else(Instant::now),
             )),
+            slot_pool: None,
         })
+    }
+
+    /// Enable the cross-process advisory-lock semaphore. When set, every
+    /// `get()` call acquires the global BlockBook slot before issuing the
+    /// HTTP request and releases it after. Callers that share this pool
+    /// (workers + SvelteKit via the same key) are serialised globally.
+    pub fn with_slot(mut self, pool: PgPool) -> Self {
+        self.slot_pool = Some(Arc::new(pool));
+        self
+    }
+
+    /// Sacrificial HTTP call that absorbs the first-request-after-sqlx
+    /// truncation bug (see `walk_category_utxos` docs). Call this once
+    /// after pool init and every worker that touches BlockBook stays
+    /// correct without per-page double-fetching.
+    ///
+    /// Uses `get_node_info` because it's the cheapest BlockBook endpoint
+    /// — a single JSON object, no RocksDB scan, sub-millisecond on a
+    /// local connection. The pacing lock still applies so concurrent
+    /// callers don't all warm up simultaneously.
+    pub async fn warm_up(&self) -> Result<()> {
+        self.get_node_info().await?;
+        Ok(())
     }
 
     /// Pace requests so at least `min_gap` elapses between outgoing HTTP
@@ -128,6 +157,15 @@ impl BlockbookClient {
 
         for attempt in 0..RETRY_ATTEMPTS {
             self.pace().await;
+            // Acquire the cross-process advisory lock before touching
+            // BlockBook. Held for the duration of one HTTP call +
+            // body read; released before backoff sleep on retry so
+            // other processes get their turn.
+            let _guard = if let Some(pool) = &self.slot_pool {
+                Some(pg::acquire_blockbook_slot(pool).await?)
+            } else {
+                None
+            };
             let resp = match self.http.get(&url).send().await {
                 Ok(r) => r,
                 Err(e) => {
@@ -233,28 +271,20 @@ impl BlockbookClient {
         const PAGE_SIZE: u32 = 1000;
         let mut utxos: Vec<Utxo> = Vec::new();
         let mut page: u32 = 1;
+
+        // Warm-up: the first HTTP call after a sqlx write in the caller
+        // can return a truncated body that parses cleanly (missing
+        // transactions silently). One sacrificial fetch of page 1 before
+        // the pagination loop absorbs the truncation for ALL pages.
+        // Previously this was a per-page double-fetch (2N calls for N
+        // pages). Now it's N+1 — same as before for single-page
+        // categories, half as many for multi-page ones.
+        let _ = self
+            .get_address_txs(category_hex, 1, PAGE_SIZE)
+            .await
+            .with_context(|| format!("warm-up address-txs for {}", &category_hex[..16]))?;
+
         loop {
-            // Workaround: there's a reproducible bug where HTTP body reads
-            // immediately after a sqlx Postgres call return a *partial*
-            // body with structurally-valid trailing braces but a
-            // truncated `transactions[]` array. The truncated body parses
-            // cleanly (every late field is `Option<T>` with serde
-            // defaults), so the worker silently gets fewer transactions
-            // than BlockBook actually has. Re-fetching is the only fix
-            // we've found that works regardless of category size.
-            //
-            // We could do a single warm-up call per worker run, but the
-            // bug fires per-call when sqlx writes interleave with HTTP
-            // reads (as in enrich's loop: walk → write → walk → write).
-            // Per-call double-fetch is the safe path. ~2x BlockBook load
-            // on enrichment runs but the box is local + the data is
-            // small, so the cost is negligible.
-            let _ = self
-                .get_address_txs(category_hex, page, PAGE_SIZE)
-                .await
-                .with_context(|| {
-                    format!("warm-up address-txs page {} for {}", page, &category_hex[..16])
-                })?;
             let res = self
                 .get_address_txs(category_hex, page, PAGE_SIZE)
                 .await
