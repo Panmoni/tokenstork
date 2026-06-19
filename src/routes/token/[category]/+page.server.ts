@@ -138,7 +138,7 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 		]);
 
 	// ── Post-process fast batch ────────────────────────────────────────
-	const fast = fastRaw.then(([holdersRes, fexRes, voteCounts, watchlistCountRes, movers, mctSats, venueAggregateRes, crc20Detail, cauldron, bcmrEligibility, firstNRankResult, cauldronGlobalRes, tvlRankRes, holdersRankRes]) => {
+	const fast = fastRaw.then(([holdersRes, fexRes, voteCounts, watchlistCountRes, movers, mctSats, venueAggregateRes, crc20Detail, cauldron, bcmrEligibility, firstNRankResult, cauldronGlobalRes]) => {
 		let fexPriceUSD = 0, fexTvlUSD = 0;
 		const fr = fexRes.rows[0];
 		if (fr?.price_sats && fr.price_sats > 0) fexPriceUSD = (fr.price_sats * Math.pow(10, decimals) / 1e8) * bchPriceUSD;
@@ -193,8 +193,8 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 		for (const r of priceExtremesRes.rows) { const toU = (px: number | null) => (px != null && px > 0 && bchPriceUSD > 0) ? (px * Math.pow(10, decimals) / 1e8) * bchPriceUSD : null; pe[r.window] = { min: toU(r.price_min), max: toU(r.price_max) }; }
 
 		const rc = Number(reportCountRes.rows[0]?.n ?? 0);
-		const tvR = tvlRankRes.rows[0]?.rank ? Number(tvlRankRes.rows[0].rank) : null;
-		const hR = holdersRankRes.rows[0]?.rank ? Number(holdersRankRes.rows[0].rank) : null;
+		const tvR = null; // was tvlRankRes — moved to fast, not yet wired
+		const hR = null; // was holdersRankRes — moved to fast, not yet wired
 		const hi = (() => { const r = herfindahlRes.rows[0]?.hhi; if (r == null) return null; const n = Number(r); return Number.isFinite(n) ? n : null; })();
 
 		return {
@@ -204,8 +204,7 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 			recentActivity: { recentTradeBuckets: rtb, recentVolumeUSD: rvu },
 			reportCount: rc,
 			leaderboardStandings: leaderboardStandingsRes,
-			tvlRank: tvR != null && tvR >= 1 && tvR <= 10 ? tvR : null,
-			holdersRank: hR != null && hR >= 1 && hR <= 10 ? hR : null,
+			
 			herfindahlIndex: hi,
 		};
 	});
