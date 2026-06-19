@@ -462,11 +462,9 @@ export const load: PageServerLoad = async ({ url }) => {
 		]);
 		const total = Number(countRes.rows[0]?.total ?? 0);
 
-		// Synchronous: movers + vote leaders (~50ms). Render instantly
-		// while the heavy token-grid query streams in.
-		const [movers, voteLeaders] = await Promise.all([getMovers24h(), getVoteLeaderboards()]);
-
-		// Deferred: the CTE-based token list with lateral joins (~1.5s).
+		// Deferred: fire the heavy CTE token-grid query immediately so it
+		// runs concurrently with movers+voteLeaders (~50ms) instead of
+		// serializing behind them — restores the pre-streaming concurrency.
 		const tokenGridPromise = (async (): Promise<{
 			tokens: TokenApiRow[];
 			total: number;
@@ -600,6 +598,10 @@ export const load: PageServerLoad = async ({ url }) => {
 				return { tokens: [], total: 0, limit: PAGE_SIZE, offset: 0, error: 'Directory is temporarily unavailable.' };
 			}
 		})();
+
+		// Synchronous: movers + vote leaders (~50ms). Render instantly
+		// while the heavy token-grid query streams in.
+		const [movers, voteLeaders] = await Promise.all([getMovers24h(), getVoteLeaderboards()]);
 
 		return {
 			mcapTvlThresholdSats,
