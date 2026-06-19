@@ -108,6 +108,25 @@ const VALID_SORTS: Record<string, string> = {
 	controversial: `LEAST(vw.hot_up, vw.hot_down) * (vw.hot_up + vw.hot_down) DESC, (vw.hot_up + vw.hot_down) DESC, ${NAME_QUALITY}, ${NAME_SORTABLE} ASC NULLS LAST`
 };
 
+// Outer-query sort variants — reference top.* columns instead of the
+// original table aliases (m, t, s, vl_cauldron) that only exist inside
+// the `top` CTE. The vote-driven sorts still reference `vw` directly
+// because vw is a LATERAL join in the outer FROM clause.
+const OUTER_NAME_QUALITY = NAME_QUALITY.replace(/\bm\.name\b/g, 'top.name');
+const OUTER_NAME_SORTABLE = NAME_SORTABLE.replace(/\bm\.name\b/g, 'top.name');
+
+const OUTER_SORTS: Record<string, string> = {
+	name: `${OUTER_NAME_QUALITY}, LOWER(${OUTER_NAME_SORTABLE}) ASC NULLS LAST, top.first_seen_at ASC`,
+	supply: `top.current_supply DESC NULLS LAST, ${OUTER_NAME_QUALITY}, ${OUTER_NAME_SORTABLE} ASC NULLS LAST`,
+	holders: `top.holder_count DESC NULLS LAST, ${OUTER_NAME_QUALITY}, ${OUTER_NAME_SORTABLE} ASC NULLS LAST`,
+	tvl: `top.cauldron_tvl_satoshis DESC NULLS LAST, ${OUTER_NAME_QUALITY}, ${OUTER_NAME_SORTABLE} ASC NULLS LAST`,
+	recent: 'top.genesis_block DESC, top.first_seen_at DESC',
+	oldest: 'top.genesis_block ASC, top.category ASC',
+	upvoted: `(vw.hot_up - vw.hot_down) DESC, vw.hot_up DESC, ${OUTER_NAME_QUALITY}, ${OUTER_NAME_SORTABLE} ASC NULLS LAST`,
+	downvoted: `(vw.hot_down - vw.hot_up) DESC, vw.hot_down DESC, ${OUTER_NAME_QUALITY}, ${OUTER_NAME_SORTABLE} ASC NULLS LAST`,
+	controversial: `LEAST(vw.hot_up, vw.hot_down) * (vw.hot_up + vw.hot_down) DESC, (vw.hot_up + vw.hot_down) DESC, ${OUTER_NAME_QUALITY}, ${OUTER_NAME_SORTABLE} ASC NULLS LAST`
+};
+
 // Default sort: TVL desc. The directory used to open name-sorted, which
 // surfaced every empty / emoji token first and pushed the actually-traded
 // ones deep. TVL-default matches aggregator convention (CoinGecko, etc.)
@@ -242,6 +261,7 @@ export const load: PageServerLoad = async ({ url }) => {
 	// selected sort breaks ties within each similarity tier. Stays empty
 	// for hex-paste queries (single-row result) and no-search queries.
 	let searchOrderPrefix = '';
+	let outerSearchOrderPrefix = '';
 	if (searchActive) {
 		// A full 64-char hex query is almost always a paste of a category ID
 		// the user wants the exact page for — short-circuit to a direct BYTEA
@@ -294,6 +314,7 @@ export const load: PageServerLoad = async ({ url }) => {
 			}
 			where.push(`(${branches.join(' OR ')})`);
 			searchOrderPrefix = `similarity(m.name, $${qIdx}) DESC NULLS LAST, `;
+			outerSearchOrderPrefix = `similarity(top.name, $${qIdx}) DESC NULLS LAST, `;
 		}
 	}
 	const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
@@ -442,7 +463,8 @@ export const load: PageServerLoad = async ({ url }) => {
 		const total = Number(countRes.rows[0]?.total ?? 0);
 
 		const dataRes = await query<DbRow>(
-			`WITH top AS (
+			`${tenureCte},
+			top AS (
 				SELECT
 					t.category,
 					t.token_type,
@@ -477,7 +499,6 @@ export const load: PageServerLoad = async ({ url }) => {
 				ORDER BY ${searchOrderPrefix}${sort}
 				LIMIT $${values.length + 1} OFFSET $${values.length + 2}
 			)
-			${tenureCte}
 			SELECT top.*,
 				   ph_1h.price_sats   AS price_sats_1h_ago,
 				   ph_24h.price_sats  AS price_sats_24h_ago,
@@ -488,7 +509,7 @@ export const load: PageServerLoad = async ({ url }) => {
 				   v.down_count
 			  FROM top
 			  ${fromJoinsHeavy}
-			  ORDER BY ${searchOrderPrefix}${sort}`,
+			  ORDER BY ${outerSearchOrderPrefix}${OUTER_SORTS[sortKey] ?? OUTER_SORTS[DEFAULT_SORT]}`,
 			[...values, PAGE_SIZE, offset]
 		);
 
