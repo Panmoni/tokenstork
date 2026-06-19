@@ -382,7 +382,13 @@
 </svelte:head>
 
 <main class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-{#await data.streamed then s}
+{#await data.streamed}
+	<div class="animate-pulse p-8 space-y-4">
+		<div class="h-6 w-48 rounded bg-slate-200 dark:bg-zinc-800"></div>
+		<div class="h-4 w-96 rounded bg-slate-200 dark:bg-zinc-800"></div>
+		<div class="h-64 w-full rounded-xl bg-slate-200 dark:bg-zinc-800 mt-6"></div>
+	</div>
+{:then s}
 
 	<div class="flex items-start flex-wrap gap-4 sm:gap-6 mb-6">
 		<img src={iconHrefFor(token.icon, token.iconClearedHash)} alt={token.name ?? ''} class="w-24 h-24 sm:w-28 sm:h-28 rounded-full ts-surface-chip" />
@@ -729,7 +735,6 @@
 		share, mover, etc.). Lives between the BCMR compact bar and the
 		core stats grid so it doesn't wedge into either.
 	-->
-	{#await data.streamed then s}
 {#if s.watchlistCount > 0 ||
     s.moverBadges.gainerRank > 0 ||
     s.moverBadges.loserRank > 0 ||
@@ -1296,7 +1301,6 @@
 	{/if}
 
 
-{/await}
 	<!--
 		BCMR technical bits — NFT types schema + extensions — as collapsible
 		JSON dumps. URIs / status / tags / splitId already surface in the
