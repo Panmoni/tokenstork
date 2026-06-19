@@ -19,14 +19,9 @@
 	import StarButton from '$lib/components/StarButton.svelte';
 	import VoteButton from '$lib/components/VoteButton.svelte';
 	import { Tooltip, TooltipTrigger, TooltipContent } from '$lib/components/ui/tooltip';
+
 	let { data } = $props();
 
-	const _d = $derived(data as Record<string, any>);
-
-	// Streamed fields (tvlRank, priceChart, etc.) live inside
-	// data.streamed (a Promise) and are not on the top-level PageData
-	// type. _d provides a permissive type for script-level $derived
-	// expressions; optional chaining makes all accesses safe at runtime.
 	// Well-known BCMR URI keys → inline SVG icons. Paths copied from the
 	// Footer's social-icon block so the brand marks stay consistent
 	// across the site. Anything not listed here renders with the generic
@@ -296,12 +291,15 @@
 		return { label: 'Whale-controlled', classes: 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300' };
 	}
 
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	type StandingsEntry = { currentRank: number | null; bucket: string; streakDays: number; medalGold: number; medalSilver: number; medalBronze: number };
+	// Top-5 standings across the three vote-leaderboard buckets, gating
+	// the inline badge strip near the page header. Filtered to currentRank
+	// ≤ 5 so the strip only fires for honestly-top-tier rankings; the
+	// underlying `leaderboardStandings.standings` array still carries the
+	// full set for the dedicated "Sentiment standings" card lower down.
 	const standings = $derived(
-		(_d.leaderboardStandings as { standings?: StandingsEntry[] } | undefined)?.standings?.filter(
-			(st) => st.currentRank !== null && st.currentRank <= 5
-		) ?? []
+		s.leaderboardStandings.standings.filter(
+			(s) => s.currentRank !== null && s.currentRank <= 5
+		)
 	);
 	// Age-bucket badge — flags tokens minted recently as a caution
 	// signal. Returns null for tokens older than 30 days, in which
@@ -310,7 +308,21 @@
 	const ageBadge = $derived(getAgeBadge(token.genesisTime));
 	// Permanent rank label for the first-10 CashTokens ever minted.
 	// Empty string for ranks outside 1..10.
-	const firstNText = $derived(token.firstNRank != null ? firstNLabel(token.firstNRank) : '');
+	const firstNText = $derived(f.firstNRank != null ? firstNLabel(f.firstNRank) : '');
+	const showBadges = $derived(
+		f.watchlistCount > 0 ||
+			f.moverBadges.gainerRank > 0 ||
+			f.moverBadges.loserRank > 0 ||
+			f.moverBadges.tvlMoverRank > 0 ||
+			f.arbitrage.eligible ||
+			(f.cauldronTvlSharePct != null && f.cauldronTvlSharePct >= 10) ||
+			s.tvlRank != null ||
+			f.holdersRank != null ||
+			standings.length > 0 ||
+			f.firstNRank != null ||
+			ageBadge != null
+	);
+
 	// FT UTXO count derived from live_utxo_count − live_nft_count for
 	// hybrid (FT+NFT) tokens. Pure-FT and pure-NFT tokens skip the
 	// "composition" line entirely; the "FT UTXOs" framing only makes
@@ -320,19 +332,19 @@
 		(token.liveNftCount ?? 0) > 0 && ftCount > 0 && token.tokenType === 'FT+NFT'
 	);
 	const hasExtremes = $derived(
-		((_d.priceExtremes as any)?.['24h']?.min != null && (_d.priceExtremes as any)?.['24h']?.max != null) ||
-			((_d.priceExtremes as any)?.['7d']?.min != null && (_d.priceExtremes as any)?.['7d']?.max != null) ||
-			((_d.priceExtremes as any)?.['30d']?.min != null && (_d.priceExtremes as any)?.['30d']?.max != null)
+		(s.priceExtremes['24h'].min != null && s.priceExtremes['24h'].max != null) ||
+			(s.priceExtremes['7d'].min != null && s.priceExtremes['7d'].max != null) ||
+			(s.priceExtremes['30d'].min != null && s.priceExtremes['30d'].max != null)
 	);
 	const marketCapUSD = $derived.by(() => {
-		if (!token.currentSupply || (_d.priceUSD as number) === 0) return 0;
+		if (!token.currentSupply || f.priceUSD === 0) return 0;
 		// Integer-shift in BigInt space to keep the integer part exact for supplies > 2^53.
 		try {
 			const base = BigInt(token.currentSupply);
 			const divisor = 10n ** BigInt(Math.max(0, Math.min(8, token.decimals)));
 			const whole = Number(base / divisor);
 			const frac = Number(base % divisor) / Number(divisor);
-			return (whole + frac) * (_d.priceUSD as number);
+			return (whole + frac) * f.priceUSD;
 		} catch {
 			return 0;
 		}
@@ -382,13 +394,54 @@
 </svelte:head>
 
 <main class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-{#await data.streamed}
-	<div class="animate-pulse p-8 space-y-4">
-		<div class="h-6 w-48 rounded bg-slate-200 dark:bg-zinc-800"></div>
-		<div class="h-4 w-96 rounded bg-slate-200 dark:bg-zinc-800"></div>
-		<div class="h-64 w-full rounded-xl bg-slate-200 dark:bg-zinc-800 mt-6"></div>
+{#await data.fast}
+	<!-- Above-fold skeleton -->
+	<div class="animate-pulse space-y-6">
+		<div class="flex flex-wrap items-center gap-2 mb-6">
+			<div class="h-6 w-20 rounded bg-slate-200 dark:bg-zinc-800"></div>
+			<div class="h-6 w-24 rounded bg-slate-200 dark:bg-zinc-800"></div>
+			<div class="h-6 w-32 rounded bg-slate-200 dark:bg-zinc-800"></div>
+		</div>
+		<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-8">
+			<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800">
+				<div class="h-3 w-16 rounded bg-slate-200 dark:bg-zinc-800 mb-2"></div>
+				<div class="h-6 w-24 rounded bg-slate-200 dark:bg-zinc-800"></div>
+			</div>
+			<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800">
+				<div class="h-3 w-16 rounded bg-slate-200 dark:bg-zinc-800 mb-2"></div>
+				<div class="h-6 w-24 rounded bg-slate-200 dark:bg-zinc-800"></div>
+			</div>
+			<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800">
+				<div class="h-3 w-16 rounded bg-slate-200 dark:bg-zinc-800 mb-2"></div>
+				<div class="h-6 w-24 rounded bg-slate-200 dark:bg-zinc-800"></div>
+			</div>
+			<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800">
+				<div class="h-3 w-16 rounded bg-slate-200 dark:bg-zinc-800 mb-2"></div>
+				<div class="h-6 w-24 rounded bg-slate-200 dark:bg-zinc-800"></div>
+			</div>
+			<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800">
+				<div class="h-3 w-16 rounded bg-slate-200 dark:bg-zinc-800 mb-2"></div>
+				<div class="h-6 w-24 rounded bg-slate-200 dark:bg-zinc-800"></div>
+			</div>
+		</div>
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-8">
+			<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 space-y-3">
+				<div class="h-3 w-16 rounded bg-slate-200 dark:bg-zinc-800 mb-3"></div>
+				<div class="h-4 w-full rounded bg-slate-200 dark:bg-zinc-800"></div>
+				<div class="h-4 w-full rounded bg-slate-200 dark:bg-zinc-800"></div>
+				<div class="h-4 w-full rounded bg-slate-200 dark:bg-zinc-800"></div>
+				<div class="h-4 w-full rounded bg-slate-200 dark:bg-zinc-800"></div>
+				<div class="h-4 w-full rounded bg-slate-200 dark:bg-zinc-800"></div>
+			</div>
+			<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 space-y-3">
+				<div class="h-3 w-16 rounded bg-slate-200 dark:bg-zinc-800 mb-3"></div>
+				<div class="h-4 w-full rounded bg-slate-200 dark:bg-zinc-800"></div>
+				<div class="h-4 w-full rounded bg-slate-200 dark:bg-zinc-800"></div>
+				<div class="h-4 w-full rounded bg-slate-200 dark:bg-zinc-800"></div>
+			</div>
+		</div>
 	</div>
-{:then s}
+{:then f}
 
 	<div class="flex items-start flex-wrap gap-4 sm:gap-6 mb-6">
 		<img src={iconHrefFor(token.icon, token.iconClearedHash)} alt={token.name ?? ''} class="w-24 h-24 sm:w-28 sm:h-28 rounded-full ts-surface-chip" />
@@ -403,8 +456,8 @@
 			<div class="mt-2 flex items-center gap-3 flex-wrap">
 				<VoteButton
 					categoryHex={token.id}
-					upCount={s.votes.upCount}
-					downCount={s.votes.downCount}
+					upCount={f.votes.upCount}
+					downCount={f.votes.downCount}
 					size="md"
 				/>
 				<a
@@ -417,7 +470,7 @@
 					</svg>
 					Airdrop to holders
 				</a>
-				{#if s.canPublishBcmr}
+				{#if f.canPublishBcmr}
 					<a
 						href="/publish-bcmr"
 						class="inline-flex items-center gap-1 px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold"
@@ -434,11 +487,11 @@
 				<span class="px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-xs font-medium">
 					{token.tokenType}
 				</span>
-				{#if s.crc20}
+				{#if f.crc20}
 					<Crc20Badge
-						isCanonical={s.crc20.isCanonical}
-						symbol={s.crc20.symbol}
-						symbolIsHex={s.crc20.symbolIsHex}
+						isCanonical={f.crc20.isCanonical}
+						symbol={f.crc20.symbol}
+						symbolIsHex={f.crc20.symbolIsHex}
 						size="sm"
 					/>
 				{/if}
@@ -468,10 +521,10 @@
 				<FormatCategory category={token.id} />
 			</div>
 		</div>
-		{#if s.priceUSD > 0 || s.fexPriceUSD > 0}
-			{@const heroPrice = s.priceUSD > 0 ? s.priceUSD : s.fexPriceUSD}
-			{@const heroSource = s.priceUSD > 0 ? 'Cauldron' : 'Fex'}
-			{@const heroPct = s.priceUSD > 0 ? s.moverBadges.pricePct : null}
+		{#if f.priceUSD > 0 || f.fexPriceUSD > 0}
+			{@const heroPrice = f.priceUSD > 0 ? f.priceUSD : f.fexPriceUSD}
+			{@const heroSource = f.priceUSD > 0 ? 'Cauldron' : 'Fex'}
+			{@const heroPct = f.priceUSD > 0 ? f.moverBadges.pricePct : null}
 			{@const heroSymbol = token.symbol ? stripEmoji(token.symbol) : ''}
 			<div class="shrink-0 sm:text-right">
 				<div class="text-4xl md:text-5xl font-mono font-bold tracking-tight ts-text-strong leading-none">
@@ -504,8 +557,9 @@
 		JSON) stay in the lower "BCMR technical" section so this strip
 		stays glanceable.
 	-->
-	{#if s.bcmr}
-		{@const bcmr = s.bcmr}
+	
+{#if data.bcmr}
+		{@const bcmr = data.bcmr}
 		{@const uriEntries = bcmr.uris
 			? Object.entries(bcmr.uris).filter(([k, v]) => uriSpec(k, v) !== null && safeUri(v))
 			: []}
@@ -601,8 +655,8 @@
 		    canonical winner pinned at the top
 		See docs/crc20-plan.md for the protocol design.
 	-->
-	{#if s.crc20}
-		{@const crc20 = s.crc20}
+	{#if f.crc20}
+		{@const crc20 = f.crc20}
 		<div class="mb-8 p-5 rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-950/10">
 			<div class="flex items-start justify-between gap-4 flex-wrap mb-4">
 				<div class="flex items-center gap-3">
@@ -735,19 +789,9 @@
 		share, mover, etc.). Lives between the BCMR compact bar and the
 		core stats grid so it doesn't wedge into either.
 	-->
-{#if s.watchlistCount > 0 ||
-    s.moverBadges.gainerRank > 0 ||
-    s.moverBadges.loserRank > 0 ||
-    s.moverBadges.tvlMoverRank > 0 ||
-    (s.arbitrage?.eligible ?? false) ||
-    ((s.cauldronTvlSharePct ?? null) != null && (s.cauldronTvlSharePct ?? 0) >= 10) ||
-    (s.tvlRank ?? null) != null ||
-    (s.holdersRank ?? null) != null ||
-    (s.leaderboardStandings?.standings?.filter(st => st.currentRank && st.currentRank <= 5)?.length ?? 0) > 0 ||
-    s.firstNRank != null ||
-    ageBadge != null}
+	{#if showBadges}
 		<div class="mb-6 flex flex-wrap items-center gap-2">
-			{#if s.firstNRank != null}
+			{#if f.firstNRank != null}
 				<!--
 					Permanent rank ribbon — first-10 CashTokens ever minted.
 					Order is fixed by `(genesis_block ASC, category ASC)` over
@@ -784,7 +828,7 @@
 					⚠️ {ageBadgeLabel(ageBadge)}
 				</span>
 			{/if}
-			{#if (s.tvlRank ?? null) != null}
+			{#if s.tvlRank != null}
 				<a
 					href="/?sort=tvl"
 					class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-600 text-white text-xs font-semibold hover:bg-cyan-700"
@@ -793,90 +837,90 @@
 					🏆 #{s.tvlRank} by Cauldron TVL
 				</a>
 			{/if}
-			{#if (s.holdersRank ?? null) != null}
+			{#if f.holdersRank != null}
 				<a
 					href="/?sort=holders"
 					class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700"
-					title={`Ranked #${s.holdersRank} by distinct on-chain holders across all non-moderated CashTokens. Exchange covenants count as a single holder, so actively-traded tokens may be slightly understated. Click to view the directory sorted by holders.`}
+					title={`Ranked #${f.holdersRank} by distinct on-chain holders across all non-moderated CashTokens. Exchange covenants count as a single holder, so actively-traded tokens may be slightly understated. Click to view the directory sorted by holders.`}
 				>
-					👥 #{s.holdersRank} by Holders
+					👥 #{f.holdersRank} by Holders
 				</a>
 			{/if}
-			{#if s.cauldronTvlSharePct != null && s.cauldronTvlSharePct >= 10}
+			{#if f.cauldronTvlSharePct != null && f.cauldronTvlSharePct >= 10}
 				<span
 					class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-600 text-white text-xs font-semibold"
-					title="This token's Cauldron pool TVL is {s.cauldronTvlSharePct.toFixed(1)}% of the entire Cauldron exchange. Concentration this high means the pool is a major part of the AMM's liquidity."
+					title="This token's Cauldron pool TVL is {f.cauldronTvlSharePct.toFixed(1)}% of the entire Cauldron exchange. Concentration this high means the pool is a major part of the AMM's liquidity."
 				>
-					⚡ {s.cauldronTvlSharePct.toFixed(1)}% of Cauldron TVL
+					⚡ {f.cauldronTvlSharePct.toFixed(1)}% of Cauldron TVL
 				</span>
 			{/if}
-			{#each standings as st (st.bucket)}
+			{#each standings as s (s.bucket)}
 				<a
 					href="/#community-sentiment"
-					class={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${BUCKET_TONE[st.bucket as keyof typeof BUCKET_TONE]}`}
-					title={`Ranked #${st.currentRank} in ${BUCKET_LABEL[st.bucket as keyof typeof BUCKET_LABEL]} on ${s.leaderboardStandings.latestDay}. Click to view leaderboards.`}
+					class={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${BUCKET_TONE[s.bucket]}`}
+					title={`Ranked #${s.currentRank} in ${BUCKET_LABEL[s.bucket]} on ${s.leaderboardStandings.latestDay}. Click to view leaderboards.`}
 				>
-					<span>#{st.currentRank} {BUCKET_LABEL[st.bucket as keyof typeof BUCKET_LABEL]}</span>
-					{#if st.streakDays >= 3}
-						<span class="opacity-80" title="{st.streakDays}-day streak in the top 5">🔥{st.streakDays}d</span>
+					<span>#{s.currentRank} {BUCKET_LABEL[s.bucket]}</span>
+					{#if s.streakDays >= 3}
+						<span class="opacity-80" title="{s.streakDays}-day streak in the top 5">🔥{s.streakDays}d</span>
 					{/if}
-					{#if st.medalGold > 0}
-						<span title="{st.medalGold} day{st.medalGold === 1 ? '' : 's'} ranked #1 lifetime">🥇{st.medalGold}</span>
-					{:else if st.medalSilver > 0}
-						<span title="{st.medalSilver} day{st.medalSilver === 1 ? '' : 's'} ranked top-3 lifetime">🥈{st.medalSilver}</span>
-					{:else if st.medalBronze > 0}
-						<span title="{st.medalBronze} day{st.medalBronze === 1 ? '' : 's'} ranked top-5 lifetime">🥉{st.medalBronze}</span>
+					{#if s.medalGold > 0}
+						<span title="{s.medalGold} day{s.medalGold === 1 ? '' : 's'} ranked #1 lifetime">🥇{s.medalGold}</span>
+					{:else if s.medalSilver > 0}
+						<span title="{s.medalSilver} day{s.medalSilver === 1 ? '' : 's'} ranked top-3 lifetime">🥈{s.medalSilver}</span>
+					{:else if s.medalBronze > 0}
+						<span title="{s.medalBronze} day{s.medalBronze === 1 ? '' : 's'} ranked top-5 lifetime">🥉{s.medalBronze}</span>
 					{/if}
 				</a>
 			{/each}
-			{#if s.moverBadges.gainerRank > 0}
-				{@const pct = s.moverBadges.pricePct ?? 0}
+			{#if f.moverBadges.gainerRank > 0}
+				{@const pct = f.moverBadges.pricePct ?? 0}
 				<span
 					class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs font-semibold"
-					title="Top {s.moverBadges.gainerRank} of 5 24h gainers on Cauldron"
+					title="Top {f.moverBadges.gainerRank} of 5 24h gainers on Cauldron"
 				>
-					📈 #{s.moverBadges.gainerRank} 24h gainer
+					📈 #{f.moverBadges.gainerRank} 24h gainer
 					{#if pct !== 0}<span class="opacity-80">+{pct.toFixed(1)}%</span>{/if}
 				</span>
 			{/if}
-			{#if s.moverBadges.loserRank > 0}
-				{@const pct = s.moverBadges.pricePct ?? 0}
+			{#if f.moverBadges.loserRank > 0}
+				{@const pct = f.moverBadges.pricePct ?? 0}
 				<span
 					class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-xs font-semibold"
-					title="Top {s.moverBadges.loserRank} of 5 24h losers on Cauldron"
+					title="Top {f.moverBadges.loserRank} of 5 24h losers on Cauldron"
 				>
-					📉 #{s.moverBadges.loserRank} 24h loser
+					📉 #{f.moverBadges.loserRank} 24h loser
 					{#if pct !== 0}<span class="opacity-80">{pct.toFixed(1)}%</span>{/if}
 				</span>
 			{/if}
-			{#if s.moverBadges.tvlMoverRank > 0}
-				{@const pct = s.moverBadges.tvlPct ?? 0}
+			{#if f.moverBadges.tvlMoverRank > 0}
+				{@const pct = f.moverBadges.tvlPct ?? 0}
 				<span
 					class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 text-xs font-semibold"
-					title="Top {s.moverBadges.tvlMoverRank} of 5 24h TVL movers on Cauldron"
+					title="Top {f.moverBadges.tvlMoverRank} of 5 24h TVL movers on Cauldron"
 				>
-					💧 #{s.moverBadges.tvlMoverRank} TVL mover
+					💧 #{f.moverBadges.tvlMoverRank} TVL mover
 					{#if pct !== 0}<span class="opacity-80">{pct >= 0 ? '+' : ''}{pct.toFixed(1)}%</span>{/if}
 				</span>
 			{/if}
-			{#if (s.arbitrage?.eligible ?? false)}
+			{#if f.arbitrage.eligible}
 				<a
 					href="/arbitrage"
 					class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-fuchsia-100 dark:bg-fuchsia-900/30 text-fuchsia-700 dark:text-fuchsia-300 text-xs font-semibold hover:bg-fuchsia-200 dark:hover:bg-fuchsia-900/50"
-					title={`Listed on ${s.arbitrage.venuesPresent} venues — visible on the /arbitrage page${s.arbitrage.rawSpreadPct != null ? ` with a ${s.arbitrage.rawSpreadPct.toFixed(2)}% raw spread` : ''}`}
+					title={`Listed on ${f.arbitrage.venuesPresent} venues — visible on the /arbitrage page${f.arbitrage.rawSpreadPct != null ? ` with a ${f.arbitrage.rawSpreadPct.toFixed(2)}% raw spread` : ''}`}
 				>
 					⇄ Arbitrage
-					{#if s.arbitrage.rawSpreadPct != null}
-						<span class="opacity-80">{s.arbitrage.rawSpreadPct.toFixed(2)}%</span>
+					{#if f.arbitrage.rawSpreadPct != null}
+						<span class="opacity-80">{f.arbitrage.rawSpreadPct.toFixed(2)}%</span>
 					{/if}
 				</a>
 			{/if}
-			{#if s.watchlistCount > 0}
+			{#if f.watchlistCount > 0}
 				<span
 					class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium ts-text-strong ts-surface-chip"
 					title="Number of distinct wallets that have added this token to their watchlist"
 				>
-					⭐ On {s.watchlistCount} watchlist{s.watchlistCount === 1 ? '' : 's'}
+					⭐ On {f.watchlistCount} watchlist{f.watchlistCount === 1 ? '' : 's'}
 				</span>
 			{/if}
 		</div>
@@ -931,10 +975,10 @@
 		<div class="p-4 rounded-xl border ts-border-subtle">
 			<div class="text-xs uppercase tracking-wider mb-1 ts-text-muted">TVL (USD)</div>
 			<div class="text-xl font-mono">
-				{s.tvlUSD > 0 ? formatMarketCap(s.tvlUSD.toString()) : '—'}
+				{f.tvlUSD > 0 ? formatMarketCap(f.tvlUSD.toString()) : '—'}
 			</div>
 		</div>
-		{#if marketCapUSD > 0 && s.tvlUSD >= s.mcapTvlThresholdUSD}
+		{#if marketCapUSD > 0 && f.tvlUSD >= f.mcapTvlThresholdUSD}
 			<div class="p-4 rounded-xl border col-span-2 md:col-span-1 ts-border-subtle">
 				<div class="text-xs uppercase tracking-wider mb-1 ts-text-muted" title="Hidden for tokens whose Cauldron TVL is below the average TVL of the top half of listed tokens — caps derived from negligible liquidity would skew rankings.">Market cap</div>
 				<div class="text-xl font-mono">{formatMarketCap(marketCapUSD.toString())}</div>
@@ -994,19 +1038,19 @@
 						{formatAge(ageDays)} <span class="text-slate-500 ml-1">({ageDays.toLocaleString()}d)</span>
 					</dd>
 				</div>
-				{#if s.topHolderSharePct != null}
+				{#if f.topHolderSharePct != null}
 					<div class="flex justify-between gap-3">
 						<dt class="ts-text-muted">Top holder controls</dt>
-						<dd class="font-mono {s.topHolderSharePct >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-zinc-100'}" title="Largest single holder's balance ÷ current supply">
-							{s.topHolderSharePct.toFixed(s.topHolderSharePct >= 10 ? 1 : 2)}%
+						<dd class="font-mono {f.topHolderSharePct >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-zinc-100'}" title="Largest single holder's balance ÷ current supply">
+							{f.topHolderSharePct.toFixed(f.topHolderSharePct >= 10 ? 1 : 2)}%
 						</dd>
 					</div>
 				{/if}
-				{#if s.top10HolderSharePct != null && s.holders.length >= 5}
+				{#if f.top10HolderSharePct != null && f.holders.length >= 5}
 					<div class="flex justify-between gap-3">
-						<dt class="ts-text-muted">Top {s.holders.length} hold</dt>
+						<dt class="ts-text-muted">Top {f.holders.length} hold</dt>
 						<dd class="font-mono ts-text-primary">
-							{s.top10HolderSharePct.toFixed(s.top10HolderSharePct >= 10 ? 1 : 2)}%
+							{f.top10HolderSharePct.toFixed(f.top10HolderSharePct >= 10 ? 1 : 2)}%
 						</dd>
 					</div>
 				{/if}
@@ -1033,19 +1077,19 @@
 						</dd>
 					</div>
 				{/if}
-				{#if s.venueListings.cauldronFirstListedAt}
+				{#if f.venueListings.cauldronFirstListedAt}
 					<div class="flex justify-between gap-3">
 						<dt class="ts-text-muted">Listed on Cauldron</dt>
-						<dd class="font-mono ts-text-primary" title={`First seen on Cauldron at ${formatAbsoluteDate(s.venueListings.cauldronFirstListedAt)}`}>
-							{formatAbsoluteDate(s.venueListings.cauldronFirstListedAt)}
+						<dd class="font-mono ts-text-primary" title={`First seen on Cauldron at ${formatAbsoluteDate(f.venueListings.cauldronFirstListedAt)}`}>
+							{formatAbsoluteDate(f.venueListings.cauldronFirstListedAt)}
 						</dd>
 					</div>
 				{/if}
-				{#if s.venueListings.fexFirstListedAt}
+				{#if f.venueListings.fexFirstListedAt}
 					<div class="flex justify-between gap-3">
 						<dt class="ts-text-muted">Listed on Fex</dt>
 						<dd class="font-mono ts-text-primary">
-							{formatAbsoluteDate(s.venueListings.fexFirstListedAt)}
+							{formatAbsoluteDate(f.venueListings.fexFirstListedAt)}
 						</dd>
 					</div>
 				{/if}
@@ -1102,7 +1146,7 @@
 		{/if}
 	</section>
 
-	{#if s.priceUSD > 0 || s.fexPriceUSD > 0}
+	{#if f.priceUSD > 0 || f.fexPriceUSD > 0}
 		<!--
 			Venue comparison. Renders only when at least one AMM has data;
 			always shows both columns (Cauldron + Fex) when either fires so
@@ -1110,8 +1154,8 @@
 			at a glance. Spread % shown on the cheaper side — the arb-
 			visibility surface the plan calls out.
 		-->
-		{@const cauldronPx = s.priceUSD}
-		{@const fexPx = s.fexPriceUSD}
+		{@const cauldronPx = f.priceUSD}
+		{@const fexPx = f.fexPriceUSD}
 		{@const bothPresent = cauldronPx > 0 && fexPx > 0}
 		{@const spreadPct =
 			bothPresent && Math.min(cauldronPx, fexPx) > 0
@@ -1151,7 +1195,7 @@
 						</div>
 						<div>
 							<div class="text-xs text-slate-500 mb-1">TVL</div>
-							<div class="font-mono">{s.tvlUSD > 0 ? formatMarketCap(s.tvlUSD.toString()) : '—'}</div>
+							<div class="font-mono">{f.tvlUSD > 0 ? formatMarketCap(f.tvlUSD.toString()) : '—'}</div>
 						</div>
 					</div>
 				</div>
@@ -1172,7 +1216,7 @@
 						</div>
 						<div>
 							<div class="text-xs text-slate-500 mb-1">TVL</div>
-							<div class="font-mono">{s.fexTvlUSD > 0 ? formatMarketCap(s.fexTvlUSD.toString()) : '—'}</div>
+							<div class="font-mono">{f.fexTvlUSD > 0 ? formatMarketCap(f.fexTvlUSD.toString()) : '—'}</div>
 						</div>
 					</div>
 				</div>
@@ -1186,7 +1230,19 @@
 		toggles below the chart let the user widen/narrow without
 		page state — `?range=24h|7d|30d|90d|1y|all` is bookmarkable.
 	-->
-	<section class="mb-8" id="chart">
+	
+{#await data.slow}
+		<!-- Below-fold skeleton -->
+		<div class="animate-pulse space-y-4 mt-6">
+			<div class="h-64 w-full rounded-xl bg-slate-200 dark:bg-zinc-800"></div>
+			<div class="h-6 w-48 rounded bg-slate-200 dark:bg-zinc-800 mt-4"></div>
+			<div class="h-6 w-full rounded bg-slate-200 dark:bg-zinc-800"></div>
+			<div class="h-6 w-full rounded bg-slate-200 dark:bg-zinc-800"></div>
+			<div class="h-6 w-full rounded bg-slate-200 dark:bg-zinc-800"></div>
+			<div class="h-6 w-full rounded bg-slate-200 dark:bg-zinc-800"></div>
+		</div>
+	{:then s}
+<section class="mb-8" id="chart">
 		<div class="flex items-baseline justify-between mb-3 flex-wrap gap-y-2">
 			<h2 class="text-xl font-bold text-slate-900 dark:text-white">
 				Price &amp; volume
@@ -1220,7 +1276,7 @@
 			<PriceChart
 				buckets={s.priceChart.buckets}
 				decimals={data.token.decimals}
-				bchPriceUSD={s.bchPriceUSD}
+				bchPriceUSD={f.bchPriceUSD}
 				rangeLabel={s.priceChart.rangeLabel}
 			/>
 		</div>
@@ -1261,7 +1317,7 @@
 						{#each s.tapswapOffers as offer (offer.id)}
 							{@const wantSatsNum = Number(offer.wantSats)}
 							{@const wantBch = Number.isFinite(wantSatsNum) ? wantSatsNum / 1e8 : 0}
-							{@const wantUsd = wantBch * (s.bchPriceUSD ?? 0)}
+							{@const wantUsd = wantBch * (f.bchPriceUSD ?? 0)}
 							<tr class="border-b border-slate-100 dark:border-zinc-800/50">
 								<td class="px-4 py-3 font-mono text-xs">
 									{#if offer.hasCommitment}
@@ -1300,14 +1356,14 @@
 		</section>
 	{/if}
 
-
 	<!--
 		BCMR technical bits — NFT types schema + extensions — as collapsible
 		JSON dumps. URIs / status / tags / splitId already surface in the
 		compact bar near the top; this section is strictly the power-user
+		payload and only renders if either dump exists.
 	-->
-	{#if s.bcmr}
-		{@const bcmr = s.bcmr}
+	{#if data.bcmr}
+		{@const bcmr = data.bcmr}
 		{@const extEntries = bcmr.extensions ? Object.entries(bcmr.extensions) : []}
 		{@const nftEntries = bcmr.nftTypes ? Object.entries(bcmr.nftTypes) : []}
 		{#if bcmr.nftsDescription || nftEntries.length > 0 || extEntries.length > 0}
@@ -1350,7 +1406,7 @@
 		{/if}
 	{/if}
 
-	{#if s.holders.length > 0}
+	{#if f.holders.length > 0}
 		{@const supplyBig = (() => {
 			try {
 				return token.currentSupply ? BigInt(token.currentSupply) : 0n;
@@ -1379,7 +1435,7 @@
 						</tr>
 					</thead>
 					<tbody>
-						{#each s.holders as holder, i (holder.address)}
+						{#each f.holders as holder, i (holder.address)}
 							{@const pct = (() => {
 								if (supplyBig === 0n) return null;
 								try {
@@ -1587,5 +1643,6 @@
 		</section>
 	{/if}
 
+{/await}
 {/await}
 </main>
