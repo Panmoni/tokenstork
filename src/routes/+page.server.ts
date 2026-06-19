@@ -117,9 +117,9 @@ const OUTER_NAME_SORTABLE = NAME_SORTABLE.replace(/\bm\.name\b/g, 'top.name');
 
 const OUTER_SORTS: Record<string, string> = {
 	name: `${OUTER_NAME_QUALITY}, LOWER(${OUTER_NAME_SORTABLE}) ASC NULLS LAST, top.first_seen_at ASC`,
-	supply: `top.current_supply DESC NULLS LAST, ${OUTER_NAME_QUALITY}, ${OUTER_NAME_SORTABLE} ASC NULLS LAST`,
+	supply: `top.current_supply::numeric DESC NULLS LAST, ${OUTER_NAME_QUALITY}, ${OUTER_NAME_SORTABLE} ASC NULLS LAST`,
 	holders: `top.holder_count DESC NULLS LAST, ${OUTER_NAME_QUALITY}, ${OUTER_NAME_SORTABLE} ASC NULLS LAST`,
-	tvl: `top.cauldron_tvl_satoshis DESC NULLS LAST, ${OUTER_NAME_QUALITY}, ${OUTER_NAME_SORTABLE} ASC NULLS LAST`,
+	tvl: `top.cauldron_tvl_satoshis::bigint DESC NULLS LAST, ${OUTER_NAME_QUALITY}, ${OUTER_NAME_SORTABLE} ASC NULLS LAST`,
 	recent: 'top.genesis_block DESC, top.first_seen_at DESC',
 	oldest: 'top.genesis_block ASC, top.category ASC',
 	upvoted: `(vw.hot_up - vw.hot_down) DESC, vw.hot_up DESC, ${OUTER_NAME_QUALITY}, ${OUTER_NAME_SORTABLE} ASC NULLS LAST`,
