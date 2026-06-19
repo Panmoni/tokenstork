@@ -325,14 +325,14 @@
 			((_d.priceExtremes as any)?.['30d']?.min != null && (_d.priceExtremes as any)?.['30d']?.max != null)
 	);
 	const marketCapUSD = $derived.by(() => {
-		if (!token.currentSupply || s.priceUSD === 0) return 0;
+		if (!token.currentSupply || (_d.priceUSD as number) === 0) return 0;
 		// Integer-shift in BigInt space to keep the integer part exact for supplies > 2^53.
 		try {
 			const base = BigInt(token.currentSupply);
 			const divisor = 10n ** BigInt(Math.max(0, Math.min(8, token.decimals)));
 			const whole = Number(base / divisor);
 			const frac = Number(base % divisor) / Number(divisor);
-			return (whole + frac) * s.priceUSD;
+			return (whole + frac) * (_d.priceUSD as number);
 		} catch {
 			return 0;
 		}
