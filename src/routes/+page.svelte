@@ -7,41 +7,26 @@
 	let { data } = $props();
 
 	const fmt = (n: number) => n.toLocaleString('en-US');
+
+	// Skeleton utility classes
+	const sk = 'animate-pulse bg-slate-200 dark:bg-zinc-700 rounded';
 </script>
 
 <svelte:head>
-	<!--
-		Explicit title on the home page so navigating from a sub-page
-		(e.g. /stats, /faq) back to / updates the document title.
-		Without this, <svelte:head><title> elements from sub-pages
-		persist in the DOM and the tab label gets stuck on the last
-		visited page's title.
-	-->
 	<title>Token Stork: Discover, Track and Analyze BCH Cash Tokens</title>
 </svelte:head>
 
 <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-	<!--
-		24h movers leads the directory — same component used on /stats so
-		gainers/losers/TVL-movers stay in lockstep. Lives ABOVE the token grid
-		so visitors land on the active-trading signal first; the long
-		exhaustive directory is what they scroll to. The "CashTokens" h1
-		that used to live here was redundant with the "Token Stork" wordmark
-		in the header — removed for vertical density.
-	-->
+	<!-- Movers24h — real data from sync load -->
 	<Movers24h movers={data.movers} />
 
+	<!-- Community sentiment — real data from sync load -->
 	{#if data.voteLeaders.totalVotes > 0}
 		<section class="mb-8">
 			<div class="flex items-baseline justify-between mb-3">
 				<div class="flex items-center gap-1.5">
 					<h2 class="text-xl font-semibold text-slate-900 dark:text-white">Community sentiment</h2>
-					<a
-						href="/faq#faq-vote-ranking"
-						class="text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
-						aria-label="About community sentiment — opens FAQ"
-						title="Ranks weight votes by voter tenure × recency (7-day half-life). Click for the full formula."
-					>
+					<a href="/faq#faq-vote-ranking" class="text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 transition-colors" aria-label="About community sentiment — opens FAQ" title="Ranks weight votes by voter tenure × recency (7-day half-life).">
 						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4" aria-hidden="true">
 							<circle cx="12" cy="12" r="10" />
 							<line x1="12" y1="16" x2="12" y2="12" />
@@ -49,9 +34,7 @@
 						</svg>
 					</a>
 				</div>
-				<span class="text-xs ts-text-muted">
-					{fmt(data.voteLeaders.totalVotes)} vote{data.voteLeaders.totalVotes === 1 ? '' : 's'} cast
-				</span>
+				<span class="text-xs ts-text-muted">{fmt(data.voteLeaders.totalVotes)} vote{data.voteLeaders.totalVotes === 1 ? '' : 's'} cast</span>
 			</div>
 			<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 				{#each [
@@ -96,17 +79,31 @@
 		</section>
 	{/if}
 
-	{#if data.error}
-		<div class="text-center py-12">
-			<div class="text-red-500 text-lg mb-2">{data.error}</div>
-			<div class="ts-text-muted">Please try again in a moment.</div>
+	<!--
+		Token grid — deferred (heavy CTE query). Skeleton: a 3-column card
+		grid matching TokenGrid's responsive layout, with icon circles + text
+		line placeholders for each row.
+	-->
+	{#await data.tokenGrid}
+		<div class="animate-pulse space-y-3">
+			{#each Array(5) as _}
+				<div class="flex items-center gap-3 p-3 rounded-xl border ts-border-subtle">
+					<div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-zinc-700"></div>
+					<div class="flex-1 space-y-2">
+						<div class="h-4 bg-slate-200 dark:bg-zinc-700 rounded w-1/3"></div>
+						<div class="h-3 bg-slate-200 dark:bg-zinc-700 rounded w-1/2"></div>
+					</div>
+				</div>
+			{/each}
 		</div>
-	{:else}
-		<TokenGrid
-			tokens={data.tokens}
-			total={data.total}
-			limit={data.limit}
-			offset={data.offset}
-		/>
-	{/if}
+	{:then tg}
+		{#if tg.error}
+			<div class="text-center py-12">
+				<div class="text-red-500 text-lg mb-2">{tg.error}</div>
+				<div class="ts-text-muted">Please try again in a moment.</div>
+			</div>
+		{:else}
+			<TokenGrid tokens={tg.tokens} total={tg.total} limit={tg.limit} offset={tg.offset} />
+		{/if}
+	{/await}
 </main>

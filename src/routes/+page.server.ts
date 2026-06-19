@@ -462,171 +462,159 @@ export const load: PageServerLoad = async ({ url }) => {
 		]);
 		const total = Number(countRes.rows[0]?.total ?? 0);
 
-		const dataRes = await query<DbRow>(
-			`${tenureCte},
-			top AS (
-				SELECT
-					t.category,
-					t.token_type,
-					t.genesis_block,
-					t.genesis_time,
-					t.first_seen_at,
-					m.name,
-					m.symbol,
-					m.decimals,
-					m.description,
-					m.icon_uri,
-					m.fetched_at AS metadata_fetched_at,
-					s.current_supply::text AS current_supply,
-					s.live_utxo_count,
-					s.live_nft_count,
-					s.holder_count,
-					s.has_active_minting,
-					s.is_fully_burned,
-					s.verified_at,
-					vl_cauldron.price_sats    AS cauldron_price_sats,
-					vl_cauldron.tvl_satoshis::text AS cauldron_tvl_satoshis,
-					vl_tapswap.listing_count::text AS tapswap_listing_count,
-					vl_fex.price_sats         AS fex_price_sats,
-					vl_fex.tvl_satoshis::text AS fex_tvl_satoshis,
-					(c.category IS NOT NULL) AS is_crc20,
-					c.symbol           AS crc20_symbol,
-					c.symbol_is_hex    AS crc20_symbol_is_hex,
-					c.is_canonical     AS crc20_is_canonical,
-					c.name             AS crc20_name
-				${fromJoins}
-				${whereClause}
-				ORDER BY ${searchOrderPrefix}${sort}
-				LIMIT $${values.length + 1} OFFSET $${values.length + 2}
-			)
-			SELECT top.*,
-				   ph_1h.price_sats   AS price_sats_1h_ago,
-				   ph_24h.price_sats  AS price_sats_24h_ago,
-				   ph_7d.price_sats   AS price_sats_7d_ago,
-				   ph_spark.points    AS sparkline_points,
-				   encode(imo.content_hash, 'hex') AS icon_cleared_hash,
-				   v.up_count,
-				   v.down_count
-			  FROM top
-			  ${fromJoinsHeavy}
-			  ORDER BY ${outerSearchOrderPrefix}${OUTER_SORTS[sortKey] ?? OUTER_SORTS[DEFAULT_SORT]}`,
-			[...values, PAGE_SIZE, offset]
-		);
-
-		// First-10 CashTokens-ever lookup. Lazy-cached in-process; the
-		// underlying SQL fires exactly once per server boot.
-		const firstNMap = await getFirstNMap();
-
-		const tokens: TokenApiRow[] = dataRes.rows.map((row) => {
-			const verifiedAt = row.verified_at?.getTime() ?? null;
-			const firstSeenAt = Math.floor(row.first_seen_at.getTime() / 1000);
-			const genesisTime = Math.floor(row.genesis_time.getTime() / 1000);
-			const categoryHex = hexFromBytes(row.category)!;
-			const firstNRank = firstNMap.get(categoryHex) ?? null;
-			const metaAt = row.metadata_fetched_at?.getTime();
-			const updatedAtMs = Math.max(
-				verifiedAt ?? 0,
-				metaAt ?? 0,
-				row.first_seen_at.getTime()
-			);
-			// node-pg returns BIGINT as a string to preserve precision. Parse
-			// to number at the edge — TVL in satoshis tops out at ~2.1e15
-			// (21M BCH), well under Number.MAX_SAFE_INTEGER (~9e15).
-			let tvl: number | null = null;
-			if (row.cauldron_tvl_satoshis != null) {
-				const parsed = Number(row.cauldron_tvl_satoshis);
-				if (Number.isFinite(parsed)) tvl = parsed;
-			}
-			let fexTvl: number | null = null;
-			if (row.fex_tvl_satoshis != null) {
-				const parsed = Number(row.fex_tvl_satoshis);
-				if (Number.isFinite(parsed)) fexTvl = parsed;
-			}
-
-			// Compute % change server-side rather than shipping two prices
-			// per window. A window is null-safe: if either end is missing
-			// the % is null and the UI renders a placeholder. Skip divide-
-			// by-zero when the older price was zero (happens if a venue
-			// briefly reported 0; shouldn't recur but defensive).
-			const pct = (oldP: number | null): number | null => {
-				const now = row.cauldron_price_sats;
-				if (now == null || oldP == null || oldP === 0) return null;
-				return ((now - oldP) / oldP) * 100;
-			};
-			const priceChange1hPct = pct(row.price_sats_1h_ago);
-			const priceChange24hPct = pct(row.price_sats_24h_ago);
-			const priceChange7dPct = pct(row.price_sats_7d_ago);
-			const sparklinePoints = Array.isArray(row.sparkline_points)
-				? row.sparkline_points.filter((n) => Number.isFinite(n))
-				: [];
-			return {
-				id: categoryHex,
-				name: row.name,
-				symbol: row.symbol,
-				decimals: row.decimals ?? 0,
-				description: row.description,
-				icon: row.icon_uri,
-				tokenType: row.token_type,
-				isVerifiedOnchain: row.verified_at !== null,
-				isFullyBurned: row.is_fully_burned ?? false,
-				currentSupply: row.current_supply ?? null,
-				liveUtxoCount: row.live_utxo_count,
-				liveNftCount: row.live_nft_count,
-				holderCount: row.holder_count,
-				hasActiveMinting: row.has_active_minting ?? false,
-				firstSeenAt,
-				genesisTime,
-				firstNRank,
-				genesisBlock: row.genesis_block,
-				updatedAt: Math.floor(updatedAtMs / 1000),
-				cauldronPriceSats: row.cauldron_price_sats,
-				cauldronTvlSatoshis: tvl,
-				tapswapListingCount: row.tapswap_listing_count
-					? Number(row.tapswap_listing_count)
-					: 0,
-				fexPriceSats: row.fex_price_sats,
-				fexTvlSatoshis: fexTvl,
-				priceChange1hPct,
-				priceChange24hPct,
-				priceChange7dPct,
-				sparklinePoints,
-				iconClearedHash: row.icon_cleared_hash ?? null,
-				upCount: row.up_count ?? 0,
-				downCount: row.down_count ?? 0,
-				isCrc20: row.is_crc20 === true,
-				crc20Symbol: row.crc20_symbol ?? null,
-				crc20SymbolIsHex: row.crc20_symbol_is_hex === true,
-				crc20IsCanonical: row.crc20_is_canonical === true,
-				crc20Name: row.crc20_name ?? null
-			};
-		});
-
-		// 24h movers + vote leaderboards — fired in parallel; each helper
-		// has its own internal try/catch so a single failure degrades to
-		// an empty card rather than a homepage error.
+		// Synchronous: movers + vote leaders (~50ms). Render instantly
+		// while the heavy token-grid query streams in.
 		const [movers, voteLeaders] = await Promise.all([getMovers24h(), getVoteLeaderboards()]);
 
+		// Deferred: the CTE-based token list with lateral joins (~1.5s).
+		const tokenGridPromise = (async (): Promise<{
+			tokens: TokenApiRow[];
+			total: number;
+			limit: number;
+			offset: number;
+			error: string | null;
+		}> => {
+			try {
+				const dataRes = await query<DbRow>(
+					`${tenureCte},
+					top AS (
+						SELECT
+							t.category,
+							t.token_type,
+							t.genesis_block,
+							t.genesis_time,
+							t.first_seen_at,
+							m.name,
+							m.symbol,
+							m.decimals,
+							m.description,
+							m.icon_uri,
+							m.fetched_at AS metadata_fetched_at,
+							s.current_supply::text AS current_supply,
+							s.live_utxo_count,
+							s.live_nft_count,
+							s.holder_count,
+							s.has_active_minting,
+							s.is_fully_burned,
+							s.verified_at,
+							vl_cauldron.price_sats    AS cauldron_price_sats,
+							vl_cauldron.tvl_satoshis::text AS cauldron_tvl_satoshis,
+							vl_tapswap.listing_count::text AS tapswap_listing_count,
+							vl_fex.price_sats         AS fex_price_sats,
+							vl_fex.tvl_satoshis::text AS fex_tvl_satoshis,
+							(c.category IS NOT NULL) AS is_crc20,
+							c.symbol           AS crc20_symbol,
+							c.symbol_is_hex    AS crc20_symbol_is_hex,
+							c.is_canonical     AS crc20_is_canonical,
+							c.name             AS crc20_name
+						${fromJoins}
+						${whereClause}
+						ORDER BY ${searchOrderPrefix}${sort}
+						LIMIT $${values.length + 1} OFFSET $${values.length + 2}
+					)
+					SELECT top.*,
+						   ph_1h.price_sats   AS price_sats_1h_ago,
+						   ph_24h.price_sats  AS price_sats_24h_ago,
+						   ph_7d.price_sats   AS price_sats_7d_ago,
+						   ph_spark.points    AS sparkline_points,
+						   encode(imo.content_hash, 'hex') AS icon_cleared_hash,
+						   v.up_count,
+						   v.down_count
+					  FROM top
+					  ${fromJoinsHeavy}
+					  ORDER BY ${outerSearchOrderPrefix}${OUTER_SORTS[sortKey] ?? OUTER_SORTS[DEFAULT_SORT]}`,
+					[...values, PAGE_SIZE, offset]
+				);
+
+				const firstNMap = await getFirstNMap();
+
+				const tokens: TokenApiRow[] = dataRes.rows.map((row) => {
+					const verifiedAt = row.verified_at?.getTime() ?? null;
+					const firstSeenAt = Math.floor(row.first_seen_at.getTime() / 1000);
+					const genesisTime = Math.floor(row.genesis_time.getTime() / 1000);
+					const categoryHex = hexFromBytes(row.category)!;
+					const firstNRank = firstNMap.get(categoryHex) ?? null;
+					const metaAt = row.metadata_fetched_at?.getTime();
+					const updatedAtMs = Math.max(verifiedAt ?? 0, metaAt ?? 0, row.first_seen_at.getTime());
+					let tvl: number | null = null;
+					if (row.cauldron_tvl_satoshis != null) {
+						const parsed = Number(row.cauldron_tvl_satoshis);
+						if (Number.isFinite(parsed)) tvl = parsed;
+					}
+					let fexTvl: number | null = null;
+					if (row.fex_tvl_satoshis != null) {
+						const parsed = Number(row.fex_tvl_satoshis);
+						if (Number.isFinite(parsed)) fexTvl = parsed;
+					}
+					const pct = (oldP: number | null): number | null => {
+						const now = row.cauldron_price_sats;
+						if (now == null || oldP == null || oldP === 0) return null;
+						return ((now - oldP) / oldP) * 100;
+					};
+					const sparklinePoints = Array.isArray(row.sparkline_points)
+						? row.sparkline_points.filter((n) => Number.isFinite(n))
+						: [];
+					return {
+						id: categoryHex,
+						name: row.name,
+						symbol: row.symbol,
+						decimals: row.decimals ?? 0,
+						description: row.description,
+						icon: row.icon_uri,
+						tokenType: row.token_type,
+						isVerifiedOnchain: row.verified_at !== null,
+						isFullyBurned: row.is_fully_burned ?? false,
+						currentSupply: row.current_supply ?? null,
+						liveUtxoCount: row.live_utxo_count,
+						liveNftCount: row.live_nft_count,
+						holderCount: row.holder_count,
+						hasActiveMinting: row.has_active_minting ?? false,
+						firstSeenAt,
+						genesisTime,
+						firstNRank,
+						genesisBlock: row.genesis_block,
+						updatedAt: Math.floor(updatedAtMs / 1000),
+						cauldronPriceSats: row.cauldron_price_sats,
+						cauldronTvlSatoshis: tvl,
+						tapswapListingCount: row.tapswap_listing_count ? Number(row.tapswap_listing_count) : 0,
+						fexPriceSats: row.fex_price_sats,
+						fexTvlSatoshis: fexTvl,
+						priceChange1hPct: pct(row.price_sats_1h_ago),
+						priceChange24hPct: pct(row.price_sats_24h_ago),
+						priceChange7dPct: pct(row.price_sats_7d_ago),
+						sparklinePoints,
+						iconClearedHash: row.icon_cleared_hash ?? null,
+						upCount: row.up_count ?? 0,
+						downCount: row.down_count ?? 0,
+						isCrc20: row.is_crc20 === true,
+						crc20Symbol: row.crc20_symbol ?? null,
+						crc20SymbolIsHex: row.crc20_symbol_is_hex === true,
+						crc20IsCanonical: row.crc20_is_canonical === true,
+						crc20Name: row.crc20_name ?? null
+					};
+				});
+
+				return { tokens, total, limit: PAGE_SIZE, offset, error: null };
+			} catch (err) {
+				console.error('[+page.server] token grid query failed:', err);
+				return { tokens: [], total: 0, limit: PAGE_SIZE, offset: 0, error: 'Directory is temporarily unavailable.' };
+			}
+		})();
+
 		return {
-			tokens,
-			total,
-			limit: PAGE_SIZE,
-			offset,
 			mcapTvlThresholdSats,
 			movers,
 			voteLeaders,
-			error: null
+			tokenGrid: tokenGridPromise
 		};
 	} catch (err) {
 		console.error('[+page.server] load failed:', err);
 		return {
-			tokens: [],
-			total: 0,
-			limit: PAGE_SIZE,
-			offset: 0,
 			mcapTvlThresholdSats: 0,
 			movers: { topGainers24h: [], topLosers24h: [], topTvlMovers24h: [], has24hHistory: false },
 			voteLeaders: { mostUpvoted: [], mostDownvoted: [], mostControversial: [], totalVotes: 0 },
-			error: 'Directory is temporarily unavailable.'
+			tokenGrid: Promise.resolve({ tokens: [], total: 0, limit: PAGE_SIZE, offset: 0, error: 'Directory is temporarily unavailable.' })
 		};
 	}
 };
+
