@@ -7,7 +7,9 @@
 // votes, CRC-20 badge, holders) is awaited so the page shell renders
 // immediately. Below-fold content (chart, Tapswap, rankings, leaderboards,
 // trading stats) is returned as a Promise — SvelteKit streams it in
-// after the shell, with skeletons shown in the interim.
+// after the shell. Both query batches fire concurrently — the streamed
+// Promise.all starts BEFORE the critical await so the DB parallelises
+// all 21 queries at once.
 
 import { error } from '@sveltejs/kit';
 import { query, hexFromBytes, bytesFromHex } from '$lib/server/db';
@@ -285,9 +287,202 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 	const decimals = row.decimals ?? bcmr?.decimals ?? 0;
 	const bchPriceUSD = await fetchBchPrice(fetch);
 
+	// ── Fire streamed queries FIRST so they run concurrently with the
+	// critical batch below. Stored as a raw Promise.all — post-processing
+	// waits for critical-path values via a .then() chain.
+	const streamedQueryPromise = Promise.all([
+		// Open Tapswap offers with this category on the "has" side
+		// (someone selling this token). Sorted by want_sats ASC so the
+		// cheapest asks render first. Limit 20 — detail page doesn't need
+		// a full paginated listing browser; Tapswap's own UI does that.
+		query<TapswapOfferRow>(
+			`SELECT id,
+			        has_amount::text    AS has_amount,
+			        has_commitment,
+			        has_capability,
+			        has_sats::text      AS has_sats,
+			        want_sats::text     AS want_sats,
+			        want_category,
+			        want_amount::text   AS want_amount,
+			        want_commitment,
+			        want_capability,
+			        maker_pkh,
+			        listed_block,
+			        listed_at
+			   FROM tapswap_offers
+			  WHERE has_category = $1
+			    AND status = 'open'
+			    AND NOT EXISTS (
+			      SELECT 1 FROM token_moderation mod WHERE mod.category = $1
+			    )
+			  ORDER BY want_sats ASC
+			  LIMIT 20`,
+			[categoryBytes]
+		),
+		computeMcapTvlThresholdSats(),
+		// Bucketed price + volume series for the chart.
+		query<PriceBucketRow>(
+			`WITH ordered AS (
+			   SELECT ts,
+			          price_sats,
+			          tvl_satoshis,
+			          tvl_satoshis - LAG(tvl_satoshis) OVER (ORDER BY ts) AS tvl_delta
+			     FROM token_price_history
+			    WHERE category = $1
+			      AND venue = 'cauldron'
+			      ${rangeSpec.interval ? `AND ts > now() - INTERVAL '${rangeSpec.interval}'` : ''}
+			 )
+			 SELECT ${rangeSpec.bucket}              AS bucket,
+			        AVG(price_sats)::double precision AS avg_price_sats,
+			        SUM(ABS(tvl_delta)) FILTER (WHERE tvl_delta IS NOT NULL)::text AS volume_sats
+			   FROM ordered
+			  GROUP BY bucket
+			  ORDER BY bucket ASC`,
+			[categoryBytes]
+		),
+		// Per-venue (cauldron, fex) snapshot for first_listed_at.
+		query<{
+			venue: 'cauldron' | 'fex';
+			tvl_satoshis: string | null;
+			pools_count: number | null;
+			pools_total_tvl_sats: string | null;
+			first_listed_at: Date;
+		}>(
+			`SELECT venue,
+			        tvl_satoshis::text AS tvl_satoshis,
+			        pools_count,
+			        pools_total_tvl_sats::text AS pools_total_tvl_sats,
+			        first_listed_at
+			   FROM token_venue_listings
+			  WHERE category = $1`,
+			[categoryBytes]
+		),
+		// 24h / 7d / 30d high-low extremes.
+		query<{
+			window: '24h' | '7d' | '30d';
+			price_min: number | null;
+			price_max: number | null;
+		}>(
+			`WITH windows AS (
+			   SELECT '24h'::text AS window, INTERVAL '24 hours' AS interval
+			   UNION ALL SELECT '7d',  INTERVAL '7 days'
+			   UNION ALL SELECT '30d', INTERVAL '30 days'
+			 )
+			 SELECT w.window,
+			        MIN(h.price_sats)::double precision AS price_min,
+			        MAX(h.price_sats)::double precision AS price_max
+			   FROM windows w
+			   LEFT JOIN token_price_history h
+			     ON h.category = $1
+			    AND h.venue = 'cauldron'
+			    AND h.ts > now() - w.interval
+			    AND h.price_sats > 0
+			  GROUP BY w.window`,
+			[categoryBytes]
+		),
+		// Count of price-history buckets in last 24h with non-zero TVL delta.
+		query<{ trade_buckets: string; volume_sats: string | null }>(
+			`WITH ordered AS (
+			   SELECT ts,
+			          tvl_satoshis,
+			          tvl_satoshis - LAG(tvl_satoshis) OVER (ORDER BY ts) AS tvl_delta
+			     FROM token_price_history
+			    WHERE category = $1
+			      AND venue = 'cauldron'
+			      AND ts > now() - INTERVAL '24 hours'
+			 )
+			 SELECT
+			   COUNT(*) FILTER (WHERE tvl_delta IS NOT NULL AND tvl_delta != 0)::bigint AS trade_buckets,
+			   SUM(ABS(tvl_delta)) FILTER (WHERE tvl_delta IS NOT NULL)::text AS volume_sats
+			   FROM ordered`,
+			[categoryBytes]
+		),
+		// Public report count.
+		query<{ n: string }>(
+			`SELECT COUNT(*)::bigint AS n FROM token_reports
+			  WHERE category = $1 AND status IN ('new','reviewed')`,
+			[categoryBytes]
+		),
+		// Per-token leaderboard standings.
+		getLeaderboardStandings(categoryBytes),
+		// Rank of this token by Cauldron pool TVL.
+		query<{ rank: string }>(
+			`WITH self AS (
+			   SELECT tvl_satoshis
+			     FROM token_venue_listings
+			    WHERE category = $1 AND venue = 'cauldron' AND tvl_satoshis IS NOT NULL
+			 )
+			 SELECT (1 + (
+			   SELECT COUNT(*)::bigint
+			     FROM token_venue_listings tvl
+			     JOIN tokens t ON t.category = tvl.category
+			    WHERE tvl.venue = 'cauldron'
+			      AND tvl.tvl_satoshis IS NOT NULL
+			      AND tvl.tvl_satoshis > self.tvl_satoshis
+			      AND NOT EXISTS (
+			        SELECT 1 FROM token_moderation mod WHERE mod.category = tvl.category
+			      )
+			 ))::text AS rank
+			 FROM self`,
+			[categoryBytes]
+		).catch((err) => {
+			console.error('[token detail] TVL rank query failed:', err);
+			return { rows: [] as Array<{ rank: string }> };
+		}),
+		// Rank of this token by holder_count.
+		query<{ rank: string }>(
+			`WITH self AS (
+			   SELECT s.holder_count
+			     FROM token_state s
+			    WHERE s.category = $1 AND s.holder_count IS NOT NULL AND s.holder_count > 0
+			 )
+			 SELECT (1 + (
+			   SELECT COUNT(*)::bigint
+			     FROM token_state s
+			     JOIN tokens t ON t.category = s.category
+			    WHERE s.holder_count IS NOT NULL
+			      AND s.holder_count > self.holder_count
+			      AND NOT EXISTS (
+			        SELECT 1 FROM token_moderation mod WHERE mod.category = s.category
+			      )
+			 ))::text AS rank
+			 FROM self`,
+			[categoryBytes]
+		).catch((err) => {
+			console.error('[token detail] holders rank query failed:', err);
+			return { rows: [] as Array<{ rank: string }> };
+		}),
+		// Herfindahl-Hirschman Index.
+		query<{ hhi: string | null }>(
+			`WITH t AS (
+			   SELECT SUM(balance::numeric) AS total, COUNT(*) AS n
+			     FROM token_holders WHERE category = $1
+			 )
+			 SELECT CASE
+			          WHEN t.n < 10 THEN NULL
+			          WHEN t.total IS NULL OR t.total = 0 THEN NULL
+			          ELSE (
+			            SELECT (SUM((th.balance::numeric / t.total) ^ 2))::text
+			              FROM token_holders th
+			             WHERE th.category = $1
+			          )
+			        END AS hhi
+			   FROM t`,
+			[categoryBytes]
+		).catch((err) => {
+			console.error('[token detail] Herfindahl query failed:', err);
+			return { rows: [] as Array<{ hhi: string | null }> };
+		}),
+		// Exchange-wide Cauldron TVL.
+		query<{ tvl_sats: string }>(
+			`SELECT tvl_sats::text AS tvl_sats FROM cauldron_global_stats WHERE id = 1`
+		)
+	]);
+
 	// ── Critical batch (awaited) — renders the page shell ────────────
 	// Token header, price, vote buttons, CRC-20 badge, watchlist count,
 	// mover badges, BCMR publish CTA, holders list, Fex price.
+	// Fires concurrently with the streamed batch above.
 	const [
 		holdersRes,
 		fexRes,
@@ -419,214 +614,23 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 	const watchlistCount = Number(watchlistCountRes.rows[0]?.n ?? 0);
 	const canPublishBcmr = bcmrEligibility;
 
-	// ── Streamed batch (returned as Promise — below-fold content) ─────
-	// Fires in parallel with the critical batch. Postgres handles the
-	// concurrency; SvelteKit streams the resolved data into the page.
-	const streamed = (async () => {
-		const [
-			tapswapRes,
-			mcapTvlThresholdSats,
-			priceHistoryRes,
-			venueAggregateRes,
-			priceExtremesRes,
-			recentTradesRes,
-			reportCountRes,
-			leaderboardStandingsRes,
-			tvlRankRes,
-			holdersRankRes,
-			herfindahlRes,
-			cauldronGlobalRes
-		] = await Promise.all([
-			// Open Tapswap offers with this category on the "has" side
-			// (someone selling this token). Sorted by want_sats ASC so the
-			// cheapest asks render first. Limit 20 — detail page doesn't need
-			// a full paginated listing browser; Tapswap's own UI does that.
-			query<TapswapOfferRow>(
-				`SELECT id,
-				        has_amount::text    AS has_amount,
-				        has_commitment,
-				        has_capability,
-				        has_sats::text      AS has_sats,
-				        want_sats::text     AS want_sats,
-				        want_category,
-				        want_amount::text   AS want_amount,
-				        want_commitment,
-				        want_capability,
-				        maker_pkh,
-				        listed_block,
-				        listed_at
-				   FROM tapswap_offers
-				  WHERE has_category = $1
-				    AND status = 'open'
-				    AND NOT EXISTS (
-				      SELECT 1 FROM token_moderation mod WHERE mod.category = $1
-				    )
-				  ORDER BY want_sats ASC
-				  LIMIT 20`,
-				[categoryBytes]
-			),
-			computeMcapTvlThresholdSats(),
-			// Bucketed price + volume series for the chart.
-			query<PriceBucketRow>(
-				`WITH ordered AS (
-				   SELECT ts,
-				          price_sats,
-				          tvl_satoshis,
-				          tvl_satoshis - LAG(tvl_satoshis) OVER (ORDER BY ts) AS tvl_delta
-				     FROM token_price_history
-				    WHERE category = $1
-				      AND venue = 'cauldron'
-				      ${rangeSpec.interval ? `AND ts > now() - INTERVAL '${rangeSpec.interval}'` : ''}
-				 )
-				 SELECT ${rangeSpec.bucket}              AS bucket,
-				        AVG(price_sats)::double precision AS avg_price_sats,
-				        SUM(ABS(tvl_delta)) FILTER (WHERE tvl_delta IS NOT NULL)::text AS volume_sats
-				   FROM ordered
-				  GROUP BY bucket
-				  ORDER BY bucket ASC`,
-				[categoryBytes]
-			),
-			// Per-venue (cauldron, fex) snapshot for first_listed_at.
-			query<{
-				venue: 'cauldron' | 'fex';
-				tvl_satoshis: string | null;
-				pools_count: number | null;
-				pools_total_tvl_sats: string | null;
-				first_listed_at: Date;
-			}>(
-				`SELECT venue,
-				        tvl_satoshis::text AS tvl_satoshis,
-				        pools_count,
-				        pools_total_tvl_sats::text AS pools_total_tvl_sats,
-				        first_listed_at
-				   FROM token_venue_listings
-				  WHERE category = $1`,
-				[categoryBytes]
-			),
-			// 24h / 7d / 30d high-low extremes.
-			query<{
-				window: '24h' | '7d' | '30d';
-				price_min: number | null;
-				price_max: number | null;
-			}>(
-				`WITH windows AS (
-				   SELECT '24h'::text AS window, INTERVAL '24 hours' AS interval
-				   UNION ALL SELECT '7d',  INTERVAL '7 days'
-				   UNION ALL SELECT '30d', INTERVAL '30 days'
-				 )
-				 SELECT w.window,
-				        MIN(h.price_sats)::double precision AS price_min,
-				        MAX(h.price_sats)::double precision AS price_max
-				   FROM windows w
-				   LEFT JOIN token_price_history h
-				     ON h.category = $1
-				    AND h.venue = 'cauldron'
-				    AND h.ts > now() - w.interval
-				    AND h.price_sats > 0
-				  GROUP BY w.window`,
-				[categoryBytes]
-			),
-			// Count of price-history buckets in last 24h with non-zero TVL delta.
-			query<{ trade_buckets: string; volume_sats: string | null }>(
-				`WITH ordered AS (
-				   SELECT ts,
-				          tvl_satoshis,
-				          tvl_satoshis - LAG(tvl_satoshis) OVER (ORDER BY ts) AS tvl_delta
-				     FROM token_price_history
-				    WHERE category = $1
-				      AND venue = 'cauldron'
-				      AND ts > now() - INTERVAL '24 hours'
-				 )
-				 SELECT
-				   COUNT(*) FILTER (WHERE tvl_delta IS NOT NULL AND tvl_delta != 0)::bigint AS trade_buckets,
-				   SUM(ABS(tvl_delta)) FILTER (WHERE tvl_delta IS NOT NULL)::text AS volume_sats
-				   FROM ordered`,
-				[categoryBytes]
-			),
-			// Public report count.
-			query<{ n: string }>(
-				`SELECT COUNT(*)::bigint AS n FROM token_reports
-				  WHERE category = $1 AND status IN ('new','reviewed')`,
-				[categoryBytes]
-			),
-			// Per-token leaderboard standings.
-			getLeaderboardStandings(categoryBytes),
-			// Rank of this token by Cauldron pool TVL.
-			query<{ rank: string }>(
-				`WITH self AS (
-				   SELECT tvl_satoshis
-				     FROM token_venue_listings
-				    WHERE category = $1 AND venue = 'cauldron' AND tvl_satoshis IS NOT NULL
-				 )
-				 SELECT (1 + (
-				   SELECT COUNT(*)::bigint
-				     FROM token_venue_listings tvl
-				     JOIN tokens t ON t.category = tvl.category
-				    WHERE tvl.venue = 'cauldron'
-				      AND tvl.tvl_satoshis IS NOT NULL
-				      AND tvl.tvl_satoshis > self.tvl_satoshis
-				      AND NOT EXISTS (
-				        SELECT 1 FROM token_moderation mod WHERE mod.category = tvl.category
-				      )
-				 ))::text AS rank
-				 FROM self`,
-				[categoryBytes]
-			).catch((err) => {
-				console.error('[token detail] TVL rank query failed:', err);
-				return { rows: [] as Array<{ rank: string }> };
-			}),
-			// Rank of this token by holder_count.
-			query<{ rank: string }>(
-				`WITH self AS (
-				   SELECT s.holder_count
-				     FROM token_state s
-				    WHERE s.category = $1 AND s.holder_count IS NOT NULL AND s.holder_count > 0
-				 )
-				 SELECT (1 + (
-				   SELECT COUNT(*)::bigint
-				     FROM token_state s
-				     JOIN tokens t ON t.category = s.category
-				    WHERE s.holder_count IS NOT NULL
-				      AND s.holder_count > self.holder_count
-				      AND NOT EXISTS (
-				        SELECT 1 FROM token_moderation mod WHERE mod.category = s.category
-				      )
-				 ))::text AS rank
-				 FROM self`,
-				[categoryBytes]
-			).catch((err) => {
-				console.error('[token detail] holders rank query failed:', err);
-				return { rows: [] as Array<{ rank: string }> };
-			}),
-			// Herfindahl-Hirschman Index.
-			query<{ hhi: string | null }>(
-				`WITH t AS (
-				   SELECT SUM(balance::numeric) AS total, COUNT(*) AS n
-				     FROM token_holders WHERE category = $1
-				 )
-				 SELECT CASE
-				          WHEN t.n < 10 THEN NULL
-				          WHEN t.total IS NULL OR t.total = 0 THEN NULL
-				          ELSE (
-				            SELECT (SUM((th.balance::numeric / t.total) ^ 2))::text
-				              FROM token_holders th
-				             WHERE th.category = $1
-				          )
-				        END AS hhi
-				   FROM t`,
-				[categoryBytes]
-			).catch((err) => {
-				console.error('[token detail] Herfindahl query failed:', err);
-				return { rows: [] as Array<{ hhi: string | null }> };
-			}),
-			// Exchange-wide Cauldron TVL.
-			query<{ tvl_sats: string }>(
-				`SELECT tvl_sats::text AS tvl_sats FROM cauldron_global_stats WHERE id = 1`
-			)
-		]);
-
-		// ── Post-process streamed data ────────────────────────────────
-
+	// ── Streamed post-processing (runs after both batches complete) ────
+	// The streamed Promise.all fired above; critical values are now
+	// available. Process the streamed results into the return shape.
+	const streamed = streamedQueryPromise.then(([
+		tapswapRes,
+		mcapTvlThresholdSats,
+		priceHistoryRes,
+		venueAggregateRes,
+		priceExtremesRes,
+		recentTradesRes,
+		reportCountRes,
+		leaderboardStandingsRes,
+		tvlRankRes,
+		holdersRankRes,
+		herfindahlRes,
+		cauldronGlobalRes
+	]) => {
 		// Map price-history rows into chart-friendly buckets.
 		const priceBuckets: PriceBucket[] = priceHistoryRes.rows.map((r) => ({
 			ts: Math.floor(r.bucket.getTime() / 1000),
@@ -681,7 +685,7 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 			priceExtremes[r.window] = { min: toUsd(r.price_min), max: toUsd(r.price_max) };
 		}
 
-		// Arbitrage eligibility — needs tapswap data (streamed) + cauldron/fex (critical, closed over).
+		// Arbitrage eligibility — needs tapswap + cauldron/fex data.
 		const cauldronListed = venueByName.cauldron.tvlSats != null;
 		const fexListed = venueByName.fex.tvlSats != null;
 		const tapswapFtOffer = tapswapRes.rows.find(
@@ -766,7 +770,7 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 			},
 			herfindahlIndex
 		};
-	})();
+	});
 
 	// ── Return: critical data immediately, streamed data as Promise ──
 	const token = {
@@ -792,12 +796,12 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 		liveUtxoCount: row.live_utxo_count,
 		liveNftCount: row.live_nft_count,
 		holderCount: row.holder_count,
-		giniCoefficient: row.gini_coefficient,
 		hasActiveMinting: row.has_active_minting ?? false,
 		isFullyBurned: row.is_fully_burned ?? false,
 		isVerifiedOnchain: row.verified_at !== null,
 		topHolderSharePct: topHolderShare,
-		top10HolderSharePct: top10HolderShare
+		top10HolderSharePct: top10HolderShare,
+		giniCoefficient: row.gini_coefficient
 	};
 
 	return {

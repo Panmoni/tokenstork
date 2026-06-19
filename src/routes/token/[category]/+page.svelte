@@ -19,9 +19,13 @@
 	import StarButton from '$lib/components/StarButton.svelte';
 	import VoteButton from '$lib/components/VoteButton.svelte';
 	import { Tooltip, TooltipTrigger, TooltipContent } from '$lib/components/ui/tooltip';
-
 	let { data } = $props();
 
+	// Streamed fields (tvlRank, priceChart, etc.) live inside
+	// data.streamed (a Promise) and are not on the top-level PageData
+	// type. _d provides a permissive type for script-level $derived
+	// expressions; optional chaining makes all accesses safe at runtime.
+	const _d = $derived(data as Record<string, any>);
 	// Well-known BCMR URI keys → inline SVG icons. Paths copied from the
 	// Footer's social-icon block so the brand marks stay consistent
 	// across the site. Anything not listed here renders with the generic
@@ -291,15 +295,12 @@
 		return { label: 'Whale-controlled', classes: 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300' };
 	}
 
-	// Top-5 standings across the three vote-leaderboard buckets, gating
-	// the inline badge strip near the page header. Filtered to currentRank
-	// ≤ 5 so the strip only fires for honestly-top-tier rankings; the
-	// underlying `leaderboardStandings.standings` array still carries the
-	// full set for the dedicated "Sentiment standings" card lower down.
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	type StandingsEntry = { currentRank: number | null; bucket: string; streakDays: number; medalGold: number; medalSilver: number; medalBronze: number };
 	const standings = $derived(
-		(data.leaderboardStandings?.standings ?? []).filter(
+		(_d.leaderboardStandings as { standings?: StandingsEntry[] } | undefined)?.standings?.filter(
 			(st) => st.currentRank !== null && st.currentRank <= 5
-		)
+		) ?? []
 	);
 	// Age-bucket badge — flags tokens minted recently as a caution
 	// signal. Returns null for tokens older than 30 days, in which
@@ -309,20 +310,6 @@
 	// Permanent rank label for the first-10 CashTokens ever minted.
 	// Empty string for ranks outside 1..10.
 	const firstNText = $derived(token.firstNRank != null ? firstNLabel(token.firstNRank) : '');
-	const showBadges = $derived(
-		data.watchlistCount > 0 ||
-			data.moverBadges.gainerRank > 0 ||
-			data.moverBadges.loserRank > 0 ||
-			data.moverBadges.tvlMoverRank > 0 ||
-			(data.arbitrage?.eligible ?? false) ||
-			((data.cauldronTvlSharePct ?? null) != null && (data.cauldronTvlSharePct ?? 0) >= 10) ||
-			(data.tvlRank ?? null) != null ||
-			(data.holdersRank ?? null) != null ||
-			standings.length > 0 ||
-			token.firstNRank != null ||
-			ageBadge != null
-	);
-
 	// FT UTXO count derived from live_utxo_count − live_nft_count for
 	// hybrid (FT+NFT) tokens. Pure-FT and pure-NFT tokens skip the
 	// "composition" line entirely; the "FT UTXOs" framing only makes
@@ -332,9 +319,9 @@
 		(token.liveNftCount ?? 0) > 0 && ftCount > 0 && token.tokenType === 'FT+NFT'
 	);
 	const hasExtremes = $derived(
-		((data.priceExtremes?.['24h']?.min ?? null) != null && (data.priceExtremes?.['24h']?.max ?? null) != null) ||
-			((data.priceExtremes?.['7d']?.min ?? null) != null && (data.priceExtremes?.['7d']?.max ?? null) != null) ||
-			((data.priceExtremes?.['30d']?.min ?? null) != null && (data.priceExtremes?.['30d']?.max ?? null) != null)
+		((_d.priceExtremes as any)?.['24h']?.min != null && (_d.priceExtremes as any)?.['24h']?.max != null) ||
+			((_d.priceExtremes as any)?.['7d']?.min != null && (_d.priceExtremes as any)?.['7d']?.max != null) ||
+			((_d.priceExtremes as any)?.['30d']?.min != null && (_d.priceExtremes as any)?.['30d']?.max != null)
 	);
 	const marketCapUSD = $derived.by(() => {
 		if (!token.currentSupply || data.priceUSD === 0) return 0;
@@ -818,10 +805,10 @@
 			{#each standings as st (st.bucket)}
 				<a
 					href="/#community-sentiment"
-					class={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${BUCKET_TONE[st.bucket]}`}
-					title={`Ranked #${st.currentRank} in ${BUCKET_LABEL[st.bucket]} on ${s.leaderboardStandings.latestDay}. Click to view leaderboards.`}
+					class={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${BUCKET_TONE[st.bucket as keyof typeof BUCKET_TONE]}`}
+					title={`Ranked #${st.currentRank} in ${BUCKET_LABEL[st.bucket as keyof typeof BUCKET_LABEL]} on ${s.leaderboardStandings.latestDay}. Click to view leaderboards.`}
 				>
-					<span>#{st.currentRank} {BUCKET_LABEL[st.bucket]}</span>
+					<span>#{st.currentRank} {BUCKET_LABEL[st.bucket as keyof typeof BUCKET_LABEL]}</span>
 					{#if st.streakDays >= 3}
 						<span class="opacity-80" title="{st.streakDays}-day streak in the top 5">🔥{st.streakDays}d</span>
 					{/if}
