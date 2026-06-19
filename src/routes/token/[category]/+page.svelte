@@ -21,6 +21,7 @@
 	import { Tooltip, TooltipTrigger, TooltipContent } from '$lib/components/ui/tooltip';
 
 	let { data } = $props();
+	const _d = $derived(data as Record<string, any>);
 
 	// Well-known BCMR URI keys → inline SVG icons. Paths copied from the
 	// Footer's social-icon block so the brand marks stay consistent
@@ -297,7 +298,7 @@
 	// underlying `leaderboardStandings.standings` array still carries the
 	// full set for the dedicated "Sentiment standings" card lower down.
 	const standings = $derived(
-		s.leaderboardStandings.standings.filter(
+		_d.leaderboardStandings.standings.filter(
 			(s) => s.currentRank !== null && s.currentRank <= 5
 		)
 	);
@@ -308,18 +309,18 @@
 	const ageBadge = $derived(getAgeBadge(token.genesisTime));
 	// Permanent rank label for the first-10 CashTokens ever minted.
 	// Empty string for ranks outside 1..10.
-	const firstNText = $derived(f.firstNRank != null ? firstNLabel(f.firstNRank) : '');
+	const firstNText = $derived(_d.firstNRank != null ? firstNLabel(_d.firstNRank) : '');
 	const showBadges = $derived(
-		f.watchlistCount > 0 ||
-			f.moverBadges.gainerRank > 0 ||
-			f.moverBadges.loserRank > 0 ||
-			f.moverBadges.tvlMoverRank > 0 ||
-			f.arbitrage.eligible ||
-			(f.cauldronTvlSharePct != null && f.cauldronTvlSharePct >= 10) ||
-			s.tvlRank != null ||
-			f.holdersRank != null ||
+		_d.watchlistCount > 0 ||
+			_d.moverBadges.gainerRank > 0 ||
+			_d.moverBadges.loserRank > 0 ||
+			_d.moverBadges.tvlMoverRank > 0 ||
+			_d.arbitrage.eligible ||
+			(_d.cauldronTvlSharePct != null && _d.cauldronTvlSharePct >= 10) ||
+			_d.tvlRank != null ||
+			_d.holdersRank != null ||
 			standings.length > 0 ||
-			f.firstNRank != null ||
+			_d.firstNRank != null ||
 			ageBadge != null
 	);
 
@@ -332,19 +333,19 @@
 		(token.liveNftCount ?? 0) > 0 && ftCount > 0 && token.tokenType === 'FT+NFT'
 	);
 	const hasExtremes = $derived(
-		(s.priceExtremes['24h'].min != null && s.priceExtremes['24h'].max != null) ||
-			(s.priceExtremes['7d'].min != null && s.priceExtremes['7d'].max != null) ||
-			(s.priceExtremes['30d'].min != null && s.priceExtremes['30d'].max != null)
+		(_d.priceExtremes['24h'].min != null && _d.priceExtremes['24h'].max != null) ||
+			(_d.priceExtremes['7d'].min != null && _d.priceExtremes['7d'].max != null) ||
+			(_d.priceExtremes['30d'].min != null && _d.priceExtremes['30d'].max != null)
 	);
 	const marketCapUSD = $derived.by(() => {
-		if (!token.currentSupply || f.priceUSD === 0) return 0;
+		if (!token.currentSupply || _d.priceUSD === 0) return 0;
 		// Integer-shift in BigInt space to keep the integer part exact for supplies > 2^53.
 		try {
 			const base = BigInt(token.currentSupply);
 			const divisor = 10n ** BigInt(Math.max(0, Math.min(8, token.decimals)));
 			const whole = Number(base / divisor);
 			const frac = Number(base % divisor) / Number(divisor);
-			return (whole + frac) * f.priceUSD;
+			return (whole + frac) * _d.priceUSD;
 		} catch {
 			return 0;
 		}
@@ -828,13 +829,13 @@
 					⚠️ {ageBadgeLabel(ageBadge)}
 				</span>
 			{/if}
-			{#if s.tvlRank != null}
+			{#if f.tvlRank != null}
 				<a
 					href="/?sort=tvl"
 					class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-600 text-white text-xs font-semibold hover:bg-cyan-700"
-					title={`Ranked #${s.tvlRank} by Cauldron pool TVL across all listed tokens. Other venues (Fex, Tapswap) are not factored in. Click to view the directory sorted by TVL.`}
+					title={`Ranked #${f.tvlRank} by Cauldron pool TVL across all listed tokens. Other venues (Fex, Tapswap) are not factored in. Click to view the directory sorted by TVL.`}
 				>
-					🏆 #{s.tvlRank} by Cauldron TVL
+					🏆 #{f.tvlRank} by Cauldron TVL
 				</a>
 			{/if}
 			{#if f.holdersRank != null}

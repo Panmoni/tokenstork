@@ -119,7 +119,10 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 		fetchCauldron(category, decimals, bchPriceUSD),
 		locals.user ? checkBcmrPublishEligibility(row, locals.user.cashaddr) : Promise.resolve(false),
 		firstNRankFor(category),
-		]);
+		query<{ tvl_sats: string }>(`SELECT tvl_sats::text AS tvl_sats FROM cauldron_global_stats WHERE id = 1`),
+		// MOVED TO FAST: query<{ rank: string }>(`WITH self AS (SELECT tvl_satoshis FROM token_venue_listings WHERE category = $1 AND venue = 'cauldron' AND tvl_satoshis IS NOT NULL) SELECT (1 + (SELECT COUNT(*)::bigint FROM token_venue_listings tvl JOIN tokens t ON t.category = tvl.category WHERE tvl.venue = 'cauldron' AND tvl.tvl_satoshis IS NOT NULL AND tvl.tvl_satoshis > self.tvl_satoshis AND NOT EXISTS (SELECT 1 FROM token_moderation mod WHERE mod.category = tvl.category)))::text AS rank FROM self`, [categoryBytes]).catch((err: Error) => { console.error('[token detail] TVL rank query failed:', err); return { rows: [] as Array<{ rank: string }> }; }),
+		// MOVED TO FAST: query<{ rank: string }>(`WITH self AS (SELECT s.holder_count FROM token_state s WHERE s.category = $1 AND s.holder_count IS NOT NULL AND s.holder_count > 0) SELECT (1 + (SELECT COUNT(*)::bigint FROM token_state s JOIN tokens t ON t.category = s.category WHERE s.holder_count IS NOT NULL AND s.holder_count > self.holder_count AND NOT EXISTS (SELECT 1 FROM token_moderation mod WHERE mod.category = s.category)))::text AS rank FROM self`, [categoryBytes]).catch((err: Error) => { console.error('[token detail] holders rank query failed:', err); return { rows: [] as Array<{ rank: string }> }; }),
+	]);
 
 	// ── Slow batch (below-fold: chart, Tapswap, rankings, extremes) ────
 	const slowRaw = Promise.all([
@@ -129,13 +132,13 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 		query<{ trade_buckets: string; volume_sats: string | null }>(`WITH ordered AS (SELECT ts, tvl_satoshis, tvl_satoshis - LAG(tvl_satoshis) OVER (ORDER BY ts) AS tvl_delta FROM token_price_history WHERE category = $1 AND venue = 'cauldron' AND ts > now() - INTERVAL '24 hours') SELECT COUNT(*) FILTER (WHERE tvl_delta IS NOT NULL AND tvl_delta != 0)::bigint AS trade_buckets, SUM(ABS(tvl_delta)) FILTER (WHERE tvl_delta IS NOT NULL)::text AS volume_sats FROM ordered`, [categoryBytes]),
 		query<{ n: string }>(`SELECT COUNT(*)::bigint AS n FROM token_reports WHERE category = $1 AND status IN ('new','reviewed')`, [categoryBytes]),
 		getLeaderboardStandings(categoryBytes),
-		query<{ rank: string }>(`WITH self AS (SELECT tvl_satoshis FROM token_venue_listings WHERE category = $1 AND venue = 'cauldron' AND tvl_satoshis IS NOT NULL) SELECT (1 + (SELECT COUNT(*)::bigint FROM token_venue_listings tvl JOIN tokens t ON t.category = tvl.category WHERE tvl.venue = 'cauldron' AND tvl.tvl_satoshis IS NOT NULL AND tvl.tvl_satoshis > self.tvl_satoshis AND NOT EXISTS (SELECT 1 FROM token_moderation mod WHERE mod.category = tvl.category)))::text AS rank FROM self`, [categoryBytes]).catch((err: Error) => { console.error('[token detail] TVL rank query failed:', err); return { rows: [] as Array<{ rank: string }> }; }),
-		query<{ rank: string }>(`WITH self AS (SELECT s.holder_count FROM token_state s WHERE s.category = $1 AND s.holder_count IS NOT NULL AND s.holder_count > 0) SELECT (1 + (SELECT COUNT(*)::bigint FROM token_state s JOIN tokens t ON t.category = s.category WHERE s.holder_count IS NOT NULL AND s.holder_count > self.holder_count AND NOT EXISTS (SELECT 1 FROM token_moderation mod WHERE mod.category = s.category)))::text AS rank FROM self`, [categoryBytes]).catch((err: Error) => { console.error('[token detail] holders rank query failed:', err); return { rows: [] as Array<{ rank: string }> }; }),
+		// MOVED TO FAST: query<{ rank: string }>(`WITH self AS (SELECT tvl_satoshis FROM token_venue_listings WHERE category = $1 AND venue = 'cauldron' AND tvl_satoshis IS NOT NULL) SELECT (1 + (SELECT COUNT(*)::bigint FROM token_venue_listings tvl JOIN tokens t ON t.category = tvl.category WHERE tvl.venue = 'cauldron' AND tvl.tvl_satoshis IS NOT NULL AND tvl.tvl_satoshis > self.tvl_satoshis AND NOT EXISTS (SELECT 1 FROM token_moderation mod WHERE mod.category = tvl.category)))::text AS rank FROM self`, [categoryBytes]).catch((err: Error) => { console.error('[token detail] TVL rank query failed:', err); return { rows: [] as Array<{ rank: string }> }; }),
+		// MOVED TO FAST: query<{ rank: string }>(`WITH self AS (SELECT s.holder_count FROM token_state s WHERE s.category = $1 AND s.holder_count IS NOT NULL AND s.holder_count > 0) SELECT (1 + (SELECT COUNT(*)::bigint FROM token_state s JOIN tokens t ON t.category = s.category WHERE s.holder_count IS NOT NULL AND s.holder_count > self.holder_count AND NOT EXISTS (SELECT 1 FROM token_moderation mod WHERE mod.category = s.category)))::text AS rank FROM self`, [categoryBytes]).catch((err: Error) => { console.error('[token detail] holders rank query failed:', err); return { rows: [] as Array<{ rank: string }> }; }),
 		query<{ hhi: string | null }>(`WITH t AS (SELECT SUM(balance::numeric) AS total, COUNT(*) AS n FROM token_holders WHERE category = $1) SELECT CASE WHEN t.n < 10 THEN NULL WHEN t.total IS NULL OR t.total = 0 THEN NULL ELSE (SELECT (SUM((th.balance::numeric / t.total) ^ 2))::text FROM token_holders th WHERE th.category = $1) END AS hhi FROM t`, [categoryBytes]).catch((err: Error) => { console.error('[token detail] Herfindahl query failed:', err); return { rows: [] as Array<{ hhi: string | null }> }; }),
 		]);
 
 	// ── Post-process fast batch ────────────────────────────────────────
-	const fast = fastRaw.then(([holdersRes, fexRes, voteCounts, watchlistCountRes, movers, mctSats, venueAggregateRes, crc20Detail, cauldron, bcmrEligibility, firstNRankResult, cauldronGlobalRes]) => {
+	const fast = fastRaw.then(([holdersRes, fexRes, voteCounts, watchlistCountRes, movers, mctSats, venueAggregateRes, crc20Detail, cauldron, bcmrEligibility, firstNRankResult, cauldronGlobalRes, tvlRankRes, holdersRankRes]) => {
 		let fexPriceUSD = 0, fexTvlUSD = 0;
 		const fr = fexRes.rows[0];
 		if (fr?.price_sats && fr.price_sats > 0) fexPriceUSD = (fr.price_sats * Math.pow(10, decimals) / 1e8) * bchPriceUSD;
@@ -173,11 +176,12 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 			topHolderSharePct: ths, top10HolderSharePct: t10,
 			firstNRank: firstNRankResult,
 			cauldronTvlSharePct: ctvs,
+			
 		};
 	});
 
 	// ── Post-process slow batch ────────────────────────────────────────
-	const slow = slowRaw.then(([tapswapRes, priceHistoryRes, priceExtremesRes, recentTradesRes, reportCountRes, leaderboardStandingsRes, tvlRankRes, holdersRankRes, herfindahlRes]) => {
+	const slow = slowRaw.then(([tapswapRes, priceHistoryRes, priceExtremesRes, recentTradesRes, reportCountRes, leaderboardStandingsRes, herfindahlRes]) => {
 		const pb: PriceBucket[] = priceHistoryRes.rows.map(r => ({ ts: Math.floor(r.bucket.getTime() / 1000), priceSats: r.avg_price_sats, volumeSats: r.volume_sats ? Number(r.volume_sats) : null }));
 
 		const rr = recentTradesRes.rows[0];
