@@ -297,8 +297,8 @@
 	// underlying `leaderboardStandings.standings` array still carries the
 	// full set for the dedicated "Sentiment standings" card lower down.
 	const standings = $derived(
-		data.leaderboardStandings.standings.filter(
-			(s) => s.currentRank !== null && s.currentRank <= 5
+		(data.leaderboardStandings?.standings ?? []).filter(
+			(st) => st.currentRank !== null && st.currentRank <= 5
 		)
 	);
 	// Age-bucket badge — flags tokens minted recently as a caution
@@ -314,10 +314,10 @@
 			data.moverBadges.gainerRank > 0 ||
 			data.moverBadges.loserRank > 0 ||
 			data.moverBadges.tvlMoverRank > 0 ||
-			data.arbitrage.eligible ||
-			(data.cauldronTvlSharePct != null && data.cauldronTvlSharePct >= 10) ||
-			data.tvlRank != null ||
-			data.holdersRank != null ||
+			(data.arbitrage?.eligible ?? false) ||
+			((data.cauldronTvlSharePct ?? null) != null && (data.cauldronTvlSharePct ?? 0) >= 10) ||
+			(data.tvlRank ?? null) != null ||
+			(data.holdersRank ?? null) != null ||
 			standings.length > 0 ||
 			token.firstNRank != null ||
 			ageBadge != null
@@ -332,9 +332,9 @@
 		(token.liveNftCount ?? 0) > 0 && ftCount > 0 && token.tokenType === 'FT+NFT'
 	);
 	const hasExtremes = $derived(
-		(data.priceExtremes['24h'].min != null && data.priceExtremes['24h'].max != null) ||
-			(data.priceExtremes['7d'].min != null && data.priceExtremes['7d'].max != null) ||
-			(data.priceExtremes['30d'].min != null && data.priceExtremes['30d'].max != null)
+		((data.priceExtremes?.['24h']?.min ?? null) != null && (data.priceExtremes?.['24h']?.max ?? null) != null) ||
+			((data.priceExtremes?.['7d']?.min ?? null) != null && (data.priceExtremes?.['7d']?.max ?? null) != null) ||
+			((data.priceExtremes?.['30d']?.min ?? null) != null && (data.priceExtremes?.['30d']?.max ?? null) != null)
 	);
 	const marketCapUSD = $derived.by(() => {
 		if (!token.currentSupply || data.priceUSD === 0) return 0;
@@ -739,7 +739,18 @@
 		share, mover, etc.). Lives between the BCMR compact bar and the
 		core stats grid so it doesn't wedge into either.
 	-->
-	{#if showBadges}
+	{#await data.streamed then s}
+{#if data.watchlistCount > 0 ||
+    data.moverBadges.gainerRank > 0 ||
+    data.moverBadges.loserRank > 0 ||
+    data.moverBadges.tvlMoverRank > 0 ||
+    (s.arbitrage?.eligible ?? false) ||
+    ((s.cauldronTvlSharePct ?? null) != null && (s.cauldronTvlSharePct ?? 0) >= 10) ||
+    (s.tvlRank ?? null) != null ||
+    (s.holdersRank ?? null) != null ||
+    (s.leaderboardStandings?.standings?.filter(st => st.currentRank && st.currentRank <= 5)?.length ?? 0) > 0 ||
+    token.firstNRank != null ||
+    ageBadge != null}
 		<div class="mb-6 flex flex-wrap items-center gap-2">
 			{#if token.firstNRank != null}
 				<!--
@@ -778,48 +789,48 @@
 					⚠️ {ageBadgeLabel(ageBadge)}
 				</span>
 			{/if}
-			{#if data.tvlRank != null}
+			{#if (s.tvlRank ?? null) != null}
 				<a
 					href="/?sort=tvl"
 					class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-600 text-white text-xs font-semibold hover:bg-cyan-700"
-					title={`Ranked #${data.tvlRank} by Cauldron pool TVL across all listed tokens. Other venues (Fex, Tapswap) are not factored in. Click to view the directory sorted by TVL.`}
+					title={`Ranked #${s.tvlRank} by Cauldron pool TVL across all listed tokens. Other venues (Fex, Tapswap) are not factored in. Click to view the directory sorted by TVL.`}
 				>
-					🏆 #{data.tvlRank} by Cauldron TVL
+					🏆 #{s.tvlRank} by Cauldron TVL
 				</a>
 			{/if}
-			{#if data.holdersRank != null}
+			{#if (s.holdersRank ?? null) != null}
 				<a
 					href="/?sort=holders"
 					class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700"
-					title={`Ranked #${data.holdersRank} by distinct on-chain holders across all non-moderated CashTokens. Exchange covenants count as a single holder, so actively-traded tokens may be slightly understated. Click to view the directory sorted by holders.`}
+					title={`Ranked #${s.holdersRank} by distinct on-chain holders across all non-moderated CashTokens. Exchange covenants count as a single holder, so actively-traded tokens may be slightly understated. Click to view the directory sorted by holders.`}
 				>
-					👥 #{data.holdersRank} by Holders
+					👥 #{s.holdersRank} by Holders
 				</a>
 			{/if}
-			{#if data.cauldronTvlSharePct != null && data.cauldronTvlSharePct >= 10}
+			{#if s.cauldronTvlSharePct != null && s.cauldronTvlSharePct >= 10}
 				<span
 					class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-600 text-white text-xs font-semibold"
-					title="This token's Cauldron pool TVL is {data.cauldronTvlSharePct.toFixed(1)}% of the entire Cauldron exchange. Concentration this high means the pool is a major part of the AMM's liquidity."
+					title="This token's Cauldron pool TVL is {s.cauldronTvlSharePct.toFixed(1)}% of the entire Cauldron exchange. Concentration this high means the pool is a major part of the AMM's liquidity."
 				>
-					⚡ {data.cauldronTvlSharePct.toFixed(1)}% of Cauldron TVL
+					⚡ {s.cauldronTvlSharePct.toFixed(1)}% of Cauldron TVL
 				</span>
 			{/if}
-			{#each standings as s (s.bucket)}
+			{#each standings as st (st.bucket)}
 				<a
 					href="/#community-sentiment"
-					class={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${BUCKET_TONE[s.bucket]}`}
-					title={`Ranked #${s.currentRank} in ${BUCKET_LABEL[s.bucket]} on ${data.leaderboardStandings.latestDay}. Click to view leaderboards.`}
+					class={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${BUCKET_TONE[st.bucket]}`}
+					title={`Ranked #${st.currentRank} in ${BUCKET_LABEL[st.bucket]} on ${s.leaderboardStandings.latestDay}. Click to view leaderboards.`}
 				>
-					<span>#{s.currentRank} {BUCKET_LABEL[s.bucket]}</span>
-					{#if s.streakDays >= 3}
-						<span class="opacity-80" title="{s.streakDays}-day streak in the top 5">🔥{s.streakDays}d</span>
+					<span>#{st.currentRank} {BUCKET_LABEL[st.bucket]}</span>
+					{#if st.streakDays >= 3}
+						<span class="opacity-80" title="{st.streakDays}-day streak in the top 5">🔥{st.streakDays}d</span>
 					{/if}
-					{#if s.medalGold > 0}
-						<span title="{s.medalGold} day{s.medalGold === 1 ? '' : 's'} ranked #1 lifetime">🥇{s.medalGold}</span>
-					{:else if s.medalSilver > 0}
-						<span title="{s.medalSilver} day{s.medalSilver === 1 ? '' : 's'} ranked top-3 lifetime">🥈{s.medalSilver}</span>
-					{:else if s.medalBronze > 0}
-						<span title="{s.medalBronze} day{s.medalBronze === 1 ? '' : 's'} ranked top-5 lifetime">🥉{s.medalBronze}</span>
+					{#if st.medalGold > 0}
+						<span title="{st.medalGold} day{st.medalGold === 1 ? '' : 's'} ranked #1 lifetime">🥇{st.medalGold}</span>
+					{:else if st.medalSilver > 0}
+						<span title="{st.medalSilver} day{st.medalSilver === 1 ? '' : 's'} ranked top-3 lifetime">🥈{st.medalSilver}</span>
+					{:else if st.medalBronze > 0}
+						<span title="{st.medalBronze} day{st.medalBronze === 1 ? '' : 's'} ranked top-5 lifetime">🥉{st.medalBronze}</span>
 					{/if}
 				</a>
 			{/each}
@@ -853,15 +864,15 @@
 					{#if pct !== 0}<span class="opacity-80">{pct >= 0 ? '+' : ''}{pct.toFixed(1)}%</span>{/if}
 				</span>
 			{/if}
-			{#if data.arbitrage.eligible}
+			{#if (s.arbitrage?.eligible ?? false)}
 				<a
 					href="/arbitrage"
 					class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-fuchsia-100 dark:bg-fuchsia-900/30 text-fuchsia-700 dark:text-fuchsia-300 text-xs font-semibold hover:bg-fuchsia-200 dark:hover:bg-fuchsia-900/50"
-					title={`Listed on ${data.arbitrage.venuesPresent} venues — visible on the /arbitrage page${data.arbitrage.rawSpreadPct != null ? ` with a ${data.arbitrage.rawSpreadPct.toFixed(2)}% raw spread` : ''}`}
+					title={`Listed on ${s.arbitrage.venuesPresent} venues — visible on the /arbitrage page${s.arbitrage.rawSpreadPct != null ? ` with a ${s.arbitrage.rawSpreadPct.toFixed(2)}% raw spread` : ''}`}
 				>
 					⇄ Arbitrage
-					{#if data.arbitrage.rawSpreadPct != null}
-						<span class="opacity-80">{data.arbitrage.rawSpreadPct.toFixed(2)}%</span>
+					{#if s.arbitrage.rawSpreadPct != null}
+						<span class="opacity-80">{s.arbitrage.rawSpreadPct.toFixed(2)}%</span>
 					{/if}
 				</a>
 			{/if}
@@ -928,7 +939,7 @@
 				{data.tvlUSD > 0 ? formatMarketCap(data.tvlUSD.toString()) : '—'}
 			</div>
 		</div>
-		{#if marketCapUSD > 0 && data.tvlUSD >= data.mcapTvlThresholdUSD}
+		{#if marketCapUSD > 0 && data.tvlUSD >= s.mcapTvlThresholdUSD}
 			<div class="p-4 rounded-xl border col-span-2 md:col-span-1 ts-border-subtle">
 				<div class="text-xs uppercase tracking-wider mb-1 ts-text-muted" title="Hidden for tokens whose Cauldron TVL is below the average TVL of the top half of listed tokens — caps derived from negligible liquidity would skew rankings.">Market cap</div>
 				<div class="text-xl font-mono">{formatMarketCap(marketCapUSD.toString())}</div>
@@ -1004,7 +1015,7 @@
 						</dd>
 					</div>
 				{/if}
-				{#if token.herfindahlIndex != null}
+				{#if s.herfindahlIndex != null}
 					<div class="flex justify-between gap-3">
 						<dt class="ts-text-muted">
 							<Tooltip>
@@ -1015,7 +1026,7 @@
 							</Tooltip>
 						</dt>
 						<dd class="font-mono ts-text-primary" title="Herfindahl index — Σ(share)²">
-							{token.herfindahlIndex.toFixed(4)}
+							{s.herfindahlIndex.toFixed(4)}
 						</dd>
 					</div>
 				{/if}
@@ -1027,19 +1038,19 @@
 						</dd>
 					</div>
 				{/if}
-				{#if data.venueListings.cauldronFirstListedAt}
+				{#if s.venueListings.cauldronFirstListedAt}
 					<div class="flex justify-between gap-3">
 						<dt class="ts-text-muted">Listed on Cauldron</dt>
-						<dd class="font-mono ts-text-primary" title={`First seen on Cauldron at ${formatAbsoluteDate(data.venueListings.cauldronFirstListedAt)}`}>
-							{formatAbsoluteDate(data.venueListings.cauldronFirstListedAt)}
+						<dd class="font-mono ts-text-primary" title={`First seen on Cauldron at ${formatAbsoluteDate(s.venueListings.cauldronFirstListedAt)}`}>
+							{formatAbsoluteDate(s.venueListings.cauldronFirstListedAt)}
 						</dd>
 					</div>
 				{/if}
-				{#if data.venueListings.fexFirstListedAt}
+				{#if s.venueListings.fexFirstListedAt}
 					<div class="flex justify-between gap-3">
 						<dt class="ts-text-muted">Listed on Fex</dt>
 						<dd class="font-mono ts-text-primary">
-							{formatAbsoluteDate(data.venueListings.fexFirstListedAt)}
+							{formatAbsoluteDate(s.venueListings.fexFirstListedAt)}
 						</dd>
 					</div>
 				{/if}
@@ -1051,34 +1062,34 @@
 						</dd>
 					</div>
 				{/if}
-				{#if data.reportCount > 0}
+				{#if s.reportCount > 0}
 					<div class="flex justify-between gap-3">
 						<dt class="ts-text-muted">Open reports</dt>
 						<dd class="font-mono text-amber-600 dark:text-amber-400" title="Number of unactioned user reports against this token">
-							{data.reportCount}
+							{s.reportCount}
 						</dd>
 					</div>
 				{/if}
 			</dl>
 		</div>
 
-		{#if hasExtremes || data.recentActivity.recentTradeBuckets > 0}
+		{#if hasExtremes || s.recentActivity.recentTradeBuckets > 0}
 			<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
 				<div class="text-xs uppercase tracking-wider mb-3 ts-text-muted">Trading</div>
 				<dl class="space-y-2 text-sm">
-					{#if data.recentActivity.recentTradeBuckets > 0}
+					{#if s.recentActivity.recentTradeBuckets > 0}
 						<div class="flex justify-between gap-3">
 							<dt class="ts-text-muted" title="Number of price-history buckets in the last 24h with non-zero TVL delta — proxy for trade activity">24h activity</dt>
 							<dd class="font-mono ts-text-primary">
-								{data.recentActivity.recentTradeBuckets} active bucket{data.recentActivity.recentTradeBuckets === 1 ? '' : 's'}
-								{#if data.recentActivity.recentVolumeUSD > 0}
-									<span class="text-slate-500 ml-1">· ~${data.recentActivity.recentVolumeUSD.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+								{s.recentActivity.recentTradeBuckets} active bucket{s.recentActivity.recentTradeBuckets === 1 ? '' : 's'}
+								{#if s.recentActivity.recentVolumeUSD > 0}
+									<span class="text-slate-500 ml-1">· ~${s.recentActivity.recentVolumeUSD.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
 								{/if}
 							</dd>
 						</div>
 					{/if}
 					{#each ['24h', '7d', '30d'] as const as windowKey (windowKey)}
-						{@const ext = data.priceExtremes[windowKey]}
+						{@const ext = s.priceExtremes[windowKey]}
 						{#if ext.min != null && ext.max != null}
 							<div class="flex justify-between gap-3">
 								<dt class="ts-text-muted">{windowKey} range</dt>
@@ -1184,7 +1195,7 @@
 		<div class="flex items-baseline justify-between mb-3 flex-wrap gap-y-2">
 			<h2 class="text-xl font-bold text-slate-900 dark:text-white">
 				Price &amp; volume
-				<span class="ml-2 text-sm font-normal text-slate-500">Cauldron · {data.priceChart.rangeLabel}</span>
+				<span class="ml-2 text-sm font-normal text-slate-500">Cauldron · {s.priceChart.rangeLabel}</span>
 			</h2>
 			<div class="flex flex-wrap gap-1 text-xs">
 				{#each [
@@ -1195,7 +1206,7 @@
 					{ key: '1y',  label: '1y' },
 					{ key: 'all', label: 'All' }
 				] as r (r.key)}
-					{@const active = data.priceChart.range === r.key}
+					{@const active = s.priceChart.range === r.key}
 					<a
 						href={`?range=${r.key}#chart`}
 						class={`px-2.5 py-1 rounded-md font-medium transition-colors ${
@@ -1212,10 +1223,10 @@
 		</div>
 		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
 			<PriceChart
-				buckets={data.priceChart.buckets}
+				buckets={s.priceChart.buckets}
 				decimals={data.token.decimals}
 				bchPriceUSD={data.bchPriceUSD}
-				rangeLabel={data.priceChart.rangeLabel}
+				rangeLabel={s.priceChart.rangeLabel}
 			/>
 		</div>
 		<p class="mt-2 text-xs ts-text-muted">
@@ -1225,12 +1236,12 @@
 		</p>
 	</section>
 
-	{#if data.tapswapOffers.length > 0}
+	{#if s.tapswapOffers.length > 0}
 		<section class="mb-8">
 			<div class="flex items-baseline justify-between mb-4">
 				<h2 class="text-xl font-bold text-slate-900 dark:text-white">
 					Open listings on Tapswap (P2P)
-					<span class="ml-2 text-sm font-normal text-slate-500">{data.tapswapOffers.length}</span>
+					<span class="ml-2 text-sm font-normal text-slate-500">{s.tapswapOffers.length}</span>
 				</h2>
 				<a
 					href={`https://tapswap.cash/trade/${token.id}`}
@@ -1252,7 +1263,7 @@
 						</tr>
 					</thead>
 					<tbody>
-						{#each data.tapswapOffers as offer (offer.id)}
+						{#each s.tapswapOffers as offer (offer.id)}
 							{@const wantSatsNum = Number(offer.wantSats)}
 							{@const wantBch = Number.isFinite(wantSatsNum) ? wantSatsNum / 1e8 : 0}
 							{@const wantUsd = wantBch * (data.bchPriceUSD ?? 0)}
@@ -1294,11 +1305,12 @@
 		</section>
 	{/if}
 
+
+{/await}
 	<!--
 		BCMR technical bits — NFT types schema + extensions — as collapsible
 		JSON dumps. URIs / status / tags / splitId already surface in the
 		compact bar near the top; this section is strictly the power-user
-		payload and only renders if either dump exists.
 	-->
 	{#if data.bcmr}
 		{@const bcmr = data.bcmr}
