@@ -299,7 +299,7 @@
 	// full set for the dedicated "Sentiment standings" card lower down.
 	const standings = $derived(
 		_d.leaderboardStandings.standings.filter(
-			(s) => s.currentRank !== null && s.currentRank <= 5
+			(_s: any) => _s.currentRank !== null && _s.currentRank <= 5
 		)
 	);
 	// Age-bucket badge — flags tokens minted recently as a caution
@@ -829,22 +829,22 @@
 					⚠️ {ageBadgeLabel(ageBadge)}
 				</span>
 			{/if}
-			{#if f.tvlRank != null}
+			{#if (f as any).tvlRank != null}
 				<a
 					href="/?sort=tvl"
 					class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-600 text-white text-xs font-semibold hover:bg-cyan-700"
-					title={`Ranked #${f.tvlRank} by Cauldron pool TVL across all listed tokens. Other venues (Fex, Tapswap) are not factored in. Click to view the directory sorted by TVL.`}
+					title={`Ranked #${(f as any).tvlRank} by Cauldron pool TVL across all listed tokens. Other venues (Fex, Tapswap) are not factored in. Click to view the directory sorted by TVL.`}
 				>
-					🏆 #{f.tvlRank} by Cauldron TVL
+					🏆 #{(f as any).tvlRank} by Cauldron TVL
 				</a>
 			{/if}
-			{#if f.holdersRank != null}
+			{#if (f as any).holdersRank != null}
 				<a
 					href="/?sort=holders"
 					class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700"
-					title={`Ranked #${f.holdersRank} by distinct on-chain holders across all non-moderated CashTokens. Exchange covenants count as a single holder, so actively-traded tokens may be slightly understated. Click to view the directory sorted by holders.`}
+					title={`Ranked #${(f as any).holdersRank} by distinct on-chain holders across all non-moderated CashTokens. Exchange covenants count as a single holder, so actively-traded tokens may be slightly understated. Click to view the directory sorted by holders.`}
 				>
-					👥 #{f.holdersRank} by Holders
+					👥 #{(f as any).holdersRank} by Holders
 				</a>
 			{/if}
 			{#if f.cauldronTvlSharePct != null && f.cauldronTvlSharePct >= 10}
@@ -858,10 +858,10 @@
 			{#each standings as s (s.bucket)}
 				<a
 					href="/#community-sentiment"
-					class={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${BUCKET_TONE[s.bucket]}`}
-					title={`Ranked #${s.currentRank} in ${BUCKET_LABEL[s.bucket]} on ${s.leaderboardStandings.latestDay}. Click to view leaderboards.`}
+					class={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${BUCKET_TONE[(s as any).bucket as keyof typeof BUCKET_TONE]}`}
+					title={`Ranked #${s.currentRank} in ${BUCKET_LABEL[(s as any).bucket as keyof typeof BUCKET_LABEL]} on ${s.leaderboardStandings.latestDay}. Click to view leaderboards.`}
 				>
-					<span>#{s.currentRank} {BUCKET_LABEL[s.bucket]}</span>
+					<span>#{s.currentRank} {BUCKET_LABEL[(s as any).bucket as keyof typeof BUCKET_LABEL]}</span>
 					{#if s.streakDays >= 3}
 						<span class="opacity-80" title="{s.streakDays}-day streak in the top 5">🔥{s.streakDays}d</span>
 					{/if}
@@ -904,15 +904,15 @@
 					{#if pct !== 0}<span class="opacity-80">{pct >= 0 ? '+' : ''}{pct.toFixed(1)}%</span>{/if}
 				</span>
 			{/if}
-			{#if f.arbitrage.eligible}
+			{#if (f as any).arbitrage.eligible}
 				<a
 					href="/arbitrage"
 					class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-fuchsia-100 dark:bg-fuchsia-900/30 text-fuchsia-700 dark:text-fuchsia-300 text-xs font-semibold hover:bg-fuchsia-200 dark:hover:bg-fuchsia-900/50"
-					title={`Listed on ${f.arbitrage.venuesPresent} venues — visible on the /arbitrage page${f.arbitrage.rawSpreadPct != null ? ` with a ${f.arbitrage.rawSpreadPct.toFixed(2)}% raw spread` : ''}`}
+					title={`Listed on ${(f as any).arbitrage.venuesPresent} venues — visible on the /arbitrage page${(f as any).arbitrage.rawSpreadPct != null ? ` with a ${(f as any).arbitrage.rawSpreadPct.toFixed(2)}% raw spread` : ''}`}
 				>
 					⇄ Arbitrage
-					{#if f.arbitrage.rawSpreadPct != null}
-						<span class="opacity-80">{f.arbitrage.rawSpreadPct.toFixed(2)}%</span>
+					{#if (f as any).arbitrage.rawSpreadPct != null}
+						<span class="opacity-80">{(f as any).arbitrage.rawSpreadPct.toFixed(2)}%</span>
 					{/if}
 				</a>
 			{/if}
@@ -1029,7 +1029,28 @@
 		proxies, BCMR freshness, public report count, listed-since.
 		Each row only renders when its underlying data is meaningful.
 	-->
-	<section class="mb-8 grid grid-cols-1 md:grid-cols-2 gap-3">
+	{#await data.slow}
+		<!-- Slow skeleton -->
+		<div class="animate-pulse space-y-4 mt-6">
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+				<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 space-y-3">
+					<div class="h-4 w-full rounded bg-slate-200 dark:bg-zinc-800"></div>
+					<div class="h-4 w-full rounded bg-slate-200 dark:bg-zinc-800"></div>
+					<div class="h-4 w-full rounded bg-slate-200 dark:bg-zinc-800"></div>
+					<div class="h-4 w-full rounded bg-slate-200 dark:bg-zinc-800"></div>
+					<div class="h-4 w-full rounded bg-slate-200 dark:bg-zinc-800"></div>
+					<div class="h-4 w-full rounded bg-slate-200 dark:bg-zinc-800"></div>
+				</div>
+				<div class="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 space-y-3">
+					<div class="h-4 w-full rounded bg-slate-200 dark:bg-zinc-800"></div>
+					<div class="h-4 w-full rounded bg-slate-200 dark:bg-zinc-800"></div>
+					<div class="h-4 w-full rounded bg-slate-200 dark:bg-zinc-800"></div>
+				</div>
+			</div>
+			<div class="h-64 w-full rounded-xl bg-slate-200 dark:bg-zinc-800 mt-4"></div>
+		</div>
+	{:then s}
+<section class="mb-8 grid grid-cols-1 md:grid-cols-2 gap-3">
 		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
 			<div class="text-xs uppercase tracking-wider mb-3 ts-text-muted">Profile</div>
 			<dl class="space-y-2 text-sm">
@@ -1055,7 +1076,7 @@
 						</dd>
 					</div>
 				{/if}
-				{#if s.herfindahlIndex != null}
+				{#if (s as any).herfindahlIndex != null}
 					<div class="flex justify-between gap-3">
 						<dt class="ts-text-muted">
 							<Tooltip>
@@ -1066,7 +1087,7 @@
 							</Tooltip>
 						</dt>
 						<dd class="font-mono ts-text-primary" title="Herfindahl index — Σ(share)²">
-							{s.herfindahlIndex.toFixed(4)}
+							{(s as any).herfindahlIndex.toFixed(4)}
 						</dd>
 					</div>
 				{/if}
@@ -1102,34 +1123,34 @@
 						</dd>
 					</div>
 				{/if}
-				{#if s.reportCount > 0}
+				{#if (s as any).reportCount > 0}
 					<div class="flex justify-between gap-3">
 						<dt class="ts-text-muted">Open reports</dt>
 						<dd class="font-mono text-amber-600 dark:text-amber-400" title="Number of unactioned user reports against this token">
-							{s.reportCount}
+							{(s as any).reportCount}
 						</dd>
 					</div>
 				{/if}
 			</dl>
 		</div>
 
-		{#if hasExtremes || s.recentActivity.recentTradeBuckets > 0}
+		{#if hasExtremes || (s as any).recentActivity.recentTradeBuckets > 0}
 			<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
 				<div class="text-xs uppercase tracking-wider mb-3 ts-text-muted">Trading</div>
 				<dl class="space-y-2 text-sm">
-					{#if s.recentActivity.recentTradeBuckets > 0}
+					{#if (s as any).recentActivity.recentTradeBuckets > 0}
 						<div class="flex justify-between gap-3">
 							<dt class="ts-text-muted" title="Number of price-history buckets in the last 24h with non-zero TVL delta — proxy for trade activity">24h activity</dt>
 							<dd class="font-mono ts-text-primary">
-								{s.recentActivity.recentTradeBuckets} active bucket{s.recentActivity.recentTradeBuckets === 1 ? '' : 's'}
-								{#if s.recentActivity.recentVolumeUSD > 0}
-									<span class="text-slate-500 ml-1">· ~${s.recentActivity.recentVolumeUSD.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+								{(s as any).recentActivity.recentTradeBuckets} active bucket{(s as any).recentActivity.recentTradeBuckets === 1 ? '' : 's'}
+								{#if (s as any).recentActivity.recentVolumeUSD > 0}
+									<span class="text-slate-500 ml-1">· ~${(s as any).recentActivity.recentVolumeUSD.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
 								{/if}
 							</dd>
 						</div>
 					{/if}
 					{#each ['24h', '7d', '30d'] as const as windowKey (windowKey)}
-						{@const ext = s.priceExtremes[windowKey]}
+						{@const ext = (s as any).priceExtremes[windowKey]}
 						{#if ext.min != null && ext.max != null}
 							<div class="flex justify-between gap-3">
 								<dt class="ts-text-muted">{windowKey} range</dt>
@@ -1232,8 +1253,6 @@
 		page state — `?range=24h|7d|30d|90d|1y|all` is bookmarkable.
 	-->
 	
-{#await data.slow}
-		<!-- Below-fold skeleton -->
 		<div class="animate-pulse space-y-4 mt-6">
 			<div class="h-64 w-full rounded-xl bg-slate-200 dark:bg-zinc-800"></div>
 			<div class="h-6 w-48 rounded bg-slate-200 dark:bg-zinc-800 mt-4"></div>
@@ -1242,7 +1261,6 @@
 			<div class="h-6 w-full rounded bg-slate-200 dark:bg-zinc-800"></div>
 			<div class="h-6 w-full rounded bg-slate-200 dark:bg-zinc-800"></div>
 		</div>
-	{:then s}
 <section class="mb-8" id="chart">
 		<div class="flex items-baseline justify-between mb-3 flex-wrap gap-y-2">
 			<h2 class="text-xl font-bold text-slate-900 dark:text-white">
@@ -1356,6 +1374,8 @@
 			</p>
 		</section>
 	{/if}
+
+{/await}
 
 	<!--
 		BCMR technical bits — NFT types schema + extensions — as collapsible
@@ -1644,6 +1664,5 @@
 		</section>
 	{/if}
 
-{/await}
 {/await}
 </main>
