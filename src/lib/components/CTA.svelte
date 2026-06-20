@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
+	import * as m from '$lib/paraglide/messages';
 </script>
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -25,10 +26,10 @@
 				</div>
 				<div class="text-white">
 					<h3 class="text-xl md:text-2xl font-semibold leading-snug">
-						Follow Panmoni on X for BCH &amp; CashTokens updates
+						{m.cta_heading()}
 					</h3>
 					<p class="mt-1 text-sm text-white/80">
-						The team behind TokenStork — product launches, dev notes, and ecosystem signal.
+						{m.cta_sub()}
 					</p>
 				</div>
 			</div>
@@ -43,7 +44,7 @@
 				<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 1200 1227" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
 					<path d="M714.163 519.284L1160.89 0H1055.03L667.137 450.887L357.328 0H0L468.492 681.821L0 1226.37H105.866L515.491 750.218L842.672 1226.37H1200L714.137 519.284H714.163ZM569.165 687.828L521.697 619.934L144.011 79.6944H306.615L611.412 515.685L658.88 583.579L1055.08 1150.3H892.476L569.165 687.854V687.826Z" />
 				</svg>
-				Follow @Panmonicom
+				{m.cta_button()}
 			</Button>
 		</div>
 	</section>

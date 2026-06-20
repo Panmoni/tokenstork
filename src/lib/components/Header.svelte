@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
+	import * as m from '$lib/paraglide/messages';
+	import { localizeHref, deLocalizeHref } from '$lib/paraglide/runtime';
 	import ThemeSwitcher from './ThemeSwitcher.svelte';
 
 	// Nav entries render left-to-right on desktop and top-down in the
@@ -9,46 +11,56 @@
 	// Nav entries; `children` enables a dropdown on desktop and a flat
 	// indented list in the mobile drawer. The parent's href stays
 	// clickable on its own — the chevron toggles the dropdown.
+	//
+	// `id` is a stable, locale-independent key for dropdown state + #each
+	// keying (labels are translated and would be unstable keys). `href`
+	// values are canonical (de-localized) — they're wrapped with
+	// `localizeHref()` at render time so a non-English visitor stays in their
+	// locale, and compared against the de-localized pathname for active state.
 	type NavChild = { name: string; href: string; description?: string };
-	type NavItem = { name: string; href: string; children?: NavChild[] };
-	const navigation: NavItem[] = [
+	type NavItem = { id: string; name: string; href: string; children?: NavChild[] };
+	const navigation = $derived<NavItem[]>([
 		{
-			name: 'Tokens',
+			id: 'tokens',
+			name: m.nav_tokens(),
 			href: '/',
 			children: [
-				{ name: 'All tokens', href: '/', description: 'Full directory' },
-				{ name: 'CRC-20', href: '/crc20', description: 'Tokens with on-chain symbol claims' }
+				{ name: m.nav_tokens_all(), href: '/', description: m.nav_tokens_all_desc() },
+				{ name: m.nav_crc20(), href: '/crc20', description: m.nav_crc20_desc() }
 			]
 		},
 		{
-			name: 'Stats',
+			id: 'stats',
+			name: m.nav_stats(),
 			href: '/stats',
 			children: [
-				{ name: 'Stats', href: '/stats', description: 'Network and token activity' },
-				{ name: 'Mining', href: '/mining', description: 'Recent blocks by miner' },
-				{ name: 'Blocks', href: '/blocks', description: 'Latest BCH blocks' }
+				{ name: m.nav_stats(), href: '/stats', description: m.nav_stats_desc() },
+				{ name: m.nav_mining(), href: '/mining', description: m.nav_mining_desc() },
+				{ name: m.nav_blocks(), href: '/blocks', description: m.nav_blocks_desc() }
 			]
 		},
 		{
-			name: 'Tools',
+			id: 'tools',
+			name: m.nav_tools(),
 			href: '/mint',
 			children: [
-				{ name: 'Mint', href: '/mint', description: 'Create a new CashTokens genesis' },
-				{ name: 'Airdrop', href: '/airdrops/new', description: 'Send tokens to all holders of another token' },
-				{ name: 'Arbitrage', href: '/arbitrage', description: 'Cross-venue price gaps' }
+				{ name: m.nav_mint(), href: '/mint', description: m.nav_mint_desc() },
+				{ name: m.nav_airdrop(), href: '/airdrops/new', description: m.nav_airdrop_desc() },
+				{ name: m.nav_arbitrage(), href: '/arbitrage', description: m.nav_arbitrage_desc() }
 			]
 		},
 		{
-			name: 'About',
+			id: 'about',
+			name: m.nav_about(),
 			href: '/about',
 			children: [
-				{ name: 'About', href: '/about', description: 'What TokenStork is for' },
-				{ name: 'FAQ', href: '/faq', description: 'Common questions' },
-				{ name: 'Learn', href: '/learn', description: 'CashTokens primer' },
-				{ name: 'Roadmap', href: '/roadmap', description: 'What we are building next' }
+				{ name: m.nav_about(), href: '/about', description: m.nav_about_desc() },
+				{ name: m.nav_faq(), href: '/faq', description: m.nav_faq_desc() },
+				{ name: m.nav_learn(), href: '/learn', description: m.nav_learn_desc() },
+				{ name: m.nav_roadmap(), href: '/roadmap', description: m.nav_roadmap_desc() }
 			]
 		}
-	];
+	]);
 
 	// Logged-in cashaddr (or null) comes through the layout server load
 	// via hooks.server.ts. Truncated for the header pill — full cashaddr
@@ -79,7 +91,7 @@
 			// expires; we can fail gracefully on the client.
 		}
 		await invalidateAll();
-		await goto('/');
+		await goto(localizeHref('/'));
 	}
 
 	let mobileMenuOpen = $state(false);
@@ -90,9 +102,9 @@
 	let userMenuOpen = $state(false);
 	let userMenuEl: HTMLDivElement | undefined = $state();
 
-	// Nav dropdowns (currently just "Tokens"). Keyed by the parent item's
-	// name. Click outside the relevant menu element closes it; Esc closes
-	// any open menu.
+	// Nav dropdowns. Keyed by the parent item's stable `id` (labels are
+	// translated, so they'd be unstable keys). Click outside the relevant
+	// menu element closes it; Esc closes any open menu.
 	let openNavMenu: string | null = $state(null);
 	let navMenuEls: Record<string, HTMLDivElement | undefined> = $state({});
 
@@ -114,7 +126,17 @@
 		}
 	}
 
-	const pathname = $derived(page.url.pathname);
+	// Canonical (de-localized) current path — used for active-link state so
+	// `/es/crc20` matches the canonical `/crc20` nav href.
+	const pathname = $derived(deLocalizeHref(page.url.pathname));
+
+	// Sign-in link: localized /login, with a `return` param pointing back to
+	// the visitor's CURRENT (locale-prefixed) path so post-login lands them
+	// on the right localized page.
+	const loginHref = $derived(
+		localizeHref('/login') +
+			(pathname !== '/' ? `?return=${encodeURIComponent(page.url.pathname)}` : '')
+	);
 
 	// Header search — only surfaces on non-home pages. The home page
 	// already has its own full-width, debounced, live-filtering search
@@ -133,7 +155,7 @@
 		e.preventDefault();
 		const q = headerSearch.trim();
 		if (q) {
-			goto(`/?search=${encodeURIComponent(q)}`);
+			goto(localizeHref(`/?search=${encodeURIComponent(q)}`));
 			headerSearch = '';
 			mobileMenuOpen = false;
 		}
@@ -146,23 +168,23 @@
 	<nav class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
 		<div class="flex h-16 items-center justify-between">
 			<div class="flex-shrink-0">
-				<a href="/" class="flex items-center">
+				<a href={localizeHref('/')} class="flex items-center">
 					<img src="/logo-simple-bch.png" alt="TokenStork" class="h-10 w-auto" />
 				</a>
 			</div>
 
 			<div class="hidden md:flex md:items-center md:space-x-6 lg:space-x-8">
-				{#each navigation as item (item.name)}
+				{#each navigation as item (item.id)}
 					{@const active =
 						pathname === item.href ||
 						(item.children?.some((c) => c.href === pathname) ?? false)}
 					{#if item.children}
-						<div class="relative" bind:this={navMenuEls[item.name]}>
+						<div class="relative" bind:this={navMenuEls[item.id]}>
 							<button
 								type="button"
-								onclick={() => (openNavMenu = openNavMenu === item.name ? null : item.name)}
+								onclick={() => (openNavMenu = openNavMenu === item.id ? null : item.id)}
 								aria-haspopup="menu"
-								aria-expanded={openNavMenu === item.name}
+								aria-expanded={openNavMenu === item.id}
 								class="relative inline-flex items-center gap-1 text-sm font-medium transition-colors duration-200 {active ? 'text-violet-600 dark:text-violet-400' : 'text-slate-600 hover:text-slate-900 dark:text-zinc-200 dark:hover:text-white'}"
 							>
 								{item.name}
@@ -170,7 +192,7 @@
 									xmlns="http://www.w3.org/2000/svg"
 									viewBox="0 0 20 20"
 									fill="currentColor"
-									class="w-4 h-4 transition-transform {openNavMenu === item.name ? 'rotate-180' : ''}"
+									class="w-4 h-4 transition-transform {openNavMenu === item.id ? 'rotate-180' : ''}"
 									aria-hidden="true"
 								>
 									<path
@@ -183,7 +205,7 @@
 									<span class="absolute -bottom-[1.625rem] left-0 right-4 h-0.5 bg-gradient-to-r from-violet-600 to-indigo-500 rounded-full"></span>
 								{/if}
 							</button>
-							{#if openNavMenu === item.name}
+							{#if openNavMenu === item.id}
 								<div
 									class="absolute left-0 mt-3 w-56 rounded-lg border shadow-lg py-1 z-50 ts-border-subtle ts-surface-panel"
 									role="menu"
@@ -191,7 +213,7 @@
 									{#each item.children as child (child.href)}
 										{@const childActive = pathname === child.href}
 										<a
-											href={child.href}
+											href={localizeHref(child.href)}
 											onclick={() => (openNavMenu = null)}
 											role="menuitem"
 											class="block px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-zinc-800 {childActive ? 'bg-violet-50 dark:bg-violet-900/20' : ''}"
@@ -211,7 +233,7 @@
 						</div>
 					{:else}
 						<a
-							href={item.href}
+							href={localizeHref(item.href)}
 							class="relative text-sm font-medium transition-colors duration-200 {active ? 'text-violet-600 dark:text-violet-400' : 'text-slate-600 hover:text-slate-900 dark:text-zinc-200 dark:hover:text-white'}"
 						>
 							{item.name}
@@ -228,11 +250,11 @@
 					<div class="flex items-center gap-3">
 						{#if watchlistCount > 0}
 							<a
-								href="/watchlist"
+								href={localizeHref('/watchlist')}
 								class="text-sm font-medium hover:text-slate-900 dark:hover:text-white inline-flex items-center gap-1 ts-text-body"
-								title="Your tracked tokens"
+								title={m.header_watchlist_title()}
 							>
-								Watchlist
+								{m.header_watchlist()}
 								<span class="px-1.5 py-0.5 rounded text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 font-semibold">
 									{watchlistCount}
 								</span>
@@ -243,7 +265,7 @@
 								type="button"
 								onclick={() => (userMenuOpen = !userMenuOpen)}
 								class="p-1.5 rounded-full hover:text-slate-900 hover:bg-slate-100 dark:hover:text-white dark:hover:bg-zinc-800 transition-colors ts-text-body"
-								aria-label="Account menu"
+								aria-label={m.header_account_menu()}
 								aria-haspopup="menu"
 								aria-expanded={userMenuOpen}
 								title={user.cashaddr}
@@ -259,26 +281,26 @@
 									role="menu"
 								>
 									<div class="px-3 py-2 border-b ts-border-subtle">
-										<div class="text-[10px] uppercase tracking-wider ts-text-faint">Signed in as</div>
+										<div class="text-[10px] uppercase tracking-wider ts-text-faint">{m.header_signed_in_as()}</div>
 										<div class="font-mono text-xs text-emerald-700 dark:text-emerald-300 mt-1 truncate" title={user.cashaddr}>
 											{truncatedCashaddr}
 										</div>
 									</div>
 									<a
-										href="/airdrops"
+										href={localizeHref('/airdrops')}
 										onclick={() => (userMenuOpen = false)}
 										class="block px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-zinc-800 ts-text-body border-b ts-border-subtle"
 										role="menuitem"
 									>
-										Your airdrops
+										{m.header_your_airdrops()}
 									</a>
 									<a
-										href="/mints"
+										href={localizeHref('/mints')}
 										onclick={() => (userMenuOpen = false)}
 										class="block px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-zinc-800 ts-text-body border-b ts-border-subtle"
 										role="menuitem"
 									>
-										Your mints
+										{m.header_your_mints()}
 									</a>
 									<button
 										type="button"
@@ -289,7 +311,7 @@
 										class="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-zinc-800 ts-text-body"
 										role="menuitem"
 									>
-										Sign out
+										{m.header_sign_out()}
 									</button>
 								</div>
 							{/if}
@@ -297,10 +319,10 @@
 					</div>
 				{:else}
 					<a
-						href={`/login${pathname !== '/' ? `?return=${encodeURIComponent(pathname)}` : ''}`}
+						href={loginHref}
 						class="text-sm font-medium hover:text-slate-900 dark:hover:text-white ts-text-body"
 					>
-						Sign in
+						{m.header_sign_in()}
 					</a>
 				{/if}
 				{#if showSearch}
@@ -313,11 +335,11 @@
 					<form onsubmit={submitHeaderSearch} class="relative hidden lg:block">
 						<input
 							type="search"
-							placeholder="Search tokens…"
+							placeholder={m.header_search_placeholder()}
 							bind:value={headerSearch}
 							maxlength="128"
 							class="w-56 pl-9 pr-3 py-1.5 rounded-lg border text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent ts-border-strong ts-surface-panel"
-							aria-label="Search tokens"
+							aria-label={m.header_search_aria()}
 						/>
 						<svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -332,7 +354,7 @@
 				<button
 					onclick={() => (mobileMenuOpen = !mobileMenuOpen)}
 					class="p-2 rounded-lg hover:text-slate-900 hover:bg-slate-100 dark:hover:text-white dark:hover:bg-zinc-800 ts-text-body"
-					aria-label="Toggle menu"
+					aria-label={m.header_toggle_menu()}
 				>
 					{#if mobileMenuOpen}
 						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-6 w-6">
@@ -353,21 +375,21 @@
 					<form onsubmit={submitHeaderSearch} class="relative mb-2 px-2">
 						<input
 							type="search"
-							placeholder="Search tokens…"
+							placeholder={m.header_search_placeholder()}
 							bind:value={headerSearch}
 							maxlength="128"
 							class="w-full pl-9 pr-3 py-2 rounded-lg border text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent ts-border-strong ts-surface-panel"
-							aria-label="Search tokens"
+							aria-label={m.header_search_aria()}
 						/>
 						<svg class="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
 						</svg>
 					</form>
 				{/if}
-				{#each navigation as item (item.name)}
+				{#each navigation as item (item.id)}
 					{@const active = pathname === item.href}
 					<a
-						href={item.href}
+						href={localizeHref(item.href)}
 						onclick={() => (mobileMenuOpen = false)}
 						class="block px-4 py-3 rounded-lg text-base font-medium transition-colors duration-200 {active ? 'bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-white'}"
 					>
@@ -378,7 +400,7 @@
 							{#each item.children.filter((c) => c.href !== item.href) as child (child.href)}
 								{@const childActive = pathname === child.href}
 								<a
-									href={child.href}
+									href={localizeHref(child.href)}
 									onclick={() => (mobileMenuOpen = false)}
 									class="block px-4 py-2 rounded-lg text-sm transition-colors duration-200 {childActive ? 'bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400' : 'text-slate-500 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800'}"
 								>
@@ -391,7 +413,7 @@
 				<div class="border-t mt-2 pt-2 ts-border-subtle">
 					{#if user && truncatedCashaddr}
 						<div class="px-4 py-2 text-xs ts-text-muted">
-							Signed in as
+							{m.header_signed_in_as()}
 							<span class="font-mono text-emerald-700 dark:text-emerald-300" title={user.cashaddr}>
 								{truncatedCashaddr}
 							</span>
@@ -404,15 +426,15 @@
 							}}
 							class="w-full text-left block px-4 py-3 rounded-lg text-base font-medium hover:bg-slate-50 dark:hover:bg-zinc-800 ts-text-body"
 						>
-							Sign out
+							{m.header_sign_out()}
 						</button>
 					{:else}
 						<a
-							href={`/login${pathname !== '/' ? `?return=${encodeURIComponent(pathname)}` : ''}`}
+							href={loginHref}
 							onclick={() => (mobileMenuOpen = false)}
 							class="block px-4 py-3 rounded-lg text-base font-medium hover:bg-slate-50 dark:hover:bg-zinc-800 ts-text-body"
 						>
-							Sign in
+							{m.header_sign_in()}
 						</a>
 					{/if}
 				</div>

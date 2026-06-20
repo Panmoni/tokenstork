@@ -2,6 +2,8 @@
 	import { goto, invalidateAll } from '$app/navigation';
 	import { env as publicEnv } from '$env/dynamic/public';
 	import { wcSession } from '$lib/client/wc-session';
+	import * as m from '$lib/paraglide/messages';
+	import { getLocale, localizeHref } from '$lib/paraglide/runtime';
 	// Two paths to acquire a wallet signature for the auth handshake:
 	//
 	//   1. Primary — WalletConnect v2 over the BCH namespace defined by
@@ -52,8 +54,7 @@
 		if (!WC_PROJECT_ID) {
 			stage = {
 				kind: 'error',
-				reason:
-					'WalletConnect is not configured on this deployment. Set PUBLIC_WALLETCONNECT_PROJECT_ID and rebuild, or sign manually below.'
+				reason: m.login_err_not_configured()
 			};
 			return;
 		}
@@ -85,7 +86,7 @@
 				projectId: WC_PROJECT_ID,
 				metadata: {
 					name: 'Token Stork',
-					description: 'BCH CashTokens directory + arbitrage scanner',
+					description: m.login_wc_app_description(),
 					url: window.location.origin,
 					icons: [`${window.location.origin}/logo-simple-bch.png`]
 				}
@@ -153,7 +154,7 @@
 					method: 'bch_signMessage',
 					params: {
 						message: challenge.message,
-						userPrompt: 'Sign in to Token Stork'
+						userPrompt: m.login_wc_user_prompt()
 					}
 				}
 			});
@@ -181,7 +182,7 @@
 			wcSession.session = sessionResult;
 			wcSession.cashaddr = cashaddr;
 			await invalidateAll();
-			await goto('/');
+			await goto(localizeHref('/'));
 		} catch (err) {
 			modal?.closeModal();
 			stage = {
@@ -205,7 +206,7 @@
 		e.preventDefault();
 		const trimmed = cashaddrInput.trim();
 		if (!trimmed) {
-			stage = { kind: 'error', reason: 'Enter a cashaddr first' };
+			stage = { kind: 'error', reason: m.login_err_enter_cashaddr() };
 			return;
 		}
 		try {
@@ -251,7 +252,7 @@
 				return;
 			}
 			await invalidateAll();
-			await goto('/');
+			await goto(localizeHref('/'));
 		} catch (err) {
 			stage = {
 				kind: 'error',
@@ -279,17 +280,16 @@
 </script>
 
 <svelte:head>
-	<title>Sign in — Token Stork</title>
+	<title>{m.login_meta_title()}</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
 <main class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
 	<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent mb-3">
-		Sign in with your BCH wallet
+		{m.login_h1()}
 	</h1>
 	<p class="mb-8 max-w-prose ts-text-muted">
-		No email, no password. Connect via WalletConnect — your wallet handles
-		the cryptography; we just verify the signature and issue a session.
+		{m.login_intro()}
 	</p>
 
 	{#if stage.kind === 'idle'}
@@ -304,11 +304,11 @@
 					<path d="M16 12h2" />
 					<path d="M3 10h18" />
 				</svg>
-				Connect Wallet
+				{m.login_connect_wallet()}
 			</button>
 			<p class="text-xs ts-text-muted">
-				Works with Cashonize, Paytaca, Zapit, and any other wallet that supports the
-				<a class="text-violet-600 dark:text-violet-400 hover:underline" href="https://github.com/mainnet-pat/wc2-bch-bcr" target="_blank" rel="noopener noreferrer">BCH WalletConnect v2 namespace</a>.
+				{m.login_wallet_support_before()}
+				<a class="text-violet-600 dark:text-violet-400 hover:underline" href="https://github.com/mainnet-pat/wc2-bch-bcr" target="_blank" rel="noopener noreferrer">{m.login_wallet_support_link()}</a>.
 			</p>
 			<div>
 				<button
@@ -316,37 +316,37 @@
 					onclick={startManual}
 					class="text-sm hover:text-slate-900 dark:hover:text-white underline-offset-4 hover:underline ts-text-muted"
 				>
-					Sign manually instead →
+					{m.login_sign_manually()} →
 				</button>
 				<p class="text-xs mt-1 ts-text-faint">
-					For users without a WalletConnect-aware wallet — paste your cashaddr and a signed-message signature.
+					{m.login_manual_hint()}
 				</p>
 			</div>
 		</div>
 	{:else if stage.kind === 'wc-connecting'}
-		<p class="ts-text-muted">Initializing WalletConnect…</p>
+		<p class="ts-text-muted">{m.login_wc_connecting()}</p>
 	{:else if stage.kind === 'wc-awaiting-approval'}
 		<p class="ts-text-muted">
-			Approve the connection in your wallet. The QR code modal should be open above this page.
+			{m.login_wc_awaiting()}
 		</p>
 		<button
 			type="button"
 			onclick={reset}
 			class="mt-4 text-sm hover:underline ts-text-muted"
 		>
-			Cancel
+			{m.login_cancel()}
 		</button>
 	{:else if stage.kind === 'wc-signing'}
 		<p class="ts-text-muted">
-			Approve the message signature in your wallet…
+			{m.login_wc_signing()}
 		</p>
 	{:else if stage.kind === 'verifying'}
-		<p class="ts-text-muted">Verifying signature…</p>
+		<p class="ts-text-muted">{m.login_verifying()}</p>
 	{:else if stage.kind === 'enter-address'}
 		<form onsubmit={requestChallengeManual} class="space-y-4">
 			<label class="block">
 				<span class="block text-sm font-medium mb-2 ts-text-strong">
-					Your BCH cashaddr
+					{m.login_cashaddr_label()}
 				</span>
 				<input
 					type="text"
@@ -358,7 +358,7 @@
 					class="w-full px-3 py-2 rounded-lg border font-mono text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 ts-border-strong ts-surface-panel"
 				/>
 				<p class="text-xs mt-2 ts-text-muted">
-					Mainnet P2PKH only. The cashaddr you enter must match the address whose private key you'll sign with.
+					{m.login_cashaddr_hint()}
 				</p>
 			</label>
 			<div class="flex gap-2">
@@ -366,14 +366,14 @@
 					type="submit"
 					class="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-medium text-sm transition-colors"
 				>
-					Continue
+					{m.login_continue()}
 				</button>
 				<button
 					type="button"
 					onclick={reset}
 					class="px-4 py-2 rounded-lg bg-slate-200 dark:bg-zinc-700 font-medium text-sm hover:bg-slate-300 dark:hover:bg-zinc-600 ts-text-strong"
 				>
-					← Back to WalletConnect
+					← {m.login_back_to_wc()}
 				</button>
 			</div>
 		</form>
@@ -381,7 +381,7 @@
 		<div class="space-y-6">
 			<section>
 				<h2 class="text-sm font-semibold uppercase tracking-wider mb-2 ts-text-muted">
-					Step 1 — Sign this message in your wallet
+					{m.login_step1()}
 				</h2>
 				<div class="relative">
 					<pre class="text-xs sm:text-sm font-mono whitespace-pre-wrap break-all rounded-lg border p-4 ts-border-strong ts-surface-soft">{stage.message}</pre>
@@ -390,26 +390,26 @@
 						onclick={copyMessage}
 						class="absolute top-2 right-2 px-2 py-1 rounded text-xs font-medium bg-slate-200 dark:bg-zinc-700 hover:bg-slate-300 dark:hover:bg-zinc-600 ts-text-strong"
 					>
-						{copied ? 'Copied' : 'Copy'}
+						{copied ? m.login_copied() : m.login_copy()}
 					</button>
 				</div>
 				<details class="mt-3 text-sm ts-text-muted">
 					<summary class="cursor-pointer text-violet-600 dark:text-violet-400 hover:underline">
-						How to sign in popular wallets
+						{m.login_how_to_sign()}
 					</summary>
 					<ul class="list-disc list-inside ml-2 mt-2 space-y-1">
-						<li><strong>Electron Cash</strong> — Tools → Sign / Verify Message → paste address + message → Sign.</li>
-						<li><strong>Cashonize</strong> — Settings → Sign Message → choose your wallet → paste message → Sign.</li>
-						<li><strong>Paytaca</strong> — Settings → Sign Message → select wallet → paste message → Sign.</li>
+						<li><strong>Electron Cash</strong> — {m.login_wallet_ec_steps()}</li>
+						<li><strong>Cashonize</strong> — {m.login_wallet_cashonize_steps()}</li>
+						<li><strong>Paytaca</strong> — {m.login_wallet_paytaca_steps()}</li>
 					</ul>
-					<p class="mt-2">Copy the resulting signature (a base64 string ending in <code>=</code>) and paste it below.</p>
+					<p class="mt-2">{m.login_copy_sig_before()} <code>=</code>{m.login_copy_sig_after()}</p>
 				</details>
 			</section>
 
 			<form onsubmit={submitSignatureManual} class="space-y-4">
 				<label class="block">
 					<span class="block text-sm font-semibold uppercase tracking-wider mb-2 ts-text-muted">
-						Step 2 — Paste the signature
+						{m.login_step2()}
 					</span>
 					<textarea
 						bind:value={signatureInput}
@@ -425,18 +425,18 @@
 						type="submit"
 						class="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-medium text-sm transition-colors"
 					>
-						Sign in
+						{m.login_sign_in()}
 					</button>
 					<button
 						type="button"
 						onclick={reset}
 						class="px-4 py-2 rounded-lg bg-slate-200 dark:bg-zinc-700 font-medium text-sm hover:bg-slate-300 dark:hover:bg-zinc-600 ts-text-strong"
 					>
-						Start over
+						{m.login_start_over()}
 					</button>
 				</div>
 				<p class="text-xs ts-text-muted">
-					Challenge expires {new Date(stage.expiresAt).toLocaleTimeString()}.
+					{m.login_challenge_expires({ time: new Date(stage.expiresAt).toLocaleTimeString(getLocale()) })}
 				</p>
 			</form>
 		</div>
@@ -449,23 +449,19 @@
 			onclick={reset}
 			class="mt-4 px-4 py-2 rounded-lg bg-slate-200 dark:bg-zinc-700 font-medium text-sm hover:bg-slate-300 dark:hover:bg-zinc-600 ts-text-strong"
 		>
-			Start over
+			{m.login_start_over()}
 		</button>
 	{/if}
 
 	<section class="mt-12 text-sm space-y-2 ts-text-muted">
 		<h2 class="text-xs font-semibold uppercase tracking-wider ts-text-muted">
-			Why wallet login?
+			{m.login_why_title()}
 		</h2>
 		<p>
-			The address you sign with becomes your account. We store nothing
-			the wallet didn't already prove you control — no email, no
-			recovery phone, no password to lose.
+			{m.login_why_p1()}
 		</p>
 		<p>
-			This unlocks the wallet-tied watchlist, future portfolio
-			tracking, and per-token annotations. Until those land, login
-			doesn't gate any of the directory data — it's all public.
+			{m.login_why_p2()}
 		</p>
 	</section>
 </main>

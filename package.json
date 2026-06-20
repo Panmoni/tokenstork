@@ -13,7 +13,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "node build",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "paraglide:compile": "paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide",
+    "check": "npm run paraglide:compile && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "db:init": "psql \"$DATABASE_URL\" -f db/schema.sql",
     "sync:leaderboards": "tsx scripts/snapshot-leaderboards.ts",
     "typecheck": "tsc --noEmit --project scripts/tsconfig.json"
@@ -35,6 +36,7 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
+    "@inlang/paraglide-js": "^2.20.0",
     "@sveltejs/adapter-node": "^5.5.4",
     "@sveltejs/kit": "^2.64.0",
     "@sveltejs/vite-plugin-svelte": "^7.0.0",

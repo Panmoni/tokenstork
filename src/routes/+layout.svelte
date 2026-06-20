@@ -1,7 +1,9 @@
 <script lang="ts">
 	import '../app.css';
 	import { onMount, type Snippet } from 'svelte';
-	import { navigating } from '$app/state';
+	import { navigating, page } from '$app/state';
+	import * as m from '$lib/paraglide/messages';
+	import { locales, baseLocale, getLocale, localizeHref, deLocalizeHref } from '$lib/paraglide/runtime';
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import MetricsBar from '$lib/components/MetricsBar.svelte';
@@ -27,11 +29,31 @@
 		bchPrice.start();
 		return () => bchPrice.stop();
 	});
+
+	// SEO: canonical + per-locale hreflang alternates. Built from the
+	// canonical (de-localized) path so every locale variant of THIS page is
+	// advertised, plus an x-default pointing at the base locale. Absolute
+	// URLs use the request origin (tokenstork.com in production).
+	const canonicalPath = $derived(deLocalizeHref(page.url.pathname));
+	const origin = $derived(page.url.origin);
+	const canonicalUrl = $derived(origin + localizeHref(canonicalPath, { locale: getLocale() }));
+	const alternates = $derived(
+		locales.map((locale) => ({
+			locale,
+			href: origin + localizeHref(canonicalPath, { locale })
+		}))
+	);
+	const xDefaultUrl = $derived(origin + localizeHref(canonicalPath, { locale: baseLocale }));
+
+	// og:locale wants a BCP-47 territory form (en_US). Fall back to the bare
+	// locale code for locales without a mapping.
+	const OG_LOCALE: Record<string, string> = { en: 'en_US', es: 'es_ES' };
+	const ogLocale = $derived(OG_LOCALE[getLocale()] ?? getLocale());
 </script>
 
 <svelte:head>
-	<title>Token Stork: Discover, Track and Analyze BCH Cash Tokens (0.0.1 beta)</title>
-	<meta name="description" content="Track BCH CashTokens market cap and more with TokenStork." />
+	<title>{m.meta_title()}</title>
+	<meta name="description" content={m.meta_description()} />
 	<meta name="theme-color" content="#4f359b" />
 
 	<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
@@ -40,11 +62,19 @@
 	<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 	<link rel="manifest" href="/site.webmanifest" />
 
-	<meta property="og:title" content="Token Stork: Discover, Track and Analyze BCH Cash Tokens (0.0.1 beta)" />
-	<meta property="og:description" content="Track BCH CashTokens market cap and more with TokenStork." />
+	<!-- Canonical + per-locale alternates so search engines index each
+	     language variant of this page and serve the right one. -->
+	<link rel="canonical" href={canonicalUrl} />
+	{#each alternates as alt (alt.locale)}
+		<link rel="alternate" hreflang={alt.locale} href={alt.href} />
+	{/each}
+	<link rel="alternate" hreflang="x-default" href={xDefaultUrl} />
+
+	<meta property="og:title" content={m.meta_title()} />
+	<meta property="og:description" content={m.meta_description()} />
 	<meta property="og:site_name" content="Token Stork" />
-	<meta property="og:url" content="https://tokenstork.com/" />
-	<meta property="og:locale" content="en_US" />
+	<meta property="og:url" content={canonicalUrl} />
+	<meta property="og:locale" content={ogLocale} />
 	<meta property="og:type" content="website" />
 	<meta property="og:image" content="https://tokenstork.com/fb.png" />
 	<meta property="og:image:width" content="1200" />
@@ -52,8 +82,8 @@
 	<meta property="og:image:alt" content="Token Stork" />
 
 	<meta name="twitter:card" content="summary_large_image" />
-	<meta name="twitter:title" content="Token Stork: Discover, Track and Analyze BCH Cash Tokens" />
-	<meta name="twitter:description" content="Track BCH CashTokens market cap and more with TokenStork." />
+	<meta name="twitter:title" content={m.meta_title()} />
+	<meta name="twitter:description" content={m.meta_description()} />
 	<meta name="twitter:creator" content="@bitcoincashsite" />
 	<meta name="twitter:image" content="https://tokenstork.com/tw.png" />
 	<meta name="twitter:image:alt" content="Token Stork" />

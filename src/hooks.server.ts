@@ -19,10 +19,13 @@
 // stolen-cookie reads can't tip the pool.
 
 import { error, type Handle } from '@sveltejs/kit';
+import { sequence } from '@sveltejs/kit/hooks';
 import { dev } from '$app/environment';
 import { env } from '$env/dynamic/private';
 import { SESSION_COOKIE_NAME } from '$lib/server/auth';
 import { findActiveSession } from '$lib/server/auth-db';
+import { paraglideMiddleware } from '$lib/paraglide/server';
+import { deLocalizeUrl, getTextDirection } from '$lib/paraglide/runtime';
 
 // Origins allowed to make state-changing /api/** calls. Production
 // origins are baked in; localhost is permitted only in dev. Operators
@@ -75,14 +78,30 @@ function isSameSiteOrAllowed(request: Request, selfOrigin: string): boolean {
 	return false;
 }
 
-export const handle: Handle = async ({ event, resolve }) => {
+// Paraglide i18n middleware. Detects the locale (URL prefix → cookie →
+// Accept-Language → base), localizes `event.request` so loaders/endpoints see
+// the de-localized URL, and stamps `<html lang dir>` via the app.html
+// placeholders. Runs FIRST in the sequence so the locale is resolved before
+// the app handle does its session + cache work.
+const paraglideHandle: Handle = ({ event, resolve }) =>
+	paraglideMiddleware(event.request, ({ request: localizedRequest, locale }) => {
+		event.request = localizedRequest;
+		return resolve(event, {
+			transformPageChunk: ({ html }) =>
+				html.replace('%lang%', locale).replace('%dir%', getTextDirection(locale))
+		});
+	});
+
+const appHandle: Handle = async ({ event, resolve }) => {
+	// Locale prefixes (`/es/mint`) must be stripped before any pathname-based
+	// routing decision below, or `/mint` (no-store) wouldn't match `/es/mint`
+	// and a sensitive page would wrongly get the public cache policy.
+	const path = deLocalizeUrl(event.url).pathname;
+
 	// CSRF / origin gate for state-changing /api/** calls. Runs BEFORE
 	// session lookup so an attacker can't even reach the cookie-reading
 	// path with a cross-site request.
-	if (
-		STATE_CHANGING_METHODS.has(event.request.method) &&
-		event.url.pathname.startsWith('/api/')
-	) {
+	if (STATE_CHANGING_METHODS.has(event.request.method) && path.startsWith('/api/')) {
 		const selfOrigin = `${event.url.protocol}//${event.url.host}`;
 		if (!isSameSiteOrAllowed(event.request, selfOrigin)) {
 			throw error(403, 'cross-origin request blocked');
@@ -111,9 +130,13 @@ export const handle: Handle = async ({ event, resolve }) => {
 		}
 	}
 	const response = await resolve(event);
-	applyEdgeCacheHeaders(event, response);
+	applyEdgeCacheHeaders(event, response, path);
 	return response;
 };
+
+// Compose i18n (locale detection + <html lang dir>) ahead of the app's
+// CSRF / session / edge-cache handle.
+export const handle: Handle = sequence(paraglideHandle, appHandle);
 
 // Route prefixes that must NEVER be cached anywhere: auth, admin, per-user
 // surfaces, the action/tool wizards, and the whole API. Matched on segment
@@ -167,12 +190,19 @@ function isNoStoreRoute(pathname: string): boolean {
  * session cookie is absent, respect origin) is documented in
  * docs/caching.md.
  */
-function applyEdgeCacheHeaders(event: Parameters<Handle>[0]['event'], response: Response): void {
+function applyEdgeCacheHeaders(
+	event: Parameters<Handle>[0]['event'],
+	response: Response,
+	// De-localized pathname (locale prefix stripped) — see appHandle. Cache
+	// decisions must key off this, not `event.url.pathname`, so `/es/mint`
+	// is treated as `/mint` (no-store) rather than a cacheable public page.
+	path: string
+): void {
 	// (1) Respect a policy the handler already set.
 	if (response.headers.has('cache-control')) return;
 
 	// (2) Never-cache routes: hard no-store regardless of method/status/auth.
-	if (isNoStoreRoute(event.url.pathname)) {
+	if (isNoStoreRoute(path)) {
 		response.headers.set('cache-control', 'private, no-store');
 		return;
 	}

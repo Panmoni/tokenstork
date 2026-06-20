@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { bchPrice } from '$lib/stores/bchPrice';
 	import { Tooltip, TooltipTrigger, TooltipContent } from '$lib/components/ui/tooltip';
+	import * as m from '$lib/paraglide/messages';
+	import { getLocale, localizeHref } from '$lib/paraglide/runtime';
 
 	interface Props {
 		tokensTracked: number;
@@ -20,7 +22,8 @@
 		tokenTxs24h
 	}: Props = $props();
 
-	const fmt = (n: number) => n.toLocaleString('en-US');
+	// Locale-aware grouping: "1,234" (en) vs "1.234" (es), etc.
+	const fmt = (n: number) => n.toLocaleString(getLocale());
 
 	// Compact USD for the Total TVL card — "$1.13M", "$742k", "$0".
 	function compactUSD(n: number): string {
@@ -44,38 +47,38 @@
 				<Tooltip>
 					<TooltipTrigger class="flex items-center gap-2 cursor-default">
 						<span class="text-xs font-medium uppercase tracking-wider ts-text-muted">
-							Tracked
+							{m.metrics_tracked()}
 						</span>
 						<span class="px-3 py-1 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 font-semibold text-sm">
 							{fmt(tokensTracked)}
 						</span>
 					</TooltipTrigger>
 					<TooltipContent>
-						Every CashToken category our indexer has ever seen since activation block 792,772 — fungible and non-fungible, active or long-dead. Minus the ones hidden by moderation.
+						{m.metrics_tracked_tip()}
 					</TooltipContent>
 				</Tooltip>
 
 				<Tooltip>
 					<TooltipTrigger class="flex items-center gap-2 cursor-default">
 						<span class="text-xs font-medium uppercase tracking-wider ts-text-muted">
-							Listed
+							{m.metrics_listed()}
 						</span>
 						<a
-							href="/?listed=1&sort=tvl"
+							href={localizeHref('/?listed=1&sort=tvl')}
 							class="font-semibold text-violet-600 dark:text-violet-400 text-sm underline-offset-4 hover:underline"
 						>
 							{fmt(listedCount)}
 						</a>
 					</TooltipTrigger>
 					<TooltipContent>
-						Subset of Tracked — tokens you can buy or sell right now via at least one venue: an active Cauldron or Fex AMM price, or an open Tapswap P2P listing. Click the number to filter the directory to just these.
+						{m.metrics_listed_tip()}
 					</TooltipContent>
 				</Tooltip>
 
 				<Tooltip>
 					<TooltipTrigger class="flex items-center gap-2 cursor-default">
 						<span class="text-xs font-medium uppercase tracking-wider ts-text-muted">
-							Total TVL
+							{m.metrics_tvl()}
 						</span>
 						{#if tvlUSD !== null}
 							<span class="font-semibold text-slate-900 dark:text-white text-sm font-mono">
@@ -86,17 +89,17 @@
 						{/if}
 					</TooltipTrigger>
 					<TooltipContent>
-						BCH-side reserve across every Cauldron + Fex pool, priced in USD. Cauldron portion is the canonical aggregate from indexer.cauldron.quest (refreshed every 30 min); Fex portion is summed across every pool we scan on-chain. Single-side (conservative; industry convention doubles this). Tapswap excluded — P2P intent, not pooled liquidity.
+						{m.metrics_tvl_tip()}
 					</TooltipContent>
 				</Tooltip>
 
 				<a
-					href="/?new24h=1&sort=recent"
+					href={localizeHref('/?new24h=1&sort=recent')}
 					class="flex items-center gap-2 hover:opacity-80 transition-opacity"
-					title="Categories whose genesis transaction was mined in the last 24 hours. Click to view them."
+					title={m.metrics_new24h_tip()}
 				>
 					<span class="text-xs font-medium uppercase tracking-wider ts-text-muted">
-						New 24h
+						{m.metrics_new24h()}
 					</span>
 					<span class="font-semibold text-violet-600 dark:text-violet-400 text-sm underline-offset-4 hover:underline">
 						{fmt(newIn24h)}
@@ -106,17 +109,17 @@
 				<Tooltip>
 					<TooltipTrigger class="flex items-center gap-2 cursor-default">
 						<span class="text-xs font-medium uppercase tracking-wider ts-text-muted">
-							Txs 24h
+							{m.metrics_txs24h()}
 						</span>
 						<a
-							href="/faq#faq-txs-24h"
+							href={localizeHref('/faq#faq-txs-24h')}
 							class="font-semibold text-violet-600 dark:text-violet-400 text-sm underline-offset-4 hover:underline"
 						>
 							{fmt(tokenTxs24h)}
 						</a>
 					</TooltipTrigger>
 					<TooltipContent>
-						CashToken-bearing transactions across all categories in the last 24 hours — every block tx that emits at least one token output (transfers, mints, multi-token movements; each tx counts once). Pure on-chain count from the verbose block JSON. Click for the FAQ explainer.
+						{m.metrics_txs24h_tip()}
 					</TooltipContent>
 				</Tooltip>
 
@@ -124,17 +127,17 @@
 					<Tooltip>
 						<TooltipTrigger class="flex items-center gap-2 cursor-default">
 							<span class="text-xs font-medium uppercase tracking-wider ts-text-muted">
-								Block
+								{m.metrics_block()}
 							</span>
 							<a
-								href="/blocks"
+								href={localizeHref('/blocks')}
 								class="font-mono text-sm text-violet-600 dark:text-violet-400 underline-offset-4 hover:underline"
 							>
 								{fmt(tailLastBlock)}
 							</a>
 						</TooltipTrigger>
 						<TooltipContent>
-							Latest BCH block our tail worker has scanned for new CashToken categories and Tapswap listings. Typically sub-second behind tip via ZMQ. Click to open the per-block economics dashboard.
+							{m.metrics_block_tip()}
 						</TooltipContent>
 					</Tooltip>
 				{/if}
@@ -142,18 +145,18 @@
 				<Tooltip>
 					<TooltipTrigger class="flex items-center gap-2 cursor-default">
 						<span class="text-xs font-medium uppercase tracking-wider ts-text-muted">
-							BCH
+							{m.metrics_bch()}
 						</span>
 						{#if $bchPrice.bchPrice}
 							<span class="font-mono text-slate-900 dark:text-white font-semibold text-sm">
-								${$bchPrice.bchPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+								${$bchPrice.bchPrice.toLocaleString(getLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
 							</span>
 						{:else}
 							<span class="inline-block w-16 h-4 bg-slate-200 dark:bg-zinc-700 rounded animate-pulse"></span>
 						{/if}
 					</TooltipTrigger>
 					<TooltipContent>
-						BCH spot price in USD, refreshed every 5 minutes. Used across the site to convert BCH-denominated prices (Cauldron, Tapswap) to USD.
+						{m.metrics_bch_tip()}
 					</TooltipContent>
 				</Tooltip>
 			</div>
@@ -161,19 +164,19 @@
 
 		<div class="md:hidden grid grid-cols-2 gap-2 py-1">
 			<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 shadow-sm">
-				<span class="text-xs ts-text-muted">Tokens</span>
+				<span class="text-xs ts-text-muted">{m.metrics_tokens_mobile()}</span>
 				<span class="font-semibold text-violet-600 dark:text-violet-400 text-sm">{fmt(tokensTracked)}</span>
 			</div>
 			<a
-				href="/?listed=1&sort=tvl"
+				href={localizeHref('/?listed=1&sort=tvl')}
 				class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 shadow-sm hover:bg-slate-50 dark:hover:bg-zinc-700 transition-colors"
-				title="Tokens with an active Cauldron / Fex AMM price or an open Tapswap P2P listing"
+				title={m.metrics_listed_title()}
 			>
-				<span class="text-xs ts-text-muted">Listed</span>
+				<span class="text-xs ts-text-muted">{m.metrics_listed()}</span>
 				<span class="font-semibold text-violet-600 dark:text-violet-400 text-sm">{fmt(listedCount)}</span>
 			</a>
 			<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 shadow-sm">
-				<span class="text-xs ts-text-muted">Total TVL</span>
+				<span class="text-xs ts-text-muted">{m.metrics_tvl()}</span>
 				{#if tvlUSD !== null}
 					<span class="font-mono font-semibold text-sm">{compactUSD(tvlUSD)}</span>
 				{:else}
@@ -181,33 +184,33 @@
 				{/if}
 			</div>
 			<a
-				href="/?new24h=1&sort=recent"
+				href={localizeHref('/?new24h=1&sort=recent')}
 				class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 shadow-sm no-underline"
-				title="Tokens minted in the last 24 hours"
+				title={m.metrics_new24h_title()}
 			>
-				<span class="text-xs ts-text-muted">New 24h</span>
+				<span class="text-xs ts-text-muted">{m.metrics_new24h()}</span>
 				<span class="font-semibold text-sm text-violet-600 dark:text-violet-400">{fmt(newIn24h)}</span>
 			</a>
 			<a
-				href="/faq#faq-txs-24h"
+				href={localizeHref('/faq#faq-txs-24h')}
 				class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 shadow-sm no-underline"
-				title="CashToken-bearing txs across all categories, last 24h"
+				title={m.metrics_txs24h_title()}
 			>
-				<span class="text-xs ts-text-muted">Txs 24h</span>
+				<span class="text-xs ts-text-muted">{m.metrics_txs24h()}</span>
 				<span class="font-semibold text-sm text-violet-600 dark:text-violet-400">{fmt(tokenTxs24h)}</span>
 			</a>
 			{#if tailLastBlock !== null}
 				<a
-					href="/blocks"
+					href={localizeHref('/blocks')}
 					class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 shadow-sm no-underline hover:bg-slate-50 dark:hover:bg-zinc-700 transition-colors"
-					title="Per-block economics dashboard"
+					title={m.metrics_block_title()}
 				>
-					<span class="text-xs ts-text-muted">Block</span>
+					<span class="text-xs ts-text-muted">{m.metrics_block()}</span>
 					<span class="font-mono text-sm text-violet-600 dark:text-violet-400">{fmt(tailLastBlock)}</span>
 				</a>
 			{/if}
 			<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 shadow-sm">
-				<span class="text-xs ts-text-muted">BCH</span>
+				<span class="text-xs ts-text-muted">{m.metrics_bch()}</span>
 				{#if $bchPrice.bchPrice}
 					<span class="font-mono font-semibold text-sm">${$bchPrice.bchPrice.toFixed(2)}</span>
 				{:else}

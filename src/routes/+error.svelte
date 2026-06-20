@@ -1,37 +1,40 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import * as m from '$lib/paraglide/messages';
+	import { localizeHref } from '$lib/paraglide/runtime';
 
 	// Pre-curated landing spots. Beats a generic "go home" link — most 404s
 	// are mistyped category hexes or stale links to features we've moved.
 	// Surfacing the directory + the high-traffic inner pages catches
-	// almost every "oh that's where I meant to be" case.
-	const suggestions = [
-		{ href: '/', label: 'Tokens directory', kind: 'Browse the full CashTokens index' },
-		{ href: '/arbitrage', label: 'Arbitrage', kind: 'Cross-venue spreads (Cauldron / Fex / Tapswap)' },
-		{ href: '/blocks', label: 'Blocks', kind: 'Per-block chain economics dashboard' },
-		{ href: '/stats', label: 'Stats', kind: 'Ecosystem aggregates + venue overlap' },
-		{ href: '/learn', label: 'Learn', kind: 'CashTokens primer' },
-		{ href: '/faq', label: 'FAQ', kind: 'Common questions about the data' }
-	];
+	// almost every "oh that's where I meant to be" case. `href` stays
+	// canonical; it's localized at render via localizeHref.
+	const suggestions = $derived([
+		{ href: '/', label: m.error_sug_tokens_label(), kind: m.error_sug_tokens_kind() },
+		{ href: '/arbitrage', label: m.error_sug_arbitrage_label(), kind: m.error_sug_arbitrage_kind() },
+		{ href: '/blocks', label: m.error_sug_blocks_label(), kind: m.error_sug_blocks_kind() },
+		{ href: '/stats', label: m.error_sug_stats_label(), kind: m.error_sug_stats_kind() },
+		{ href: '/learn', label: m.error_sug_learn_label(), kind: m.error_sug_learn_kind() },
+		{ href: '/faq', label: m.error_sug_faq_label(), kind: m.error_sug_faq_kind() }
+	]);
 
 	const headline = $derived(
 		page.status === 404
-			? 'Page not found'
+			? m.error_404_headline()
 			: page.status === 410
-				? 'Token hidden'
+				? m.error_410_headline()
 				: page.status >= 500
-					? 'Something broke on our side'
-					: 'Something went wrong'
+					? m.error_500_headline()
+					: m.error_generic_headline()
 	);
 
 	const subline = $derived(
 		page.status === 404
-			? "The URL you tried doesn't match anything on the site. If you pasted a category hex, double-check the 64 characters — one wrong digit is a different token."
+			? m.error_404_subline()
 			: page.status === 410
-				? 'This token category was removed from the directory by moderation. We keep the list of removals public on /moderated for transparency.'
+				? m.error_410_subline()
 				: page.status >= 500
-					? "Something went wrong on our end. We're probably already looking at it; if not, refresh in a minute."
-					: 'Unexpected error rendering this page.'
+					? m.error_500_subline()
+					: m.error_generic_subline()
 	);
 </script>
 
@@ -42,7 +45,7 @@
 
 <main class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
 	<p class="text-sm text-violet-600 dark:text-violet-400 font-mono uppercase tracking-wider mb-3">
-		Error {page.status}
+		{m.error_label()} {page.status}
 	</p>
 	<h1 class="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent mb-4">
 		{headline}
@@ -57,13 +60,13 @@
 
 	<div class="mb-8">
 		<h2 class="text-xs uppercase tracking-wider mb-3 font-semibold ts-text-muted">
-			Try one of these
+			{m.error_try_one()}
 		</h2>
 		<ul class="grid sm:grid-cols-2 gap-2">
 			{#each suggestions as s (s.href)}
 				<li>
 					<a
-						href={s.href}
+						href={localizeHref(s.href)}
 						class="block p-3 rounded-lg border hover:border-violet-400 dark:hover:border-violet-600 hover:bg-violet-50/40 dark:hover:bg-violet-950/20 transition-colors no-underline ts-border-subtle"
 					>
 						<div class="font-semibold text-slate-900 dark:text-white">{s.label}</div>
@@ -76,8 +79,8 @@
 
 	{#if page.status === 410}
 		<p class="text-sm ts-text-muted">
-			See <a href="/moderated" class="text-violet-600 dark:text-violet-400 hover:underline">/moderated</a>
-			for the full list of hidden categories with reason and date.
+			{m.error_410_footer_before()} <a href={localizeHref('/moderated')} class="text-violet-600 dark:text-violet-400 hover:underline">/moderated</a>
+			{m.error_410_footer_after()}
 		</p>
 	{/if}
 </main>

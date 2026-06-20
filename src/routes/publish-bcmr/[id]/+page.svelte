@@ -27,6 +27,8 @@
 	import { connectWallet, signTransaction, disconnectWallet } from '$lib/client/wc-client';
 	import { buildConsolidationTx, plainUtxosToConsolidationInputs } from '$lib/client/consolidationBuilder';
 	import { cashAddressToLockingBytecode, binToHex } from '@bitauth/libauth';
+	import * as m from '$lib/paraglide/messages';
+	import { localizeHref } from '$lib/paraglide/runtime';
 
 	let { data } = $props();
 
@@ -142,26 +144,33 @@
 	let prepareDone = $state(false);
 	let walletUtxos = $state<WalletUtxo[]>([]);
 
-	const stepLabels = ['Identity', 'Icon', 'Canonicalize', 'Publish', 'Build & sign', 'Broadcast'];
+	const stepLabels = $derived([
+		m.bcmrw_step_identity(),
+		m.bcmrw_step_icon(),
+		m.bcmrw_step_canonicalize(),
+		m.bcmrw_step_publish(),
+		m.bcmrw_step_build_sign(),
+		m.bcmrw_step_broadcast()
+	]);
 
 	// Per-step validators.
 	const step1Error = $derived.by<string | null>(() => {
-		if (!name.trim()) return 'A name is required.';
-		if (name.trim().length > 80) return 'Name must be 80 characters or fewer.';
-		if (!ticker.trim()) return 'A ticker (symbol) is required.';
-		if (ticker.trim().length > 12) return 'Ticker must be 12 characters or fewer.';
+		if (!name.trim()) return m.bcmrw_v_name_required();
+		if (name.trim().length > 80) return m.bcmrw_v_name_long();
+		if (!ticker.trim()) return m.bcmrw_v_ticker_required();
+		if (ticker.trim().length > 12) return m.bcmrw_v_ticker_long();
 		if (!Number.isInteger(decimals) || decimals < 0 || decimals > 8) {
-			return 'Decimals must be an integer in 0-8.';
+			return m.bcmrw_v_decimals();
 		}
-		if (description.length > 500) return 'Description must be 500 characters or fewer.';
+		if (description.length > 500) return m.bcmrw_v_desc_long();
 		return null;
 	});
 	const step2Error = $derived.by<string | null>(() => {
 		const trimmed = iconUri.trim();
 		if (!trimmed) return null; // optional
-		if (trimmed.length > 1024) return 'Icon URI must be 1024 characters or fewer.';
+		if (trimmed.length > 1024) return m.bcmrw_v_icon_long();
 		if (!/^(https?|ipfs):\/\//i.test(trimmed)) {
-			return 'Icon URI must start with https://, http://, or ipfs:// (or leave blank).';
+			return m.bcmrw_v_icon_scheme();
 		}
 		return null;
 	});
@@ -183,12 +192,12 @@
 			});
 			if (!res.ok) {
 				const body = (await res.json().catch(() => ({}))) as { message?: string };
-				saveError = body.message ?? `Save failed (HTTP ${res.status})`;
+				saveError = body.message ?? m.bcmrw_err_save({ status: res.status });
 				return;
 			}
 			session = (await res.json()) as BcmrPublishSession;
 		} catch (err) {
-			saveError = (err as Error).message ?? 'Network error';
+			saveError = (err as Error).message ?? m.error_network();
 		} finally {
 			saving = false;
 		}
@@ -256,7 +265,7 @@
 		// the session has a content hash, re-fetch the canonical bytes.
 		if (!canonicalJson) { await runCanonicalize(); }
 		const json = canonicalJson;
-		if (!json) { ipfsError = 'Generate the canonical JSON first.'; return; }
+		if (!json) { ipfsError = m.bcmrw_err_gen_first(); return; }
 		ipfsUploading = true; ipfsError = null;
 		try {
 			let { key, provider } = (() => {
@@ -264,7 +273,7 @@
 				if (saved) return JSON.parse(saved) as { key: string; provider: string };
 				return { key: ipfsKeyInput, provider: 'pinata' };
 			})();
-			if (!key) { ipfsError = 'Enter your Pinata API key below.'; return; }
+			if (!key) { ipfsError = m.bcmrw_err_enter_pinata(); return; }
 
 			// Compute content hash from the canonical JSON bytes so we can
 			// check whether this file is already pinned.
@@ -316,7 +325,7 @@
 	}
 	async function runVerify() {
 		const raw = publicationUriInput.trim();
-		if (!raw) { verifyResult = { ok: false, reason: 'invalid-url', message: 'Enter a URL first' }; return; }
+		if (!raw) { verifyResult = { ok: false, reason: 'invalid-url', message: m.bcmrw_err_enter_url() }; return; }
 		const verifyUri = raw.startsWith('ipfs://')
 			? `https://gateway.pinata.cloud/ipfs/${raw.slice(7)}`
 			: raw;
@@ -403,16 +412,16 @@
 	async function runBroadcast() {
 		const trimmed = signedTxHexInput.trim();
 		if (!trimmed) {
-			broadcastError = 'Paste the signed tx hex from your wallet first.';
+			broadcastError = m.bcmrw_err_paste_hex();
 			return;
 		}
 		if (!/^[0-9a-fA-F]+$/.test(trimmed) || trimmed.length % 2 !== 0) {
-			broadcastError = 'Signed hex must be even-length and hex-only (0-9, a-f).';
+			broadcastError = m.bcmrw_err_hex_format();
 			return;
 		}
 		// Guard: pasting the unsigned tx without signing is the most common error.
 		if (session.unsignedTxHex && trimmed === session.unsignedTxHex) {
-			broadcastError = 'This is the unsigned transaction. Sign it in your wallet first.';
+			broadcastError = m.bcmrw_err_unsigned();
 			return;
 		}
 		broadcasting = true;
@@ -461,8 +470,8 @@
 			if (!res.ok) {
 				readiness = {
 					ready: false,
-					requirements: [{ label: 'Wallet check', satisfied: false, reason: `Readiness check failed (HTTP ${res.status})`, fixable: 'refresh' }],
-					summary: 'Readiness check failed'
+					requirements: [{ label: m.bcmrw_wallet_check(), satisfied: false, reason: `Readiness check failed (HTTP ${res.status})`, fixable: 'refresh' }],
+					summary: m.bcmrw_readiness_failed()
 				};
 				return;
 			}
@@ -510,9 +519,9 @@
 			readiness = {
 				ready: false,
 				requirements: [
-					{ label: 'Wallet check', satisfied: false, reason: (err as Error).message || 'Readiness check failed', fixable: 'refresh' }
+					{ label: m.bcmrw_wallet_check(), satisfied: false, reason: (err as Error).message || m.bcmrw_readiness_failed(), fixable: 'refresh' }
 				],
-				summary: 'Readiness check failed'
+				summary: m.bcmrw_readiness_failed()
 			};
 		} finally {
 			readinessLoading = false;
