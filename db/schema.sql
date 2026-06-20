@@ -1420,3 +1420,30 @@ CREATE UNIQUE INDEX IF NOT EXISTS bcmr_change_events_pull_uniq_idx
 CREATE UNIQUE INDEX IF NOT EXISTS bcmr_change_events_maxhops_uniq_idx
   ON bcmr_change_events (category)
   WHERE event_type = 'max_hops_hit';
+
+-- ============================================================================
+-- BCMR Watchdog M3 — subscriptions + delivery.
+--
+-- Delivery is by a Rust drainer (workers/src/bin/bcmr-events-drain.rs) that
+-- POSTs undelivered bcmr_change_events to ONE operator-configured webhook
+-- (BCMR_WEBHOOK_URL, mirrors reportAlert.ts: HMAC-signed, journald-durable).
+-- bcmr_watch records per-holder subscriptions for a FUTURE per-channel fan-out
+-- (Telegram/email); in this phase they're recorded but not yet routed — the
+-- operator webhook is the sole live sink.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS bcmr_watch (
+  cashaddr   TEXT        NOT NULL REFERENCES users(cashaddr) ON DELETE CASCADE,
+  category   BYTEA       NOT NULL REFERENCES tokens(category) ON DELETE CASCADE,
+  -- Delivery channel the holder wants. 'operator' = counts toward the operator
+  -- feed only (today's behavior); 'telegram'/'email' reserved for the future
+  -- per-holder fan-out.
+  channel    TEXT        NOT NULL DEFAULT 'operator'
+                         CHECK (channel IN ('operator','telegram','email')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (cashaddr, category, channel)
+);
+
+CREATE INDEX IF NOT EXISTS bcmr_watch_category_idx ON bcmr_watch (category);
+
+-- Drainer heartbeat — operators alert on staleness like the other sync workers.
+ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_bcmr_events_drain_at TIMESTAMPTZ;

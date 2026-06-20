@@ -1284,6 +1284,112 @@ pub async fn bump_pull_epoch(pool: &PgPool, category: &[u8], authchain_tx: &[u8]
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// BCMR Watchdog M3 — event delivery (drainer) helpers.
+// ---------------------------------------------------------------------------
+
+/// One undelivered change event, for the drainer to dispatch. Column names
+/// match the table so `FromRow` maps them directly.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct UndeliveredEvent {
+    pub id: i64,
+    pub category: Vec<u8>,
+    pub authchain_tx: Vec<u8>,
+    pub event_type: String,
+    pub severity: String,
+    pub prev_content_hash: Option<Vec<u8>>,
+    pub new_content_hash: Option<Vec<u8>>,
+    pub prev_addr: Option<String>,
+    pub new_addr: Option<String>,
+    pub detail: Option<serde_json::Value>,
+    pub block_height: Option<i32>,
+    pub block_time: Option<chrono::DateTime<chrono::Utc>>,
+    pub pull_epoch: Option<i32>,
+    pub detected_at: chrono::DateTime<chrono::Utc>,
+    pub delivery_attempts: i32,
+}
+
+/// Pick undelivered events for dispatch, oldest first, skipping those that have
+/// already exhausted `max_attempts` retries (a dead webhook is given up on
+/// rather than retried forever).
+pub async fn pick_undelivered_events(
+    pool: &PgPool,
+    max_attempts: i32,
+    limit: i32,
+) -> Result<Vec<UndeliveredEvent>> {
+    let rows = sqlx::query_as::<_, UndeliveredEvent>(
+        r#"
+        SELECT id, category, authchain_tx, event_type, severity,
+               prev_content_hash, new_content_hash, prev_addr, new_addr,
+               detail, block_height, block_time, pull_epoch, detected_at,
+               delivery_attempts
+          FROM bcmr_change_events
+         WHERE delivered_at IS NULL AND delivery_attempts < $1
+         ORDER BY detected_at ASC
+         LIMIT $2
+        "#,
+    )
+    .bind(max_attempts)
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+    .context("pick_undelivered_events")?;
+    Ok(rows)
+}
+
+/// Mark an event delivered (idempotent: the `delivered_at IS NULL` guard makes
+/// a double-mark a no-op).
+pub async fn mark_event_delivered(pool: &PgPool, id: i64) -> Result<()> {
+    sqlx::query(
+        "UPDATE bcmr_change_events SET delivered_at = now()
+          WHERE id = $1 AND delivered_at IS NULL",
+    )
+    .bind(id)
+    .execute(pool)
+    .await
+    .context("mark_event_delivered")?;
+    Ok(())
+}
+
+/// Record a failed delivery attempt (bumps the retry counter / backoff gate).
+pub async fn mark_event_delivery_failed(pool: &PgPool, id: i64) -> Result<()> {
+    sqlx::query(
+        "UPDATE bcmr_change_events SET delivery_attempts = delivery_attempts + 1
+          WHERE id = $1",
+    )
+    .bind(id)
+    .execute(pool)
+    .await
+    .context("mark_event_delivery_failed")?;
+    Ok(())
+}
+
+/// Run-level mutex for the event drainer (so a manual run can't double-deliver
+/// alongside the timer). Distinct key from the walker / icons locks.
+pub async fn try_acquire_bcmr_events_lock(pool: &PgPool) -> Result<bool> {
+    let row: (bool,) = sqlx::query_as("SELECT pg_try_advisory_lock($1)")
+        .bind(BCMR_EVENTS_LOCK_KEY)
+        .fetch_one(pool)
+        .await
+        .context("acquiring bcmr-events-drain advisory lock")?;
+    Ok(row.0)
+}
+
+const BCMR_EVENTS_LOCK_KEY: i64 = 0x0042_434D_5244_524E; // ~"BCMRDRN"
+
+/// Touch the drainer heartbeat. Operators alert on staleness of this column.
+pub async fn mark_bcmr_events_drain_run(pool: &PgPool) -> Result<()> {
+    sqlx::query(
+        "UPDATE sync_state
+            SET last_bcmr_events_drain_at = now(), updated_at = now()
+          WHERE id = 1",
+    )
+    .execute(pool)
+    .await
+    .context("mark_bcmr_events_drain_run")?;
+    Ok(())
+}
+
 pub async fn mark_bcmr_onchain_run(pool: &PgPool) -> Result<()> {
     sqlx::query(
         "UPDATE sync_state
