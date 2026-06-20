@@ -4,6 +4,7 @@
 	import * as m from '$lib/paraglide/messages';
 	import { localizeHref, deLocalizeHref } from '$lib/paraglide/runtime';
 	import ThemeSwitcher from './ThemeSwitcher.svelte';
+	import LocaleSwitcher from './LocaleSwitcher.svelte';
 
 	// Nav entries render left-to-right on desktop and top-down in the
 	// mobile drawer. Terms and Privacy live at /terms and /privacy and
@@ -346,10 +347,12 @@
 						</svg>
 					</form>
 				{/if}
+				<LocaleSwitcher />
 				<ThemeSwitcher />
 			</div>
 
 			<div class="flex md:hidden items-center gap-2">
+				<LocaleSwitcher />
 				<ThemeSwitcher />
 				<button
 					onclick={() => (mobileMenuOpen = !mobileMenuOpen)}

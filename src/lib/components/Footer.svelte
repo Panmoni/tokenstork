@@ -3,7 +3,6 @@
 	import { version } from '$app/environment';
 	import * as m from '$lib/paraglide/messages';
 	import { localizeHref } from '$lib/paraglide/runtime';
-	import LocaleSwitcher from './LocaleSwitcher.svelte';
 
 	const socials = [
 		{
@@ -147,7 +146,6 @@
 						</svg>
 					</a>
 				{/each}
-				<LocaleSwitcher />
 			</div>
 
 			<p class="text-sm text-center sm:text-right ts-text-body">

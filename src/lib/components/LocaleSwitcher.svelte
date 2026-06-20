@@ -9,7 +9,11 @@
 	// runtime can't resolve a display name.
 	function displayName(locale: string): string {
 		try {
-			return new Intl.DisplayNames([locale], { type: 'language' }).of(locale) ?? locale;
+			const n = new Intl.DisplayNames([locale], { type: 'language' }).of(locale) ?? locale;
+			// Intl returns the autonym in the locale's own casing — Spanish
+			// gives lowercase "español". Capitalize the first letter so the
+			// switcher reads "Español", "Deutsch", etc.
+			return n.charAt(0).toUpperCase() + n.slice(1);
 		} catch {
 			return locale;
 		}
@@ -82,7 +86,7 @@
 
 	{#if open}
 		<div
-			class="absolute right-0 bottom-full mb-2 max-h-72 w-44 overflow-y-auto rounded-lg border py-1 shadow-lg z-50 ts-border-subtle ts-surface-panel"
+			class="absolute right-0 top-full mt-2 max-h-72 w-44 overflow-y-auto rounded-lg border py-1 shadow-lg z-50 ts-border-subtle ts-surface-panel"
 			role="menu"
 		>
 			{#each options as opt (opt.locale)}
