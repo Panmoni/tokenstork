@@ -42,20 +42,17 @@
 			title: 'Token claim + management',
 			status: 'planned',
 			bullets: [
-				'Wallet owners of a category can manage it via TokenStork: BCMR updates, dividends, mass distribution, manage minting NFTs, additional supply for FT+NFT hybrids.',
-				'Import-existing-token flow for tokens minted elsewhere.',
-				'Add BCMR support to existing-but-unregistered tokens.',
-				'One-click submit to the TokenStork BCMR registry (replacement for OTR mirroring).'
+				'Wallet owners of a category can manage it via TokenStork: dividends, mint-NFT management, and minting additional supply for FT+NFT hybrids. (BCMR publish/update for tokens whose authority NFT you hold already ships at /publish-bcmr; mass distribution ships at /airdrops.)',
+				'Import-existing-token flow for tokens minted elsewhere.'
 			]
 		},
 		{
 			title: 'Stats follow-ups + tagging',
 			status: 'planned',
 			bullets: [
-				'Top gainers / losers and TVL movers on /stats — most are live; the long-window variants need ≥ 2 weeks of accumulated price history.',
+				'Long-window (7d / 30d) gainers, losers, and TVL movers on /stats — the 24h windows are live; the longer windows are next now that enough price history has accumulated.',
 				'Community-submitted tags for filtering the directory (stablecoin, memecoin, utility, DAO, etc.).',
-				'NFT-aware Tapswap arbitrage — current /arbitrage is FT-only on the Tapswap side; NFT listings need per-commitment treatment.',
-				'Holder concentration: top-10 horizontal bar chart on the detail page (Gini already shipped).'
+				'NFT-aware Tapswap arbitrage — current /arbitrage is FT-only on the Tapswap side; NFT listings need per-commitment treatment.'
 			]
 		},
 	];
