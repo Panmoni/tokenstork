@@ -18,11 +18,19 @@
 //!   `ICON_RESCAN_BATCH=500/tick × Sun 03:00 UTC weekly`, a 10k-URL
 //!   table fully sweeps in ~5 weeks.
 //!
+//! - `reheal` (one-shot, operator-run) — re-runs the pending pipeline over
+//!   icons currently `blocked` for a recoverable reason (`oversize`,
+//!   `unsupported_format`). Resets those rows to pending (deleting the
+//!   stale block so the content-hash dedupe doesn't short-circuit) and
+//!   reprocesses them with the current decoders + size cap + downscaling.
+//!   NEVER touches `adult` blocks — those are real content decisions.
+//!
 //! Env vars:
 //! - DATABASE_URL                       — Postgres connection
 //! - GOOGLE_VISION_API_KEY              — required for `pending` mode unless ICON_VISION_DISABLED=1 (rescan doesn't call Vision)
 //! - ICON_VISION_DISABLED               — `1` to skip Vision; new icons land in `state='review'` for manual review (default unset)
-//! - ICON_MODE                          — `pending` (default) | `rescan`
+//! - ICON_MODE                          — `pending` (default) | `rescan` | `reheal`
+//! - ICON_REHEAL_REASONS                — comma list for `reheal` mode (default `oversize,unsupported_format`; `adult` is rejected)
 //! - ICON_TICK_BATCH                    — max URLs per pending tick (default 200)
 //! - ICON_RESCAN_BATCH                  — max URLs per rescan tick (default 500)
 //! - ICON_NSFW_BLOCK_THRESHOLD          — default 0.9 (unused when ICON_VISION_DISABLED=1)
@@ -53,6 +61,12 @@ const DEFAULT_BLOCK_THRESHOLD: f32 = 0.9;
 const DEFAULT_REVIEW_THRESHOLD: f32 = 0.6;
 const DEFAULT_BATCH: usize = 200;
 const DEFAULT_RESCAN_BATCH: usize = 500;
+/// Default `block_reason`s the `reheal` mode reprocesses. `adult` is
+/// deliberately absent and is rejected even if an operator passes it.
+const DEFAULT_REHEAL_REASONS: &str = "oversize,unsupported_format";
+/// The ONLY reasons `reheal` will ever act on. A hard allowlist so a typo
+/// (or `adult`) can never re-serve content that was blocked on its pixels.
+const ALLOWED_REHEAL_REASONS: &[&str] = &["oversize", "unsupported_format"];
 const PER_REQUEST_DELAY: Duration = Duration::from_millis(35);
 /// Per-tick wallclock budget. A hostile gateway that hangs just under
 /// the per-request timeout could otherwise stall a tick for
@@ -65,12 +79,14 @@ const TICK_DEADLINE: Duration = Duration::from_secs(600);
 enum Mode {
     Pending,
     Rescan,
+    Reheal,
 }
 
 impl Mode {
     fn from_env() -> Self {
         match std::env::var("ICON_MODE").as_deref() {
             Ok("rescan") => Mode::Rescan,
+            Ok("reheal") => Mode::Reheal,
             // Default to pending for any other value (including unset
             // and the explicit "pending"). Operator typos fail safe.
             _ => Mode::Pending,
@@ -139,6 +155,7 @@ async fn main() -> Result<()> {
     match mode {
         Mode::Pending => run_pending(&pool, &http).await?,
         Mode::Rescan => run_rescan(&pool, &http).await?,
+        Mode::Reheal => run_reheal(&pool, &http).await?,
     }
 
     mark_icons_run(&pool).await?;
@@ -146,7 +163,19 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn run_pending(pool: &pg::PgPool, http: &reqwest::Client) -> Result<()> {
+/// Shared config for the URL-processing modes (`pending`, `reheal`).
+struct PendingConfig {
+    api_key: Option<String>,
+    block_threshold: f32,
+    review_threshold: f32,
+    batch: usize,
+    output_dir: PathBuf,
+}
+
+/// Load + validate the pipeline config from the environment. Shared so the
+/// pending tick and the reheal one-shot can never drift on thresholds,
+/// Vision-disable semantics, or the output dir.
+fn load_pending_config() -> Result<PendingConfig> {
     let vision_disabled = matches!(std::env::var("ICON_VISION_DISABLED").as_deref(), Ok("1"));
     let api_key = if vision_disabled {
         info!("ICON_VISION_DISABLED=1 — skipping Vision; new icons will land in state='review'");
@@ -168,44 +197,47 @@ async fn run_pending(pool: &pg::PgPool, http: &reqwest::Client) -> Result<()> {
             block_threshold, review_threshold,
         ));
     }
-
     if !output_dir.exists() {
         std::fs::create_dir_all(&output_dir)
             .with_context(|| format!("creating ICON_OUTPUT_DIR={}", output_dir.display()))?;
     }
+    Ok(PendingConfig {
+        api_key,
+        block_threshold,
+        review_threshold,
+        batch,
+        output_dir,
+    })
+}
 
-    let pending = find_pending_icon_urls(pool, batch as i64).await?;
-
-    if pending.is_empty() {
-        // Healthy idle path — most ticks land here. Caller touches
-        // the heartbeat after we return, so operator dashboards still
-        // see the timer firing. No log noise on idle.
-        return Ok(());
-    }
-
-    info!(n = pending.len(), batch, "sync-icons tick — processing pending queue");
-
-    let started = Instant::now();
-    let deadline = started + TICK_DEADLINE;
+/// Run a list of URIs through the per-URL pipeline, honoring the per-tick
+/// wallclock budget. Shared by `run_pending` and `run_reheal`.
+async fn drain(
+    pool: &pg::PgPool,
+    http: &reqwest::Client,
+    uris: &[String],
+    cfg: &PendingConfig,
+) -> TickSummary {
+    let deadline = Instant::now() + TICK_DEADLINE;
     let mut summary = TickSummary::default();
 
-    for uri in &pending {
+    for uri in uris {
         if Instant::now() >= deadline {
             warn!(
                 processed = summary.scanned,
-                of = pending.len(),
-                "tick wallclock budget exhausted; deferring remainder to next run"
+                of = uris.len(),
+                "wallclock budget exhausted; deferring remainder to next run"
             );
             break;
         }
         match process_url(
             pool,
             http,
-            api_key.as_deref(),
-            &output_dir,
+            cfg.api_key.as_deref(),
+            &cfg.output_dir,
             uri,
-            block_threshold,
-            review_threshold,
+            cfg.block_threshold,
+            cfg.review_threshold,
         )
         .await
         {
@@ -228,12 +260,84 @@ async fn run_pending(pool: &pg::PgPool, http: &reqwest::Client) -> Result<()> {
         summary.scanned += 1;
         sleep(PER_REQUEST_DELAY).await;
     }
+    summary
+}
 
+async fn run_pending(pool: &pg::PgPool, http: &reqwest::Client) -> Result<()> {
+    let cfg = load_pending_config()?;
+    let pending = find_pending_icon_urls(pool, cfg.batch as i64).await?;
+
+    if pending.is_empty() {
+        // Healthy idle path — most ticks land here. Caller touches
+        // the heartbeat after we return, so operator dashboards still
+        // see the timer firing. No log noise on idle.
+        return Ok(());
+    }
+
+    info!(n = pending.len(), batch = cfg.batch, "sync-icons tick — processing pending queue");
+
+    let started = Instant::now();
+    let summary = drain(pool, http, &pending, &cfg).await;
     let elapsed = started.elapsed().as_secs_f64();
     info!(
         ?summary,
         elapsed_s = format!("{:.1}", elapsed),
         "sync-icons (pending) tick complete"
+    );
+    Ok(())
+}
+
+/// `reheal` mode — re-run the pipeline over icons blocked for a recoverable
+/// reason (`oversize`, `unsupported_format`). One-shot, operator-triggered.
+async fn run_reheal(pool: &pg::PgPool, http: &reqwest::Client) -> Result<()> {
+    let cfg = load_pending_config()?;
+
+    // Parse + validate reasons against the hard allowlist. `adult` (and any
+    // typo) is dropped with a warning — it must never be re-served.
+    let raw =
+        std::env::var("ICON_REHEAL_REASONS").unwrap_or_else(|_| DEFAULT_REHEAL_REASONS.into());
+    let mut reasons: Vec<String> = Vec::new();
+    for r in raw.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+        if ALLOWED_REHEAL_REASONS.contains(&r) {
+            if !reasons.iter().any(|x| x == r) {
+                reasons.push(r.to_string());
+            }
+        } else {
+            warn!(
+                reason = %r,
+                "ignoring non-rehealable reason (only oversize/unsupported_format allowed; adult is never rehealed)"
+            );
+        }
+    }
+    if reasons.is_empty() {
+        return Err(anyhow!(
+            "no valid reheal reasons (allowed: oversize, unsupported_format)"
+        ));
+    }
+
+    // Snapshot the URLs BEFORE severing the links, then reset the rows so
+    // the pipeline treats them as fresh pending work.
+    let uris = pg::select_blocked_uris_for_reheal(pool, &reasons).await?;
+    if uris.is_empty() {
+        info!(?reasons, "reheal: no blocked icons match — nothing to do");
+        return Ok(());
+    }
+    let (urls_reset, rows_deleted) = pg::reset_blocked_for_reheal(pool, &reasons).await?;
+    info!(
+        ?reasons,
+        uris = uris.len(),
+        urls_reset,
+        rows_deleted,
+        "reheal: reset blocked rows to pending; reprocessing now"
+    );
+
+    let started = Instant::now();
+    let summary = drain(pool, http, &uris, &cfg).await;
+    let elapsed = started.elapsed().as_secs_f64();
+    info!(
+        ?summary,
+        elapsed_s = format!("{:.1}", elapsed),
+        "sync-icons (reheal) complete"
     );
     Ok(())
 }

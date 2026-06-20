@@ -77,10 +77,11 @@ hmac = "0.12"
 ripemd = "0.1"
 
 # Image format detection + WebP transcode for the icon safety pipeline.
-# `default-features=false` strips formats we don't need (tiff, ico, etc.);
-# we keep png/jpeg/webp/gif (first-frame only). Pure-Rust WebP encode — no
-# native libwebp linkage.
-image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
+# `default-features=false` strips formats we don't need (tiff, etc.); we
+# keep png/jpeg/webp/gif (first-frame only) plus bmp/ico — both are common
+# token-icon source formats the heal pass recovers. Pure-Rust WebP encode —
+# no native libwebp linkage.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp", "ico"] }
 
 # SVG rasterization for the icon safety pipeline. `resvg` deliberately
 # does NOT execute scripts, fetch external `href`s, or follow file://

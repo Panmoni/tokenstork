@@ -2285,6 +2285,80 @@ pub async fn flip_icon_url_to_pending(pool: &PgPool, uri: &str) -> Result<()> {
     Ok(())
 }
 
+/// Reheal — list the icon URLs currently linked to a `blocked` decision
+/// whose reason is in `reasons`. Captured BEFORE [`reset_blocked_for_reheal`]
+/// nulls the links, so the caller can replay them through the normal
+/// pending pipeline (now with a higher size cap, bmp/ico decoders, and
+/// downscaling). NEVER pass `"adult"` — that bucket is a real content
+/// decision and must not be re-served; the caller enforces the allowlist.
+pub async fn select_blocked_uris_for_reheal(
+    pool: &PgPool,
+    reasons: &[String],
+) -> Result<Vec<String>> {
+    let rows: Vec<(String,)> = sqlx::query_as(
+        "SELECT s.icon_uri
+           FROM icon_url_scan s
+           JOIN icon_moderation m ON m.content_hash = s.content_hash
+          WHERE m.state = 'blocked'
+            AND m.block_reason = ANY($1)",
+    )
+    .bind(reasons)
+    .fetch_all(pool)
+    .await
+    .context("selecting blocked URIs for reheal")?;
+    Ok(rows.into_iter().map(|(s,)| s).collect())
+}
+
+/// Reheal — reset every `blocked` decision whose reason is in `reasons`
+/// back to a clean pending state so the pipeline reprocesses it from
+/// scratch. Two steps, in one transaction:
+///   1. NULL the `content_hash` link (and clear retry counters) on every
+///      referencing `icon_url_scan` row so the pending picker surfaces it
+///      immediately. Must precede the delete — `icon_url_scan.content_hash`
+///      has an unqualified FK to `icon_moderation`, so a referenced row
+///      can't be deleted.
+///   2. DELETE the now-unreferenced blocked moderation rows. Removing the
+///      decision is what defeats the content-hash dedupe in `process_url`
+///      (a re-fetch to an unchanged hash would otherwise just re-link the
+///      old block). This also sweeps 0-URL orphan rows in the same buckets.
+/// Returns `(urls_reset, rows_deleted)`. NEVER pass `"adult"`.
+pub async fn reset_blocked_for_reheal(
+    pool: &PgPool,
+    reasons: &[String],
+) -> Result<(u64, u64)> {
+    let mut tx = pool.begin().await.context("begin reheal transaction")?;
+
+    let urls_reset = sqlx::query(
+        "UPDATE icon_url_scan
+            SET content_hash = NULL,
+                last_fetched_at = NULL,
+                fetch_error = NULL,
+                fail_count = 0
+          WHERE content_hash IN (
+                SELECT content_hash FROM icon_moderation
+                 WHERE state = 'blocked' AND block_reason = ANY($1)
+          )",
+    )
+    .bind(reasons)
+    .execute(&mut *tx)
+    .await
+    .context("resetting icon_url_scan rows for reheal")?
+    .rows_affected();
+
+    let rows_deleted = sqlx::query(
+        "DELETE FROM icon_moderation
+          WHERE state = 'blocked' AND block_reason = ANY($1)",
+    )
+    .bind(reasons)
+    .execute(&mut *tx)
+    .await
+    .context("deleting blocked moderation rows for reheal")?
+    .rows_affected();
+
+    tx.commit().await.context("commit reheal transaction")?;
+    Ok((urls_reset, rows_deleted))
+}
+
 /// Idempotent insert of a single icon URL into the scan queue. Called
 /// from `sync-bcmr` after upserting `token_metadata` so newly-discovered
 /// icon URIs land in the queue without waiting for the next bootstrap

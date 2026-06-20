@@ -14,10 +14,15 @@ use std::time::Duration;
 
 use crate::safe_http::{read_body_capped, validate_url_scheme};
 
-/// Hard cap on icon bytes. Anything larger is presumed adversarial and
+/// Hard cap on icon bytes fetched off the network. Anything larger
 /// short-circuits to a `blocked / oversize` decision before any CPU is
-/// spent decoding it.
-pub const ICON_SIZE_CAP_BYTES: usize = 2 * 1024 * 1024;
+/// spent decoding it. 16 MiB comfortably covers legitimate large token
+/// icons (high-res PNGs, multi-frame GIFs) — they're downscaled to
+/// [`WEBP_MAX_DIM`] on encode, so a big *source* still yields a tiny
+/// stored WebP. The real decompression-bomb guard is
+/// [`DECODED_ALLOC_CAP_BYTES`] (applied post-fetch at decode time), not
+/// this network cap.
+pub const ICON_SIZE_CAP_BYTES: usize = 16 * 1024 * 1024;
 
 /// Decoded-image allocation cap. A 2 MiB highly-compressible PNG (e.g.
 /// 30k×30k indexed-color all-zeros) decodes to ~3.6 GB; the byte cap above
@@ -33,6 +38,14 @@ pub const FETCH_TIMEOUT: Duration = Duration::from_secs(20);
 /// and visual quality for small UI icons; the perceptual loss on a 64×64
 /// thumbnail is invisible.
 pub const WEBP_QUALITY: u8 = 80;
+
+/// Max stored-WebP dimension (px) per side. Token icons never render
+/// larger than a small avatar, so we downscale any decoded image whose
+/// longest side exceeds this before encoding. Keeps the on-disk WebP tiny
+/// regardless of source resolution (a 4000×4000 source → 512×512 WebP)
+/// and is what makes the raised [`ICON_SIZE_CAP_BYTES`] safe to serve.
+/// Only ever shrinks — smaller images are encoded at native size.
+pub const WEBP_MAX_DIM: u32 = 512;
 
 /// Maximum render dimension (px) for rasterized SVG. An SVG can declare
 /// a 100k×100k viewBox in a few hundred bytes, which would allocate ~40
@@ -410,7 +423,12 @@ fn decode_raster(bytes: &[u8]) -> Result<DynamicImage> {
 
     let supported = matches!(
         format,
-        ImageFormat::Png | ImageFormat::Jpeg | ImageFormat::WebP | ImageFormat::Gif
+        ImageFormat::Png
+            | ImageFormat::Jpeg
+            | ImageFormat::WebP
+            | ImageFormat::Gif
+            | ImageFormat::Bmp
+            | ImageFormat::Ico
     );
     if !supported {
         return Err(anyhow!("unsupported image format: {:?}", format));
@@ -435,8 +453,23 @@ fn decode_raster(bytes: &[u8]) -> Result<DynamicImage> {
 /// input bytes. The caller should leave the URL pending so a future
 /// library version can retry.
 pub fn encode_to_webp(img: &DynamicImage) -> Result<Vec<u8>> {
+    // Downscale to a thumbnail before encoding. `resize` preserves aspect
+    // ratio and fits within MAX×MAX; we only call it when a side actually
+    // exceeds the cap so smaller icons are never upscaled (which would just
+    // bloat the file and blur the image). Lanczos3 gives clean downscales.
+    let scaled;
+    let src = if img.width() > WEBP_MAX_DIM || img.height() > WEBP_MAX_DIM {
+        scaled = img.resize(
+            WEBP_MAX_DIM,
+            WEBP_MAX_DIM,
+            image::imageops::FilterType::Lanczos3,
+        );
+        &scaled
+    } else {
+        img
+    };
     let mut out = Vec::new();
-    img.write_to(&mut Cursor::new(&mut out), ImageFormat::WebP)
+    src.write_to(&mut Cursor::new(&mut out), ImageFormat::WebP)
         .context("WebP encode failed")?;
     Ok(out)
 }
@@ -506,6 +539,60 @@ mod tests {
         assert!(webp.starts_with(b"RIFF"));
         // The 8th-12th bytes are "WEBP".
         assert_eq!(&webp[8..12], b"WEBP");
+    }
+
+    /// Build an in-memory PNG of arbitrary dimensions for resize fixtures.
+    fn make_png_sized(w: u32, h: u32) -> Vec<u8> {
+        use image::{ImageBuffer, Rgb};
+        let img: ImageBuffer<Rgb<u8>, Vec<u8>> =
+            ImageBuffer::from_fn(w, h, |x, y| Rgb([(x % 256) as u8, (y % 256) as u8, 128]));
+        let mut out = Vec::new();
+        img.write_to(&mut Cursor::new(&mut out), ImageFormat::Png)
+            .expect("encode sized PNG");
+        out
+    }
+
+    #[test]
+    fn encode_downscales_oversized_image() {
+        // 1000×600 source → longest side capped at WEBP_MAX_DIM, aspect kept.
+        let png = make_png_sized(1000, 600);
+        let img = decode_image(&png).expect("decode").image;
+        let webp = encode_to_webp(&img).expect("encode");
+        let out = image::load_from_memory(&webp).expect("re-decode webp");
+        assert!(
+            out.width() <= WEBP_MAX_DIM && out.height() <= WEBP_MAX_DIM,
+            "expected <= {WEBP_MAX_DIM}px per side, got {}x{}",
+            out.width(),
+            out.height()
+        );
+        assert_eq!(out.width(), WEBP_MAX_DIM, "longest side should hit the cap");
+    }
+
+    #[test]
+    fn encode_leaves_small_image_native_size() {
+        let png = make_png_sized(64, 48);
+        let img = decode_image(&png).expect("decode").image;
+        let webp = encode_to_webp(&img).expect("encode");
+        let out = image::load_from_memory(&webp).expect("re-decode webp");
+        assert_eq!(
+            (out.width(), out.height()),
+            (64, 48),
+            "small image must not be resized or upscaled"
+        );
+    }
+
+    #[test]
+    fn decodes_bmp_now_supported() {
+        // BMP was previously rejected as unsupported_format; the heal change
+        // compiles in the decoder and allowlists the format.
+        use image::{ImageBuffer, Rgb};
+        let img: ImageBuffer<Rgb<u8>, Vec<u8>> =
+            ImageBuffer::from_fn(8, 8, |_, _| Rgb([10, 20, 30]));
+        let mut bmp = Vec::new();
+        img.write_to(&mut Cursor::new(&mut bmp), ImageFormat::Bmp)
+            .expect("encode test BMP");
+        let decoded = decode_image(&bmp).expect("BMP should now decode");
+        assert_eq!((decoded.image.width(), decoded.image.height()), (8, 8));
     }
 
     #[test]
