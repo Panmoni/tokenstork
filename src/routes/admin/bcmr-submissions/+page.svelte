@@ -68,6 +68,15 @@
 
 <div class="max-w-6xl mx-auto px-4 py-8">
 	<header class="mb-6">
+		<nav aria-label="Breadcrumb" class="mb-3 text-sm">
+			<a
+				href="/admin"
+				data-sveltekit-preload-data="hover"
+				class="text-violet-600 dark:text-violet-400 hover:underline">Admin</a
+			>
+			<span class="ts-text-muted mx-1.5">/</span>
+			<span class="ts-text-muted">BCMR submissions</span>
+		</nav>
 		<h1 class="text-3xl font-bold ts-text-strong">BCMR submission queue</h1>
 		<p class="mt-1 text-sm ts-text-muted">
 			Operator approval queue for tokenstork-hosted BCMR backups.
