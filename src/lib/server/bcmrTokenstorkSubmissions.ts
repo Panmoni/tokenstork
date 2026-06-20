@@ -131,6 +131,18 @@ export async function listSubmissions(
 	return res.rows.map(rowToSubmission);
 }
 
+/** Count per review_state, for dashboard badges. Missing states read 0. */
+export async function getSubmissionStateCounts(): Promise<Record<SubmissionState, number>> {
+	const counts: Record<SubmissionState, number> = { pending: 0, approved: 0, rejected: 0 };
+	const res = await query<{ review_state: SubmissionState; n: number }>(
+		`SELECT review_state, COUNT(*)::int AS n FROM bcmr_tokenstork_submissions GROUP BY review_state`
+	);
+	for (const r of res.rows) {
+		if (r.review_state in counts) counts[r.review_state] = r.n;
+	}
+	return counts;
+}
+
 /**
  * Approve a submission: write the JSON to /var/lib/tokenstork/bcmr/
  * <content_hash>.json (so Caddy can serve it at /bcmr/<hash>.json) and
