@@ -1,5 +1,4 @@
 # TODO
-
 - Transfer tokenstork.com to Cloudflare as registrar
 - Test minting page again, all 3 modes
 - Test airdrops
@@ -21,3 +20,4 @@
 - unique and interesting distribution tools to get more holders
 - Guidance on where to buy BCH and what wallet to use
 - SEO pass
+- do some research to create an SEO and marketing strategy for the site
