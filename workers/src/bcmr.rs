@@ -112,18 +112,7 @@ impl BcmrToken {
                     revisions.iter().max_by(|a, b| a.0.cmp(b.0)).map(|(_, v)| v)
                 });
             if let Some(snap) = snapshot {
-                let (symbol, decimals_raw) = match snap.token.as_ref() {
-                    Some(t) => (t.symbol.clone(), t.decimals.clone()),
-                    None => (None, None),
-                };
-                let icon_uri = snap.uris.as_ref().and_then(|u| u.icon.clone());
-                return BcmrFlat {
-                    name: nonempty_capped(snap.name.clone(), MAX_NAME_LEN),
-                    symbol: nonempty_capped(symbol, MAX_SYMBOL_LEN),
-                    decimals: validate_decimals(decimals_raw, category_hex),
-                    description: nonempty_capped(snap.description.clone(), MAX_DESC_LEN),
-                    icon_uri: nonempty_capped(icon_uri, MAX_ICON_URI_LEN),
-                };
+                return flatten_snapshot(snap, category_hex);
             }
         }
 
@@ -142,6 +131,100 @@ impl BcmrToken {
             description: nonempty_capped(self.description, MAX_DESC_LEN),
             icon_uri: nonempty_capped(icon_uri, MAX_ICON_URI_LEN),
         }
+    }
+}
+
+/// Flatten one per-revision identity snapshot into the `token_metadata`
+/// column layout. Shared by the single-category on-chain path
+/// ([`BcmrToken::into_flat`]) and the multi-category OTR registry path
+/// ([`OtrRegistry::flatten_category`]) so both apply the same trimming,
+/// length caps, and decimals clamping. `category_hex` is only used as
+/// `warn!` context for out-of-range decimals.
+fn flatten_snapshot(snap: &BcmrIdentitySnapshot, category_hex: &str) -> BcmrFlat {
+    let (symbol, decimals_raw) = match snap.token.as_ref() {
+        Some(t) => (t.symbol.clone(), t.decimals.clone()),
+        None => (None, None),
+    };
+    let icon_uri = snap.uris.as_ref().and_then(|u| u.icon.clone());
+    BcmrFlat {
+        name: nonempty_capped(snap.name.clone(), MAX_NAME_LEN),
+        symbol: nonempty_capped(symbol, MAX_SYMBOL_LEN),
+        decimals: validate_decimals(decimals_raw, category_hex),
+        description: nonempty_capped(snap.description.clone(), MAX_DESC_LEN),
+        icon_uri: nonempty_capped(icon_uri, MAX_ICON_URI_LEN),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// OTR (OpenTokenRegistry) registry — the multi-token aggregate BCMR published
+// at otr.cash/.well-known/bitcoin-cash-metadata-registry.json and pulled on a
+// regular cadence by the `bcmr-otr` worker.
+//
+// Unlike [`BcmrToken`] (one category's body), a *registry* carries many
+// categories in its `identities` map. We only deserialize `identities`; the
+// registry-level `latestRevision` / `registryIdentity` / `version` describe
+// the registry entity itself, NOT any individual token's revision, so they're
+// irrelevant to per-category resolution.
+//
+// OTR is strictly a gap-filler: the on-chain authchain walker
+// ([crate::bcmr_onchain]) remains the canonical, sha256-verified source. The
+// worker that consumes this type writes `bcmr_source='otr'` and never
+// overwrites a `bcmr_source='onchain'` row.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+pub struct OtrRegistry {
+    /// `identities[<category-hex>][<revision-iso-timestamp>]` — same nested
+    /// shape as `BcmrToken.identities`, just spanning every token the
+    /// registry lists. Defaulted so a registry that somehow omits the key
+    /// parses to an empty map rather than failing the whole sync.
+    #[serde(default)]
+    pub identities: std::collections::HashMap<String, HashMap<String, BcmrIdentitySnapshot>>,
+}
+
+/// The flattened metadata + newest-revision key for one category resolved out
+/// of an [`OtrRegistry`].
+#[derive(Debug, Clone)]
+pub struct OtrCategoryMeta {
+    pub flat: BcmrFlat,
+    /// The ISO-8601 revision key the snapshot came from (the newest for this
+    /// category). Used verbatim as `token_metadata.bcmr_revision`.
+    pub revision: String,
+}
+
+impl OtrRegistry {
+    /// Resolve the newest snapshot for `category_hex` (case-insensitive) and
+    /// flatten it. Returns None when the registry doesn't list the category or
+    /// its revision map is empty.
+    ///
+    /// Newest = max ISO-8601 revision key (lexicographic == chronological),
+    /// matching [`BcmrToken::into_flat`]'s `latestRevision`-absent fallback.
+    /// The registry has no per-category `latestRevision` pointer, so max-by-key
+    /// is the only selector.
+    pub fn flatten_category(&self, category_hex: &str) -> Option<OtrCategoryMeta> {
+        let cat_lc = category_hex.to_ascii_lowercase();
+        let revisions = self.identities.get(&cat_lc)?;
+        let (rev_key, snap) = revisions.iter().max_by(|a, b| a.0.cmp(b.0))?;
+        Some(OtrCategoryMeta {
+            flat: flatten_snapshot(snap, category_hex),
+            revision: rev_key.clone(),
+        })
+    }
+
+    /// Iterate `(category_hex, newest-flattened-meta)` over every category the
+    /// registry lists. Categories with an empty revision map are skipped.
+    /// `category_hex` is the raw registry key (lowercase per spec).
+    pub fn iter_categories(&self) -> impl Iterator<Item = (&str, OtrCategoryMeta)> {
+        self.identities.iter().filter_map(|(cat, revisions)| {
+            let (rev_key, snap) = revisions.iter().max_by(|a, b| a.0.cmp(b.0))?;
+            Some((
+                cat.as_str(),
+                OtrCategoryMeta {
+                    flat: flatten_snapshot(snap, cat),
+                    revision: rev_key.clone(),
+                },
+            ))
+        })
     }
 }
 
@@ -413,6 +496,90 @@ mod tests {
         assert_eq!(f.name.as_deref(), Some("FallbackName"));
         assert_eq!(f.symbol.as_deref(), Some("FB"));
         assert_eq!(f.icon_uri.as_deref(), Some("ipfs://fallback"));
+    }
+
+    #[test]
+    fn otr_registry_flattens_each_category() {
+        // Shape pulled from the real otr.cash registry: a multi-token
+        // `identities` map keyed by category hex, each holding one or more
+        // ISO-revision snapshots. Registry-level latestRevision/version are
+        // present but ignored by OtrRegistry.
+        let fldch = "0adb865ee9cc3038de87fba682e6cd361414edc9acff0da2fd0690d75341c640";
+        let furu = "d9ab24ed15a7846cc3d9e004aa5cb976860f13dac1ead05784ee4f4622af96ea";
+        let raw = json!({
+            "$schema": "https://cashtokens.org/bcmr-v2.schema.json",
+            "latestRevision": "2023-05-13T00:00:00.000Z",
+            "registryIdentity": "abc",
+            "version": { "major": 1, "minor": 0, "patch": 0 },
+            "identities": {
+                fldch: {
+                    "2024-08-06T00:00:00.000Z": {
+                        "name": "FoldingCash",
+                        "description": "FLDCH rewards Folding@Home users.",
+                        "token": { "category": fldch, "symbol": "FLDCH", "decimals": 8 },
+                        "uris": { "icon": "ipfs://bafyFLDCH", "web": "https://folding.cash" }
+                    }
+                },
+                furu: {
+                    "2023-10-31T12:00:40.239Z": {
+                        "name": "Furu Tokens",
+                        "token": { "symbol": "FURU", "decimals": 2 }
+                    }
+                }
+            }
+        });
+        let reg: OtrRegistry = serde_json::from_value(raw).unwrap();
+
+        let f = reg.flatten_category(fldch).expect("FLDCH resolves");
+        assert_eq!(f.flat.name.as_deref(), Some("FoldingCash"));
+        assert_eq!(f.flat.symbol.as_deref(), Some("FLDCH"));
+        assert_eq!(f.flat.decimals, 8);
+        assert_eq!(f.flat.icon_uri.as_deref(), Some("ipfs://bafyFLDCH"));
+        assert_eq!(f.revision, "2024-08-06T00:00:00.000Z");
+
+        // Uppercase lookup still resolves (defensive lowercasing).
+        assert!(reg.flatten_category(&furu.to_ascii_uppercase()).is_some());
+
+        // Unknown category → None (gap-filler leaves it for the on-chain walker).
+        assert!(reg
+            .flatten_category("00000000000000000000000000000000000000000000000000000000deadbeef")
+            .is_none());
+
+        // iter_categories yields exactly the two listed categories.
+        let mut seen: Vec<String> = reg.iter_categories().map(|(c, _)| c.to_string()).collect();
+        seen.sort();
+        let mut want = vec![fldch.to_string(), furu.to_string()];
+        want.sort();
+        assert_eq!(seen, want);
+    }
+
+    #[test]
+    fn otr_registry_picks_newest_revision_per_category() {
+        let cat = "0adb865ee9cc3038de87fba682e6cd361414edc9acff0da2fd0690d75341c640";
+        let raw = json!({
+            "identities": {
+                cat: {
+                    "2024-01-01T00:00:00.000Z": {
+                        "name": "Old", "token": { "symbol": "OLD", "decimals": 0 }
+                    },
+                    "2025-06-01T00:00:00.000Z": {
+                        "name": "New", "token": { "symbol": "NEW", "decimals": 4 }
+                    }
+                }
+            }
+        });
+        let reg: OtrRegistry = serde_json::from_value(raw).unwrap();
+        let f = reg.flatten_category(cat).expect("resolves");
+        assert_eq!(f.flat.name.as_deref(), Some("New"));
+        assert_eq!(f.flat.symbol.as_deref(), Some("NEW"));
+        assert_eq!(f.flat.decimals, 4);
+        assert_eq!(f.revision, "2025-06-01T00:00:00.000Z");
+    }
+
+    #[test]
+    fn otr_registry_missing_identities_parses_to_empty() {
+        let reg: OtrRegistry = serde_json::from_value(json!({ "version": {} })).unwrap();
+        assert_eq!(reg.iter_categories().count(), 0);
     }
 
     #[test]

@@ -1045,6 +1045,111 @@ pub async fn update_token_authchain_head(
 }
 
 // ---------------------------------------------------------------------------
+// OTR (OpenTokenRegistry) gap-fill helpers.
+//
+// The `bcmr-otr` worker pulls the multi-token registry from otr.cash on a
+// daily cadence and fills metadata for categories the on-chain walker could
+// not satisfy. OTR is strictly secondary: the on-chain authchain walker
+// remains the canonical, sha256-verified source.
+//
+// Precedence is enforced entirely in [`update_token_metadata_otr`]:
+//   - It is a guarded UPDATE, never an INSERT — so it only ever augments a
+//     row the on-chain walker already created (`onchain` or, more usually,
+//     `onchain-empty`). A category OTR lists but the walker hasn't visited
+//     yet simply has no row to update; the walker (hourly, priority-1 for
+//     brand-new categories) creates it well before OTR's daily pass, since
+//     OTR listings arrive via slow manual GitHub PRs long after a token is
+//     indexed.
+//   - The `bcmr_source IS DISTINCT FROM 'onchain'` guard makes the write a
+//     no-op against any canonical on-chain row, so OTR can never clobber
+//     verified metadata.
+//   - It deliberately does NOT touch `fetched_at`. That column is the
+//     on-chain picker's priority-2 stale clock; if OTR's daily refresh kept
+//     bumping it, a category that DOES have on-chain BCMR (but was filled by
+//     OTR first, in the vanishingly rare race) would never go stale enough
+//     to be re-walked and upgraded. Leaving `fetched_at` alone keeps the
+//     on-chain re-check cadence intact while OTR refreshes the display data.
+// ---------------------------------------------------------------------------
+
+/// One category's worth of OTR-derived metadata. `bcmr_revision` is the
+/// snapshot's ISO revision parsed to a timestamp (None if unparseable);
+/// `bcmr_body` is a minimal BCMR-v2 envelope (`{identities: {cat: <revmap>}}`)
+/// sliced out of the registry so the detail-page `bcmrFromBody` rich card
+/// renders identically to the on-chain path.
+#[derive(Debug, Clone)]
+pub struct TokenMetadataOtrWrite {
+    pub category: Vec<u8>,
+    pub name: Option<String>,
+    pub symbol: Option<String>,
+    pub decimals: i16,
+    pub description: Option<String>,
+    pub icon_uri: Option<String>,
+    pub bcmr_revision: Option<DateTime<Utc>>,
+    pub bcmr_body: serde_json::Value,
+}
+
+/// Guarded UPDATE of an existing `token_metadata` row with OTR-sourced data.
+///
+/// Returns the number of rows affected: `1` when an existing non-onchain row
+/// was filled, `0` when the category has no `token_metadata` row yet (the
+/// on-chain walker hasn't reached it) or already carries `bcmr_source='onchain'`
+/// (canonical — protected by the guard). See the section comment above for why
+/// this is an UPDATE that never touches `fetched_at`.
+pub async fn update_token_metadata_otr(
+    pool: &PgPool,
+    w: &TokenMetadataOtrWrite,
+) -> Result<u64> {
+    let res = sqlx::query(
+        r#"
+        UPDATE token_metadata SET
+            name                 = $2,
+            symbol               = $3,
+            decimals             = $4,
+            description          = $5,
+            icon_uri             = $6,
+            bcmr_publication_uri = NULL,
+            bcmr_revision        = $7,
+            bcmr_body            = $8,
+            bcmr_source          = 'otr'
+          WHERE category = $1
+            AND bcmr_source IS DISTINCT FROM 'onchain'
+        "#,
+    )
+    .bind(&w.category)
+    .bind(&w.name)
+    .bind(&w.symbol)
+    .bind(w.decimals)
+    .bind(&w.description)
+    .bind(&w.icon_uri)
+    .bind(w.bcmr_revision)
+    .bind(&w.bcmr_body)
+    .execute(pool)
+    .await
+    .with_context(|| {
+        format!(
+            "update_token_metadata_otr for {}",
+            bytes_to_hex(&w.category)
+        )
+    })?;
+    Ok(res.rows_affected())
+}
+
+/// Observability heartbeat for the OTR sync, mirroring
+/// [`mark_bcmr_onchain_run`]. Always called at the end of a run (even a
+/// no-op one) so an operator can alert on a stalled `last_otr_run_at`.
+pub async fn mark_otr_run(pool: &PgPool) -> Result<()> {
+    sqlx::query(
+        "UPDATE sync_state
+            SET last_otr_run_at = now(), updated_at = now()
+          WHERE id = 1",
+    )
+    .execute(pool)
+    .await
+    .context("mark_otr_run")?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // CRC-20 detection helpers. See workers/src/crc20.rs for the parser and
 // docs/crc20-plan.md for the design.
 // ---------------------------------------------------------------------------

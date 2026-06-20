@@ -1,0 +1,17 @@
+[Unit]
+Description=Run tokenstork OTR (OpenTokenRegistry) BCMR gap-fill daily
+
+[Timer]
+# First run 20 min after boot, daily thereafter. OTR is a manually-curated
+# community registry (tokens land via GitHub PRs over days), so it changes
+# slowly — a daily pull is plenty, and keeping the cadence well below the
+# on-chain walker's hourly tick means the canonical on-chain walker always
+# classifies a freshly-minted category before OTR's pass would touch it.
+OnBootSec=20min
+OnUnitActiveSec=1d
+Persistent=true
+RandomizedDelaySec=10min
+Unit=sync-bcmr-otr.service
+
+[Install]
+WantedBy=timers.target
