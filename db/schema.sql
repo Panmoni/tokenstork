@@ -234,18 +234,26 @@ ALTER TABLE token_venue_listings
 ALTER TABLE token_price_history
   ALTER COLUMN tvl_satoshis TYPE NUMERIC(30,0);
 
--- Convert price columns from DOUBLE PRECISION to NUMERIC(30,0) for
--- exact monetary arithmetic. DOUBLE PRECISION (IEEE 754) has 53 bits
--- of mantissa (~15-16 decimal digits) — satoshi-denominated prices
--- from Cauldron/Fex are whole numbers well within this range today,
--- but floating-point comparison and aggregation risk accumulates
--- silently. NUMERIC(30,0) stores exact integers up to 10^30 sats
--- (~10^22 BCH), matching the tvl_satoshis column type.
--- Idempotent: re-running on already-NUMERIC columns is a no-op.
+-- price_sats stays DOUBLE PRECISION (matching the CREATE TABLE declarations
+-- above) and is deliberately NOT NUMERIC. An earlier NUMERIC(30,0) migration
+-- backfired two ways:
+--   1. Scale 0 rounded every sub-1-sat price to 0 — e.g. DOGECASH at
+--      ~0.12 sats/smallest-unit became 0, blanking the price for roughly
+--      half of all listed tokens.
+--   2. node-postgres returns NUMERIC as a *string*, which silently defeated
+--      the `Number.isFinite()` guards in the formatters, so every venue price
+--      rendered as "—" regardless of value.
+-- Prices originate as f64 from the Cauldron/Fex APIs, so DOUBLE PRECISION is
+-- the honest, lossless-for-our-range type and pg hands it back as a JS number.
+-- (tvl_satoshis stays NUMERIC(30,0) above — it genuinely is a large integer
+-- and is read via ::text + Number().)
+-- These ALTERs convert any DB still on the old NUMERIC(30,0) columns back to
+-- DOUBLE PRECISION; on a fresh DB they are no-ops. Rows already stored as 0
+-- stay 0 until the next sync-cauldron / sync-fex run repopulates them.
 ALTER TABLE token_venue_listings
-  ALTER COLUMN price_sats TYPE NUMERIC(30,0);
+  ALTER COLUMN price_sats TYPE DOUBLE PRECISION;
 ALTER TABLE token_price_history
-  ALTER COLUMN price_sats TYPE NUMERIC(30,0);
+  ALTER COLUMN price_sats TYPE DOUBLE PRECISION;
 
 -- Seed a single initial data point per currently-listed category from
 -- `token_venue_listings`, but only once. Without this the sparklines are
