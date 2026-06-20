@@ -216,13 +216,18 @@ export function formatPriceUSD(value: number | null | undefined): string {
  * divide by `10^8` (sats → BCH), multiply by the live BCH/USD rate.
  */
 export function formatVenuePriceUSD(
-	priceSats: number | null | undefined,
+	priceSats: number | string | null | undefined,
 	decimals: number,
 	bchPriceUSD: number | null | undefined
 ): string {
-	if (priceSats == null || bchPriceUSD == null || bchPriceUSD <= 0) return '—';
-	if (!Number.isFinite(priceSats) || priceSats <= 0) return '—';
-	const bchPerToken = (priceSats * Math.pow(10, decimals)) / 1e8;
+	// `token_venue_listings.price_sats` is a NUMERIC column, and node-postgres
+	// returns NUMERIC as a *string* — not a number. Coerce before any numeric
+	// guard: `Number.isFinite('5031')` is false, which would silently blank
+	// every venue price in the grid/watchlist even when the value is valid.
+	const p = priceSats == null ? NaN : Number(priceSats);
+	if (!Number.isFinite(p) || p <= 0) return '—';
+	if (bchPriceUSD == null || bchPriceUSD <= 0) return '—';
+	const bchPerToken = (p * Math.pow(10, decimals)) / 1e8;
 	return formatPriceUSD(bchPerToken * bchPriceUSD);
 }
 
