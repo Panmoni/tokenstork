@@ -753,6 +753,16 @@ CREATE TABLE IF NOT EXISTS icon_moderation (
 CREATE INDEX IF NOT EXISTS icon_moderation_state_idx
   ON icon_moderation (state, scanned_at DESC);
 
+-- Manual-review audit trail. The icon worker makes automated decisions;
+-- the /admin/icons review queue lets an operator hand-decide the `review`
+-- backlog (clear or block). These columns record WHO decided and WHEN so
+-- a safety decision (esp. adult/CSAM) is attributable. NULL for every row
+-- the worker decided automatically — only set on an operator action.
+-- Idempotent so re-running schema.sql on an existing DB is a no-op.
+ALTER TABLE icon_moderation ADD COLUMN IF NOT EXISTS decided_by    TEXT;        -- operator cashaddr, NULL = automated
+ALTER TABLE icon_moderation ADD COLUMN IF NOT EXISTS decided_at    TIMESTAMPTZ; -- when the operator decided
+ALTER TABLE icon_moderation ADD COLUMN IF NOT EXISTS moderator_note TEXT;       -- optional operator commentary (audit only)
+
 CREATE TABLE IF NOT EXISTS icon_url_scan (
   icon_uri        TEXT        PRIMARY KEY,                    -- raw BCMR URI (re-fetch-on-change works via natural URL key)
   content_hash    BYTEA       REFERENCES icon_moderation(content_hash),

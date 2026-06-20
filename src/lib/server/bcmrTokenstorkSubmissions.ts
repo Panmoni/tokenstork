@@ -24,6 +24,12 @@ import { join } from 'node:path';
 import { env } from '$env/dynamic/private';
 import { query, bytesFromHex, hexFromBytes } from './db';
 
+// Admin gate now lives in one shared module (./admin) so every operator
+// surface — the BCMR queue here and the icon-review queue — share one
+// allowlist. Re-exported so existing importers of `isAdmin` from this
+// module keep working unchanged.
+export { isAdmin } from './admin';
+
 const BCMR_BACKUP_DIR = env.BCMR_BACKUP_DIR || '/var/lib/tokenstork/bcmr';
 
 export type SubmissionState = 'pending' | 'approved' | 'rejected';
@@ -207,17 +213,4 @@ export async function rejectSubmission(
 	);
 	if (!res.rows[0]) throw new Error(`Reject failed; row missing for ${contentHashHex}`);
 	return rowToSubmission(res.rows[0]);
-}
-
-/** Operator-only allowlist check. Reads BCMR_ADMIN_CASHADDRS env var
- *  (comma-separated cashaddrs). Returns true iff the caller is on the
- *  allowlist. Use in route loaders/actions before exposing any admin
- *  surface. */
-export function isAdmin(cashaddr: string): boolean {
-	const raw = env.BCMR_ADMIN_CASHADDRS || '';
-	const allowlist = raw
-		.split(',')
-		.map((s) => s.trim())
-		.filter(Boolean);
-	return allowlist.includes(cashaddr);
 }

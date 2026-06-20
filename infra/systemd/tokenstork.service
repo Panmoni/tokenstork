@@ -52,8 +52,19 @@ SystemCallFilter=~@privileged @resources
 SystemCallArchitectures=native
 UMask=0077
 
-# The app itself never writes to its install directory; Node just reads build/.
-# /tmp is provided by PrivateTmp. No ReadWritePaths needed.
+# The app never writes to its install directory; Node just reads build/.
+# /tmp is provided by PrivateTmp.
+#
+# It DOES need write access to the shared state dir: the /admin/icons
+# "Block" action deletes the on-disk WebP at
+# /var/lib/tokenstork/icons/<hash>.webp (the load-bearing step that stops
+# Caddy serving a blocked icon — Caddy serves that whole directory flat,
+# so a DB-only block wouldn't take effect). The same grant also lets the
+# /admin/bcmr-submissions "Approve" action write
+# /var/lib/tokenstork/bcmr/<hash>.json. ProtectSystem=strict mounts the
+# FS read-only; ReadWritePaths punches the one hole. The dir is owned by
+# the same `tokenstork` user the worker uses, so file unlinks succeed.
+ReadWritePaths=/var/lib/tokenstork
 
 [Install]
 WantedBy=multi-user.target
