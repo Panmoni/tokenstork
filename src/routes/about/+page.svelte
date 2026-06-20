@@ -120,7 +120,10 @@
 				</li>
 				<li>
 					<a href="https://bchn.org/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Bitcoin Cash Node (BCHN)</a>
-					— the archival full node underpinning every on-chain read
+					— the archival full node underpinning every on-chain read; a fork of
+					<a href="https://www.bitcoinabc.org/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Bitcoin ABC</a>, itself a fork of the
+					<a href="https://bitcoincore.org/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">original Bitcoin node</a>
+					— each only minor patches atop the last, honoring the long legacy of Bitcoin development
 				</li>
 				<li>
 					<a href="https://bchworks.com/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">BCHWorks</a>
