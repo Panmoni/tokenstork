@@ -251,7 +251,7 @@
 				class="group p-5 rounded-xl border hover:border-violet-400 dark:hover:border-violet-600 transition-colors no-underline ts-border-subtle ts-surface-panel"
 			>
 				<div class="flex items-center gap-3">
-					<img src="/cauldron-logo.png" alt="" class="w-7 h-7 rounded-full bg-slate-900 p-0.5" aria-hidden="true" />
+					<img src="/cauldron-logo.png" alt="" class="w-7 h-7 rounded-full bg-white p-0.5" aria-hidden="true" />
 					<span class="font-semibold text-slate-900 dark:text-white">Cauldron <span class="text-xs font-normal ts-text-muted">(AMM)</span></span>
 				</div>
 				<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">{fmt(data.cauldronListedCategories)}</div>

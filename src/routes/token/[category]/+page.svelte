@@ -1011,7 +1011,7 @@
 						<div class="p-4 rounded-xl border {t3.priceUSD > 0 ? '' : 'opacity-60'} ts-border-subtle">
 							<div class="flex items-center justify-between mb-2">
 								<div class="flex items-center gap-2">
-									<img src="/cauldron-logo.png" alt="" class="h-5 w-5 rounded-full bg-slate-900 p-0.5" />
+									<img src="/cauldron-logo.png" alt="" class="h-5 w-5 rounded-full bg-white p-0.5" />
 									<span class="font-semibold">Cauldron</span>
 								</div>
 								{#if t3.priceUSD > 0}
