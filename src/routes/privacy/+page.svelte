@@ -1,27 +1,12 @@
 <script lang="ts">
+	import LegalDocument from '$lib/components/LegalDocument.svelte';
+	import type { Section } from '$lib/legalDocument';
+
 	// Edit `lastUpdated` whenever processors, cookies, or data flows change —
 	// not for cosmetic edits. The processor list below must match what the
 	// CSP in svelte.config.js actually allows; if you add or remove a third-
 	// party endpoint there, mirror the change here.
 	const lastUpdated = '26 Apr 2026';
-
-	// Each section's body is a list of structured blocks so the page reads as
-	// a scannable document rather than a wall of text. Block kinds:
-	//   p    — plain paragraph
-	//   lead — bold lead-in (label) + remaining text in the same paragraph
-	//   list — unordered list (rendered with disc bullets via prose styles)
-	//   h3   — sub-section heading inside a numbered section
-	type Block =
-		| { kind: 'p'; text: string }
-		| { kind: 'lead'; label: string; text: string }
-		| { kind: 'list'; items: string[] }
-		| { kind: 'h3'; text: string };
-
-	type Section = {
-		id: string;
-		title: string;
-		body: Block[];
-	};
 
 	const sections: Section[] = [
 		{
@@ -253,55 +238,9 @@
 	<link rel="canonical" href="https://tokenstork.com/privacy" />
 </svelte:head>
 
-<main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-	<h1
-		class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent mb-2"
-	>
-		Privacy Policy
-	</h1>
-	<p class="mb-8 ts-text-muted">
-		Last updated: {lastUpdated}. See also our <a
-			href="/terms"
-			class="text-violet-600 dark:text-violet-400 hover:underline">Terms of Service</a
-		>.
-	</p>
-
-	<nav
-		aria-label="Table of contents"
-		class="mb-10 p-4 rounded-xl border ts-border-subtle ts-surface-soft"
-	>
-		<h2 class="text-sm font-semibold uppercase tracking-wide mb-3 ts-text-muted">
-			On this page
-		</h2>
-		<ol class="grid gap-1 sm:grid-cols-2 list-none p-0 m-0">
-			{#each sections as { id, title }}
-				<li>
-					<a href="#{id}" class="text-violet-600 dark:text-violet-400 hover:underline">{title}</a>
-				</li>
-			{/each}
-		</ol>
-	</nav>
-
-	<div class="prose prose-slate dark:prose-invert max-w-none">
-		{#each sections as { id, title, body }}
-			<section id={id} class="scroll-mt-24">
-				<h2>{title}</h2>
-				{#each body as block}
-					{#if block.kind === 'p'}
-						<p>{block.text}</p>
-					{:else if block.kind === 'lead'}
-						<p><strong>{block.label}</strong> {block.text}</p>
-					{:else if block.kind === 'h3'}
-						<h3>{block.text}</h3>
-					{:else if block.kind === 'list'}
-						<ul>
-							{#each block.items as item}
-								<li>{item}</li>
-							{/each}
-						</ul>
-					{/if}
-				{/each}
-			</section>
-		{/each}
-	</div>
-</main>
+<LegalDocument
+	title="Privacy Policy"
+	{lastUpdated}
+	related={{ label: 'Terms of Service', href: '/terms' }}
+	{sections}
+/>
