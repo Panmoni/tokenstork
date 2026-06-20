@@ -127,3 +127,30 @@ per category, re-walked every >72h-stale tick. Context: memory
                                 moderator_note='deploy smoke test'
        WHERE details = 'deploy smoke test — please ignore';
       ```
+      
+      
+      Why is price the last thing to load on individual inner token pages and why so slow?
+      
+      link "via Cauldron" on inner token page to https://app.cauldron.quest/, they deserve that
+      
+a problem with bcmr is that people can change the metadata on the token and it can tank the whole recognizability etc of the token.
+
+what kind of caching could we implement to make static data and skeletons load super super fast so can concentrate more resources on the hydration of the website with super up to date data
+
+SEO pass
+
+marketing machine
+
+unique and interesting tokenization tools
+
+unique and interesting distribution tools to get more holders
+
+> Bitcoin Cash Node (BCHN) — the archival full node underpinning every on-chain read
+
+update this to note it is a fork of Bitcoin ABC node AND a fork of the original Bitcoin node, all with minor pages, honoring the long legacy of Bitcoin development etc.
+
+on https://tokenstork.com/learn, make the links more visible perhaps with underlining or something
+
+update https://tokenstork.com/roadmap, remove stuff that is done
+
+when qr033df3ym99dqru8a6gtwfus8t8g9w5lsve42m0df is logged in, treat that address as the admin
