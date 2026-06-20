@@ -75,13 +75,27 @@ OOMPolicy=stop
 # the box still thrashes during heavy enrichment, the next step is
 # either more RAM (64 GB) or a shared token-bucket across ALL workers.
 
-# CPUQuota caps BlockBook to 6 full cores (600%). Without this, a
-# RocksDB thrash cycle under memory pressure can consume every core
-# on the box, starving BCHN, Postgres, SvelteKit, and the workers
-# — making even non-BlockBook pages time out. 600% leaves 2 cores
-# for the rest of the system even in the worst case. Combined with
-# MemoryHigh=24G, this bounds both dimensions of the thrash spiral.
-CPUQuota=600%
+# CPUQuota caps BlockBook's CPU. Without this, a RocksDB thrash cycle
+# under memory pressure can consume every core on the box, starving
+# BCHN, Postgres, SvelteKit, and the workers — making even non-BlockBook
+# pages time out. Combined with MemoryHigh=24G, this bounds both
+# dimensions of the thrash spiral.
+#
+# Quota evolution log:
+# - 600% (post 2026-06-13 thrash): held BlockBook at exactly 6 cores; it
+#   sat pinned there 24/7 (throttled in 99.5% of CFS periods), which IS
+#   the box's ~6 load average. Diagnosed 2026-06-20: at chain tip the
+#   burn is NOT compaction or IBD — it's the internal mempool resync
+#   (every ~1s across mempool_workers) plus query serving, not app load
+#   (which is already paced to ~5 rps via a Postgres advisory lock).
+# - 500% (2026-06-20): lowered to 5 cores AFTER halving the mempool
+#   worker pool (mempool_workers 8→4, mempool_sub_workers 2→1 in
+#   /etc/blockbook-bcash/blockchaincfg.json) cut the resync's runnable-
+#   thread count. 500% parks load at ~5 and leaves 7 cores for the rest
+#   of the box. Can drop to 400% once the mempool change is confirmed to
+#   have reduced demand below 5 cores — watch query latency / broken-pipe
+#   warnings in the journal before tightening further.
+CPUQuota=500%
 
 # Hardening profile matching sync-tail / sync-cauldron / tokenstork.service.
 NoNewPrivileges=true
