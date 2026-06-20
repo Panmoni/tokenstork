@@ -11,9 +11,16 @@
 	// and isn't already cleared — only those can be approved (Clear requires
 	// the WebP present), so Select-all and the checkboxes target that set.
 	let selected = $state<Set<string>>(new Set());
-	let bulkNote = $state('');
+	// One shared, inline audit note that feeds every decision — bulk approve
+	// and the per-card Clear/Block. Optional; never shown to users. Kept
+	// inline (in the toolbar) instead of a browser prompt() on purpose.
+	let actionNote = $state('');
 	let bulkBusy = $state(false);
 	let bulkResult = $state<string | null>(null);
+
+	function noteOrNull(): string | null {
+		return actionNote.trim() || null;
+	}
 
 	type Row = (typeof data.rows)[number];
 	function isClearable(row: Row): boolean {
@@ -41,12 +48,6 @@
 		const live = new Set(clearableRows.map((r) => r.contentHashHex));
 		const hashes = [...selected].filter((h) => live.has(h));
 		if (hashes.length === 0) return;
-		if (
-			!confirm(
-				`Approve (Clear) ${hashes.length} icon${hashes.length === 1 ? '' : 's'}? They will be served publicly.`
-			)
-		)
-			return;
 		bulkBusy = true;
 		error = null;
 		bulkResult = null;
@@ -54,7 +55,7 @@
 			const res = await fetch('/api/admin/icons/bulk-clear', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ hashes, note: bulkNote.trim() || null })
+				body: JSON.stringify({ hashes, note: noteOrNull() })
 			});
 			const b = (await res.json().catch(() => ({}))) as {
 				message?: string;
@@ -69,7 +70,7 @@
 			const skip = b.skipped?.length ?? 0;
 			bulkResult = `Approved ${cleared} icon${cleared === 1 ? '' : 's'}${skip ? ` · ${skip} skipped` : ''}.`;
 			selected = new Set();
-			bulkNote = '';
+			actionNote = '';
 			await invalidateAll();
 		} catch (err) {
 			error = (err as Error).message ?? 'Network error';
@@ -78,16 +79,25 @@
 		}
 	}
 
-	// Images in the review queue are, by definition, borderline (the NSFW
-	// gate scored them between block + review thresholds). Blur every
-	// preview by default and require an explicit click to reveal, so the
-	// operator is never ambushed by explicit content.
-	let revealed = $state<Set<string>>(new Set());
+	// Reveal every preview by DEFAULT so the operator can eyeball the whole
+	// queue in one pass. (The blur-by-default safety posture is still one
+	// click away via "Blur all", and any single card can be hidden.) Review
+	// images are borderline — the operator opted into seeing them up front.
+	// `revealOverrides` holds the hashes flipped away from the global default.
+	let revealAll = $state(true);
+	let revealOverrides = $state<Set<string>>(new Set());
+	function isRevealed(hash: string): boolean {
+		return revealOverrides.has(hash) ? !revealAll : revealAll;
+	}
 	function toggleReveal(hash: string) {
-		const next = new Set(revealed);
+		const next = new Set(revealOverrides);
 		if (next.has(hash)) next.delete(hash);
 		else next.add(hash);
-		revealed = next;
+		revealOverrides = next;
+	}
+	function toggleRevealAll() {
+		revealAll = !revealAll;
+		revealOverrides = new Set();
 	}
 
 	// Per-card block reason. Defaults to 'adult' (the most common manual
@@ -112,11 +122,10 @@
 	}
 
 	async function clearIcon(hash: string) {
-		const note = prompt('Optional note (audit trail; not shown to users):', '') ?? '';
 		busy = hash;
 		error = null;
 		try {
-			if (await post(`/api/admin/icons/${hash}/clear`, { note: note || null })) {
+			if (await post(`/api/admin/icons/${hash}/clear`, { note: noteOrNull() })) {
 				await invalidateAll();
 			}
 		} catch (err) {
@@ -128,11 +137,10 @@
 
 	async function blockIcon(hash: string) {
 		const reason = reasonFor(hash);
-		const note = prompt(`Block as "${reason}". Optional note (audit trail):`, '') ?? '';
 		busy = hash;
 		error = null;
 		try {
-			if (await post(`/api/admin/icons/${hash}/block`, { reason, note: note || null })) {
+			if (await post(`/api/admin/icons/${hash}/block`, { reason, note: noteOrNull() })) {
 				await invalidateAll();
 			}
 		} catch (err) {
@@ -245,11 +253,18 @@
 			>
 				Deselect
 			</button>
+			<button
+				type="button"
+				onclick={toggleRevealAll}
+				class="px-2.5 py-1 rounded-md border ts-border-subtle hover:bg-slate-50 dark:hover:bg-zinc-800"
+			>
+				{revealAll ? 'Blur all' : 'Reveal all'}
+			</button>
 			<span class="ts-text-muted tabular-nums">{selectedCount} selected</span>
 			<input
 				type="text"
-				bind:value={bulkNote}
-				placeholder="Optional note (audit trail; not shown to users)"
+				bind:value={actionNote}
+				placeholder="Optional note (audit trail; applies to your next decision)"
 				class="flex-1 min-w-[12rem] rounded-md border ts-border-subtle bg-transparent px-2 py-1 text-xs ts-text-strong"
 			/>
 			<button
@@ -282,7 +297,7 @@
 					<!-- Preview -->
 					<div class="relative aspect-square rounded-lg overflow-hidden bg-slate-100 dark:bg-zinc-800 mb-3">
 						{#if row.hasFile}
-							{#if revealed.has(row.contentHashHex)}
+							{#if isRevealed(row.contentHashHex)}
 								<img
 									src={`/icons/${row.contentHashHex}.webp`}
 									alt="token icon under review"
