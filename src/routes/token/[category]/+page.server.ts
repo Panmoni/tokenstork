@@ -24,6 +24,7 @@ import { query, hexFromBytes, bytesFromHex } from '$lib/server/db';
 import { firstNRankFor } from '$lib/server/firstN';
 import { bcmrFromBody, fetchCauldron } from '$lib/server/external';
 import { scoreBcmrTrust, type BcmrProfileRow } from '$lib/server/bcmrTrust';
+import { getBcmrVersions } from '$lib/server/bcmrVersions';
 import { fetchCrc20Detail } from '$lib/server/crc20';
 import { computeMcapTvlThresholdSats } from '$lib/server/mcapThreshold';
 import { getVoteCounts, getLeaderboardStandings } from '$lib/server/votes';
@@ -942,10 +943,18 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 	// raw Promises — SvelteKit's data_serializer.js detects thenables
 	// automatically and serializes them as deferred IDs, streaming their
 	// resolved values as chunks to the client.
+	// BCMR version-history timeline (watchdog M5) — deferred; a small history
+	// query streamed in after the initial HTML, like tvlRank/holdersRank.
+	const bcmrVersionsPromise = getBcmrVersions(categoryBytes).catch((err) => {
+		console.error('[token detail] bcmr versions query failed:', err);
+		return [];
+	});
+
 	return {
 		token,
 		bcmr: bcmrData,
 		bcmrTrust,
+		bcmrVersions: bcmrVersionsPromise,
 		bchPriceUSD,
 		tier1: tier1Promise,
 		tier2: tier2Promise,

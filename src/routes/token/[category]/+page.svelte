@@ -1336,6 +1336,44 @@
 		</div>
 	{/if}
 
+	<!-- BCMR version history (watchdog M5) — deferred timeline. -->
+	{#await data.bcmrVersions then versions}
+		{#if versions && versions.length > 0}
+			<section class="mt-8">
+				<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-1">BCMR version history</h2>
+				<p class="text-xs ts-text-muted mb-4">Every metadata publication we've archived for this token, newest first. Each snapshot is immutable from our side; the pin link returns that exact version as of its block.</p>
+				<ol class="space-y-3">
+					{#each versions as v (v.authchainTx)}
+						<li class="text-sm border-l-2 pl-3 {v.bodyVerified ? 'border-emerald-400' : 'border-red-400'}">
+							<div class="flex items-center gap-2 flex-wrap">
+								{#if v.bodyVerified}
+									<span class="text-xs text-emerald-600 dark:text-emerald-400">✓ verified</span>
+								{:else}
+									<span class="text-xs text-red-600 dark:text-red-400">⚠ did not verify</span>
+								{/if}
+								<span class="text-xs ts-text-muted">
+									{#if v.blockHeight != null}block {v.blockHeight}{:else}mempool{/if}
+									{#if v.blockTime != null}· {new Date(v.blockTime * 1000).toISOString().slice(0, 10)}{/if}
+								</span>
+								{#if v.bodyVerified && v.blockHeight != null}
+									<a href="/api/tokens/{token.id}/bcmr?as_of_block={v.blockHeight}" target="_blank" rel="noopener noreferrer" class="text-xs text-violet-600 dark:text-violet-400 hover:underline" title="Fetch this exact BCMR version as of its block">pin ↗</a>
+								{/if}
+							</div>
+							<div class="ts-text-body">
+								{stripEmoji(v.name) || '—'}
+								{#if v.symbol}<span class="text-xs text-slate-500 font-mono ml-1">{stripEmoji(v.symbol)}</span>{/if}
+							</div>
+							{#if v.changedFields.length > 0}
+								<div class="text-xs text-amber-700 dark:text-amber-400">changed: {v.changedFields.join(', ')}</div>
+							{/if}
+							<div class="text-[10px] font-mono ts-text-muted truncate">sha256 {v.contentHash.slice(0, 16)}…{#if v.bodyOversize} · body too large to archive inline{/if}</div>
+						</li>
+					{/each}
+				</ol>
+			</section>
+		{/if}
+	{/await}
+
 	<!-- Footer links -->
 	<div class="flex items-center justify-between text-sm mt-8 pt-6 border-t ts-border-subtle">
 		<a href="/" class="text-violet-600 hover:underline">← All tokens</a>
