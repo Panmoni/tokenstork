@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	// If the page was opened with a fragment like #faq-ft-nft (e.g. from
 	// the /stats "What's FT+NFT?" link), auto-open the matching details
@@ -13,739 +14,72 @@
 			if (el instanceof HTMLDetailsElement) el.open = true;
 		}
 	});
+
+	// Each Q&A is a native <details> (JS-free accordion, keyboard-accessible).
+	// `q`/`a` are i18n message functions (faq_q*/faq_a*); their HTML is rendered
+	// with {@html} so inline links/code/badges survive translation. `id` (when
+	// set) keeps the deep-link anchors other pages target; `wide` => space-y-3.
+	const faqs: { id?: string; wide?: boolean; q: () => string; a: () => string }[] = [
+		{ q: m.faq_q1, a: m.faq_a1 },
+		{ q: m.faq_q2, a: m.faq_a2 },
+		{ id: 'faq-crc20-vs-bcmr', wide: true, q: m.faq_q3, a: m.faq_a3 },
+		{ id: 'faq-ft-nft', wide: true, q: m.faq_q4, a: m.faq_a4 },
+		{ q: m.faq_q5, a: m.faq_a5 },
+		{ q: m.faq_q6, a: m.faq_a6 },
+		{ q: m.faq_q7, a: m.faq_a7 },
+		{ q: m.faq_q8, a: m.faq_a8 },
+		{ q: m.faq_q9, a: m.faq_a9 },
+		{ q: m.faq_q10, a: m.faq_a10 },
+		{ id: 'faq-mcap-hidden', q: m.faq_q11, a: m.faq_a11 },
+		{ q: m.faq_q12, a: m.faq_a12 },
+		{ id: 'faq-emoji', q: m.faq_q13, a: m.faq_a13 },
+		{ id: 'faq-icons', q: m.faq_q14, a: m.faq_a14 },
+		{ id: 'faq-tvl', q: m.faq_q15, a: m.faq_a15 },
+		{ id: 'faq-txs-24h', q: m.faq_q16, a: m.faq_a16 },
+		{ id: 'faq-bcmr-publish', q: m.faq_q17, a: m.faq_a17 },
+		{ q: m.faq_q18, a: m.faq_a18 },
+		{ id: 'faq-vote-ranking', wide: true, q: m.faq_q19, a: m.faq_a19 },
+		{ id: 'faq-airdrops', q: m.faq_q20, a: m.faq_a20 },
+		{ q: m.faq_q21, a: m.faq_a21 }
+	];
 </script>
 
 <svelte:head>
-	<title>FAQ — Token Stork</title>
+	<title>{m.faq_meta_title()}</title>
 	<meta
 		name="description"
-		content="Frequently asked questions about TokenStork, BCH CashTokens, and the directory's data sources."
+		content={m.faq_meta_description()}
 	/>
 </svelte:head>
 
 <main class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 	<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent mb-6">
-		Frequently asked questions
+		{m.faq_h1()}
 	</h1>
 	<p class="mb-10 ts-text-muted">
-		Quick answers to the things readers most often want to know about TokenStork and the CashTokens
-		ecosystem. Click any question to expand. If something's missing here, email
+		{m.faq_intro_1()}
 		<a href="mailto:hello@panmoni.com" class="text-violet-600 dark:text-violet-400 hover:underline">hello@panmoni.com</a>
-		and I'll add it.
+		{m.faq_intro_2()}
 	</p>
 
 	<div class="space-y-3">
-		<!--
-			Each Q&A is a native <details> element so the accordion works
-			without JS and stays keyboard-accessible. Styling-only shell.
-		-->
-
-		<details class="group p-5 rounded-xl border ts-border-subtle ts-surface-panel">
-			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
-				<span>What is TokenStork?</span>
-				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
-			</summary>
-			<div class="mt-3 space-y-2 ts-text-body">
-				<p>
-					TokenStork is a market-cap and directory site for
-					<a href="https://cashtokens.org/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">BCH CashTokens</a>. We index every category ever minted since the CashTokens upgrade
-					activated at block 792,772 in May 2023, and surface prices, holders, metadata, and trade
-					venues.
-				</p>
-				<p>
-					Everything runs on a single archival BCH node + our own Postgres. No third-party
-					blockchain indexer sits in the pipeline — the site is fully self-hosted.
-				</p>
-			</div>
-		</details>
-
-		<details class="group p-5 rounded-xl border ts-border-subtle ts-surface-panel">
-			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
-				<span>What is a CashToken?</span>
-				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
-			</summary>
-			<div class="mt-3 space-y-2 ts-text-body">
-				<p>
-					CashTokens is Bitcoin Cash's native token standard, activated in May 2023. It lets any
-					BCH transaction create fungible tokens (like stablecoins or meme coins) or non-fungible
-					tokens (collectibles, membership passes) directly in the base protocol — no smart-contract
-					platform required, no separate ledger.
-				</p>
-				<p>
-					Every token shares a <strong>category</strong>, a 32-byte hex identifier derived from the
-					transaction where the category was first minted. You'll see categories referenced
-					throughout the site in that format.
-				</p>
-				<p>
-					The <a href="/learn" class="text-violet-600 dark:text-violet-400 hover:underline">Learn page</a>
-					links to tutorials for minting your own.
-				</p>
-			</div>
-		</details>
-
-		<details id="faq-crc20-vs-bcmr" class="group p-5 rounded-xl border scroll-mt-20 ts-border-subtle ts-surface-panel">
-			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
-				<span>What's the difference between <strong>CRC-20</strong> and <strong>BCMR</strong>?</span>
-				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
-			</summary>
-			<div class="mt-3 space-y-3 ts-text-body">
-				<p>
-					Both are ways to attach a name, symbol, and decimals to a CashTokens category. They
-					answer different questions and use very different mechanisms:
-				</p>
-				<ul class="list-disc list-inside ml-2 space-y-2">
-					<li>
-						<strong>BCMR</strong> (<a href="https://github.com/bitjson/chip-bcmr" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">CHIP-BCMR</a>)
-						is the BCH ecosystem's metadata registry standard. Issuers publish a JSON
-						file (icon, description, links, NFT types, extensions) at a URI, then commit
-						the URI + a sha256 of the JSON body inside an on-chain
-						<code class="px-1 py-0.5 rounded font-mono text-xs ts-surface-chip">OP_RETURN BCMR</code>
-						locator on their token's authchain. We walk that authchain ourselves directly
-						from the chain (no third-party indexer) and verify the body's hash against the
-						on-chain commit before showing the metadata anywhere on the site.
-					</li>
-					<li>
-						<strong>CRC-20</strong> (<a href="https://crc20.cash/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">crc20.cash</a>)
-						is a permissionless <em>on-chain</em> naming convention. The symbol, decimals,
-						and name are encoded inside a 21-byte CashScript covenant in the token's
-						<strong>genesis transaction</strong>. We detect it directly from chain data — no
-						third-party registry, no publisher, no DNS dependency.
-					</li>
-				</ul>
-				<p>
-					The big practical difference: BCMR is <strong>self-asserted</strong> (any issuer can
-					declare any symbol they like in their JSON), while CRC-20 is
-					<strong>first-come-first-served on chain</strong>, with one canonical winner per symbol
-					determined by a deterministic sort
-					(<code class="px-1 py-0.5 rounded font-mono text-xs ts-surface-chip">max(commit_block, reveal_block − 20)</code>,
-					ties broken by category id). A token can have BCMR alone, CRC-20 alone, both, or
-					neither. When both exist, the on-chain CRC-20 bytes win on authenticity (you can verify
-					them against the genesis tx); BCMR wins on richness (icons, descriptions, social
-					links).
-				</p>
-				<p>
-					Browse all CRC-20 tokens at <a href="/crc20" class="text-violet-600 dark:text-violet-400 hover:underline">/crc20</a>
-					— the page splits canonical winners from non-canonical contenders so you can see
-					where symbols are contested.
-				</p>
-			</div>
-		</details>
-
-		<details id="faq-ft-nft" class="group p-5 rounded-xl border scroll-mt-20 ts-border-subtle ts-surface-panel">
-			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
-				<span>What does <code class="px-1.5 py-0.5 rounded font-mono text-sm ts-surface-chip">FT+NFT</code> mean?</span>
-				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
-			</summary>
-			<div class="mt-3 space-y-3 ts-text-body">
-				<p>
-					CashToken categories come in three shapes based on the kinds of outputs the token
-					appears on:
-				</p>
-				<ul class="list-disc list-inside ml-2 space-y-2">
-					<li>
-						<strong>FT</strong> — fungible only. Every output has an <code class="px-1.5 py-0.5 rounded font-mono text-xs ts-surface-chip">amount</code> but no NFT commitment. Tokens you count — balances are interchangeable.
-						Example: a BCH-denominated stablecoin.
-					</li>
-					<li>
-						<strong>NFT</strong> — non-fungible only. Every output has an NFT commitment
-						(arbitrary bytes identifying the unique item). No fungible balance. Example: a
-						collectible series.
-					</li>
-					<li>
-						<strong>FT+NFT</strong> — hybrid. The same category has both fungible balances AND
-						unique NFTs under the same category id. Unlike ERC-20 vs ERC-721, BCH CashTokens
-						let one category carry both semantics simultaneously.
-					</li>
-				</ul>
-				<p>
-					Typical FT+NFT pattern: a project mints a governance token (FT) alongside membership
-					badges (NFT) under the same brand. At our last snapshot roughly 18% of the ecosystem
-					uses this hybrid pattern — see the breakdown on <a href="/stats" class="text-violet-600 dark:text-violet-400 hover:underline">/stats</a>.
-				</p>
-			</div>
-		</details>
-
-		<details class="group p-5 rounded-xl border ts-border-subtle ts-surface-panel">
-			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
-				<span>What's the difference between Cauldron and Tapswap?</span>
-				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
-			</summary>
-			<div class="mt-3 space-y-2 ts-text-body">
-				<p>
-					Both are places you can trade CashTokens, but they work very differently:
-				</p>
-				<ul class="list-disc list-inside ml-2 space-y-2">
-					<li>
-						<strong><a href="https://cauldron.quest/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Cauldron</a></strong> is an <strong>AMM</strong> — a constant-product liquidity pool à la Uniswap v2. You
-						trade against the pool at the price the pool's reserves imply; the act of trading
-						moves the price. Listings with Cauldron presence get the
-						<span class="inline-flex items-center justify-center w-5 h-5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-[10px] font-bold">C</span>
-						badge on the directory.
-					</li>
-					<li>
-						<strong><a href="https://tapswap.cash/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Tapswap</a></strong> is a <strong>P2P marketplace</strong> — fixed-price listings posted on-chain.
-						No pool, no price impact; you take the listing or you don't. Listings show the
-						<span class="inline-flex items-center justify-center w-5 h-5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">T</span>
-						badge.
-					</li>
-				</ul>
-				<p>
-					A token can be on one, both, or neither. The
-					<a href="/stats" class="text-violet-600 dark:text-violet-400 hover:underline">Venue overlap</a>
-					section on /stats breaks down the split.
-				</p>
-			</div>
-		</details>
-
-		<details class="group p-5 rounded-xl border ts-border-subtle ts-surface-panel">
-			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
-				<span>What are the small icons next to each token's name?</span>
-				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
-			</summary>
-			<div class="mt-3 space-y-2 ts-text-body">
-				<p>Each token in the directory shows a few compact signals next to its name:</p>
-				<ul class="list-disc list-inside ml-2 space-y-1.5">
-					<li>
-						<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold align-middle ts-text-body ts-surface-chip">FT</span>
-						/
-						<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold align-middle ts-text-body ts-surface-chip">NFT</span>
-						/
-						<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold align-middle ts-text-body ts-surface-chip">FT+NFT</span>
-						— token-type badge (<a href="#faq-ft-nft" class="underline hover:text-violet-600 dark:hover:text-violet-400">what these mean</a>).
-					</li>
-					<li>
-						<img src="/cauldron-logo.png" alt="" class="inline-block h-4 w-4 align-middle rounded-full bg-white p-0.5" aria-hidden="true" />
-						<strong>Cauldron logo</strong> — the token has an active AMM pool on <a href="https://cauldron.quest/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Cauldron</a> with a live pool price.
-					</li>
-					<li>
-						<img src="/tapswap-logo.png" alt="" class="inline-block h-4 w-4 align-middle" aria-hidden="true" />
-						<strong>Tapswap logo</strong> — the token has one or more open P2P listings on <a href="https://tapswap.cash/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Tapswap</a>. Hover the icon for the listing count.
-					</li>
-				</ul>
-				<p>
-					A token can show one, both, or neither venue icon. No icons = not currently tradeable
-					anywhere our indexer knows about.
-				</p>
-			</div>
-		</details>
-
-		<details class="group p-5 rounded-xl border ts-border-subtle ts-surface-panel">
-			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
-				<span>What's the difference between "Tracked" and "Listed" in the header?</span>
-				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
-			</summary>
-			<div class="mt-3 space-y-2 ts-text-body">
-				<p>
-					<strong>Tracked</strong> is every CashToken category our indexer has ever seen, going
-					back to activation block 792,772 in May 2023 — fungible and NFT, active or long-dead.
-					It's the size of the universe we know about.
-				</p>
-				<p>
-					<strong>Listed</strong> is the subset that's actually tradeable right now — at least
-					one active Cauldron pool or at least one open Tapswap listing. It's a much smaller
-					number. The ratio (Listed ÷ Tracked) is a rough "what fraction of tokens have any
-					liquidity?" signal.
-				</p>
-			</div>
-		</details>
-
-		<details class="group p-5 rounded-xl border ts-border-subtle ts-surface-panel">
-			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
-				<span>Why does my token show <code class="px-1.5 py-0.5 rounded font-mono text-sm ts-surface-chip">—</code> for Holders, UTXOs, or NFTs?</span>
-				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
-			</summary>
-			<div class="mt-3 space-y-2 ts-text-body">
-				<p>
-					Those fields come from a per-category enrichment index that joins what's unspent on
-					chain to category membership. We're deploying it as part of the BlockBook rollout;
-					until that's live those columns show the em-dash placeholder.
-				</p>
-				<p>
-					If you're seeing em-dashes and you expect real numbers, BlockBook hasn't finished its
-					initial index build yet. Give it a day or two.
-				</p>
-			</div>
-		</details>
-
-		<details class="group p-5 rounded-xl border ts-border-subtle ts-surface-panel">
-			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
-				<span>How often does the data refresh?</span>
-				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
-			</summary>
-			<div class="mt-3 space-y-2 ts-text-body">
-				<p>
-					Different sources update at different cadences:
-				</p>
-				<ul class="list-disc list-inside ml-2 space-y-1">
-					<li><strong>New categories + Tapswap listings</strong> — sub-second. The tail worker subscribes to BCH node ZMQ and indexes within milliseconds of a new block.</li>
-					<li><strong>Cauldron prices + TVL</strong> — every 10 minutes for already-listed tokens (~60-90s fast refresh), plus a 4-hour full scan that discovers newly-listed tokens and prunes delisted ones.</li>
-					<li><strong>BCMR metadata</strong> (name, symbol, icon, description) — hourly via the on-chain authchain walker. The walker reads each category's authchain directly from BCH and sha256-verifies the publisher's JSON body against the on-chain locator before caching it. No third-party indexer.</li>
-					<li><strong>BCH/USD price</strong> — every 5 minutes.</li>
-					<li><strong>Sparklines + 1h/24h/7d % change</strong> — rebuilt from the price history each request; fills in over the 7 days following deploy.</li>
-				</ul>
-			</div>
-		</details>
-
-		<details class="group p-5 rounded-xl border ts-border-subtle ts-surface-panel">
-			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
-				<span>What are sparklines?</span>
-				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
-			</summary>
-			<div class="mt-3 space-y-2 ts-text-body">
-				<p>
-					The tiny inline chart at the right end of each directory row — it plots the token's
-					<strong>Cauldron price over the last 7 days</strong> as a single-line graph. Green
-					stroke if the 7-day trend is up, rose if down, slate if flat.
-				</p>
-				<p>
-					Each data point is one
-					<a href="https://cauldron.quest/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Cauldron</a>
-					sync snapshot. With the worker running every 10 minutes, a fully-populated sparkline
-					holds ~1,000 points; the SVG downsamples that to a readable line.
-				</p>
-				<p>
-					Tokens without a Cauldron pool (Tapswap-only or not listed) show "—" in the sparkline
-					column — no on-chain price history means nothing to chart. The same price series
-					drives the 1h / 24h / 7d % change columns too.
-				</p>
-			</div>
-		</details>
-
-		<details id="faq-mcap-hidden" class="group p-5 rounded-xl border scroll-mt-20 ts-border-subtle ts-surface-panel">
-			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
-				<span>Why is the Market cap blank for some tokens?</span>
-				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
-			</summary>
-			<div class="mt-3 space-y-2 ts-text-body">
-				<p>
-					A token's market cap is <em>price × circulating supply</em>, and the price
-					we have comes from its Cauldron AMM pool. When a pool holds only a few
-					dollars of liquidity, a single dust-sized swap can move that price by
-					orders of magnitude — and multiplying it by a billion-unit supply yields
-					a "cap" that looks enormous but means nothing. Left in the rankings,
-					those numbers shove genuinely-traded tokens down the page.
-				</p>
-				<p>
-					So we hide the MCap figure for any token whose Cauldron TVL is
-					<strong>below the average TVL of the top half of currently listed
-					tokens</strong>. The threshold is recomputed on every page load — as
-					more deep pools get listed the bar rises; if liquidity dries up across
-					the top end it falls. No hardcoded dollar floor to age out.
-				</p>
-				<p>
-					The token itself is unchanged: price, TVL, supply, holders, sparkline,
-					and the detail page are all still shown. Only the misleading derived
-					figure is withheld. Tokens with no Cauldron pool at all never had a
-					derivable market cap in the first place.
-				</p>
-			</div>
-		</details>
-
-		<details class="group p-5 rounded-xl border ts-border-subtle ts-surface-panel">
-			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
-				<span>Where do token names, symbols, and icons come from?</span>
-				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
-			</summary>
-			<div class="mt-3 space-y-2 ts-text-body">
-				<p>
-					From <a href="https://cashtokens.org/docs/bcmr/chip/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">BCMR</a>
-					(the Bitcoin Cash Metadata Registries CHIP). Token creators publish a JSON
-					manifest (name, symbol, decimals, description, icon, links, NFT schema, and
-					more) and commit its URI + sha256 inside an
-					<code class="px-1 py-0.5 rounded font-mono text-xs ts-surface-chip">OP_RETURN BCMR</code>
-					locator on their token's authchain.
-				</p>
-				<p>
-					We read it directly from the chain — our hourly
-					<code class="px-1 py-0.5 rounded font-mono text-xs ts-surface-chip">sync-bcmr-onchain</code>
-					worker walks each category's authchain via our local BlockBook, parses the
-					on-chain locator, fetches the publisher's URI, and sha256-verifies the body
-					before caching it. The "BCMR JSON" link at the bottom of every token detail
-					page points to the publisher's own URI (typically an IPFS CID or a self-hosted
-					file), so you can read the same bytes we did. No third-party indexer in the
-					path: if a publisher hasn't put a BCMR locator on their authchain, we don't
-					show metadata — the bare category hex shows instead.
-				</p>
-				<p>
-					If a token shows a plain category hex instead of a name, the minter hasn't
-					published an on-chain BCMR locator yet. On the token detail page you can see
-					every BCMR field we know about under the "BCMR metadata" card.
-				</p>
-			</div>
-		</details>
-
-		<details id="faq-emoji" class="group p-5 rounded-xl border scroll-mt-20 ts-border-subtle ts-surface-panel">
-			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
-				<span>Why don't I see emojis in token names?</span>
-				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
-			</summary>
-			<div class="mt-3 space-y-2 ts-text-body">
-				<p>
-					We strip emoji from token names, symbols, and descriptions at display time. In a dense
-					directory full of rows, emoji turn into visual noise — they compete with the real name,
-					bloat mobile line-heights, and make it hard to tell a serious project from a lookalike
-					that copied the same glyph. Removing them keeps the grid scannable.
-				</p>
-				<p>
-					The on-chain data isn't touched. BCMR metadata is stored exactly as the issuer published
-					it; the emoji filter runs only in the browser-facing render path. If you need the raw
-					string, the
-					<code class="px-1.5 py-0.5 rounded font-mono text-xs ts-surface-chip">/api/tokens</code>
-					endpoint returns it unmodified.
-				</p>
-			</div>
-		</details>
-
-		<details id="faq-icons" class="group p-5 rounded-xl border scroll-mt-20 ts-border-subtle ts-surface-panel">
-			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
-				<span>How does TokenStork filter token icons?</span>
-				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
-			</summary>
-			<div class="mt-3 space-y-2 ts-text-body">
-				<p>
-					Token icons come from BCMR metadata that issuers publish themselves — typically as
-					<code class="px-1.5 py-0.5 rounded font-mono text-xs ts-surface-chip">ipfs://</code>
-					URIs anyone on the network can fill with anything. We don't render those URLs directly
-					in your browser; instead, every icon goes through a small safety pipeline before it's
-					served, and only icons that clear every gate end up visible on the site.
-				</p>
-
-				<p class="font-semibold ts-text-strong">What we check</p>
-				<ul class="list-disc pl-5 space-y-1">
-					<li>
-						<strong>Size.</strong> Anything larger than 2 MiB is rejected outright — both
-						to keep page weight reasonable and to short-circuit decompression-bomb images.
-					</li>
-					<li>
-						<strong>Format.</strong> PNG, JPEG, WebP, and GIF first-frame are supported as
-						static rasters. SVG is rasterized server-side via <code class="px-1 rounded font-mono text-xs ts-surface-chip">resvg</code>
-						before serving — your browser never sees the SVG XML, so embedded scripts,
-						event handlers, and external <code class="px-1 rounded font-mono text-xs ts-surface-chip">href</code>
-						references can't reach you. Animated GIF/APNG render their first frame only.
-					</li>
-					<li>
-						<strong>Adult content.</strong> Each icon is run through Google Cloud Vision's
-						SafeSearch classifier. Scores above a configured threshold are auto-blocked;
-						borderline scores route to an operator-reviewed queue.
-					</li>
-					<li>
-						<strong>CSAM.</strong> Cloudflare's CSAM Scanning Tool runs against every icon
-						the moment it transits their edge — backed by NCMEC + IWF hash databases.
-						Matches are blocked at the network edge and reported automatically per US/EU
-						mandatory-reporting law.
-					</li>
-				</ul>
-
-				<p class="font-semibold ts-text-strong">How we serve them</p>
-				<p>
-					Icons that pass every gate are transcoded to a static WebP, content-addressed by their
-					SHA-256 hash, and served from
-					<code class="px-1.5 py-0.5 rounded font-mono text-xs ts-surface-chip">/icons/&lt;hash&gt;.webp</code>
-					behind a long cache. We never hot-link to the issuer's IPFS gateway from your browser —
-					all bytes go through our origin, scanned and cached.
-				</p>
-
-				<p class="font-semibold ts-text-strong">Why some tokens show a grey placeholder</p>
-				<p>
-					Default-deny: until an icon is scanned <em>and</em> cleared, you see the placeholder.
-					Reasons a token might still show grey:
-				</p>
-				<ul class="list-disc pl-5 space-y-1">
-					<li>The icon is queued for scanning but hasn't been processed yet (new mints flip from grey to real within ~15 minutes).</li>
-					<li>The fetch failed (IPFS gateway timeout) — we retry on a future tick.</li>
-					<li>The icon was rejected for one of the reasons above.</li>
-					<li>The token has no BCMR icon at all — the issuer never published one.</li>
-				</ul>
-
-				<p class="font-semibold ts-text-strong">Privacy</p>
-				<p>
-					The classifier sees only the icon bytes — anonymous, no user identifier, no IP, no
-					session. Bytes are processed in transit and not retained by Google for SafeSearch
-					calls. We keep the SHA-256 hash and a score; we don't keep the bytes ourselves once
-					they're either cleared (transcoded copy on disk) or blocked (deleted).
-				</p>
-
-				<p class="text-xs ts-text-muted">
-					Spotted an icon that looks wrong (false-blocked legitimate art, or a harmful image
-					that slipped through)? Email
-					<a href="mailto:hello@panmoni.com" class="text-violet-600 dark:text-violet-400 hover:underline">hello@panmoni.com</a>
-					with the token's category hex and we'll triage.
-				</p>
-			</div>
-		</details>
-
-		<details id="faq-tvl" class="group p-5 rounded-xl border scroll-mt-20 ts-border-subtle ts-surface-panel">
-			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
-				<span>How is the headline Total TVL computed?</span>
-				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
-			</summary>
-			<div class="mt-3 space-y-2 ts-text-body">
-				<p>
-					The <strong>Total TVL</strong> pill in the header sums BCH-side reserve across
-					every pool on every AMM venue we index — Cauldron plus Fex.cash. The number is
-					quoted in USD using the live BCH spot price.
-				</p>
-				<p>
-					The Cauldron portion comes from
-					<code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">indexer.cauldron.quest</code>'s
-					canonical ecosystem TVL — the same number the
-					<a href="/stats" class="text-violet-600 dark:text-violet-400 hover:underline">/stats</a> page
-					shows on its "Cauldron AMM" card. We cache it for 30 minutes via our
-					<code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">sync-cauldron-stats</code>
-					worker so the homepage doesn't pay a network round-trip on every render.
-				</p>
-				<p>
-					The Fex portion is summed locally: our Fex worker enumerates every pool on the BCH
-					chain via a <code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">scantxoutset</code> against the AssetCovenant P2SH and stores both the
-					per-category canonical pool (for directory price + spread display) and the
-					sum across all pools per category (for the headline TVL).
-				</p>
-				<p>
-					Tapswap is deliberately excluded — its open offers are P2P intent, not pooled
-					liquidity, so summing them as TVL would double-count or mislead. We use the
-					conservative single-side convention everywhere (BCH-side reserve only, not the
-					doubled both-sides figure that the wider DeFi industry typically reports).
-				</p>
-			</div>
-		</details>
-
-		<details id="faq-txs-24h" class="group p-5 rounded-xl border scroll-mt-20 ts-border-subtle ts-surface-panel">
-			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
-				<span>How is the "Txs 24h" number calculated?</span>
-				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
-			</summary>
-			<div class="mt-3 space-y-2 ts-text-body">
-				<p>
-					The <strong>Txs 24h</strong> pill in the header — and the matching
-					<strong>Token-bearing txs</strong> card on
-					<a href="/stats" class="text-violet-600 dark:text-violet-400 hover:underline">/stats</a> —
-					counts every transaction in the last 24 hours that emits at least one CashToken-bearing
-					output. A tx that mints a new category, transfers existing tokens, or moves multiple
-					token types in a single tx all count as <em>one</em> entry. Coinbase transactions are
-					excluded.
-				</p>
-				<p>
-					We derive the count purely from on-chain data — no DB lookup, no external API. Our
-					<code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">sync-tail</code>
-					worker reads the verbose JSON of every new block from our local BCHN node, scans each
-					transaction's outputs for any
-					<code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">tokenData</code>
-					field, and stores a per-block tally in the
-					<code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">blocks.token_tx_count</code>
-					column. The headline number is just
-					<code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">SUM(token_tx_count) WHERE time &gt; now() - INTERVAL '24 hours'</code>.
-					Roughly 144 blocks land in any 24-hour window at BCH's 10-minute target spacing, so
-					a fresh deploy might briefly show a partial number while the rolling window fills.
-				</p>
-				<p>
-					The companion <strong>New categories</strong> card on
-					<a href="/stats" class="text-violet-600 dark:text-violet-400 hover:underline">/stats</a> uses
-					a stricter detection: per the CashTokens CHIP, a transaction creates a new token
-					category if it spends a previous transaction's output at index 0 and emits a
-					<code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">token_data</code>
-					vout whose category id matches that parent's transaction id. The category id IS the
-					parent UTXO's txid by spec, so we can detect new categories without consulting a
-					database — every chain participant can verify the same number.
-				</p>
-				<p>
-					What this number is <em>not</em>: it is not BCH transaction volume, not USD volume,
-					and not a measure of trade activity specifically. A token's whole UTXO set being
-					reorganised by its issuer counts the same as a real user-driven transfer. If you want
-					trading-specific signal, look at the Cauldron 24h volume on
-					<a href="/stats" class="text-violet-600 dark:text-violet-400 hover:underline">/stats</a> or
-					Tapswap's open-listing depth.
-				</p>
-			</div>
-		</details>
-
-		<details id="faq-bcmr-publish" class="group p-5 rounded-xl border scroll-mt-20 ts-border-subtle ts-surface-panel">
-			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
-				<span>How does "Publish BCMR" work?</span>
-				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
-			</summary>
-			<div class="mt-3 space-y-2 ts-text-body">
-				<p>
-					BCMR (Bitcoin Cash Metadata Registry) is how a CashToken tells wallets + explorers what
-					its name, symbol, icon, and description are. Without a BCMR publication, your token
-					shows up as a 16-char hex string — useless for any kind of brand or community use. The
-					<a href="/publish-bcmr" class="text-violet-600 dark:text-violet-400 hover:underline">Publish BCMR</a>
-					wizard at tokenstork.com walks you through publishing one on-chain.
-				</p>
-				<p>
-					<strong>Who can publish?</strong> Only the wallet holding your category's
-					<em>authority NFT</em> — the NFT created at genesis that anchors the authchain. The
-					wizard automatically detects which categories your connected wallet can publish for and
-					rejects anything else. This is the CashTokens-protocol way of preventing impersonation:
-					if someone else minted the token, they can't publish metadata on your behalf, and vice
-					versa.
-				</p>
-				<p>
-					<strong>How does the wizard work?</strong> Six steps:
-				</p>
-				<ol class="list-decimal pl-6 space-y-1">
-					<li>Enter the identity: name, ticker (symbol), decimals, description.</li>
-					<li>Paste an icon URI (<code class="text-xs">https://</code> or <code class="text-xs">ipfs://</code>) or skip.</li>
-					<li>
-						We generate the canonical BCMR JSON and compute its <code class="text-xs">sha256</code> — that hash
-						will be committed on-chain alongside your publication URL.
-					</li>
-					<li>
-						Upload the JSON to your own IPFS / Pinata / Lighthouse / any HTTPS host, paste the
-						URL, and we sha256-verify the returned bytes. Your own host is the canonical source.
-						Optionally, opt into a tokenstork-hosted backup mirror (operator-approved; serves at
-						<code class="text-xs">https://tokenstork.com/bcmr/&lt;hash&gt;.json</code> as a fallback).
-					</li>
-					<li>
-						We build the unsigned transaction that spends your authority NFT, emits a new one
-						(preserving the NFT's commitment + capability), and attaches the
-						<code class="text-xs">OP_RETURN BCMR</code> locator with your content hash + URL. You sign in your
-						wallet and paste the signed hex.
-					</li>
-					<li>We broadcast to BCH. Done.</li>
-				</ol>
-				<p>
-					<strong>What happens after broadcast?</strong> Our on-chain BCMR walker runs hourly, and
-					on its next tick it'll see your new authchain hop, fetch the JSON from your host, verify
-					the hash matches, and update the token's metadata across the directory. Typically your
-					token's name and icon appear within an hour of broadcast.
-				</p>
-				<p>
-					<strong>Why does my IPFS host need to keep the JSON?</strong> The on-chain locator points
-					at <em>your</em> URL — that's the canonical reference for the metadata. If your host goes
-					down, any cached copy (including ours, if you opted in) still works, but the publisher-of-record
-					is you. <a href="/publish-bcmr" class="text-violet-600 dark:text-violet-400 hover:underline">Start a publication →</a>
-				</p>
-			</div>
-		</details>
-
-		<details class="group p-5 rounded-xl border ts-border-subtle ts-surface-panel">
-			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
-				<span>How do I add a token? How do I report one?</span>
-				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
-			</summary>
-			<div class="mt-3 space-y-2 ts-text-body">
-				<p>
-					<strong>Add:</strong> nothing to do! We index every CashToken category automatically.
-					Once you mint a token it appears on tokenstork within seconds. To show a name and icon,
-					publish BCMR metadata via your authchain — Paytaca's wallet has built-in tools for
-					this.
-				</p>
-				<p>
-					<strong>Report:</strong> every token detail page has a "Report this token" button
-					below the stats. Use it for spam, phishing, fraud, or deliberately offensive content.
-					Reports go directly to us, not the token creator.
-				</p>
-			</div>
-		</details>
-
-		<details id="faq-vote-ranking" class="group p-5 rounded-xl border scroll-mt-20 ts-border-subtle ts-surface-panel">
-			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
-				<span>How are tokens ranked on the up/down vote leaderboards?</span>
-				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
-			</summary>
-			<div class="mt-3 space-y-3 ts-text-body">
-				<p>
-					The "Most upvoted / downvoted / controversial" leaderboards on the homepage don't
-					just count raw <span class="font-mono">↑</span> and <span class="font-mono">↓</span>
-					clicks. Each vote contributes a <em>weighted</em> score, and the leaderboard sorts on
-					the sum of those weights. The directory's <code class="px-1.5 py-0.5 rounded font-mono text-xs ts-surface-chip">?sort=upvoted</code> /
-					<code class="px-1.5 py-0.5 rounded font-mono text-xs ts-surface-chip">downvoted</code> /
-					<code class="px-1.5 py-0.5 rounded font-mono text-xs ts-surface-chip">controversial</code> options use the same weights.
-				</p>
-				<p>Two things shape a single vote's weight:</p>
-				<ol class="list-decimal list-inside ml-2 space-y-2">
-					<li>
-						<strong>How long the voter has been around.</strong> Each wallet's tenure is the number
-						of distinct UTC days on which it has cast at least one vote action. A vote from a
-						brand-new wallet contributes <span class="font-mono">1.0</span>; a vote from a wallet
-						that's been active 30 days contributes <span class="font-mono">5.0</span>; a year-tenured
-						wallet contributes about <span class="font-mono">8.5</span>. Growth is logarithmic
-						(<span class="font-mono">log₂(tenure_days + 2)</span>) — established voters get more
-						say, but a tireless contributor doesn't dominate.
-					</li>
-					<li>
-						<strong>How recently the vote was cast.</strong> Vote weight halves every 7 days
-						(<span class="font-mono">0.5<sup>age_days / 7</sup></span>). A vote cast today is worth
-						<span class="font-mono">1.0×</span>, last week's is worth <span class="font-mono">0.5×</span>,
-						two weeks old is <span class="font-mono">0.25×</span>, a month-old vote is about
-						<span class="font-mono">0.05×</span>. Old enthusiasm fades; the leaderboard reflects
-						the current mood.
-					</li>
-				</ol>
-				<p>
-					Multiplied together, the formula favours <strong>consistent votes from established
-					voters</strong>, and naturally pushes raid-style bursts of fresh wallets toward the
-					bottom of the ranking. The raw <span class="font-mono">↑</span> /
-					<span class="font-mono">↓</span> counts shown next to each token are still the simple
-					totals — only the <em>ordering</em> uses the weighted score.
-				</p>
-				<p>
-					Each wallet may cast, change, or retract at most <strong>20 vote actions per UTC
-					day</strong>. That's well above any organic per-day activity but tight enough that a
-					script-controlled wallet can't shove a token to the top in one sitting. The counter
-					resets at 00:00 UTC.
-				</p>
-			</div>
-		</details>
-
-		<details id="faq-airdrops" class="group p-5 rounded-xl border scroll-mt-20 ts-border-subtle ts-surface-panel">
-			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
-				<span>How do airdrops work?</span>
-				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
-			</summary>
-			<div class="mt-3 space-y-2 ts-text-body">
-				<p>
-					Sign in with your wallet, navigate to a token you hold (any FT balance or NFT
-					counts), and click <strong>Airdrop</strong> on the token detail page. Pick a
-					recipient token — the wizard will airdrop your token to every wallet that
-					currently holds the recipient token.
-				</p>
-				<p>
-					Two split modes. <em>Equal</em> divides your total amount evenly across all
-					recipients (truncation residue stays with you). <em>Weighted</em> sends each
-					recipient a share proportional to their balance + NFT count of the recipient
-					token. Sender's own wallet is always filtered out of the recipient list.
-				</p>
-				<p>
-					Recipient lists come from our local <code>token_holders</code> snapshot
-					(refreshed every 6 h by the enrich worker), so a brand-new token minted in the
-					last few hours may not have all its holders indexed yet. The wizard surfaces
-					the snapshot timestamp so you can decide whether to wait.
-				</p>
-				<p>
-					Big airdrops are split into chunks of up to 600 recipients per transaction.
-					Your wallet signs each chunk in sequence (paste the signed hex back into the
-					wizard); a wallet rejection on chunk K leaves earlier chunks intact and lets
-					you retry K from the receipt page. If our holder snapshot advances mid-airdrop
-					(an enrich tick fires), remaining chunks halt with a "redraft" prompt rather
-					than send to a possibly-stale set.
-				</p>
-				<p>
-					<strong>Privacy heads-up:</strong> like every UTXO transaction, an airdrop
-					reveals your sender wallet to every recipient via the tx-input. Your wallet's
-					public key hash is visible in any block explorer.
-				</p>
-			</div>
-		</details>
-
-		<details class="group p-5 rounded-xl border ts-border-subtle ts-surface-panel">
-			<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
-				<span>Is TokenStork open source?</span>
-				<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
-			</summary>
-			<div class="mt-3 space-y-2 ts-text-body">
-				<p>
-					Yes. Code is at
-					<a href="https://github.com/Panmoni/tokenstork" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">github.com/Panmoni/tokenstork</a>.
-					Pull requests and issues welcome. The <a href="/roadmap" class="text-violet-600 dark:text-violet-400 hover:underline">/roadmap</a> shows what's shipped and what's next.
-				</p>
-			</div>
-		</details>
+		{#each faqs as item (item.q)}
+			<details
+				id={item.id}
+				class="group p-5 rounded-xl border {item.id ? 'scroll-mt-20 ' : ''}ts-border-subtle ts-surface-panel"
+			>
+				<summary class="cursor-pointer text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between gap-4 list-none">
+					<span>{@html item.q()}</span>
+					<span class="text-violet-500 group-open:rotate-45 transition-transform select-none">+</span>
+				</summary>
+				<div class="mt-3 {item.wide ? 'space-y-3' : 'space-y-2'} ts-text-body">{@html item.a()}</div>
+			</details>
+		{/each}
 	</div>
 
 	<p class="text-sm mt-10 ts-text-muted">
-		Didn't find what you were looking for? Email
+		{m.faq_footer_1()}
 		<a href="mailto:hello@panmoni.com" class="text-violet-600 dark:text-violet-400 hover:underline">hello@panmoni.com</a>
-		and I'll add the answer.
+		{m.faq_footer_2()}
 	</p>
 </main>
