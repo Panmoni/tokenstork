@@ -444,26 +444,21 @@ fn decode_raster(bytes: &[u8]) -> Result<(DynamicImage, &'static str)> {
     // Sniff format from the bytes (don't trust `Content-Type` or extension).
     let format = image::guess_format(bytes).context("could not guess image format")?;
 
+    // BMP/ICO are intentionally absent (see Cargo.toml): their decoders are
+    // dimension-bomb DoS vectors the image crate can't safely bound, so they
+    // are rejected here as unsupported before any decode is attempted.
     let supported = matches!(
         format,
-        ImageFormat::Png
-            | ImageFormat::Jpeg
-            | ImageFormat::WebP
-            | ImageFormat::Gif
-            | ImageFormat::Bmp
-            | ImageFormat::Ico
+        ImageFormat::Png | ImageFormat::Jpeg | ImageFormat::WebP | ImageFormat::Gif
     );
     if !supported {
         return Err(anyhow!("unsupported image format: {:?}", format));
     }
 
-    // Header-only dimension probe FIRST — the load-bearing bomb guard.
-    // `Limits.max_alloc` is NOT honored uniformly across decoders: the BMP
-    // decoder (uncompressed) allocates width×height×bpp up front from the
-    // header, so a BMP/ICO claiming e.g. 160000×160000 aborts the whole
-    // process with a ~100 GB allocation before max_alloc is ever consulted.
-    // `into_dimensions` parses only the header (no pixel buffer), so we can
-    // reject absurd geometry cheaply before any decoder allocates.
+    // Header-only dimension probe before decoding — defense-in-depth against
+    // a decoder that under-honors Limits. `into_dimensions` parses only the
+    // header (no pixel buffer), so an image claiming absurd geometry (e.g.
+    // a 65535×65535 GIF) is rejected cheaply before any allocation.
     let (w, h) = ImageReader::with_format(Cursor::new(bytes), format)
         .into_dimensions()
         .context("could not read image dimensions")?;
@@ -623,45 +618,39 @@ mod tests {
     }
 
     #[test]
-    fn decodes_bmp_now_supported() {
-        // BMP was previously rejected as unsupported_format; the heal change
-        // compiles in the decoder and allowlists the format.
-        use image::{ImageBuffer, Rgb};
-        let img: ImageBuffer<Rgb<u8>, Vec<u8>> =
-            ImageBuffer::from_fn(8, 8, |_, _| Rgb([10, 20, 30]));
-        let mut bmp = Vec::new();
-        img.write_to(&mut Cursor::new(&mut bmp), ImageFormat::Bmp)
-            .expect("encode test BMP");
-        let decoded = decode_image(&bmp).expect("BMP should now decode");
-        assert_eq!((decoded.image.width(), decoded.image.height()), (8, 8));
-        assert_eq!(decoded.source_format, "bmp", "source format drives the 'adjusted' note");
-    }
-
-    #[test]
-    fn rejects_dimension_bomb_bmp() {
-        // A 54-byte BMP header declaring a 160000×160000 image (~100 GB of
-        // pixels). The uncompressed BMP decoder allocates width×height×bpp
-        // up front and ignores Limits.max_alloc, so without the header
-        // dimension probe this would abort the whole process. The probe
-        // must reject it as an ordinary Err instead.
+    fn bmp_rejected_as_unsupported() {
+        // BMP is deliberately not in the decode allowlist (DoS-unsafe
+        // decoder). A minimal 54-byte BMP header (8×8) must be rejected as
+        // unsupported, never decoded.
         let mut bmp = Vec::new();
         bmp.extend_from_slice(b"BM");
-        bmp.extend_from_slice(&0u32.to_le_bytes()); // file size (ignored)
+        bmp.extend_from_slice(&54u32.to_le_bytes()); // file size
         bmp.extend_from_slice(&0u32.to_le_bytes()); // reserved
         bmp.extend_from_slice(&54u32.to_le_bytes()); // pixel data offset
         bmp.extend_from_slice(&40u32.to_le_bytes()); // DIB header size
-        bmp.extend_from_slice(&160_000i32.to_le_bytes()); // width
-        bmp.extend_from_slice(&160_000i32.to_le_bytes()); // height
+        bmp.extend_from_slice(&8i32.to_le_bytes()); // width
+        bmp.extend_from_slice(&8i32.to_le_bytes()); // height
         bmp.extend_from_slice(&1u16.to_le_bytes()); // planes
         bmp.extend_from_slice(&24u16.to_le_bytes()); // bpp
-        bmp.extend_from_slice(&0u32.to_le_bytes()); // compression BI_RGB
-        bmp.extend_from_slice(&0u32.to_le_bytes()); // image size
-        bmp.extend_from_slice(&2835i32.to_le_bytes()); // x ppm
-        bmp.extend_from_slice(&2835i32.to_le_bytes()); // y ppm
-        bmp.extend_from_slice(&0u32.to_le_bytes()); // colors used
-        bmp.extend_from_slice(&0u32.to_le_bytes()); // important colors
+        bmp.extend_from_slice(&[0u8; 24]); // rest of BITMAPINFOHEADER
         let result = decode_image(&bmp);
-        assert!(result.is_err(), "dimension-bomb BMP must be rejected, not decoded");
+        assert!(result.is_err(), "BMP must be rejected as unsupported");
+    }
+
+    #[test]
+    fn rejects_dimension_bomb_gif() {
+        // A GIF header declaring a 65535×65535 canvas (~17 GB of pixels).
+        // The header-only dimension probe must reject it cheaply before any
+        // decoder allocates a pixel buffer — never abort the process.
+        let mut gif = Vec::new();
+        gif.extend_from_slice(b"GIF89a");
+        gif.extend_from_slice(&65535u16.to_le_bytes()); // logical width
+        gif.extend_from_slice(&65535u16.to_le_bytes()); // logical height
+        gif.push(0x00); // packed fields (no global color table)
+        gif.push(0x00); // background color index
+        gif.push(0x00); // pixel aspect ratio
+        let result = decode_image(&gif);
+        assert!(result.is_err(), "dimension-bomb GIF must be rejected, not decoded");
     }
 
     #[test]

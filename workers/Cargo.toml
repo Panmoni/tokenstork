@@ -77,11 +77,15 @@ hmac = "0.12"
 ripemd = "0.1"
 
 # Image format detection + WebP transcode for the icon safety pipeline.
-# `default-features=false` strips formats we don't need (tiff, etc.); we
-# keep png/jpeg/webp/gif (first-frame only) plus bmp/ico — both are common
-# token-icon source formats the heal pass recovers. Pure-Rust WebP encode —
-# no native libwebp linkage.
-image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp", "ico"] }
+# `default-features=false` strips formats we don't need. We keep
+# png/jpeg/webp/gif (first-frame only) + SVG via resvg. BMP/ICO are
+# deliberately EXCLUDED: the image crate's BMP decoder allocates
+# width*height*bpp up front and ignores Limits.max_alloc, and ICO hides the
+# real geometry behind a directory entry (into_dimensions can't see the
+# embedded bomb) — both are dimension-bomb DoS vectors we can't safely
+# bound, so such icons are rejected as unsupported_format. Pure-Rust WebP
+# encode — no native libwebp linkage.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
 
 # SVG rasterization for the icon safety pipeline. `resvg` deliberately
 # does NOT execute scripts, fetch external `href`s, or follow file://
