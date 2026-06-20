@@ -19,10 +19,47 @@ Environment="PORT=3000"
 Environment="ORIGIN=https://tokenstork.com"
 Environment="NODE_ENV=production"
 
+# Cap V8's old-space heap so GC turns aggressive BEFORE the cgroup hard
+# cap (MemoryMax below) is reached. A cgroup MemoryHigh alone is a weak
+# lever for a Node process — reclaim pressure mostly evicts page cache,
+# not the JS heap — so the heap ceiling is the knob that actually makes
+# the app degrade (slower GC) rather than get OOM-killed under a memory
+# balloon. 2048 MB sits comfortably under the 3 GB MemoryMax, leaving
+# room for off-heap buffers (SSR output, large JSON-grid serialization).
+Environment="NODE_OPTIONS=--max-old-space-size=2048"
+
 # Secrets load from /etc/tokenstork/env (chmod 600, owner tokenstork).
 # Required: DATABASE_URL
 # Optional: CRYPTO_COMPARE_KEY, FEAR_AND_GREED_API_KEY
 EnvironmentFile=-/etc/tokenstork/env
+
+# ── Resource guardrails (traffic-spike resilience) ─────────────────────
+# The app idles at ~75 MB RSS; even under heavy SSR + large JSON-grid
+# serialization it should stay in the low hundreds of MB. These caps are
+# a SAFETY RAIL, not a leash (≈40× rest usage): their only job is to stop
+# a runaway / leak / abuse spike from dragging the whole 32 GB box into
+# the swap-thrash failure mode that took out blockbook on 2026-06-13 (see
+# the blockbook-bcash.service thrash log). If the app ever hits MemoryMax
+# the cgroup OOM-kills it and Restart=on-failure (above) bounces it in
+# ~1-3 s — Caddy's `lb_try_duration 15s` (infra/Caddyfile) papers over
+# the gap.
+#
+# OOMPolicy=continue — NOT `stop` as blockbook uses. blockbook deliberately
+# stops to avoid a mid-IBD restart loop; a stateless web app is the
+# opposite case — it SHOULD bounce straight back, so we let the kill be a
+# normal failure that the existing Restart= logic restarts.
+MemoryHigh=2G
+MemoryMax=3G
+OOMPolicy=continue
+
+# CPUWeight biases the CFS scheduler toward user-facing page serving when
+# the box is contended. No CPUQuota — under a spike the app SHOULD be free
+# to use whatever cores are available; we want priority, not a ceiling.
+# blockbook is already capped at 5 cores (CPUQuota=500%), leaving 7 for
+# the rest of the box; this weight (2× the default 100) ensures live
+# requests win those cores against the batch sync-* one-shots during an
+# enrichment sweep or a traffic spike.
+CPUWeight=200
 
 # ── Hardening ──────────────────────────────────────────────────────────
 NoNewPrivileges=true
