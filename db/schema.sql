@@ -1447,3 +1447,23 @@ CREATE INDEX IF NOT EXISTS bcmr_watch_category_idx ON bcmr_watch (category);
 
 -- Drainer heartbeat — operators alert on staleness like the other sync workers.
 ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_bcmr_events_drain_at TIMESTAMPTZ;
+
+-- ============================================================================
+-- BCMR Watchdog M4 — trust/stability profile (O(1) read surface).
+--
+-- A per-category summary the walker recomputes each walk from
+-- token_metadata_history + bcmr_change_events. The directory + detail page read
+-- a single row instead of aggregating history at list scale; the TS-side
+-- mapper (src/lib/server/bcmrTrust.ts) turns it into a tier/label/reasons badge.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS token_bcmr_profile (
+  category           BYTEA       PRIMARY KEY REFERENCES tokens(category) ON DELETE CASCADE,
+  version_count      INTEGER     NOT NULL DEFAULT 0,   -- distinct content_hash ever published
+  verified_count     INTEGER     NOT NULL DEFAULT 0,   -- verified history rows
+  total_count        INTEGER     NOT NULL DEFAULT 0,   -- all locator-bearing history rows
+  first_published_at TIMESTAMPTZ,                       -- earliest verified version
+  last_change_at     TIMESTAMPTZ,                       -- most recent verified version
+  authority_moved_at TIMESTAMPTZ,                       -- most recent authority_moved event
+  ever_pulled        BOOLEAN     NOT NULL DEFAULT false,-- a version_pulled ever fired
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);

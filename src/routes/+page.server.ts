@@ -12,6 +12,7 @@ import {
 } from '$lib/server/votes';
 import { NOT_MODERATED_CLAUSE } from '$lib/moderation';
 import { cached } from '$lib/server/cache';
+import { scoreBcmrTrust, type BcmrProfileRow } from '$lib/server/bcmrTrust';
 import type { PageServerLoad } from './$types';
 import type { TokenApiRow, TokenType } from '$lib/types';
 
@@ -551,6 +552,53 @@ export const load: PageServerLoad = async ({ url, depends }) => {
 
 		const firstNMap = await getFirstNMap();
 
+		// BCMR watchdog suspect-flag (M4): one cheap indexed lookup over just
+		// this page's category ids (PK = ANY) — deliberately OUTSIDE the
+		// perf-tuned grid CTE so it can't perturb that query's plan. Uses the
+		// same scoreBcmrTrust mapper as the detail page (single source of truth).
+		const bcmrSuspectSet = new Set<string>();
+		const pageCategories = dataRes.rows.map((r) => r.category);
+		if (pageCategories.length > 0) {
+			try {
+				const profRes = await query<{
+					category: Buffer;
+					version_count: number;
+					verified_count: number;
+					total_count: number;
+					first_published_at: Date | null;
+					last_change_at: Date | null;
+					authority_moved_at: Date | null;
+					ever_pulled: boolean;
+				}>(
+					`SELECT category, version_count, verified_count, total_count,
+					        first_published_at, last_change_at, authority_moved_at, ever_pulled
+					   FROM token_bcmr_profile
+					  WHERE category = ANY($1::bytea[])`,
+					[pageCategories]
+				);
+				const nowSec = Math.floor(Date.now() / 1000);
+				const toSec = (d: Date | null): number | null =>
+					d ? Math.floor(d.getTime() / 1000) : null;
+				for (const p of profRes.rows) {
+					const profile: BcmrProfileRow = {
+						versionCount: p.version_count,
+						verifiedCount: p.verified_count,
+						totalCount: p.total_count,
+						firstPublishedAt: toSec(p.first_published_at),
+						lastChangeAt: toSec(p.last_change_at),
+						authorityMovedAt: toSec(p.authority_moved_at),
+						everPulled: p.ever_pulled
+					};
+					if (scoreBcmrTrust(profile, nowSec).tier === 'suspicious') {
+						bcmrSuspectSet.add(hexFromBytes(p.category)!);
+					}
+				}
+			} catch (err) {
+				// Non-fatal: the directory just renders without the flag.
+				console.error('[home grid] bcmr suspect lookup failed:', err);
+			}
+		}
+
 		const tokens: TokenApiRow[] = dataRes.rows.map((row) => {
 			const verifiedAt = row.verified_at?.getTime() ?? null;
 			const firstSeenAt = Math.floor(row.first_seen_at.getTime() / 1000);
@@ -613,7 +661,8 @@ export const load: PageServerLoad = async ({ url, depends }) => {
 				crc20Symbol: row.crc20_symbol ?? null,
 				crc20SymbolIsHex: row.crc20_symbol_is_hex === true,
 				crc20IsCanonical: row.crc20_is_canonical === true,
-				crc20Name: row.crc20_name ?? null
+				crc20Name: row.crc20_name ?? null,
+				bcmrSuspect: bcmrSuspectSet.has(categoryHex)
 			};
 		});
 

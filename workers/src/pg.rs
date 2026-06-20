@@ -1390,6 +1390,53 @@ pub async fn mark_bcmr_events_drain_run(pool: &PgPool) -> Result<()> {
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// BCMR Watchdog M4 — trust/stability profile recompute.
+// ---------------------------------------------------------------------------
+
+/// Recompute and upsert a category's `token_bcmr_profile` summary from its
+/// history + change events. Called by the walker after processing a category
+/// with at least one locator-bearing hop, so the directory + detail page read
+/// one row instead of aggregating history at list scale. Idempotent.
+pub async fn recompute_token_bcmr_profile(pool: &PgPool, category: &[u8]) -> Result<()> {
+    sqlx::query(
+        r#"
+        INSERT INTO token_bcmr_profile
+            (category, version_count, verified_count, total_count,
+             first_published_at, last_change_at, authority_moved_at,
+             ever_pulled, updated_at)
+        SELECT
+            $1,
+            COUNT(DISTINCT content_hash),
+            COUNT(*) FILTER (WHERE body_verified),
+            COUNT(*),
+            MIN(COALESCE(block_time, observed_at)) FILTER (WHERE body_verified),
+            MAX(COALESCE(block_time, observed_at)) FILTER (WHERE body_verified),
+            (SELECT MAX(detected_at) FROM bcmr_change_events e
+              WHERE e.category = $1 AND e.event_type = 'authority_moved'),
+            EXISTS (SELECT 1 FROM bcmr_change_events e
+                     WHERE e.category = $1 AND e.event_type = 'version_pulled'),
+            now()
+          FROM token_metadata_history
+         WHERE category = $1
+        ON CONFLICT (category) DO UPDATE SET
+            version_count      = EXCLUDED.version_count,
+            verified_count     = EXCLUDED.verified_count,
+            total_count        = EXCLUDED.total_count,
+            first_published_at = EXCLUDED.first_published_at,
+            last_change_at     = EXCLUDED.last_change_at,
+            authority_moved_at = EXCLUDED.authority_moved_at,
+            ever_pulled        = EXCLUDED.ever_pulled,
+            updated_at         = EXCLUDED.updated_at
+        "#,
+    )
+    .bind(category)
+    .execute(pool)
+    .await
+    .with_context(|| format!("recompute_token_bcmr_profile for {}", bytes_to_hex(category)))?;
+    Ok(())
+}
+
 pub async fn mark_bcmr_onchain_run(pool: &PgPool) -> Result<()> {
     sqlx::query(
         "UPDATE sync_state

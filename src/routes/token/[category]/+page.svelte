@@ -384,6 +384,37 @@
 						</TooltipContent>
 					</Tooltip>
 				{/if}
+				<!-- BCMR metadata-stability badge (watchdog M4). tier0, synchronous. -->
+				{#if data.bcmrTrust && data.bcmrTrust.tier !== 'none'}
+					{@const tier = data.bcmrTrust.tier}
+					<Tooltip>
+						<TooltipTrigger
+							class="text-xs cursor-help {tier === 'suspicious'
+								? 'text-red-600 dark:text-red-400'
+								: tier === 'stable'
+									? 'text-emerald-600 dark:text-emerald-400'
+									: tier === 'new'
+										? 'text-sky-600 dark:text-sky-400'
+										: tier === 'volatile'
+											? 'text-amber-600 dark:text-amber-400'
+											: 'ts-text-muted'}"
+						>
+							BCMR: {data.bcmrTrust.label}
+						</TooltipTrigger>
+						<TooltipContent>
+							<div class="font-medium mb-1">Metadata stability</div>
+							{#if data.bcmrTrust.reasons.length}
+								<ul class="list-disc pl-4 space-y-0.5">
+									{#each data.bcmrTrust.reasons as reason}
+										<li>{reason}</li>
+									{/each}
+								</ul>
+							{:else}
+								<p>How long this token's BCMR metadata has been stable, and whether its identity or authority key has changed.</p>
+							{/if}
+						</TooltipContent>
+					</Tooltip>
+				{/if}
 				{#if token.isFullyBurned}
 					<span class="text-xs text-red-600">Fully burned</span>
 				{/if}

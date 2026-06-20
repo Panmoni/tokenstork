@@ -54,8 +54,8 @@ use workers::pg::{
     TokenMetadataHistoryWrite, TokenMetadataOnchainWrite, bump_pull_epoch, bytes_to_hex,
     ensure_icon_url_scan_row, get_prior_verified_version, insert_bcmr_change_event,
     mark_bcmr_onchain_run, mark_no_locator_walked, pick_bcmr_onchain_batch, pool_from_env,
-    pulled_event_exists, try_acquire_bcmr_onchain_lock, update_token_authchain_head,
-    upsert_token_metadata_history, upsert_token_metadata_onchain,
+    pulled_event_exists, recompute_token_bcmr_profile, try_acquire_bcmr_onchain_lock,
+    update_token_authchain_head, upsert_token_metadata_history, upsert_token_metadata_onchain,
 };
 use workers::safe_http::safe_client_builder;
 
@@ -566,6 +566,15 @@ async fn walk_one(
                 "could not mark no-locator-walked; row will be re-picked next tick"
             );
         }
+    }
+
+    // M4: refresh the trust/stability profile for categories that have BCMR
+    // history (≥1 locator-bearing hop this walk). Best-effort — a failure here
+    // doesn't fail the walk; the next walk recomputes.
+    if stats.locators_seen > 0
+        && let Err(e) = recompute_token_bcmr_profile(pool, &target.category).await
+    {
+        warn!(category = %category_hex, error = %e, "failed to recompute bcmr profile");
     }
 
     // M2: a max-hops-hit is a standing "investigate this authchain" flag —
