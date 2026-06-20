@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { Separator } from '$lib/components/ui/separator';
 	import { version } from '$app/environment';
+	import * as m from '$lib/paraglide/messages';
+	import { localizeHref } from '$lib/paraglide/runtime';
+	import LocaleSwitcher from './LocaleSwitcher.svelte';
 
 	const socials = [
 		{
@@ -50,21 +53,27 @@
 
 <footer class="mt-12 border-t ts-border-subtle ts-surface-soft">
 	<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-		<div class="grid gap-8 md:grid-cols-5">
+		<!--
+			Footer nav mirrors the header's four primary sections — Tokens,
+			Stats, Tools, About — using the same message keys and hrefs so the
+			two stay in sync. Legal links (Terms, Privacy) live under About,
+			matching where the header keeps them out of primary nav.
+		-->
+		<div class="grid gap-8 md:grid-cols-2 lg:grid-cols-6">
 			<div class="md:col-span-2">
 				<div class="flex items-center gap-2 text-slate-900 dark:text-white font-bold text-lg">
 					<img src="/TokenStorkRegistry-icon.png" alt="" class="h-8 w-8" />
 					<span>TokenStork</span>
 				</div>
 				<p class="mt-3 text-sm max-w-sm ts-text-body">
-					A market-cap &amp; analytics site for BCH CashTokens. Visit
+					{m.footer_tagline_before()}
 					<a
 						href="https://bchworks.com/"
 						target="_blank"
 						rel="noopener noreferrer"
 						class="text-violet-600 dark:text-violet-400 hover:underline"
 					>BCHWorks.com</a>
-					to learn more about Bitcoin Cash.
+					{m.footer_tagline_after()}
 				</p>
 				<a
 					href="mailto:hello@panmoni.com"
@@ -76,39 +85,47 @@
 
 			<div>
 				<h3 class="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-wider">
-					Site
+					{m.nav_tokens()}
 				</h3>
 				<ul class="mt-4 space-y-2 text-sm">
-					<li><a href="/" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Tokens</a></li>
-					<li><a href="/crc20" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">CRC-20</a></li>
-					<li><a href="/arbitrage" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Arbitrage</a></li>
-					<li><a href="/blocks" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Blocks</a></li>
-					<li><a href="/mining" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Mining</a></li>
-					<li><a href="/mint" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Mint</a></li>
-					<li><a href="/airdrops/new" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Airdrop</a></li>
-					<li><a href="/stats" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Stats</a></li>
+					<li><a href={localizeHref('/')} class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">{m.nav_tokens_all()}</a></li>
+					<li><a href={localizeHref('/crc20')} class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">{m.nav_crc20()}</a></li>
 				</ul>
 			</div>
 
 			<div>
 				<h3 class="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-wider">
-					Resources
+					{m.nav_stats()}
 				</h3>
 				<ul class="mt-4 space-y-2 text-sm">
-					<li><a href="/learn" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Learn</a></li>
-					<li><a href="/faq" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">FAQ</a></li>
-					<li><a href="/roadmap" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Roadmap</a></li>
-					<li><a href="/about" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">About</a></li>
+					<li><a href={localizeHref('/stats')} class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">{m.nav_stats()}</a></li>
+					<li><a href={localizeHref('/mining')} class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">{m.nav_mining()}</a></li>
+					<li><a href={localizeHref('/blocks')} class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">{m.nav_blocks()}</a></li>
 				</ul>
 			</div>
 
 			<div>
 				<h3 class="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-wider">
-					Legal
+					{m.nav_tools()}
 				</h3>
 				<ul class="mt-4 space-y-2 text-sm">
-					<li><a href="/terms" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Terms</a></li>
-					<li><a href="/privacy" class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Privacy</a></li>
+					<li><a href={localizeHref('/mint')} class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">{m.nav_mint()}</a></li>
+					<li><a href={localizeHref('/airdrops/new')} class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">{m.nav_airdrop()}</a></li>
+					<li><a href={localizeHref('/arbitrage')} class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">{m.nav_arbitrage()}</a></li>
+				</ul>
+			</div>
+
+			<div>
+				<h3 class="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-wider">
+					{m.nav_about()}
+				</h3>
+				<ul class="mt-4 space-y-2 text-sm">
+					<li><a href={localizeHref('/about')} class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">{m.nav_about()}</a></li>
+					<li><a href={localizeHref('/faq')} class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">{m.nav_faq()}</a></li>
+					<li><a href={localizeHref('/learn')} class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">{m.nav_learn()}</a></li>
+					<li><a href={localizeHref('/roadmap')} class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">{m.nav_roadmap()}</a></li>
+					<li><a href={localizeHref('/terms')} class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">{m.footer_legal_terms()}</a></li>
+					<li><a href={localizeHref('/privacy')} class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">{m.footer_legal_privacy()}</a></li>
 				</ul>
 			</div>
 		</div>
@@ -130,10 +147,11 @@
 						</svg>
 					</a>
 				{/each}
+				<LocaleSwitcher />
 			</div>
 
 			<p class="text-sm text-center sm:text-right ts-text-body">
-				A
+				{m.footer_project_before()}
 				<img src="/panmoni.svg" alt="" class="inline h-[1em] w-[1em] align-[-0.15em] mx-0.5" aria-hidden="true" />
 				<a
 					href="https://www.panmoni.com/"
@@ -141,13 +159,18 @@
 					rel="noopener noreferrer"
 					title="Panmoni is a Web3 product studio"
 					class="gradient-link tracking-wider font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#00abda] to-[#1476ff]"
-				>Panmoni</a>
-				project. · v{version} <span class="font-mono text-xs ts-text-muted" title="Git commit hash of this build">({__GIT_COMMIT__})</span> (alpha) · Prices in USD
+				>Panmoni</a>{m.footer_project_after()} · v{version} <span class="font-mono text-xs ts-text-muted" title="Git commit hash of this build">({__GIT_COMMIT__})</span> (alpha) · {m.footer_prices_usd()}
 			</p>
 		</div>
 
 		<Separator class="my-8 bg-slate-200 dark:bg-zinc-800" />
 
+		<!--
+			Risk / financial disclaimer + alpha-tooling notice are kept in
+			English (the authoritative version) — same policy as the legal
+			pages (/terms, /privacy, /tos). Only the internal links are
+			localized so a non-English visitor stays in their locale.
+		-->
 		<p class="text-xs leading-relaxed ts-text-muted">
 			<strong class="ts-text-strong">Disclaimer:</strong>
 			Cryptocurrency investments carry a high degree of risk, and may not be suitable for all
@@ -160,12 +183,12 @@
 		</p>
 		<p class="text-xs leading-relaxed mt-3 ts-text-muted">
 			<strong class="ts-text-strong">Alpha tooling:</strong>
-			the <a href="/mint" class="underline hover:text-violet-600">mint</a> and
-			<a href="/airdrops/new" class="underline hover:text-violet-600">airdrop</a>
+			the <a href={localizeHref('/mint')} class="underline hover:text-violet-600">mint</a> and
+			<a href={localizeHref('/airdrops/new')} class="underline hover:text-violet-600">airdrop</a>
 			tools build and broadcast real BCH transactions through code that has not been independently
 			audited. They are alpha software, untested at scale, and provided as-is. Use them at your own
 			risk; test with a low-stakes wallet first; verify every output in your wallet's pre-sign
-			review. See the <a href="/terms#tools-alpha" class="underline hover:text-violet-600">Terms</a>
+			review. See the <a href={localizeHref('/terms#tools-alpha')} class="underline hover:text-violet-600">Terms</a>
 			for the full disclaimer.
 		</p>
 	</div>
