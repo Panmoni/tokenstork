@@ -357,6 +357,11 @@ async fn walk_one(
         let mut body_oversize = false;
         let mut flat: Option<BcmrFlat> = None;
         let mut raw_value: Option<serde_json::Value> = None;
+        // True only for a genuine sha256 MISMATCH (we fetched bytes that didn't
+        // match the on-chain hash) — the deterministic rug signal. A plain fetch
+        // ERROR (timeout/404/DNS) is transient infra and must NOT be treated as
+        // a critical mismatch on first sight.
+        let mut now_mismatch = false;
 
         let (body_verified, body_size) = match &outcome {
             FetchedBody::Verified { bytes, size } => {
@@ -404,6 +409,7 @@ async fn walk_one(
                 observed_sha256,
             } => {
                 stats.mismatched += 1;
+                now_mismatch = true;
                 warn!(
                     category = %category_hex,
                     uri = %locator.uri,
@@ -490,6 +496,7 @@ async fn walk_one(
             &locator.content_hash,
             new_fields.as_ref(),
             body_verified,
+            now_mismatch,
             &outcome,
             block_height_i32,
             block_time,
@@ -628,6 +635,7 @@ async fn detect_and_emit_events(
     new_content_hash: &[u8],
     new_fields: Option<&VersionFields>,
     now_verified: bool,
+    now_mismatch: bool,
     outcome: &HistoryUpsertOutcome,
     block_height: Option<i32>,
     block_time: Option<chrono::DateTime<Utc>>,
@@ -691,10 +699,13 @@ async fn detect_and_emit_events(
                     }
                 }
             }
-        } else {
-            // A freshly-seen publication we could not verify (hash mismatch or
-            // unfetchable on first sight) — the rug signature. Worth alerting
-            // even with no prior (a token whose very first BCMR doesn't verify).
+        } else if now_mismatch {
+            // A freshly-seen publication whose body did NOT match its on-chain
+            // hash — the deterministic rug signature (the served body differs
+            // from what was committed). Worth a critical even with no prior. A
+            // plain fetch ERROR (transient infra) is deliberately NOT alerted
+            // here: it's archived and re-tried, and if it persists the trust
+            // profile surfaces it as a "no verified publication" badge.
             let prev_hash = prior.as_ref().map(|p| p.content_hash.clone());
             let prev_addr = prior.as_ref().and_then(|p| p.controller_addr.clone());
             let detail = new_fields.map(|nf| {
