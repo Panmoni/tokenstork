@@ -694,7 +694,7 @@
 	}
 
 	async function abandonDraft() {
-		if (!confirm('Abandon this draft? You can start a fresh one for this category afterwards.')) return;
+		if (!confirm(m.bcmrw_abandon_confirm())) return;
 		abandoning = true;
 		abandonError = null;
 		try {
@@ -704,12 +704,12 @@
 				body: JSON.stringify({ state: 'abandoned' })
 			});
 			if (res.ok) {
-				await goto('/publish-bcmr');
+				await goto(localizeHref('/publish-bcmr'));
 				return;
 			}
-			abandonError = `Abandon failed (HTTP ${res.status})`;
+			abandonError = m.bcmrw_err_abandon({ status: res.status });
 		} catch (err) {
-			abandonError = (err as Error).message ?? 'Network error';
+			abandonError = (err as Error).message ?? m.error_network();
 		} finally {
 			abandoning = false;
 		}
@@ -723,17 +723,17 @@
 </script>
 
 <svelte:head>
-	<title>{data.isUpdate ? 'Update' : 'Publish'} BCMR — Token Stork</title>
+	<title>{data.isUpdate ? m.bcmrw_verb_update() : m.bcmrw_verb_publish()} BCMR — Token Stork</title>
 </svelte:head>
 
 <div class="max-w-3xl mx-auto px-4 py-8">
 	<div class="mb-6">
-		<a href="/publish-bcmr" class="text-violet-600 dark:text-violet-400 hover:underline text-sm">← Back to categories</a>
+		<a href={localizeHref('/publish-bcmr')} class="text-violet-600 dark:text-violet-400 hover:underline text-sm">← {m.bcmrw_back_to_categories()}</a>
 		<h1 class="mt-2 text-3xl font-bold ts-text-strong">
-			{data.isUpdate ? 'Update' : 'Publish'} BCMR
+			{data.isUpdate ? m.bcmrw_verb_update() : m.bcmrw_verb_publish()} BCMR
 		</h1>
 		<p class="mt-1 text-sm ts-text-muted">
-			Category <code class="font-mono text-xs">{session.categoryHex.slice(0, 16)}…{session.categoryHex.slice(-8)}</code>
+			{m.pubbcmr_th_category()} <code class="font-mono text-xs">{session.categoryHex.slice(0, 16)}…{session.categoryHex.slice(-8)}</code>
 			· <span class="capitalize">{session.state}</span>
 		</p>
 	</div>
@@ -764,15 +764,14 @@
 
 	<div class="p-6 sm:p-8 rounded-xl border ts-border-subtle ts-surface-panel">
 		{#if step === 1}
-			<h2 class="text-xl font-semibold ts-text-strong mb-2">1. Identity</h2>
+			<h2 class="text-xl font-semibold ts-text-strong mb-2">{m.bcmrw_s1_h()}</h2>
 			<p class="text-sm mb-5 ts-text-muted">
-				What this token is called and how it appears in wallets + explorers. These fields go into
-				the BCMR JSON as the registry's <code class="text-xs">identities[category][revision]</code>
-				entry.
+				{m.bcmrw_s1_desc_before()} <code class="text-xs">identities[category][revision]</code>
+				{m.bcmrw_s1_desc_after()}
 			</p>
 			<div class="mb-4 flex items-center gap-3">
 				<label class="px-3 py-1.5 text-xs rounded border ts-border-strong hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer">
-					📄 Upload BCMR JSON
+					📄 {m.bcmrw_upload_json()}
 					<input type="file" accept=".json" hidden onchange={async (e) => {
 						const file = (e.currentTarget as HTMLInputElement).files?.[0];
 						if (!file) return;
@@ -800,25 +799,25 @@
 								step = 2;
 							}
 						} catch (err) {
-							alert('Could not parse BCMR JSON: ' + (err as Error).message);
+							alert(m.bcmrw_err_parse_json() + (err as Error).message);
 						}
 					}} />
 				</label>
-				<span class="text-xs ts-text-muted">Pre-fills the form from an existing BCMR JSON file</span>
+				<span class="text-xs ts-text-muted">{m.bcmrw_upload_hint()}</span>
 			</div>
 			<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
 				<label class="block">
-					<span class="text-sm font-medium ts-text-strong">Name</span>
+					<span class="text-sm font-medium ts-text-strong">{m.bcmrw_field_name()}</span>
 					<input
 						type="text"
 						maxlength="80"
 						bind:value={name}
-						placeholder="My Token"
+						placeholder={m.bcmrw_name_ph()}
 						class="mt-1 w-full px-3 py-2 rounded-md border ts-border-strong ts-surface-input"
 					/>
 				</label>
 				<label class="block">
-					<span class="text-sm font-medium ts-text-strong">Ticker / symbol</span>
+					<span class="text-sm font-medium ts-text-strong">{m.bcmrw_field_ticker()}</span>
 					<input
 						type="text"
 						maxlength="12"
@@ -828,7 +827,7 @@
 					/>
 				</label>
 				<label class="block">
-					<span class="text-sm font-medium ts-text-strong">Decimals</span>
+					<span class="text-sm font-medium ts-text-strong">{m.bcmrw_field_decimals()}</span>
 					<input
 						type="number"
 						min="0"
@@ -837,15 +836,15 @@
 						bind:value={decimals}
 						class="mt-1 w-full px-3 py-2 rounded-md border ts-border-strong ts-surface-input"
 					/>
-					<span class="block mt-1 text-xs ts-text-muted">0 for indivisible (NFT-style or whole-units), up to 8 for finely-divisible.</span>
+					<span class="block mt-1 text-xs ts-text-muted">{m.bcmrw_decimals_hint()}</span>
 				</label>
 				<label class="block sm:col-span-2">
-					<span class="text-sm font-medium ts-text-strong">Description (optional)</span>
+					<span class="text-sm font-medium ts-text-strong">{m.bcmrw_field_description()}</span>
 					<textarea
 						rows="3"
 						maxlength="500"
 						bind:value={description}
-						placeholder="A brief explanation of this token's purpose."
+						placeholder={m.bcmrw_description_ph()}
 						class="mt-1 w-full px-3 py-2 rounded-md border ts-border-strong ts-surface-input"
 					></textarea>
 					<span class="block mt-1 text-xs ts-text-muted">{description.length} / 500</span>
@@ -855,14 +854,13 @@
 				<p class="mt-4 text-sm text-rose-600 dark:text-rose-400">{step1Error}</p>
 			{/if}
 		{:else if step === 2}
-			<h2 class="text-xl font-semibold ts-text-strong mb-2">2. Icon URI</h2>
+			<h2 class="text-xl font-semibold ts-text-strong mb-2">{m.bcmrw_s2_h()}</h2>
 			<p class="text-sm mb-5 ts-text-muted">
-				Where to find your token's icon image. Paste an <code class="text-xs">https://</code> URL
-				or an <code class="text-xs">ipfs://&lt;cid&gt;</code> reference. The image should be a
-				square PNG or WebP at 256×256 or larger. Leave blank to publish without an icon.
+				{m.bcmrw_s2_desc_a()} <code class="text-xs">https://</code>
+				{m.bcmrw_s2_desc_b()} <code class="text-xs">ipfs://&lt;cid&gt;</code>{m.bcmrw_s2_desc_c()}
 			</p>
 			<label class="block">
-				<span class="text-sm font-medium ts-text-strong">Icon URI</span>
+				<span class="text-sm font-medium ts-text-strong">{m.bcmrw_field_icon_uri()}</span>
 				<input
 					type="text"
 					maxlength="1024"
@@ -875,11 +873,10 @@
 				<p class="mt-4 text-sm text-rose-600 dark:text-rose-400">{step2Error}</p>
 			{/if}
 		{:else if step === 3}
-			<h2 class="text-xl font-semibold ts-text-strong mb-2">3. Canonicalize</h2>
+			<h2 class="text-xl font-semibold ts-text-strong mb-2">{m.bcmrw_s3_h()}</h2>
 			<p class="text-sm mb-5 ts-text-muted">
-				We'll build the canonical BCMR JSON from your inputs and compute its <code class="text-xs">sha256</code> —
-				that hash will be committed on-chain alongside the publication URI, so any consumer can
-				verify the JSON bytes match what you intended to publish.
+				{m.bcmrw_s3_desc_before()} <code class="text-xs">sha256</code>
+				{m.bcmrw_s3_desc_after()}
 			</p>
 
 			{#if !session.contentHashHex && !canonicalJson}
@@ -889,14 +886,14 @@
 					disabled={canonicalizing}
 					class="px-4 py-2 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold disabled:opacity-50"
 				>
-					{canonicalizing ? 'Generating…' : 'Generate canonical JSON'}
+					{canonicalizing ? m.bcmrw_generating() : m.bcmrw_generate_json()}
 				</button>
 			{/if}
 
 			{#if session.contentHashHex || canonicalJson}
 				<div class="space-y-4">
 					<div>
-						<div class="text-sm font-medium ts-text-strong mb-1">Content hash (sha256)</div>
+						<div class="text-sm font-medium ts-text-strong mb-1">{m.bcmrw_content_hash()}</div>
 						<div class="flex items-center gap-2">
 							<code class="flex-1 px-3 py-2 rounded-md bg-slate-100 dark:bg-zinc-800 font-mono text-xs break-all">
 								{session.contentHashHex}
@@ -906,20 +903,20 @@
 								onclick={() => session.contentHashHex && copyToClipboard(session.contentHashHex)}
 								class="px-3 py-2 rounded-md border ts-border-strong text-xs hover:bg-slate-50 dark:hover:bg-zinc-800"
 							>
-								Copy
+								{m.ui_copy()}
 							</button>
 						</div>
 					</div>
 
 					<div>
 						<div class="flex items-center justify-between mb-1">
-							<div class="text-sm font-medium ts-text-strong">Canonical JSON</div>
+							<div class="text-sm font-medium ts-text-strong">{m.bcmrw_canonical_json()}</div>
 							<button
 								type="button"
 								onclick={downloadJson}
 								class="px-3 py-1.5 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold"
 							>
-								Download .json
+								{m.bcmrw_download_json()}
 							</button>
 						</div>
 						<pre
@@ -928,17 +925,17 @@
 					</div>
 					<div class="p-3 rounded-md bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-900">
 						{#if ipfsCid}
-							<p class="text-xs text-emerald-700 dark:text-emerald-300">Pinned ✓ <code>ipfs://{ipfsCid}</code></p>
+							<p class="text-xs text-emerald-700 dark:text-emerald-300">{m.bcmrw_pinned()} <code>ipfs://{ipfsCid}</code></p>
 						{:else}
 							<button type="button" onclick={pinCanonicalJson} disabled={ipfsUploading}
 								class="px-4 py-2 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold disabled:opacity-50">
-								{ipfsUploading ? 'Pinning…' : '🚀 Pin to IPFS'}
+								{ipfsUploading ? m.bcmrw_pinning() : `🚀 ${m.bcmrw_pin_to_ipfs()}`}
 							</button>
 							{#if !localStorage.getItem('mint-ipfs-key')}
 								<div class="mt-2">
-									<input type="password" bind:value={ipfsKeyInput} placeholder="Pinata JWT or Lighthouse API key"
+									<input type="password" bind:value={ipfsKeyInput} placeholder={m.bcmrw_ipfs_key_ph()}
 										class="w-full px-3 py-1.5 text-xs rounded border ts-border-strong font-mono" />
-									<span class="block mt-1 text-[10px] ts-text-muted">Saved to localStorage — never sent to Token Stork.</span>
+									<span class="block mt-1 text-[10px] ts-text-muted">{m.bcmrw_ipfs_key_note()}</span>
 								</div>
 							{/if}
 							{#if ipfsError}<p class="text-xs text-rose-600 mt-2">{ipfsError}</p>{/if}
@@ -951,15 +948,14 @@
 				<p class="mt-4 text-sm text-rose-600 dark:text-rose-400">{canonicalizeError}</p>
 			{/if}
 		{:else if step === 4}
-			<h2 class="text-xl font-semibold ts-text-strong mb-2">4. Publish & verify</h2>
+			<h2 class="text-xl font-semibold ts-text-strong mb-2">{m.bcmrw_s4_h()}</h2>
 			<p class="text-sm mb-5 ts-text-muted">
-				Upload the canonical JSON from step 3 to your own IPFS / Pinata / Lighthouse / any
-				HTTPS host you control, then paste the URL here. <strong>Your own host stays the canonical
-				source</strong> — it's what we'll commit on-chain.
+				{m.bcmrw_s4_desc_before()} <strong>{m.bcmrw_s4_desc_strong()}</strong>
+				{m.bcmrw_s4_desc_after()}
 			</p>
 
 			<label class="block">
-				<span class="text-sm font-medium ts-text-strong">Publication URL (https:// or ipfs://)</span>
+				<span class="text-sm font-medium ts-text-strong">{m.bcmrw_pub_url_label()}</span>
 				<input
 					type="url"
 					maxlength="2048"
@@ -969,7 +965,7 @@
 					disabled={!!session.publicationVerifiedAt}
 				/>
 				<span class="block mt-1 text-xs ts-text-muted">
-					HTTPS or ipfs:// accepted. If your host uses redirects, paste the final URL. Maximum 8 MiB body.
+					{m.bcmrw_pub_url_hint()}
 				</span>
 			</label>
 
@@ -980,11 +976,11 @@
 					disabled={verifying || !publicationUriInput.trim() || !!session.publicationVerifiedAt}
 					class="px-4 py-2 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold disabled:opacity-50"
 				>
-					{verifying ? 'Verifying…' : session.publicationVerifiedAt ? 'Verified ✓' : 'Verify my host'}
+					{verifying ? m.bcmrw_verifying() : session.publicationVerifiedAt ? m.bcmrw_verified() : m.bcmrw_verify_host()}
 				</button>
 				{#if session.publicationVerifiedAt}
 					<span class="text-xs text-emerald-700 dark:text-emerald-400">
-						Hosted bytes match the canonical content hash.
+						{m.bcmrw_verify_match()}
 					</span>
 				{/if}
 			</div>
@@ -994,7 +990,7 @@
 					class="mt-4 p-3 rounded-md bg-rose-50 dark:bg-rose-950/30 text-sm text-rose-700 dark:text-rose-300"
 					role="alert"
 				>
-					<strong>Verification failed:</strong>
+					<strong>{m.bcmrw_verify_failed()}</strong>
 					{verifyResult.message}
 					{#if verifyResult.reason === 'hash-mismatch' && verifyResult.expected && verifyResult.observed}
 						<div class="mt-2 font-mono text-[11px]">
@@ -1002,9 +998,7 @@
 							observed: {verifyResult.observed}
 						</div>
 						<div class="mt-2 text-xs">
-							The bytes returned by your host don't match what step 3 canonicalized. Re-download
-							the canonical JSON from step 3 and upload exactly those bytes (any whitespace
-							difference changes the hash).
+							{m.bcmrw_verify_mismatch_help()}
 						</div>
 					{/if}
 				</div>
@@ -1020,13 +1014,10 @@
 							disabled={submitBackupResult?.ok || submittingBackup}
 						/>
 						<span class="flex-1 text-sm">
-							<strong class="ts-text-strong block">Optional: submit a backup copy to tokenstork.com.</strong>
+							<strong class="ts-text-strong block">{m.bcmrw_backup_title()}</strong>
 							<span class="ts-text-muted">
-								The bytes get content-addressed at
-								<code class="text-xs">https://tokenstork.com/bcmr/&lt;hash&gt;.json</code> after operator
-								approval, so consumers can fall back to our copy if your own host is ever unreachable.
-								Your IPFS / HTTPS host remains the canonical source — this is just an additional mirror.
-								Approval is operator-discretionary.
+								{m.bcmrw_backup_body_before()}
+								<code class="text-xs">https://tokenstork.com/bcmr/&lt;hash&gt;.json</code> {m.bcmrw_backup_body_after()}
 							</span>
 						</span>
 					</label>
@@ -1037,13 +1028,12 @@
 							disabled={submittingBackup}
 							class="mt-3 px-3 py-1.5 rounded-md bg-slate-700 hover:bg-slate-800 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-white text-xs font-semibold disabled:opacity-50"
 						>
-							{submittingBackup ? 'Submitting…' : 'Submit backup for review'}
+							{submittingBackup ? m.bcmrw_submitting() : m.bcmrw_submit_backup()}
 						</button>
 					{/if}
 					{#if submitBackupResult?.ok}
 						<div class="mt-3 text-xs text-emerald-700 dark:text-emerald-400">
-							✓ Backup submitted. The operator will review; approval is independent of the on-chain
-							publication, which proceeds either way.
+							{m.bcmrw_backup_ok()}
 						</div>
 					{:else if submitBackupResult && !submitBackupResult.ok}
 						<div class="mt-3 text-xs text-rose-700 dark:text-rose-400">{submitBackupResult.message}</div>
@@ -1051,30 +1041,28 @@
 				</div>
 			{/if}
 		{:else if step === 5}
-			<h2 class="text-xl font-semibold ts-text-strong mb-2">5. Build & sign</h2>
+			<h2 class="text-xl font-semibold ts-text-strong mb-2">{m.bcmrw_s5_h()}</h2>
 			<p class="text-sm mb-5 ts-text-muted">
-				We build the unsigned transaction that spends your category's authority NFT, emits a new
-				authority NFT to your wallet, and attaches an <code class="text-xs">OP_RETURN BCMR</code>
-				locator. Token Stork can orchestrate the signing via WalletConnect — or you can build,
-				sign manually, and paste the hex below.
+				{m.bcmrw_s5_desc_before()} <code class="text-xs">OP_RETURN BCMR</code>
+				{m.bcmrw_s5_desc_after()}
 			</p>
 
 			<!-- Readiness diagnostic card -->
 			<div class="mb-5 p-4 rounded-lg border ts-border-subtle bg-slate-50 dark:bg-zinc-950">
 				<div class="flex items-center justify-between mb-3">
-					<span class="text-sm font-medium ts-text-strong">Transaction readiness</span>
+					<span class="text-sm font-medium ts-text-strong">{m.bcmrw_tx_readiness()}</span>
 					<button
 						type="button"
 						onclick={fetchAndCheckReadiness}
 						disabled={readinessLoading}
 						class="text-xs px-2 py-1 rounded border ts-border-strong hover:bg-slate-100 dark:hover:bg-zinc-900 disabled:opacity-50"
 					>
-						{readinessLoading ? 'Checking…' : '🔄 Check wallet'}
+						{readinessLoading ? m.bcmrw_checking() : `🔄 ${m.bcmrw_check_wallet()}`}
 					</button>
 				</div>
 
 				{#if readinessLoading}
-					<p class="text-xs ts-text-muted">Checking your wallet for sufficient BCH and the authority NFT…</p>
+					<p class="text-xs ts-text-muted">{m.bcmrw_checking_wallet_long()}</p>
 				{:else if readiness}
 					<div class="space-y-2">
 						{#each readiness.requirements as req}
@@ -1105,9 +1093,9 @@
 								disabled={wcSigning}
 								class="px-5 py-2.5 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium"
 							>
-								{wcSigning ? 'Connecting to wallet…' : '✍️ Sign with Wallet'}
+								{wcSigning ? m.bcmrw_connecting_wallet() : `✍️ ${m.bcmrw_sign_with_wallet()}`}
 							</button>
-							<span class="text-xs ts-text-muted">or sign manually below</span>
+							<span class="text-xs ts-text-muted">{m.bcmrw_or_sign_manually_below()}</span>
 						{:else if readiness.requirements.some(r => !r.satisfied && r.fixable === 'consolidate-bch')}
 							<button
 								type="button"
@@ -1115,12 +1103,12 @@
 								disabled={prepareInProgress}
 								class="px-5 py-2.5 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium"
 							>
-								{prepareInProgress ? 'Consolidating…' : '🚀 Create funding UTXO'}
+								{prepareInProgress ? m.bcmrw_consolidating() : `🚀 ${m.bcmrw_create_funding()}`}
 							</button>
-							<span class="text-xs ts-text-muted">Consolidate plain BCH into one spendable UTXO</span>
+							<span class="text-xs ts-text-muted">{m.bcmrw_consolidate_hint()}</span>
 						{:else if !readiness.ready}
 							<p class="text-xs text-amber-700 dark:text-amber-300">
-								Resolve the issues above to enable one-click signing, or use the manual flow below.
+								{m.bcmrw_resolve_issues()}
 							</p>
 						{/if}
 					</div>
@@ -1132,16 +1120,16 @@
 						<p class="mt-2 text-xs text-rose-600 dark:text-rose-400">{prepareError}</p>
 					{/if}
 					{#if prepareDone}
-						<p class="mt-2 text-xs text-emerald-600 dark:text-emerald-400">Consolidation broadcast! Refreshing readiness…</p>
+						<p class="mt-2 text-xs text-emerald-600 dark:text-emerald-400">{m.bcmrw_consolidation_broadcast()}</p>
 					{/if}
 				{:else}
-					<p class="text-xs ts-text-muted">Click "Check wallet" to see if you're ready to publish.</p>
+					<p class="text-xs ts-text-muted">{m.bcmrw_click_check()}</p>
 				{/if}
 			</div>
 
 			<!-- Manual paste-hex fallback (collapsible) -->
 			<details class="mt-4 mb-5" open={!readiness?.ready}>
-				<summary class="cursor-pointer text-sm font-medium ts-text-strong">or sign manually</summary>
+				<summary class="cursor-pointer text-sm font-medium ts-text-strong">{m.bcmrw_or_sign_manually()}</summary>
 				<div class="mt-4 space-y-4">
 					{#if !session.unsignedTxHex && !buildTxSummary}
 						<button
@@ -1150,7 +1138,7 @@
 							disabled={buildingTx}
 							class="px-4 py-2 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold disabled:opacity-50"
 						>
-							{buildingTx ? 'Building…' : 'Build unsigned tx'}
+							{buildingTx ? m.bcmrw_building() : m.bcmrw_build_unsigned()}
 						</button>
 					{/if}
 
@@ -1164,19 +1152,19 @@
 								<div class="p-3 rounded-md bg-slate-50 dark:bg-zinc-900/50 text-sm">
 									<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
 										<div>
-											<div class="text-xs ts-text-muted">authNFT (new)</div>
+											<div class="text-xs ts-text-muted">{m.bcmrw_authnft_new()}</div>
 											<div class="font-mono ts-text-strong">{buildTxSummary.authNftOutputSats} sats</div>
 										</div>
 										<div>
-											<div class="text-xs ts-text-muted">Fee</div>
+											<div class="text-xs ts-text-muted">{m.bcmrw_fee()}</div>
 											<div class="font-mono ts-text-strong">{buildTxSummary.feeSats} sats</div>
 										</div>
 										<div>
-											<div class="text-xs ts-text-muted">Change</div>
+											<div class="text-xs ts-text-muted">{m.bcmrw_change()}</div>
 											<div class="font-mono ts-text-strong">{buildTxSummary.changeSats} sats</div>
 										</div>
 										<div>
-											<div class="text-xs ts-text-muted">Tx size</div>
+											<div class="text-xs ts-text-muted">{m.bcmrw_tx_size()}</div>
 											<div class="font-mono ts-text-strong">{buildTxSummary.encodedTxBytes} B</div>
 										</div>
 									</div>
@@ -1185,30 +1173,30 @@
 
 							<div>
 								<div class="flex items-center justify-between mb-1">
-									<div class="text-sm font-medium ts-text-strong">Unsigned transaction hex</div>
+									<div class="text-sm font-medium ts-text-strong">{m.bcmrw_unsigned_hex()}</div>
 									<button
 										type="button"
 										onclick={() => session.unsignedTxHex && copyToClipboard(session.unsignedTxHex)}
 										class="px-3 py-1 rounded-md border ts-border-strong text-xs hover:bg-slate-50 dark:hover:bg-zinc-800"
 									>
-										Copy
+										{m.ui_copy()}
 									</button>
 								</div>
 								<pre
 									class="px-3 py-2 rounded-md bg-slate-100 dark:bg-zinc-800 font-mono text-[11px] max-h-32 overflow-auto break-all"
 								>{session.unsignedTxHex}</pre>
 								<p class="mt-2 text-xs ts-text-muted">
-									Sign this hex in your wallet (Paytaca, Electron Cash, Cashonize, etc.). Then paste the signed hex below.
+									{m.bcmrw_sign_hex_hint()}
 								</p>
 							</div>
 
 							<div>
 								<label class="block">
-									<span class="text-sm font-medium ts-text-strong">Signed transaction hex</span>
+									<span class="text-sm font-medium ts-text-strong">{m.bcmrw_signed_hex_label()}</span>
 									<textarea
 										rows="4"
 										bind:value={signedTxHexInput}
-										placeholder="Paste signed hex from your wallet here…"
+										placeholder={m.bcmrw_signed_hex_ph()}
 										class="mt-1 w-full px-3 py-2 rounded-md border ts-border-strong ts-surface-input font-mono text-xs"
 									></textarea>
 								</label>
@@ -1218,7 +1206,7 @@
 									disabled={broadcasting || !signedTxHexInput.trim()}
 									class="mt-3 px-4 py-2 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold disabled:opacity-50"
 								>
-									{broadcasting ? 'Broadcasting…' : 'Broadcast →'}
+									{broadcasting ? m.bcmrw_broadcasting() : `${m.bcmrw_broadcast()} →`}
 								</button>
 							</div>
 						</div>
@@ -1230,23 +1218,21 @@
 				</div>
 			</details>
 		{:else if step === 6}
-			<h2 class="text-xl font-semibold ts-text-strong mb-2">6. Done — published on-chain</h2>
+			<h2 class="text-xl font-semibold ts-text-strong mb-2">{m.bcmrw_s6_h()}</h2>
 			{#if broadcastTxid || session.publishTxidHex}
 				{@const txid = broadcastTxid ?? session.publishTxidHex}
 				<div class="space-y-4">
 					<div class="p-4 rounded-xl border ts-border-subtle bg-emerald-50 dark:bg-emerald-950/30">
 						<div class="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
-							✓ BCMR publication broadcast.
+							✓ {m.bcmrw_broadcast_ok()}
 						</div>
 						<p class="mt-2 text-sm ts-text-body">
-							The transaction is in the mempool. Our on-chain BCMR walker runs hourly — your
-							token's name, symbol, icon, and description will start appearing on the directory
-							within ~1 hour of the next walker tick after this tx confirms.
+							{m.bcmrw_s6_body()}
 						</p>
 					</div>
 
 					<div>
-						<div class="text-sm font-medium ts-text-strong mb-1">Transaction ID</div>
+						<div class="text-sm font-medium ts-text-strong mb-1">{m.bcmrw_txid()}</div>
 						<div class="flex items-center gap-2">
 							<code class="flex-1 px-3 py-2 rounded-md bg-slate-100 dark:bg-zinc-800 font-mono text-xs break-all">
 								{txid}
@@ -1256,29 +1242,29 @@
 								onclick={() => txid && copyToClipboard(txid)}
 								class="px-3 py-2 rounded-md border ts-border-strong text-xs hover:bg-slate-50 dark:hover:bg-zinc-800"
 							>
-								Copy
+								{m.ui_copy()}
 							</button>
 						</div>
 					</div>
 
 					<div class="flex items-center gap-3 flex-wrap text-sm">
 						<a
-							href={`/token/${session.categoryHex}`}
+							href={localizeHref(`/token/${session.categoryHex}`)}
 							class="px-3 py-1.5 rounded-md bg-violet-600 hover:bg-violet-700 text-white font-semibold"
 						>
-							View your token →
+							{m.bcmrw_view_token()} →
 						</a>
-						<a href="/publish-bcmr" class="text-violet-600 dark:text-violet-400 hover:underline">
-							Publish for another category
+						<a href={localizeHref('/publish-bcmr')} class="text-violet-600 dark:text-violet-400 hover:underline">
+							{m.bcmrw_publish_another()}
 						</a>
-						<a href="/faq#faq-bcmr-publish" class="ml-auto text-xs ts-text-muted hover:text-violet-600">
-							How this works ↗
+						<a href={localizeHref('/faq#faq-bcmr-publish')} class="ml-auto text-xs ts-text-muted hover:text-violet-600">
+							{m.bcmrw_how_works()} ↗
 						</a>
 					</div>
 				</div>
 			{:else}
 				<p class="text-sm ts-text-muted">
-					This step shows after a successful broadcast. Complete step 5 first.
+					{m.bcmrw_s6_placeholder()}
 				</p>
 			{/if}
 		{/if}
@@ -1294,7 +1280,7 @@
 				disabled={step === 1}
 				class="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-slate-50 dark:hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed ts-text-strong ts-border-strong"
 			>
-				← Back
+				← {m.bcmrw_back()}
 			</button>
 			<div class="flex items-center gap-3">
 				<button
@@ -1303,7 +1289,7 @@
 					disabled={abandoning}
 					class="px-3 py-2 text-xs ts-text-muted hover:text-rose-600 disabled:opacity-50"
 				>
-					{abandoning ? 'Abandoning…' : 'Abandon draft'}
+					{abandoning ? m.bcmrw_abandoning() : m.bcmrw_abandon_draft()}
 				</button>
 				{#if step === 1}
 					<button
@@ -1312,7 +1298,7 @@
 						disabled={!!step1Error || saving}
 						class="px-5 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
 					>
-						{saving ? 'Saving…' : 'Next →'}
+						{saving ? m.bcmrw_saving() : `${m.bcmrw_next()} →`}
 					</button>
 				{:else if step === 2}
 					<button
@@ -1321,7 +1307,7 @@
 						disabled={!!step2Error || saving}
 						class="px-5 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
 					>
-						{saving ? 'Saving…' : 'Next →'}
+						{saving ? m.bcmrw_saving() : `${m.bcmrw_next()} →`}
 					</button>
 				{:else if step === 3}
 					<button
@@ -1330,7 +1316,7 @@
 						disabled={!session.contentHashHex}
 						class="px-5 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
 					>
-						Next →
+						{m.bcmrw_next()} →
 					</button>
 				{:else if step === 4}
 					<button
@@ -1339,7 +1325,7 @@
 						disabled={!session.publicationVerifiedAt}
 						class="px-5 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
 					>
-						Next →
+						{m.bcmrw_next()} →
 					</button>
 				{:else if step === 5}
 					<!-- Step 5 advances via the WC sign or broadcast button; no separate Next button needed -->

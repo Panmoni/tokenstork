@@ -17,6 +17,8 @@
 	import type { MintSession } from '$lib/server/mintSessions';
 	import { connectWallet, signTransaction, disconnectWallet } from '$lib/client/wc-client';
 	import { buildConsolidationTx, plainUtxosToConsolidationInputs } from '$lib/client/consolidationBuilder';
+	import * as m from '$lib/paraglide/messages';
+	import { getLocale, localizeHref } from '$lib/paraglide/runtime';
 
 	let { data } = $props();
 
@@ -68,9 +70,9 @@
 		if (fundingUtxosLoading || !fundingUtxosFetched) return null;
 		if (fundingUtxos.some(u => u.txid === outpointTxid.toLowerCase())) return null;
 		if (fundingUtxosDiag && fundingUtxosDiag.total > 0) {
-			return { message: 'This txid was not found at vout=0 in your wallet. The genesis tx MUST spend vout=0 — if you control a different output of this transaction, it will not work. Send BCH to yourself first to create a vout=0 UTXO.' };
+			return { message: m.mint_warn_outpoint_notfound() };
 		}
-		return { message: 'This txid could not be verified against your wallet. Make sure it is the txid of a transaction where you control output #0 (vout=0).' };
+		return { message: m.mint_warn_outpoint_unverified() };
 	});
 	// Persistence health for the stepper. saveSession is fire-and-forget;
 	// when it fails we surface a small banner so the user knows their
@@ -121,32 +123,32 @@
 	let iconUploading = $state(false);
 	let iconError = $state<string | null>(null);
 	// Per-step validation. null = good to advance.
-	const step1Error = $derived.by(() => (tokenType ? null : 'Pick a token type to continue.'));
+	const step1Error = $derived.by(() => (tokenType ? null : m.mint_v_pick_type()));
 	const step2Error = $derived.by(() => {
-		if (!name.trim()) return 'A name is required.';
-		if (!ticker.trim()) return 'A ticker is required.';
-		if (ticker.trim().length > 12) return 'Ticker must be 12 characters or fewer.';
+		if (!name.trim()) return m.mint_v_name_required();
+		if (!ticker.trim()) return m.mint_v_ticker_required();
+		if (ticker.trim().length > 12) return m.mint_v_ticker_long();
 		if (tokenType !== 'NFT' && (decimals < 0 || decimals > 8)) {
-			return 'Decimals must be 0–8 per CashTokens spec.';
+			return m.mint_v_decimals();
 		}
 		return null;
 	});
 	const step3Error = $derived.by(() => {
 		if (tokenType === 'FT' || tokenType === 'FT+NFT') {
-			if (!totalSupply.trim()) return 'Total supply is required for fungible tokens.';
+			if (!totalSupply.trim()) return m.mint_v_supply_required();
 			try {
 				const big = BigInt(totalSupply);
-				if (big <= 0n) return 'Total supply must be positive.';
+				if (big <= 0n) return m.mint_v_supply_positive();
 			} catch {
-				return 'Total supply must be a whole number.';
+				return m.mint_v_supply_int();
 			}
 		}
 		if ((tokenType === 'NFT' || tokenType === 'FT+NFT') && nftCommitmentHex) {
 			if (!/^[0-9a-fA-F]*$/.test(nftCommitmentHex)) {
-				return 'NFT commitment must be hex (0-9, a-f).';
+				return m.mint_v_commitment_hex();
 			}
 			if (nftCommitmentHex.length > 80) {
-				return 'NFT commitment max 40 bytes (80 hex chars).';
+				return m.mint_v_commitment_len();
 			}
 		}
 		return null;
@@ -163,7 +165,7 @@
 		if (!data || data.unauthenticated) return;
 		if (!tokenType || !outpointTxid) return;
 		if (!/^[0-9a-fA-F]{64}$/.test(outpointTxid)) {
-			genesisBuildError = 'Outpoint txid must be 64-char hex.';
+			genesisBuildError = m.mint_err_outpoint_hex();
 			return;
 		}
 		try {
@@ -201,7 +203,7 @@
 			const res = await fetch('/api/wallet/funding-utxos', { signal: controller.signal });
 			clearTimeout(timeout);
 			if (!res.ok) {
-				fundingUtxosError = `Could not fetch UTXOs (HTTP ${res.status})`;
+				fundingUtxosError = m.mint_err_fetch_utxos({ status: res.status });
 				return;
 			}
 			const body = (await res.json()) as { utxos: typeof fundingUtxos; plainUtxos: typeof plainUtxos; diag: typeof fundingUtxosDiag };
@@ -215,7 +217,7 @@
 			}
 		} catch (e) {
 			if ((e as Error).name === 'AbortError') {
-				fundingUtxosError = 'UTXO fetch timed out after 20 seconds. BlockBook may be slow — try again.';
+				fundingUtxosError = m.mint_err_utxo_timeout();
 			} else {
 				fundingUtxosError = (e as Error).message;
 			}
@@ -232,7 +234,7 @@
 			headers: { 'content-type': 'application/json' },
 			body: '{}'
 		});
-		if (!res.ok) throw new Error(`Could not create session (${res.status})`);
+		if (!res.ok) throw new Error(m.mint_err_create_session({ status: res.status }));
 		const session = (await res.json()) as MintSession;
 		sessionId = session.id;
 		return sessionId;
@@ -378,7 +380,7 @@
 			// so we can provide source-output data to the wallet.
 			const lockResult = cashAddressToLockingBytecode(data.cashaddr);
 			if (typeof lockResult === 'string') {
-				wcSignError = `Could not derive locking script from your address: ${lockResult}`;
+				wcSignError = m.mint_err_derive_lock({ detail: lockResult });
 				return;
 			}
 			const lockingBytecodeHex = binToHex(lockResult.bytecode);
@@ -413,7 +415,7 @@
 			// Cleanup.
 			await disconnectWallet(client, topic);
 		} catch (e) {
-			wcSignError = (e as Error).message || 'WalletConnect signing failed';
+			wcSignError = (e as Error).message || m.mint_err_wc_failed();
 		} finally {
 			wcSigning = false;
 		}
@@ -425,13 +427,13 @@
 		prepareDone = false;
 		try {
 			if (plainUtxos.length === 0) {
-				prepareError = 'No plain-BCH UTXOs available for consolidation.';
+				prepareError = m.mint_err_no_plain();
 				return;
 			}
 
 			// Connect WC.
 			const cashaddr = data!.cashaddr;
-			if (!cashaddr) { prepareError = 'Wallet address unavailable.'; return; }
+			if (!cashaddr) { prepareError = m.mint_err_no_addr(); return; }
 			const { client, topic } = await connectWallet(cashaddr);
 
 			// Build consolidation tx via shared builder.
@@ -470,7 +472,7 @@
 			});
 			if (!bcRes.ok) {
 				const msg = (await bcRes.json().catch(() => ({})) as { message?: string }).message;
-				prepareError = msg ?? `Broadcast failed (${bcRes.status})`;
+				prepareError = msg ?? m.mint_err_broadcast({ status: bcRes.status });
 				return;
 			}
 
@@ -479,7 +481,7 @@
 			fundingUtxosFetched = false;
 			fetchFundingUtxos();
 		} catch (e) {
-			prepareError = (e as Error).message || 'Prepare funding failed';
+			prepareError = (e as Error).message || m.mint_err_prepare_failed();
 		} finally {
 			prepareInProgress = false;
 		}
@@ -491,11 +493,11 @@
 		broadcasting = true;
 		try {
 			if (!signedTxHex.trim()) {
-				broadcastError = 'Paste your signed tx hex from the wallet.';
+				broadcastError = m.mint_err_paste_signed();
 				return;
 			}
 			if (!/^[0-9a-fA-F]+$/.test(signedTxHex.trim())) {
-				broadcastError = 'Signed tx must be hex (0-9, a-f).';
+				broadcastError = m.mint_err_signed_hex();
 				return;
 			}
 			// Guard: pasting the unsigned tx back without signing is the
@@ -504,11 +506,11 @@
 			// is 106-108 bytes (71-73 byte DER sig + 33 byte pubkey + 1-2
 			// byte push opcodes). Any signed tx must be ≥ 228 bytes.
 			if (signedTxHex.trim().length < 460) {
-				broadcastError = 'This hex is too short to be a signed transaction — it looks like the unsigned tx from step 4. Sign it in your wallet first, then paste the signed version.';
+				broadcastError = m.mint_err_too_short();
 				return;
 			}
 			if (genesisBuild && signedTxHex.trim() === genesisBuild.unsignedTxHex) {
-				broadcastError = 'This is the unsigned transaction. Sign it in your wallet first, then paste the signed hex here.';
+				broadcastError = m.mint_err_unsigned();
 				return;
 			}
 			const res = await fetch('/api/mint/broadcast', {
@@ -518,7 +520,7 @@
 			});
 			const body = (await res.json().catch(() => ({}))) as { txid?: string; message?: string };
 			if (!res.ok) {
-				broadcastError = body.message ?? `Broadcast failed (${res.status})`;
+				broadcastError = body.message ?? m.mint_err_broadcast({ status: res.status });
 				return;
 			}
 			broadcastTxid = body.txid ?? null;
@@ -584,7 +586,7 @@
 			// Auto-redirect to token page after 3 seconds.
 			if (mintedCategoryHex) {
 				setTimeout(() => {
-					window.location.href = `/token/${mintedCategoryHex}`;
+					window.location.href = localizeHref(`/token/${mintedCategoryHex}`);
 				}, 3000);
 			}
 		} finally {
@@ -644,15 +646,15 @@
 	async function uploadIconToIpfs() {
 		iconError = null;
 		if (!iconFile) {
-			iconError = 'Pick an icon file first.';
+			iconError = m.mint_err_pick_icon();
 			return;
 		}
 		if (iconFile.size > 2 * 1024 * 1024) {
-			iconError = 'Icon must be ≤ 2 MiB (matches the icon-safety pipeline cap).';
+			iconError = m.mint_err_icon_size();
 			return;
 		}
 		if (!ipfsApiKey.trim()) {
-			iconError = 'Paste your IPFS provider API key first (same widget as below).';
+			iconError = m.mint_err_icon_key();
 			return;
 		}
 		iconUploading = true;
@@ -673,11 +675,11 @@
 		ipfsCid = null;
 		const json = bcmrJsonString();
 		if (!json) {
-			ipfsError = 'BCMR not ready (broadcast first).';
+			ipfsError = m.mint_err_bcmr_not_ready();
 			return;
 		}
 		if (!ipfsApiKey.trim()) {
-			ipfsError = 'Paste your IPFS provider API key first.';
+			ipfsError = m.mint_err_ipfs_key();
 			return;
 		}
 		ipfsUploading = true;
@@ -702,7 +704,7 @@
 	// fresh in the same browser session.
 	async function discardDraft() {
 		discardError = null;
-		if (!confirm('Discard this draft? You will lose any progress in the current wizard.')) return;
+		if (!confirm(m.mint_discard_confirm())) return;
 		// No server session yet (user dropped before crossing step 1) —
 		// just clear local state and bounce back to step 1.
 		if (!sessionId) {
@@ -717,7 +719,7 @@
 				body: JSON.stringify({ state: 'abandoned' })
 			});
 			if (!res.ok) {
-				discardError = `Could not discard (${res.status}).`;
+				discardError = m.mint_err_discard({ status: res.status });
 				return;
 			}
 			resetWizardLocal();
@@ -764,14 +766,21 @@
 		URL.revokeObjectURL(url);
 	}
 
-	const stepLabels = ['Type', 'Identity', 'Supply', 'Review', 'Sign & broadcast', 'Publish'];
+	const stepLabels = $derived([
+		m.mint_step_type(),
+		m.mint_step_identity(),
+		m.mint_step_supply(),
+		m.mint_step_review(),
+		m.mint_step_sign(),
+		m.mint_step_publish()
+	]);
 </script>
 
 <svelte:head>
-	<title>Mint a CashToken — Token Stork</title>
+	<title>{m.mint_meta_title()}</title>
 	<meta
 		name="description"
-		content="Mint your own BCH CashToken (FT, NFT, or hybrid) directly from your wallet."
+		content={m.mint_meta_description()}
 	/>
 	<!-- Wallet-gated workflow page; the unauthenticated CTA is the only
 	     thing crawlers would index, and there's no SEO upside to it. -->
@@ -781,13 +790,13 @@
 <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 	<div class="mb-8">
 		<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent">
-			Mint a CashToken
+			{m.mint_h1()}
 		</h1>
 		<p class="mt-2 max-w-2xl ts-text-muted">
-			Create your own fungible token, NFT, or hybrid on the Bitcoin Cash chain. Walk through the
-			six-step wizard, sign the genesis transaction with your wallet, and your category appears
-			on the directory within minutes.
+			{m.mint_intro()}
 		</p>
+		<!-- Risk/alpha disclaimer kept in English (authoritative), per the
+		     legal-English-only policy; only the Terms link is localized. -->
 		<div
 			class="mt-4 max-w-2xl px-4 py-3 rounded-lg border bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/40 text-sm text-amber-800 dark:text-amber-200"
 			role="note"
@@ -796,7 +805,7 @@
 			BCH transaction. Construction is libauth-direct and untested at scale; the operator makes
 			no warranty as to correctness. Test with a low-stakes wallet first, verify every output in
 			your wallet's pre-sign review, and accept that bugs are possible. See the
-			<a href="/terms#tools-alpha" class="underline">Terms</a> for the full disclaimer.
+			<a href={localizeHref('/terms#tools-alpha')} class="underline">Terms</a> for the full disclaimer.
 		</div>
 	</div>
 
@@ -804,21 +813,19 @@
 		<div class="p-8 rounded-xl border text-center max-w-xl mx-auto ts-border-subtle ts-surface-panel">
 			<div class="text-5xl mb-3">🔒</div>
 			<h2 class="text-xl font-semibold text-slate-900 dark:text-white mb-2">
-				Wallet sign-in required
+				{m.mint_auth_required()}
 			</h2>
 			<p class="text-sm mb-5 ts-text-muted">
-				Minting a CashToken means signing an on-chain transaction with the BCH address that owns
-				the funding UTXO. We don't store your private key, we don't email you, and we don't ask
-				for any other identity — your wallet IS the account.
+				{m.mint_auth_body()}
 			</p>
 			<a
-				href="/login?next=/mint"
+				href={localizeHref('/login?next=/mint')}
 				class="inline-block px-5 py-2.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-medium transition-colors"
 			>
-				Sign in with your wallet
+				{m.mint_auth_signin()}
 			</a>
 			<p class="mt-3 text-xs ts-text-muted">
-				Lost key = lost account. That's an intended property; not a bug.
+				{m.mint_auth_lost_key()}
 			</p>
 		</div>
 	{:else}
@@ -827,7 +834,7 @@
 				class="mb-4 px-4 py-2 rounded-lg border bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/40 text-xs text-amber-800 dark:text-amber-200"
 				role="status"
 			>
-				Couldn't save your draft on the last step transition — your progress is in memory only. A refresh will lose it. Next save attempt will retry automatically.
+				{m.mint_save_failed()}
 			</div>
 		{/if}
 		<ol class="flex items-center justify-between mb-8 text-xs sm:text-sm">
@@ -855,16 +862,15 @@
 
 		<div class="p-6 sm:p-8 rounded-xl border ts-border-subtle ts-surface-panel">
 			{#if step === 1}
-				<h2 class="text-xl font-semibold text-slate-900 dark:text-white mb-2">1. Pick a token type</h2>
+				<h2 class="text-xl font-semibold text-slate-900 dark:text-white mb-2">{m.mint_s1_h()}</h2>
 				<p class="text-sm mb-5 ts-text-muted">
-					CashTokens has three flavors. The type is part of the genesis transaction and can't be
-					changed once minted.
+					{m.mint_s1_desc()}
 				</p>
 				<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
 					{#each [
-						{ id: 'FT', label: 'Fungible (FT)', desc: 'A divisible token with a fixed total supply, like USD or BTC. Choose this for currencies, governance tokens, points.' },
-						{ id: 'NFT', label: 'Non-fungible (NFT)', desc: 'Each token is unique with optional commitment data. Choose this for art, collectibles, identity claims.' },
-						{ id: 'FT+NFT', label: 'Hybrid', desc: 'Both at once. The minting NFT controls future FT issuance — common for governance + treasury tokens.' }
+						{ id: 'FT', label: m.mint_type_ft_label(), desc: m.mint_type_ft_desc() },
+						{ id: 'NFT', label: m.mint_type_nft_label(), desc: m.mint_type_nft_desc() },
+						{ id: 'FT+NFT', label: m.mint_type_hybrid_label(), desc: m.mint_type_hybrid_desc() }
 					] as opt (opt.id)}
 						<button
 							type="button"
@@ -877,61 +883,59 @@
 					{/each}
 				</div>
 			{:else if step === 2}
-				<h2 class="text-xl font-semibold text-slate-900 dark:text-white mb-2">2. Identity</h2>
+				<h2 class="text-xl font-semibold text-slate-900 dark:text-white mb-2">{m.mint_s2_h()}</h2>
 				<p class="text-sm mb-5 ts-text-muted">
-					What this token is called and what it looks like. Will be published as BCMR metadata
-					so wallets and explorers display it consistently.
+					{m.mint_s2_desc()}
 				</p>
 				<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
 					<label class="block">
-						<span class="text-sm font-medium ts-text-strong">Name</span>
-						<input type="text" bind:value={name} maxlength="80" placeholder="e.g. Wonderland Token" class="mt-1 w-full rounded-lg border px-3 py-2 text-sm ts-border-strong ts-surface-page" />
+						<span class="text-sm font-medium ts-text-strong">{m.mint_field_name()}</span>
+						<input type="text" bind:value={name} maxlength="80" placeholder={m.mint_name_ph()} class="mt-1 w-full rounded-lg border px-3 py-2 text-sm ts-border-strong ts-surface-page" />
 					</label>
 					<label class="block">
-						<span class="text-sm font-medium ts-text-strong">Ticker</span>
-						<input type="text" bind:value={ticker} maxlength="12" placeholder="e.g. WLT" class="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-mono uppercase ts-border-strong ts-surface-page" />
+						<span class="text-sm font-medium ts-text-strong">{m.mint_field_ticker()}</span>
+						<input type="text" bind:value={ticker} maxlength="12" placeholder={m.mint_ticker_ph()} class="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-mono uppercase ts-border-strong ts-surface-page" />
 					</label>
 					{#if tokenType !== 'NFT'}
 						<label class="block">
-							<span class="text-sm font-medium ts-text-strong">Decimals (0–8)</span>
+							<span class="text-sm font-medium ts-text-strong">{m.mint_field_decimals()}</span>
 							<input type="number" min="0" max="8" bind:value={decimals} class="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-mono ts-border-strong ts-surface-page" />
 						</label>
 					{/if}
 					<label class="block sm:col-span-2">
-						<span class="text-sm font-medium ts-text-strong">Description (optional)</span>
-						<textarea bind:value={description} maxlength="500" rows="3" placeholder="A sentence or two for the BCMR metadata." class="mt-1 w-full rounded-lg border px-3 py-2 text-sm ts-border-strong ts-surface-page"></textarea>
+						<span class="text-sm font-medium ts-text-strong">{m.mint_field_description()}</span>
+						<textarea bind:value={description} maxlength="500" rows="3" placeholder={m.mint_description_ph()} class="mt-1 w-full rounded-lg border px-3 py-2 text-sm ts-border-strong ts-surface-page"></textarea>
 					</label>
 					<label class="block sm:col-span-2">
-						<span class="text-sm font-medium ts-text-strong">Icon URI (optional)</span>
-						<input type="text" bind:value={iconUri} placeholder="https://… or ipfs://… — leave empty to publish without an icon" class="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-mono ts-border-strong ts-surface-page" />
+						<span class="text-sm font-medium ts-text-strong">{m.mint_field_icon_uri()}</span>
+						<input type="text" bind:value={iconUri} placeholder={m.mint_icon_uri_ph()} class="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-mono ts-border-strong ts-surface-page" />
 					</label>
 				</div>
 				<details class="mt-4 p-4 rounded-lg border bg-slate-50 dark:bg-zinc-950 text-xs ts-border-subtle">
-					<summary class="cursor-pointer text-sm font-medium ts-text-strong">Pin an icon file to IPFS</summary>
+					<summary class="cursor-pointer text-sm font-medium ts-text-strong">{m.mint_pin_icon_summary()}</summary>
 					<p class="mt-3 ts-text-muted">
-						Upload a static raster (PNG / JPEG / WebP, ≤ 2 MiB) directly from your browser to
-						<strong>Pinata</strong> or <strong>Lighthouse</strong> using your own API key.
-						The file never reaches Token Stork's server. Once pinned, the resulting
-						<code>ipfs://&lt;cid&gt;</code> populates the Icon URI field above.
+						{m.mint_pin_icon_desc_a()}
+						<strong>Pinata</strong> {m.mint_pin_icon_desc_b()} <strong>Lighthouse</strong> {m.mint_pin_icon_desc_c()}
+						<code>ipfs://&lt;cid&gt;</code> {m.mint_pin_icon_desc_d()}
 					</p>
 					<div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
 						<label class="block">
-							<span class="font-medium ts-text-strong">Provider</span>
+							<span class="font-medium ts-text-strong">{m.mint_field_provider()}</span>
 							<select bind:value={ipfsProvider} class="mt-1 w-full rounded-lg border px-2 py-1.5 text-xs ts-border-strong ts-surface-page">
 								<option value="pinata">Pinata</option>
 								<option value="lighthouse">Lighthouse</option>
 							</select>
 						</label>
 						<label class="block sm:col-span-2">
-							<span class="font-medium ts-text-strong">API key</span>
-							<input type="password" bind:value={ipfsApiKey} placeholder="your bearer token (cleared after upload)" class="mt-1 w-full rounded-lg border px-2 py-1.5 text-xs font-mono ts-border-strong ts-surface-page" />
+							<span class="font-medium ts-text-strong">{m.mint_field_api_key()}</span>
+							<input type="password" bind:value={ipfsApiKey} placeholder={m.mint_api_key_ph()} class="mt-1 w-full rounded-lg border px-2 py-1.5 text-xs font-mono ts-border-strong ts-surface-page" />
 						</label>
 						<label class="block sm:col-span-2">
-							<span class="font-medium ts-text-strong">Icon file</span>
+							<span class="font-medium ts-text-strong">{m.mint_field_icon_file()}</span>
 							<input type="file" accept="image/png,image/jpeg,image/webp" onchange={(e) => (iconFile = (e.currentTarget as HTMLInputElement).files?.[0] ?? null)} class="mt-1 w-full text-xs" />
 						</label>
 						<button type="button" onclick={uploadIconToIpfs} disabled={iconUploading || !iconFile || !ipfsApiKey.trim()} class="mt-5 px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-white text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed">
-							{iconUploading ? 'Pinning…' : 'Pin icon'}
+							{iconUploading ? m.mint_pinning() : m.mint_pin_icon()}
 						</button>
 					</div>
 					{#if iconError}
@@ -939,59 +943,57 @@
 					{/if}
 				</details>
 			{:else if step === 3}
-				<h2 class="text-xl font-semibold text-slate-900 dark:text-white mb-2">3. Supply</h2>
+				<h2 class="text-xl font-semibold text-slate-900 dark:text-white mb-2">{m.mint_s3_h()}</h2>
 				{#if tokenType === 'FT' || tokenType === 'FT+NFT'}
 					<p class="text-sm mb-5 ts-text-muted">
-						The total supply minted at genesis. This is the only mint event unless you keep
-						the minting NFT (FT+NFT hybrid). Up to 2<sup>63</sup>−1 per CHIP-2022-02.
+						{m.mint_s3_ft_desc_a()}<sup>63</sup>{m.mint_s3_ft_desc_b()}
 					</p>
 					<label class="block max-w-md">
-						<span class="text-sm font-medium ts-text-strong">Total supply (smallest unit)</span>
-						<input type="text" inputmode="numeric" bind:value={totalSupply} placeholder="e.g. 100000000" class="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-mono ts-border-strong ts-surface-page" />
+						<span class="text-sm font-medium ts-text-strong">{m.mint_field_total_supply()}</span>
+						<input type="text" inputmode="numeric" bind:value={totalSupply} placeholder={m.mint_supply_ph()} class="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-mono ts-border-strong ts-surface-page" />
 					</label>
 				{/if}
 				{#if tokenType === 'NFT' || tokenType === 'FT+NFT'}
 					<div class="mt-6">
 						<label class="block max-w-md">
-							<span class="text-sm font-medium ts-text-strong">NFT commitment (hex, ≤ 40 bytes)</span>
-							<input type="text" bind:value={nftCommitmentHex} placeholder="optional — leave empty for none" class="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-mono ts-border-strong ts-surface-page" />
+							<span class="text-sm font-medium ts-text-strong">{m.mint_field_commitment()}</span>
+							<input type="text" bind:value={nftCommitmentHex} placeholder={m.mint_commitment_ph()} class="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-mono ts-border-strong ts-surface-page" />
 						</label>
 						<label class="block mt-3 max-w-md">
-							<span class="text-sm font-medium ts-text-strong">NFT capability</span>
+							<span class="text-sm font-medium ts-text-strong">{m.mint_field_capability()}</span>
 							<select bind:value={nftCapability} class="mt-1 w-full rounded-lg border px-3 py-2 text-sm ts-border-strong ts-surface-page">
-								<option value="none">None — pure NFT, can't mint or mutate</option>
-								<option value="mutable">Mutable — commitment can change</option>
-								<option value="minting">Minting — controls future FT issuance</option>
+								<option value="none">{m.mint_cap_none()}</option>
+								<option value="mutable">{m.mint_cap_mutable()}</option>
+								<option value="minting">{m.mint_cap_minting()}</option>
 							</select>
 						</label>
 					</div>
 				{/if}
 			{:else if step === 4}
-				<h2 class="text-xl font-semibold text-slate-900 dark:text-white mb-2">4. Review</h2>
+				<h2 class="text-xl font-semibold text-slate-900 dark:text-white mb-2">{m.mint_s4_h()}</h2>
 				<p class="text-sm mb-4 ts-text-muted">
-					Your token's <strong>category ID</strong> is the txid of a UTXO you own at
-					<strong>vout=0</strong>. We'll auto-detect suitable UTXOs from your wallet below.
-					The recipient is automatically set to your authenticated address.
+					{m.mint_s4_desc_a()} <strong>{m.mint_category_id()}</strong> {m.mint_s4_desc_b()}
+					<strong>vout=0</strong>. {m.mint_s4_desc_c()}
 				</p>
 
 				<!-- Funding UTXO selector -->
 				<div class="mb-5 p-4 rounded-lg border ts-border-subtle bg-slate-50 dark:bg-zinc-950">
 					<div class="flex items-center justify-between mb-3">
-						<span class="text-sm font-medium ts-text-strong">Funding UTXO</span>
+						<span class="text-sm font-medium ts-text-strong">{m.mint_funding_utxo()}</span>
 						<button type="button" onclick={fetchFundingUtxos}
 							class="text-xs px-2 py-1 rounded border ts-border-strong hover:bg-slate-100 dark:hover:bg-zinc-900">
-							{fundingUtxosLoading ? 'Checking…' : '🔄 Refresh'}
+							{fundingUtxosLoading ? m.mint_checking() : `🔄 ${m.mint_refresh()}`}
 						</button>
 					</div>
 
 					{#if fundingUtxosLoading}
-						<p class="text-xs ts-text-muted">Checking your wallet for suitable UTXOs…</p>
+						<p class="text-xs ts-text-muted">{m.mint_checking_utxos()}</p>
 					{:else if fundingUtxosError}
 						<p class="text-xs text-amber-600 dark:text-amber-400">{fundingUtxosError}</p>
-						<p class="text-xs mt-1 ts-text-muted">You can still paste a txid manually below.</p>
+						<p class="text-xs mt-1 ts-text-muted">{m.mint_paste_manual_note()}</p>
 					{:else if fundingUtxos.length > 0}
 						<label class="block">
-							<span class="text-xs font-medium ts-text-muted">Select a vout=0 UTXO</span>
+							<span class="text-xs font-medium ts-text-muted">{m.mint_select_vout0()}</span>
 							<select bind:value={outpointTxid} class="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-mono ts-border-strong ts-surface-page"
 								onchange={(e) => {
 									const txid = (e.currentTarget as HTMLSelectElement).value;
@@ -999,14 +1001,14 @@
 									if (match) outpointSatoshis = match.valueSats;
 								}}>
 								{#each fundingUtxos as utxo}
-									<option value={utxo.txid}>{utxo.txid.slice(0,16)}… — {utxo.valueSats.toLocaleString()} sats</option>
+									<option value={utxo.txid}>{utxo.txid.slice(0,16)}… — {utxo.valueSats.toLocaleString(getLocale())} sats</option>
 								{/each}
 							</select>
 						</label>
-						<p class="text-xs mt-2 ts-text-muted">Found {fundingUtxos.length} suitable UTXO{fundingUtxos.length===1?'':'s'} at vout=0.</p>
+						<p class="text-xs mt-2 ts-text-muted">{fundingUtxos.length === 1 ? m.mint_found_utxos_one({ count: fundingUtxos.length }) : m.mint_found_utxos_many({ count: fundingUtxos.length })}</p>
 						{#if plainUtxos.filter(u => u.txid !== outpointTxid).length > 0}
 							<details class="text-xs mt-2" open={extraInputTxids.length > 0}>
-								<summary class="cursor-pointer ts-text-muted">+ Add extra funding ({plainUtxos.filter(u => u.txid !== outpointTxid).length} UTXOs)</summary>
+								<summary class="cursor-pointer ts-text-muted">{m.mint_add_extra({ count: plainUtxos.filter(u => u.txid !== outpointTxid).length })}</summary>
 								<div class="mt-2 max-h-32 overflow-y-auto space-y-1">
 									{#each plainUtxos.filter(u => u.txid !== outpointTxid) as u}
 										<label class="flex items-center gap-2 text-xs ts-text-muted cursor-pointer">
@@ -1020,7 +1022,7 @@
 												}}
 											/>
 											<span class="font-mono">{u.txid.slice(0,12)}… vout={u.vout}</span>
-											<span class="ml-auto">{u.valueSats.toLocaleString()} sats</span>
+											<span class="ml-auto">{u.valueSats.toLocaleString(getLocale())} sats</span>
 										</label>
 									{/each}
 								</div>
@@ -1028,41 +1030,41 @@
 						{/if}
 					{:else if fundingUtxosDiag}
 						<div class="text-xs space-y-2">
-							<p class="text-amber-700 dark:text-amber-300"><strong>No suitable vout=0 UTXOs found.</strong></p>
-							<p class="ts-text-muted">Your wallet has <strong>{fundingUtxosDiag.total}</strong> UTXOs total. Breakdown:</p>
+							<p class="text-amber-700 dark:text-amber-300"><strong>{m.mint_no_vout0()}</strong></p>
+							<p class="ts-text-muted">{m.mint_wallet_has_a()} <strong>{fundingUtxosDiag.total}</strong> {m.mint_wallet_has_b()}</p>
 							<ul class="list-disc pl-4 space-y-0.5 ts-text-muted">
-								<li>{fundingUtxosDiag.notVout0} skipped — not at vout=0</li>
-								{#if fundingUtxosDiag.hasTokens > 0}<li>{fundingUtxosDiag.hasTokens} skipped — carry tokens</li>{/if}
+								<li>{m.mint_skipped_notvout0({ count: fundingUtxosDiag.notVout0 })}</li>
+								{#if fundingUtxosDiag.hasTokens > 0}<li>{m.mint_skipped_tokens({ count: fundingUtxosDiag.hasTokens })}</li>{/if}
 							</ul>
 							{#if plainUtxos.length > 0}
 								<div class="mt-3 p-3 rounded bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-900">
-									<p class="text-xs text-violet-900 dark:text-violet-200 mb-2"><strong>You have {plainUtxos.length} plain-BCH UTXOs.</strong> Consolidate into one vout=0 with one wallet tap.</p>
+									<p class="text-xs text-violet-900 dark:text-violet-200 mb-2"><strong>{m.mint_plain_cta_strong({ count: plainUtxos.length })}</strong> {m.mint_plain_cta_rest()}</p>
 									<button type="button" onclick={prepareFunding} disabled={prepareInProgress}
 										class="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium">
-										{prepareInProgress ? 'Connecting…' : '🚀 Create funding UTXO'}
+										{prepareInProgress ? m.mint_connecting() : `🚀 ${m.mint_create_funding()}`}
 									</button>
 									{#if prepareError}<p class="text-xs text-rose-600 mt-2">{prepareError}</p>{/if}
-									{#if prepareDone}<p class="text-xs text-emerald-600 mt-2">Broadcast! Refreshing…</p>{/if}
+									{#if prepareDone}<p class="text-xs text-emerald-600 mt-2">{m.mint_broadcast_refresh()}</p>{/if}
 								</div>
 							{:else}
-								<p class="text-amber-700 dark:text-amber-300 mt-1"><strong>No plain-BCH UTXOs.</strong> Send BCH to yourself first.</p>
+								<p class="text-amber-700 dark:text-amber-300 mt-1"><strong>{m.mint_no_plain_strong()}</strong> {m.mint_no_plain_rest()}</p>
 							{/if}
 						</div>
 					{:else}
-						<p class="text-xs ts-text-muted">Click Refresh to scan your wallet.</p>
+						<p class="text-xs ts-text-muted">{m.mint_click_refresh()}</p>
 					{/if}
 				</div>
 
 				<!-- Manual override -->
 				<details class="text-xs mb-5 ts-text-muted">
-					<summary class="cursor-pointer">Or paste a txid manually</summary>
+					<summary class="cursor-pointer">{m.mint_paste_txid_summary()}</summary>
 					<div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
 						<label class="block sm:col-span-2">
-							<span class="text-xs font-medium ts-text-strong">Outpoint txid (vout=0)</span>
-							<input type="text" bind:value={outpointTxid} placeholder="64-char hex" class="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-mono ts-border-strong ts-surface-page" />
+							<span class="text-xs font-medium ts-text-strong">{m.mint_field_outpoint_txid()}</span>
+							<input type="text" bind:value={outpointTxid} placeholder={m.mint_outpoint_ph()} class="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-mono ts-border-strong ts-surface-page" />
 						</label>
 						<label class="block">
-							<span class="text-xs font-medium ts-text-strong">UTXO value (sats)</span>
+							<span class="text-xs font-medium ts-text-strong">{m.mint_field_utxo_value()}</span>
 							<input type="number" min="1000" bind:value={outpointSatoshis} class="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-mono ts-border-strong ts-surface-page" />
 						</label>
 					</div>
@@ -1080,58 +1082,57 @@
 				{#if genesisBuild}
 					<dl class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
 						<div>
-							<dt class="text-xs uppercase tracking-wide ts-text-muted">Type</dt>
+							<dt class="text-xs uppercase tracking-wide ts-text-muted">{m.mint_dl_type()}</dt>
 							<dd class="mt-1 font-mono text-slate-900 dark:text-white">{tokenType}</dd>
 						</div>
 						<div>
-							<dt class="text-xs uppercase tracking-wide ts-text-muted">Name / Ticker</dt>
+							<dt class="text-xs uppercase tracking-wide ts-text-muted">{m.mint_dl_name_ticker()}</dt>
 							<dd class="mt-1 text-slate-900 dark:text-white">{name} <span class="font-mono text-xs">({ticker})</span></dd>
 						</div>
 						<div class="sm:col-span-2">
-							<dt class="text-xs uppercase tracking-wide ts-text-muted">Resulting category id</dt>
+							<dt class="text-xs uppercase tracking-wide ts-text-muted">{m.mint_dl_category_id()}</dt>
 							<dd class="mt-1 font-mono text-xs break-all text-slate-900 dark:text-white">{genesisBuild.categoryHex}</dd>
 						</div>
 						<div>
-							<dt class="text-xs uppercase tracking-wide ts-text-muted">Estimated tx size</dt>
-							<dd class="mt-1 font-mono text-slate-900 dark:text-white">{genesisBuild.estimatedTxBytes} bytes</dd>
+							<dt class="text-xs uppercase tracking-wide ts-text-muted">{m.mint_dl_tx_size()}</dt>
+							<dd class="mt-1 font-mono text-slate-900 dark:text-white">{genesisBuild.estimatedTxBytes} {m.mint_bytes()}</dd>
 						</div>
 						<div>
-							<dt class="text-xs uppercase tracking-wide ts-text-muted">Fee</dt>
+							<dt class="text-xs uppercase tracking-wide ts-text-muted">{m.mint_dl_fee()}</dt>
 							<dd class="mt-1 font-mono text-slate-900 dark:text-white">{genesisBuild.feeSats} sats</dd>
 						</div>
 						<div>
-							<dt class="text-xs uppercase tracking-wide ts-text-muted">Change back to you</dt>
+							<dt class="text-xs uppercase tracking-wide ts-text-muted">{m.mint_dl_change()}</dt>
 							<dd class="mt-1 font-mono text-slate-900 dark:text-white">{genesisBuild.changeSats} sats</dd>
 						</div>
 					</dl>
 					<details class="mt-4 text-xs ts-text-muted">
-						<summary class="cursor-pointer">Show unsigned tx hex</summary>
+						<summary class="cursor-pointer">{m.mint_show_unsigned()}</summary>
 						<p class="mt-2">
-							Note: the input's unlocking script is empty here — your wallet fills it during
-							signing. That's why the hex below is shorter than the typical 220+ byte signed tx.
+							{m.mint_unsigned_note()}
 						</p>
 					</details>
 				{/if}
 			{:else if step === 5}
-				<h2 class="text-xl font-semibold text-slate-900 dark:text-white mb-2">5. Sign & broadcast</h2>
+				<h2 class="text-xl font-semibold text-slate-900 dark:text-white mb-2">{m.mint_s5_h()}</h2>
 
 				<!-- Unsigned tx hex — surfaced here so the user doesn't need to go back to step 4 -->
 				<div class="mb-5 p-4 rounded-lg border ts-border-subtle bg-slate-50 dark:bg-zinc-950">
 					<div class="flex items-center justify-between mb-2">
-						<span class="text-sm font-medium ts-text-strong">Unsigned transaction</span>
+						<span class="text-sm font-medium ts-text-strong">{m.mint_unsigned_tx()}</span>
 						<button
 							type="button"
 							onclick={copyUnsignedTx}
 							disabled={!genesisBuild}
 							class="text-xs px-2 py-1 rounded border ts-border-strong hover:bg-slate-100 dark:hover:bg-zinc-900 disabled:opacity-50"
 						>
-							{copiedUnsignedTx ? 'Copied ✓' : '📋 Copy'}
+							{copiedUnsignedTx ? `${m.ui_copied()} ✓` : `📋 ${m.ui_copy()}`}
 						</button>
 					</div>
 					<p class="text-xs mb-2 ts-text-muted">
-						Sign this in your wallet, then paste the <strong>signed</strong> hex below.
+						{m.mint_sign_then_a()} <strong>{m.mint_signed_word()}</strong> {m.mint_sign_then_b()}
 					</p>
-					<pre class="p-3 rounded bg-white dark:bg-black border break-all whitespace-pre-wrap text-[10px] font-mono ts-border-subtle">{genesisBuild?.unsignedTxHex ?? '(build the tx in step 4 first)'}</pre>
+					<pre class="p-3 rounded bg-white dark:bg-black border break-all whitespace-pre-wrap text-[10px] font-mono ts-border-subtle">{genesisBuild?.unsignedTxHex ?? m.mint_build_first_ph()}</pre>
 				</div>
 
 
@@ -1142,9 +1143,9 @@
 						disabled={wcSigning || !genesisBuild}
 						class="px-5 py-2.5 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium"
 					>
-						{wcSigning ? 'Connecting to wallet…' : '✍️ Sign with Wallet'}
+						{wcSigning ? m.mint_connecting_wallet() : `✍️ ${m.mint_sign_with_wallet()}`}
 					</button>
-					<span class="text-xs ts-text-muted">or paste signed hex below</span>
+					<span class="text-xs ts-text-muted">{m.mint_or_paste_signed()}</span>
 				</div>
 
 				{#if wcSignError}
@@ -1152,40 +1153,36 @@
 				{/if}
 
 				<label class="block">
-					<span class="text-sm font-medium ts-text-strong">Signed tx (hex)</span>
+					<span class="text-sm font-medium ts-text-strong">{m.mint_field_signed_tx()}</span>
 					<textarea bind:value={signedTxHex} rows="4" placeholder="0200000001..." class="mt-1 w-full rounded-lg border px-3 py-2 text-xs font-mono break-all ts-border-strong ts-surface-page"></textarea>
 				</label>
 				{#if broadcastError}
 					<p class="mt-3 text-sm text-rose-600 dark:text-rose-400">{broadcastError}</p>
 				{/if}
 				<button type="button" onclick={broadcast} disabled={broadcasting || !signedTxHex.trim()} class="mt-4 px-5 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium">
-					{broadcasting ? 'Broadcasting…' : 'Broadcast'}
+					{broadcasting ? m.mint_broadcasting() : m.mint_broadcast()}
 				</button>
 			{:else if step === 6}
-				<h2 class="text-xl font-semibold text-slate-900 dark:text-white mb-2">6. Publish BCMR</h2>
+				<h2 class="text-xl font-semibold text-slate-900 dark:text-white mb-2">{m.mint_s6_h()}</h2>
 				<div class="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 text-sm text-emerald-900 dark:text-emerald-200 mb-5">
-					<strong>Genesis broadcast ✓</strong>
+					<strong>{m.mint_genesis_broadcast()} ✓</strong>
 					<div class="mt-2 text-xs">
 						<div>txid: <span class="font-mono break-all">{broadcastTxid}</span></div>
-						<div>category id: <span class="font-mono break-all">{mintedCategoryHex}</span></div>
+						<div>{m.mint_catid_lbl()} <span class="font-mono break-all">{mintedCategoryHex}</span></div>
 					</div>
 					<p class="mt-2">
-						Your token will appear on the directory within ~10 minutes (one block + sync-tail
-						tick). Until then, the BCMR file below is what you publish so wallets and
-						explorers know its identity.
+						{m.mint_s6_appear()}
 					</p>
 				</div>
 				<p class="text-sm mb-3 ts-text-muted">
-					Download the BCMR JSON below, host it at any HTTPS URL you control (or pin it to IPFS
-					and use the <code>ipfs://&lt;cid&gt;</code> form), then submit it to BCMR registries
-					so wallets pick up your token's identity.
+					{m.mint_s6_download_a()} <code>ipfs://&lt;cid&gt;</code>{m.mint_s6_download_b()}
 				</p>
 				<button type="button" onclick={downloadBcmr} class="px-5 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium">
-					Download BCMR JSON
+					{m.mint_download_bcmr()}
 				</button>
 
 				<div class="mt-8 p-5 rounded-xl border bg-slate-50 dark:bg-zinc-950 ts-border-subtle">
-					<h3 class="text-sm font-semibold text-slate-900 dark:text-white mb-2">Or pin directly to IPFS</h3>
+					<h3 class="text-sm font-semibold text-slate-900 dark:text-white mb-2">{m.mint_or_pin_ipfs()}</h3>
 					<p class="text-xs mb-3 ts-text-muted">
 						Paste your own <strong>Pinata</strong> JWT or <strong>Lighthouse</strong> API
 						key. The upload runs <em>directly</em> from your browser to the IPFS provider —
@@ -1207,14 +1204,14 @@
 					</p>
 					<div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
 						<label class="block">
-							<span class="text-xs font-medium ts-text-strong">Provider</span>
+							<span class="text-xs font-medium ts-text-strong">{m.mint_field_provider()}</span>
 							<select bind:value={ipfsProvider} class="mt-1 w-full rounded-lg border px-3 py-2 text-sm ts-border-strong ts-surface-page">
 								<option value="pinata">Pinata (JWT)</option>
 								<option value="lighthouse">Lighthouse</option>
 							</select>
 						</label>
 						<label class="block sm:col-span-2">
-							<span class="text-xs font-medium ts-text-strong">API key (Bearer token)</span>
+							<span class="text-xs font-medium ts-text-strong">{m.mint_field_api_key()}</span>
 							<input type="password" bind:value={ipfsApiKey} placeholder="never sent to Token Stork — browser → IPFS provider directly" class="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-mono ts-border-strong ts-surface-page" />
 						</label>
 					</div>
@@ -1223,13 +1220,13 @@
 					{/if}
 					{#if ipfsCid}
 						<div class="p-3 rounded bg-emerald-100 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-900 text-sm text-emerald-900 dark:text-emerald-200 mb-2">
-							<div class="font-semibold">Pinned ✓</div>
-							<div class="mt-1 text-xs">CID: <span class="font-mono break-all">{ipfsCid}</span></div>
-							<div class="mt-1 text-xs">Use as: <code class="font-mono">ipfs://{ipfsCid}</code></div>
+							<div class="font-semibold">{m.mint_pinned()}</div>
+							<div class="mt-1 text-xs">{m.mint_cid_label()} <span class="font-mono break-all">{ipfsCid}</span></div>
+							<div class="mt-1 text-xs">{m.mint_use_as()} <code class="font-mono">ipfs://{ipfsCid}</code></div>
 						</div>
 					{/if}
 					<button type="button" onclick={uploadBcmrToIpfs} disabled={ipfsUploading || !ipfsApiKey.trim()} class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">
-						{ipfsUploading ? 'Pinning…' : 'Pin BCMR to IPFS'}
+						{ipfsUploading ? m.mint_pinning() : m.mint_pin_bcmr()}
 					</button>
 				</div>
 
@@ -1249,19 +1246,17 @@
 			{#if step !== 5 && step !== 6}
 				<div class="mt-8 flex items-center justify-between">
 					<button type="button" onclick={back} disabled={step === 1} class="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-slate-50 dark:hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed ts-text-strong ts-border-strong">
-						Back
+						{m.mint_back()}
 					</button>
 					<button type="button" onclick={next} disabled={(step === 1 && !!step1Error) || (step === 2 && !!step2Error) || (step === 3 && !!step3Error) || (step === 4 && !genesisBuild)} class="px-5 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">
-						Next
+						{m.mint_next()}
 					</button>
 				</div>
 			{/if}
 		</div>
 
 		<p class="mt-6 text-xs max-w-2xl ts-text-muted">
-			Mint as <span class="font-mono">{data.cashaddr}</span>. The genesis tx will be signed by
-			that address; it must hold a UTXO with enough BCH to cover the genesis output + fees
-			(typically 2000-3000 sats).
+			{m.mint_mint_as_a()} <span class="font-mono">{data.cashaddr}</span>{m.mint_mint_as_b()}
 		</p>
 
 		{#if step !== 6}
@@ -1272,7 +1267,7 @@
 					disabled={discarding}
 					class="text-rose-600 dark:text-rose-400 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
 				>
-					{discarding ? 'Discarding…' : 'Discard this draft'}
+					{discarding ? m.mint_discarding() : m.mint_discard_draft()}
 				</button>
 				{#if discardError}
 					<span class="ml-3 text-rose-600 dark:text-rose-400">{discardError}</span>

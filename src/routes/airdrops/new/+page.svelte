@@ -15,6 +15,8 @@
 
 	import { goto } from '$app/navigation';
 	import { iconHrefFor } from '$lib/icons';
+	import * as m from '$lib/paraglide/messages';
+	import { getLocale, localizeHref } from '$lib/paraglide/runtime';
 
 	let { data } = $props();
 	type MyToken = (typeof data.myTokens)[number];
@@ -219,7 +221,7 @@
 		broadcastError = null;
 		const hex = signedHexInput.trim().toLowerCase();
 		if (!/^[0-9a-f]+$/.test(hex) || hex.length % 2 !== 0) {
-			broadcastError = 'Signed hex must be even-length hex.';
+			broadcastError = m.airdrop_err_hex_even();
 			broadcasting = false;
 			return;
 		}
@@ -237,7 +239,7 @@
 			chunksDone.push({ txIndex: activeChunk.txIndex, txid: body.txid });
 			signedHexInput = '';
 			if (body.snapshotAdvanced) {
-				broadcastError = 'Recipient holder set changed mid-airdrop. Halting; visit the receipt page to redraft remaining chunks.';
+				broadcastError = m.airdrop_err_snapshot_advanced();
 				activeChunk = null;
 				return;
 			}
@@ -245,7 +247,7 @@
 				activeChunk = body.nextChunk;
 			} else {
 				// All done — go to receipt page.
-				goto(`/airdrops/${airdropId}`);
+				goto(localizeHref(`/airdrops/${airdropId}`));
 			}
 		} catch (err) {
 			broadcastError = (err as Error).message;
@@ -266,17 +268,15 @@
 </script>
 
 <svelte:head>
-	<title>Airdrop — Token Stork</title>
+	<title>{m.airdrop_meta_title()}</title>
 </svelte:head>
 
 <div class="max-w-3xl mx-auto px-4 py-8">
 	<h1 class="text-3xl font-bold mb-1 text-slate-900 dark:text-white">
-		Airdrop CashTokens
+		{m.airdrop_h1()}
 	</h1>
 	<p class="ts-text-muted mb-6">
-		Send tokens you hold to every wallet that holds another token. Equal split or proportional to
-		recipient holdings. Built on local <code>token_holders</code> data — no third-party indexer
-		queries.
+		{m.airdrop_intro_before()} <code>token_holders</code> {m.airdrop_intro_after()}
 	</p>
 
 	<!-- Alpha-tooling disclaimer (rendered every step). -->
@@ -289,7 +289,7 @@
 		low-stakes source token + a small recipient set first; verify every output in your wallet's
 		pre-sign review; accept that bugs are possible. The operator makes no warranty as to correctness
 		or against partial-broadcast outcomes. See the
-		<a href="/terms#tools-alpha" class="underline">Terms</a> for the full disclaimer.
+		<a href={localizeHref('/terms#tools-alpha')} class="underline">Terms</a> for the full disclaimer.
 	</div>
 
 	<!-- Privacy disclosure (rendered every step). -->
@@ -311,7 +311,7 @@
 				<span
 					class={`inline-flex items-center justify-center w-5 h-5 rounded-full border ${n <= step ? 'border-violet-500 bg-violet-50 dark:bg-violet-950/40' : 'border-slate-300 dark:border-zinc-700'}`}
 				>{n}</span>
-				<span class="hidden sm:inline">{['Source', 'Target', 'Amount', 'Review', 'Sign'][n - 1]}</span>
+				<span class="hidden sm:inline">{[m.airdrop_step_source(), m.airdrop_step_target(), m.airdrop_step_amount(), m.airdrop_step_review(), m.airdrop_step_sign()][n - 1]}</span>
 				{#if n < 5}<span class="px-1">→</span>{/if}
 			</li>
 		{/each}
@@ -319,19 +319,16 @@
 
 	{#if step === 1}
 		<section class="rounded-xl border ts-border-subtle p-5 ts-surface-panel">
-			<h2 class="text-lg font-semibold mb-3 ts-text-strong">1. Source token</h2>
-			<p class="text-sm ts-text-muted mb-3">Which of YOUR tokens are you airdropping?</p>
+			<h2 class="text-lg font-semibold mb-3 ts-text-strong">{m.airdrop_s1_h()}</h2>
+			<p class="text-sm ts-text-muted mb-3">{m.airdrop_s1_q()}</p>
 
 			{#if data.myTokens.length === 0}
 				<div class="px-4 py-3 rounded-lg border ts-border-subtle text-sm ts-text-muted">
-					Your wallet doesn't currently hold any non-moderated CashTokens. Receive
-					some on this address (or wait for the next 6h enrich tick if you just
-					received a token) and come back.
+					{m.airdrop_no_tokens()}
 				</div>
 			{:else}
 				<p class="text-xs ts-text-muted mb-2">
-					{data.myTokens.length} category{data.myTokens.length === 1 ? '' : 's'} in your
-					wallet. Click one to airdrop:
+					{data.myTokens.length} {data.myTokens.length === 1 ? m.airdrop_category() : m.airdrop_categories()} {m.airdrop_in_wallet_suffix()}
 				</p>
 				<div class="rounded border ts-border-subtle max-h-96 overflow-y-auto">
 					<ul class="divide-y ts-border-subtle">
@@ -359,7 +356,7 @@
 										<div class="font-mono">
 											{(() => {
 												const big = BigInt(t.balance);
-												if (t.decimals === 0) return big.toLocaleString('en-US');
+												if (t.decimals === 0) return big.toLocaleString(getLocale());
 												const padded = big.toString().padStart(t.decimals + 1, '0');
 												const whole = padded.slice(0, -t.decimals);
 												const frac = padded.slice(-t.decimals).replace(/0+$/, '');
@@ -367,7 +364,7 @@
 											})()}
 										</div>
 										<div class="ts-text-muted">
-											{t.tokenType}{t.nftCount > 0 ? ` · ${t.nftCount} NFT${t.nftCount === 1 ? '' : 's'}` : ''}
+											{t.tokenType}{t.nftCount > 0 ? ` · ${t.nftCount} ${t.nftCount === 1 ? m.airdrop_nft() : m.airdrop_nfts()}` : ''}
 										</div>
 									</div>
 								</button>
@@ -378,13 +375,13 @@
 			{/if}
 
 			<details class="mt-4 text-xs ts-text-muted">
-				<summary class="cursor-pointer">Or paste a category hex directly</summary>
+				<summary class="cursor-pointer">{m.airdrop_paste_hex_summary()}</summary>
 				<div class="mt-2 flex gap-2">
 					<input
 						type="text"
 						class="flex-1 px-3 py-2 rounded border ts-border-subtle font-mono text-sm bg-white dark:bg-zinc-900"
 						bind:value={sourceCategoryHex}
-						placeholder="64-character hex"
+						placeholder={m.airdrop_hex_ph()}
 					/>
 					<button
 						type="button"
@@ -396,7 +393,7 @@
 							try {
 								const res = await fetch(`/api/tokens/${hex}/eligibility`);
 								if (res.status === 410) {
-									sourceLookupError = "You don't currently hold this token.";
+									sourceLookupError = m.airdrop_err_not_hold();
 									return;
 								}
 								if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -412,7 +409,7 @@
 							}
 						}}
 					>
-						Use →
+						{m.airdrop_use()} →
 					</button>
 				</div>
 				{#if sourceLookupError}
@@ -422,16 +419,15 @@
 		</section>
 	{:else if step === 2}
 		<section class="rounded-xl border ts-border-subtle p-5 ts-surface-panel">
-			<h2 class="text-lg font-semibold mb-3 ts-text-strong">2. Recipient token</h2>
+			<h2 class="text-lg font-semibold mb-3 ts-text-strong">{m.airdrop_s2_h()}</h2>
 			<p class="text-sm ts-text-muted mb-3">
-				Source: <span class="font-mono text-xs">{sourceSymbol ?? sourceName ?? sourceCategoryHex.slice(0, 16) + '…'}</span>
-				· your balance: <span class="font-mono">{sourceBalanceDisplay}</span>
+				{m.airdrop_source_prefix()}: <span class="font-mono text-xs">{sourceSymbol ?? sourceName ?? sourceCategoryHex.slice(0, 16) + '…'}</span>
+				· {m.airdrop_your_balance()}: <span class="font-mono">{sourceBalanceDisplay}</span>
 			</p>
 			<p class="text-sm ts-text-muted mb-3">
-				Whose holders should receive? Type a name, symbol, or paste a category hex.
-				They'll all get a share of your tokens.
+				{m.airdrop_s2_q()}
 			</p>
-			<label class="block text-xs font-medium ts-text-muted mb-1" for="rcpt">Search by name, symbol, or hex</label>
+			<label class="block text-xs font-medium ts-text-muted mb-1" for="rcpt">{m.airdrop_search_label()}</label>
 			<input
 				id="rcpt"
 				type="text"
@@ -442,7 +438,7 @@
 				autocomplete="off"
 			/>
 			{#if recipientSearchBusy}
-				<p class="mt-1 text-xs ts-text-muted">Searching…</p>
+				<p class="mt-1 text-xs ts-text-muted">{m.airdrop_searching()}</p>
 			{/if}
 			{#if recipientSearchHits.length > 0}
 				<div class="mt-2 rounded border ts-border-subtle max-h-72 overflow-y-auto">
@@ -468,7 +464,7 @@
 										<div class="text-xs ts-text-muted font-mono truncate">{hit.categoryHex.slice(0, 32)}…</div>
 									</div>
 									<div class="text-right text-xs flex-none">
-										<div class="font-mono">{hit.holderCount?.toLocaleString() ?? '—'} holders</div>
+										<div class="font-mono">{hit.holderCount?.toLocaleString(getLocale()) ?? '—'} {m.airdrop_holders()}</div>
 										<div class="ts-text-muted">{hit.tokenType}</div>
 									</div>
 								</button>
@@ -479,30 +475,30 @@
 			{/if}
 			{#if recipientCategoryHex && recipientHolderCount != null}
 				<div class="mt-3 p-3 rounded border ts-border-subtle bg-slate-50 dark:bg-zinc-900/30 text-sm">
-					Selected: <strong>{recipientName ?? recipientSymbol ?? recipientCategoryHex.slice(0, 16) + '…'}</strong>
-					· {recipientHolderCount.toLocaleString()} holders will receive
+					{m.airdrop_selected()}: <strong>{recipientName ?? recipientSymbol ?? recipientCategoryHex.slice(0, 16) + '…'}</strong>
+					· {recipientHolderCount.toLocaleString(getLocale())} {m.airdrop_holders_will_receive()}
 				</div>
 			{/if}
 			{#if recipientLookupError}
 				<p class="mt-2 text-sm text-rose-600 dark:text-rose-400">{recipientLookupError}</p>
 			{/if}
 			<div class="mt-4 flex justify-between">
-				<button type="button" class="px-3 py-2 text-sm ts-text-muted" onclick={() => (step = 1)}>← Back</button>
+				<button type="button" class="px-3 py-2 text-sm ts-text-muted" onclick={() => (step = 1)}>← {m.airdrop_back()}</button>
 				<button
 					type="button"
 					class="px-4 py-2 rounded bg-violet-600 hover:bg-violet-700 text-white font-semibold disabled:opacity-50"
 					disabled={!step2Valid()}
 					onclick={() => (step = 3)}
 				>
-					Continue →
+					{m.airdrop_continue()} →
 				</button>
 			</div>
 		</section>
 	{:else if step === 3}
 		<section class="rounded-xl border ts-border-subtle p-5 ts-surface-panel">
-			<h2 class="text-lg font-semibold mb-3 ts-text-strong">3. Amount + split</h2>
+			<h2 class="text-lg font-semibold mb-3 ts-text-strong">{m.airdrop_s3_h()}</h2>
 
-			<label class="block text-xs font-medium ts-text-muted mb-1" for="ad-total">Total to airdrop</label>
+			<label class="block text-xs font-medium ts-text-muted mb-1" for="ad-total">{m.airdrop_total_label()}</label>
 			<div class="flex gap-2 items-center mb-1">
 				<input
 					id="ad-total"
@@ -511,24 +507,24 @@
 					bind:value={totalDisplay}
 					placeholder="0.0"
 				/>
-				<span class="text-sm ts-text-muted">{sourceSymbol ?? 'tokens'}</span>
+				<span class="text-sm ts-text-muted">{sourceSymbol ?? m.airdrop_tokens_unit()}</span>
 			</div>
 			<p class="text-xs ts-text-muted mb-3">
-				Your balance: <span class="font-mono">{sourceBalanceDisplay}</span>
-				· Recipients: <span class="font-mono">{recipientHolderCount}</span>
-				{#if totalExceedsBalance}<span class="ml-2 text-rose-600 dark:text-rose-400">exceeds balance</span>{/if}
+				{m.airdrop_balance_cap()}: <span class="font-mono">{sourceBalanceDisplay}</span>
+				· {m.airdrop_recipients()}: <span class="font-mono">{recipientHolderCount}</span>
+				{#if totalExceedsBalance}<span class="ml-2 text-rose-600 dark:text-rose-400">{m.airdrop_exceeds_balance()}</span>{/if}
 			</p>
 
 			<fieldset class="mb-3">
-				<legend class="block text-xs font-medium ts-text-muted mb-1">Split mode</legend>
+				<legend class="block text-xs font-medium ts-text-muted mb-1">{m.airdrop_split_mode()}</legend>
 				<div class="flex gap-2">
 					<label class="flex-1" for="ad-mode-equal">
 						<input id="ad-mode-equal" type="radio" bind:group={mode} value="equal" class="sr-only" />
 						<div
 							class={`px-3 py-2 rounded border cursor-pointer ${mode === 'equal' ? 'border-violet-500 bg-violet-50 dark:bg-violet-950/40' : 'ts-border-subtle'}`}
 						>
-							<div class="text-sm font-semibold">Equal</div>
-							<div class="text-xs ts-text-muted">Every holder gets the same amount.</div>
+							<div class="text-sm font-semibold">{m.airdrop_equal()}</div>
+							<div class="text-xs ts-text-muted">{m.airdrop_equal_desc()}</div>
 						</div>
 					</label>
 					<label class="flex-1" for="ad-mode-weighted">
@@ -536,9 +532,9 @@
 						<div
 							class={`px-3 py-2 rounded border cursor-pointer ${mode === 'weighted' ? 'border-violet-500 bg-violet-50 dark:bg-violet-950/40' : 'ts-border-subtle'}`}
 						>
-							<div class="text-sm font-semibold">Weighted</div>
+							<div class="text-sm font-semibold">{m.airdrop_weighted()}</div>
 							<div class="text-xs ts-text-muted">
-								Proportional to each holder's balance + NFT count of the recipient token.
+								{m.airdrop_weighted_desc()}
 							</div>
 						</div>
 					</label>
@@ -550,12 +546,12 @@
 				class="text-xs ts-text-muted underline"
 				onclick={() => (advancedOpen = !advancedOpen)}
 			>
-				{advancedOpen ? '▾' : '▸'} Advanced
+				{advancedOpen ? '▾' : '▸'} {m.airdrop_advanced()}
 			</button>
 			{#if advancedOpen}
 				<div class="mt-2 px-3 py-2 rounded border ts-border-subtle bg-slate-50 dark:bg-zinc-900/50">
 					<label class="block text-xs font-medium ts-text-muted mb-1" for="ad-dust">
-						BCH dust per recipient output (sats)
+						{m.airdrop_dust_label()}
 					</label>
 					<input
 						id="ad-dust"
@@ -567,50 +563,49 @@
 						bind:value={outputValueSats}
 					/>
 					<p class="text-xs ts-text-muted mt-1">
-						Default 800. Below 800: recipients may need to add their own funding to spend
-						the token UTXO. Below 546: rejected by standard relays.
+						{m.airdrop_dust_hint()}
 					</p>
 				</div>
 			{/if}
 
 			<div class="mt-4 flex justify-between">
-				<button type="button" class="px-3 py-2 text-sm ts-text-muted" onclick={() => (step = 2)}>← Back</button>
+				<button type="button" class="px-3 py-2 text-sm ts-text-muted" onclick={() => (step = 2)}>← {m.airdrop_back()}</button>
 				<button
 					type="button"
 					class="px-4 py-2 rounded bg-violet-600 hover:bg-violet-700 text-white font-semibold disabled:opacity-50"
 					disabled={!step3Valid()}
 					onclick={() => (step = 4)}
 				>
-					Review →
+					{m.airdrop_review_btn()} →
 				</button>
 			</div>
 		</section>
 	{:else if step === 4}
 		<section class="rounded-xl border ts-border-subtle p-5 ts-surface-panel">
-			<h2 class="text-lg font-semibold mb-3 ts-text-strong">4. Review</h2>
+			<h2 class="text-lg font-semibold mb-3 ts-text-strong">{m.airdrop_s4_h()}</h2>
 			<dl class="space-y-2 text-sm">
 				<div class="flex justify-between">
-					<dt class="ts-text-muted">From</dt>
+					<dt class="ts-text-muted">{m.airdrop_from()}</dt>
 					<dd class="font-mono">{sourceSymbol ?? sourceName ?? sourceCategoryHex.slice(0, 16) + '…'}</dd>
 				</div>
 				<div class="flex justify-between">
-					<dt class="ts-text-muted">To holders of</dt>
+					<dt class="ts-text-muted">{m.airdrop_to_holders_of()}</dt>
 					<dd class="font-mono">{recipientName ?? recipientCategoryHex.slice(0, 16) + '…'}</dd>
 				</div>
 				<div class="flex justify-between">
-					<dt class="ts-text-muted">Recipients</dt>
+					<dt class="ts-text-muted">{m.airdrop_recipients()}</dt>
 					<dd class="font-mono">{recipientHolderCount}</dd>
 				</div>
 				<div class="flex justify-between">
-					<dt class="ts-text-muted">Total to send</dt>
+					<dt class="ts-text-muted">{m.airdrop_total_to_send()}</dt>
 					<dd class="font-mono">{formatBaseUnits(totalBaseUnits, sourceDecimals)} {sourceSymbol ?? ''}</dd>
 				</div>
 				<div class="flex justify-between">
-					<dt class="ts-text-muted">Split mode</dt>
-					<dd class="font-mono">{mode}</dd>
+					<dt class="ts-text-muted">{m.airdrop_split_mode()}</dt>
+					<dd class="font-mono">{mode === 'equal' ? m.airdrop_equal() : m.airdrop_weighted()}</dd>
 				</div>
 				<div class="flex justify-between">
-					<dt class="ts-text-muted">BCH per recipient</dt>
+					<dt class="ts-text-muted">{m.airdrop_bch_per_recipient()}</dt>
 					<dd class="font-mono">{outputValueSats} sats</dd>
 				</div>
 			</dl>
@@ -618,32 +613,31 @@
 				<p class="mt-3 text-sm text-rose-600 dark:text-rose-400">{createError}</p>
 			{/if}
 			<div class="mt-4 flex justify-between">
-				<button type="button" class="px-3 py-2 text-sm ts-text-muted" onclick={() => (step = 3)}>← Back</button>
+				<button type="button" class="px-3 py-2 text-sm ts-text-muted" onclick={() => (step = 3)}>← {m.airdrop_back()}</button>
 				<button
 					type="button"
 					class="px-4 py-2 rounded bg-violet-600 hover:bg-violet-700 text-white font-semibold disabled:opacity-50"
 					disabled={creating}
 					onclick={createAirdrop}
 				>
-					{creating ? 'Drafting…' : 'Confirm + draft →'}
+					{creating ? m.airdrop_drafting() : `${m.airdrop_confirm_draft()} →`}
 				</button>
 			</div>
 		</section>
 	{:else if step === 5}
 		<section class="rounded-xl border ts-border-subtle p-5 ts-surface-panel">
-			<h2 class="text-lg font-semibold mb-3 ts-text-strong">5. Sign + broadcast</h2>
+			<h2 class="text-lg font-semibold mb-3 ts-text-strong">{m.airdrop_s5_h()}</h2>
 			<p class="text-sm ts-text-muted mb-3">
-				Airdrop ID: <span class="font-mono text-xs">{airdropId}</span>
-				· {chunksDone.length} of {txCount} broadcast
+				{m.airdrop_id_prefix()}: <span class="font-mono text-xs">{airdropId}</span>
+				· {m.airdrop_n_of_m_broadcast({ done: chunksDone.length, total: txCount })}
 			</p>
 
 			{#if activeChunk}
 				<div class="mb-3 px-3 py-2 rounded border ts-border-subtle bg-slate-50 dark:bg-zinc-900/50 text-xs">
-					<strong>Tx {activeChunk.txIndex + 1} of {txCount}</strong> · {activeChunk.recipientCount}
-					recipients · estimated fee {activeChunk.feeSats} sats · {activeChunk.encodedTxBytes}B
+					<strong>{m.airdrop_tx_of({ n: activeChunk.txIndex + 1, total: txCount })}</strong> · {m.airdrop_chunk_meta({ recipients: activeChunk.recipientCount, fee: activeChunk.feeSats, bytes: activeChunk.encodedTxBytes })}
 				</div>
 				<details class="mb-3">
-					<summary class="text-xs ts-text-muted cursor-pointer">Unsigned hex (copy to your wallet)</summary>
+					<summary class="text-xs ts-text-muted cursor-pointer">{m.airdrop_unsigned_hex_summary()}</summary>
 					<textarea
 						readonly
 						rows="4"
@@ -651,14 +645,14 @@
 					>{activeChunk.unsignedTxHex}</textarea>
 				</details>
 				<label class="block text-xs font-medium ts-text-muted mb-1" for="ad-signed">
-					Signed hex (paste from your wallet)
+					{m.airdrop_signed_hex_label()}
 				</label>
 				<textarea
 					id="ad-signed"
 					rows="4"
 					class="w-full px-2 py-1 font-mono text-[11px] rounded border ts-border-subtle bg-white dark:bg-zinc-900"
 					bind:value={signedHexInput}
-					placeholder="Paste the signed transaction hex here"
+					placeholder={m.airdrop_signed_hex_ph()}
 				></textarea>
 				{#if broadcastError}
 					<p class="mt-2 text-sm text-rose-600 dark:text-rose-400">{broadcastError}</p>
@@ -670,13 +664,13 @@
 						disabled={broadcasting || !signedHexInput.trim()}
 						onclick={broadcastChunk}
 					>
-						{broadcasting ? 'Broadcasting…' : 'Broadcast'}
+						{broadcasting ? m.airdrop_broadcasting() : m.airdrop_broadcast()}
 					</button>
 				</div>
 			{/if}
 
 			{#if chunksDone.length > 0}
-				<h3 class="mt-6 mb-2 text-sm font-semibold ts-text-strong">Broadcast so far</h3>
+				<h3 class="mt-6 mb-2 text-sm font-semibold ts-text-strong">{m.airdrop_broadcast_so_far()}</h3>
 				<ul class="text-xs space-y-1">
 					{#each chunksDone as c (c.txIndex)}
 						<li class="font-mono">Tx {c.txIndex + 1}: <span class="text-emerald-600 dark:text-emerald-400">{c.txid.slice(0, 16)}…</span></li>
