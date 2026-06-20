@@ -1,6 +1,7 @@
 <script lang="ts">
 	import TokenGrid from '$lib/components/TokenGrid.svelte';
 	import Movers24h from '$lib/components/Movers24h.svelte';
+	import InfoTooltip from '$lib/components/InfoTooltip.svelte';
 	import { iconHrefFor } from '$lib/icons';
 	import { stripEmoji } from '$lib/format';
 	import { invalidate } from '$app/navigation';
@@ -74,13 +75,11 @@
 			<div class="flex items-baseline justify-between mb-3">
 				<div class="flex items-center gap-1.5">
 					<h2 class="text-xl font-semibold text-slate-900 dark:text-white">Community sentiment</h2>
-					<a href="/faq#faq-vote-ranking" class="text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 transition-colors" aria-label="About community sentiment — opens FAQ" title="Ranks weight votes by voter tenure × recency (7-day half-life).">
-						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4" aria-hidden="true">
-							<circle cx="12" cy="12" r="10" />
-							<line x1="12" y1="16" x2="12" y2="12" />
-							<line x1="12" y1="8" x2="12.01" y2="8" />
-						</svg>
-					</a>
+					<InfoTooltip
+						href="/faq#faq-vote-ranking"
+						label="About community sentiment — opens FAQ"
+						text="Ranks weight votes by voter tenure × recency (7-day half-life)."
+					/>
 				</div>
 				<span class="text-xs ts-text-muted">{fmt(data.voteLeaders.totalVotes)} vote{data.voteLeaders.totalVotes === 1 ? '' : 's'} cast</span>
 			</div>

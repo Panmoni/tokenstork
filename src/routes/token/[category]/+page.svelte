@@ -20,6 +20,7 @@
 	import StarButton from '$lib/components/StarButton.svelte';
 	import VoteButton from '$lib/components/VoteButton.svelte';
 	import { Tooltip, TooltipTrigger, TooltipContent } from '$lib/components/ui/tooltip';
+	import InfoTooltip from '$lib/components/InfoTooltip.svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -545,11 +546,12 @@
 						<div>
 							<h2 class="text-lg font-semibold text-slate-900 dark:text-white inline-flex items-center gap-1.5">
 								CRC-20 token
-								<a href="/faq#faq-crc20-vs-bcmr" class="inline-flex items-center justify-center w-5 h-5 rounded-full text-slate-400 hover:text-amber-700 dark:hover:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors" title="What's the difference between CRC-20 and BCMR?" aria-label="What's the difference between CRC-20 and BCMR?">
-									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4" aria-hidden="true">
-										<path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
-									</svg>
-								</a>
+								<InfoTooltip
+									href="/faq#faq-crc20-vs-bcmr"
+									label="What's the difference between CRC-20 and BCMR?"
+									text="What's the difference between CRC-20 and BCMR?"
+									class="w-5 h-5 rounded-full hover:text-amber-700 dark:hover:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+								/>
 							</h2>
 							<p class="text-xs ts-text-muted">
 								On-chain naming claim via covenant in genesis transaction.
@@ -593,7 +595,12 @@
 							Commit block <span class="font-mono">{crc20.commitBlock.toLocaleString()}</span><br />
 							Reveal block <span class="font-mono">{crc20.revealBlock.toLocaleString()}</span><br />
 							Fair genesis height <span class="font-mono">{crc20.fairGenesisHeight.toLocaleString()}</span>
-							<span class="ts-text-faint" title="max(commit_block, reveal_block - 20). Drives the per-symbol canonical sort.">ⓘ</span>
+							<InfoTooltip
+								label="How fair genesis height is computed"
+								text="max(commit_block, reveal_block - 20). Drives the per-symbol canonical sort."
+								class="align-middle"
+								iconClass="w-3.5 h-3.5"
+							/>
 						</dd>
 					</div>
 					<div>
