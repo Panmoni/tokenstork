@@ -781,6 +781,13 @@ pub struct OnchainBcmrTarget {
 
 /// Pick up to `limit` categories for the on-chain walker. Priority:
 ///
+/// 0. **Fast lane (watchdog R1).** Categories whose latest verified version's
+///    head is CURRENTLY failing to re-fetch — a possible `version_pulled` (rug)
+///    in progress. Re-walked on a tight 1h gate regardless of the 72h
+///    metadata-staleness gate, so a pull is confirmed within hours, not the
+///    ~9 days a 72h cadence × 3-strike threshold would take. Bounded by a
+///    failure ceiling so a permanently-dead head (already alerted) eventually
+///    drops back to the normal cadence rather than being hammered forever.
 /// 1. Categories with NO `token_metadata` row at all (brand-new — never
 ///    walked).
 /// 2. Categories with `bcmr_source != 'onchain'` AND `fetched_at < now() -
@@ -816,6 +823,24 @@ pub async fn pick_bcmr_onchain_batch(
             m.fetched_at,
             m.bcmr_source,
             CASE
+              -- Priority 0: latest verified head currently failing to re-fetch.
+              -- Was verified before (last_verified_at not null) but now isn't,
+              -- and is due for a re-check (>1h since last attempt). Bounded by a
+              -- failure ceiling so a permanent pull stops being re-walked once
+              -- it has clearly been alerted.
+              WHEN EXISTS (
+                     SELECT 1 FROM token_metadata_history h
+                      WHERE h.category = t.category
+                        AND h.body_verified = false
+                        AND h.last_verified_at IS NOT NULL
+                        AND h.consecutive_fetch_failures BETWEEN 1 AND 48
+                        AND (h.fetched_at IS NULL
+                             OR h.fetched_at < now() - interval '1 hour')
+                        AND h.block_height = (
+                              SELECT MAX(h2.block_height)
+                                FROM token_metadata_history h2
+                               WHERE h2.category = t.category)
+                   ) THEN 0
               WHEN m.category IS NULL                         THEN 1
               WHEN m.bcmr_source IS DISTINCT FROM 'onchain'
                 AND (m.fetched_at IS NULL
@@ -966,6 +991,9 @@ pub struct HistoryUpsertOutcome {
     pub consecutive_fetch_failures: i32,
     /// `pull_epoch` AFTER this write (M2 increments it on a restore).
     pub pull_epoch: i32,
+    /// `last_verified_at` AFTER this write (the wall-clock anchor for the
+    /// `version_pulled` hysteresis). None if this version never verified.
+    pub last_verified_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 /// Upsert into `token_metadata_history` keyed on `(category, authchain_tx)`.
@@ -1008,7 +1036,7 @@ pub async fn upsert_token_metadata_history(
     let inserted = prev.is_none();
     let prev_body_verified = prev.as_ref().map(|p| p.0);
 
-    let post: (i32, i32) = sqlx::query_as(
+    let post: (i32, i32, Option<chrono::DateTime<chrono::Utc>>) = sqlx::query_as(
         r#"
         INSERT INTO token_metadata_history
             (category, authchain_tx, block_height, block_time,
@@ -1046,7 +1074,7 @@ pub async fn upsert_token_metadata_history(
             -- wall-clock anchor: bump on verify, never null it otherwise.
             last_verified_at = CASE WHEN EXCLUDED.body_verified THEN now()
                 ELSE token_metadata_history.last_verified_at END
-        RETURNING consecutive_fetch_failures, pull_epoch
+        RETURNING consecutive_fetch_failures, pull_epoch, last_verified_at
         "#,
     )
     .bind(&w.category)              // $1
@@ -1086,7 +1114,174 @@ pub async fn upsert_token_metadata_history(
         prev_body_verified,
         consecutive_fetch_failures: post.0,
         pull_epoch: post.1,
+        last_verified_at: post.2,
     })
+}
+
+// ---------------------------------------------------------------------------
+// BCMR Watchdog M2 — change-event detection helpers.
+// ---------------------------------------------------------------------------
+
+/// The prior latest verified version of a category, for diffing a new
+/// publication against. `content_hash` + the flat fields + the authority
+/// controller address as they were one version ago.
+#[derive(Debug, Clone)]
+pub struct PriorVersion {
+    pub content_hash: Vec<u8>,
+    pub fields: crate::bcmr_events::VersionFields,
+    pub controller_addr: Option<String>,
+}
+
+/// Fetch the most recent VERIFIED version of `category`, excluding the hop
+/// `exclude_tx` (the one we just wrote). Returns `None` when this is the first
+/// verified version. Ordered by block height (NULL/mempool last) then
+/// observation time so the "previous" version is well-defined even for
+/// same-block or mempool hops.
+pub async fn get_prior_verified_version(
+    pool: &PgPool,
+    category: &[u8],
+    exclude_tx: &[u8],
+) -> Result<Option<PriorVersion>> {
+    #[allow(clippy::type_complexity)]
+    let row: Option<(
+        Vec<u8>,
+        Option<String>,
+        Option<String>,
+        Option<i16>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    )> = sqlx::query_as(
+        r#"
+        SELECT content_hash, name, symbol, decimals, icon_uri, description,
+               head_controller_addr
+          FROM token_metadata_history
+         WHERE category = $1 AND body_verified AND authchain_tx <> $2
+         ORDER BY block_height DESC NULLS LAST, observed_at DESC
+         LIMIT 1
+        "#,
+    )
+    .bind(category)
+    .bind(exclude_tx)
+    .fetch_optional(pool)
+    .await
+    .context("get_prior_verified_version")?;
+
+    Ok(row.map(
+        |(content_hash, name, symbol, decimals, icon_uri, description, controller_addr)| {
+            PriorVersion {
+                content_hash,
+                fields: crate::bcmr_events::VersionFields {
+                    name,
+                    symbol,
+                    decimals,
+                    icon_uri,
+                    description,
+                },
+                controller_addr,
+            }
+        },
+    ))
+}
+
+/// One change-event row to append. `event_type` / `severity` are the
+/// `as_str()` forms from [`crate::bcmr_events`].
+#[derive(Debug, Clone)]
+pub struct BcmrChangeEventWrite {
+    pub category: Vec<u8>,
+    pub authchain_tx: Vec<u8>,
+    pub event_type: &'static str,
+    pub severity: &'static str,
+    pub prev_content_hash: Option<Vec<u8>>,
+    pub new_content_hash: Option<Vec<u8>>,
+    pub prev_addr: Option<String>,
+    pub new_addr: Option<String>,
+    pub detail: Option<serde_json::Value>,
+    pub block_height: Option<i32>,
+    pub block_time: Option<chrono::DateTime<chrono::Utc>>,
+    pub pull_epoch: Option<i32>,
+}
+
+/// Append a change event, idempotently. Returns `true` if a new row was
+/// inserted, `false` if a matching event already existed (the partial unique
+/// indexes deduplicate re-walks; `ON CONFLICT DO NOTHING` swallows the dup).
+pub async fn insert_bcmr_change_event(pool: &PgPool, e: &BcmrChangeEventWrite) -> Result<bool> {
+    let inserted: Option<(i64,)> = sqlx::query_as(
+        r#"
+        INSERT INTO bcmr_change_events
+            (category, authchain_tx, event_type, severity,
+             prev_content_hash, new_content_hash, prev_addr, new_addr,
+             detail, block_height, block_time, pull_epoch)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        ON CONFLICT DO NOTHING
+        RETURNING id
+        "#,
+    )
+    .bind(&e.category)
+    .bind(&e.authchain_tx)
+    .bind(e.event_type)
+    .bind(e.severity)
+    .bind(&e.prev_content_hash)
+    .bind(&e.new_content_hash)
+    .bind(&e.prev_addr)
+    .bind(&e.new_addr)
+    .bind(&e.detail)
+    .bind(e.block_height)
+    .bind(e.block_time)
+    .bind(e.pull_epoch)
+    .fetch_optional(pool)
+    .await
+    .with_context(|| {
+        format!(
+            "insert_bcmr_change_event {} for {}",
+            e.event_type,
+            bytes_to_hex(&e.category)
+        )
+    })?;
+    Ok(inserted.is_some())
+}
+
+/// Whether a `version_pulled` event already exists for this head + pull epoch.
+/// Used to decide whether a re-verify is a genuine restore (a pull was alerted)
+/// versus a routine verify after a sub-threshold blip (no alert was sent, so no
+/// restore should be either).
+pub async fn pulled_event_exists(
+    pool: &PgPool,
+    category: &[u8],
+    authchain_tx: &[u8],
+    pull_epoch: i32,
+) -> Result<bool> {
+    let row: Option<(i64,)> = sqlx::query_as(
+        r#"
+        SELECT id FROM bcmr_change_events
+         WHERE category = $1 AND authchain_tx = $2
+           AND event_type = 'version_pulled' AND pull_epoch = $3
+         LIMIT 1
+        "#,
+    )
+    .bind(category)
+    .bind(authchain_tx)
+    .bind(pull_epoch)
+    .fetch_optional(pool)
+    .await
+    .context("pulled_event_exists")?;
+    Ok(row.is_some())
+}
+
+/// Increment a head hop's `pull_epoch` after a restore so the NEXT genuine pull
+/// is a fresh crossing (a new, non-swallowed alert).
+pub async fn bump_pull_epoch(pool: &PgPool, category: &[u8], authchain_tx: &[u8]) -> Result<()> {
+    sqlx::query(
+        "UPDATE token_metadata_history
+            SET pull_epoch = pull_epoch + 1
+          WHERE category = $1 AND authchain_tx = $2",
+    )
+    .bind(category)
+    .bind(authchain_tx)
+    .execute(pool)
+    .await
+    .context("bump_pull_epoch")?;
+    Ok(())
 }
 
 pub async fn mark_bcmr_onchain_run(pool: &PgPool) -> Result<()> {

@@ -1353,3 +1353,70 @@ ALTER TABLE token_metadata_history ADD COLUMN IF NOT EXISTS correction_reason TE
 -- rather than a duplicate swallowed by the unique index. Lives on the head hop row.
 ALTER TABLE token_metadata_history
   ADD COLUMN IF NOT EXISTS pull_epoch INTEGER NOT NULL DEFAULT 0;
+
+-- ============================================================================
+-- BCMR Watchdog M2 — append-only change-event log.
+--
+-- The walker detects and records every metadata mutation as a durable,
+-- queryable event; an M3 drainer dispatches undelivered rows to the operator
+-- webhook. Append-only + idempotent: a re-walk that re-observes the same hop
+-- emits nothing new (the partial unique indexes below absorb the duplicate via
+-- ON CONFLICT DO NOTHING).
+--
+-- Severity:  info  = a normal new publication;
+--            warning = needs an eyeball (authority key moved, max-hops hit);
+--            critical = rug signature (a publication whose body never matched
+--                       its on-chain hash, or the current head's body pulled).
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS bcmr_change_events (
+  id                BIGSERIAL   PRIMARY KEY,
+  category          BYTEA       NOT NULL REFERENCES tokens(category) ON DELETE CASCADE,
+  -- The carrying authchain tx. For max_hops_hit (a per-category walk outcome,
+  -- not a specific publication) this is the genesis txid sentinel.
+  authchain_tx      BYTEA       NOT NULL,
+  event_type        TEXT        NOT NULL
+                    CHECK (event_type IN ('new_version','version_mismatch',
+                                          'version_pulled','version_restored',
+                                          'authority_moved','max_hops_hit')),
+  severity          TEXT        NOT NULL CHECK (severity IN ('info','warning','critical')),
+  prev_content_hash BYTEA,                                  -- prior verified version's hash (NULL = first version)
+  new_content_hash  BYTEA,                                  -- this version's locator hash
+  prev_addr         TEXT,                                   -- prior authority controller address
+  new_addr          TEXT,                                   -- this hop's authority controller address
+  detail            JSONB,                                  -- field-level diff / context
+  block_height      INTEGER,
+  block_time        TIMESTAMPTZ,
+  -- R3: epoch of the pull/restore crossing (NULL for non-pull events). Part of
+  -- the pull/restore idempotency key so a restore→re-pull is a fresh alert.
+  pull_epoch        INTEGER,
+  detected_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  delivered_at      TIMESTAMPTZ,                            -- set by the M3 drainer on successful dispatch
+  delivery_attempts INTEGER     NOT NULL DEFAULT 0
+);
+
+-- Drainer queue: undelivered rows, oldest first.
+CREATE INDEX IF NOT EXISTS bcmr_change_events_undelivered_idx
+  ON bcmr_change_events (detected_at)
+  WHERE delivered_at IS NULL;
+
+-- Per-token audit / UI timeline.
+CREATE INDEX IF NOT EXISTS bcmr_change_events_category_idx
+  ON bcmr_change_events (category, detected_at DESC);
+
+-- Idempotency (the hard part). Version + authority events are one-per-hop:
+-- a re-walk re-observing the same authchain_tx must not re-alert.
+CREATE UNIQUE INDEX IF NOT EXISTS bcmr_change_events_hop_uniq_idx
+  ON bcmr_change_events (category, authchain_tx, event_type)
+  WHERE event_type IN ('new_version','version_mismatch','authority_moved');
+
+-- Pull/restore events are one-per-crossing: keyed by pull_epoch so a genuine
+-- restore→re-pull (epoch incremented) is a fresh, non-swallowed alert.
+CREATE UNIQUE INDEX IF NOT EXISTS bcmr_change_events_pull_uniq_idx
+  ON bcmr_change_events (category, authchain_tx, event_type, pull_epoch)
+  WHERE event_type IN ('version_pulled','version_restored');
+
+-- max_hops_hit is one-per-category-ever (a standing "investigate this chain"
+-- flag), so it doesn't re-fire every hourly walk.
+CREATE UNIQUE INDEX IF NOT EXISTS bcmr_change_events_maxhops_uniq_idx
+  ON bcmr_change_events (category)
+  WHERE event_type = 'max_hops_hit';

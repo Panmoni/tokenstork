@@ -40,16 +40,22 @@ use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
 use workers::bcmr::{BcmrFlat, BcmrToken};
+use workers::bcmr_events::{
+    EventType, VersionFields, authority_moved, authority_moved_severity, diff_detail, field_diff,
+    pull_threshold_crossed,
+};
 use workers::bcmr_onchain::{
     AuthchainHop, BodyArchive, FetchedBody, body_archive, fetch_and_verify_bcmr, walk_authchain,
 };
 use workers::blockbook::BlockbookClient;
 use workers::env::parse_or_default;
 use workers::pg::{
-    self, OnchainBcmrTarget, TokenMetadataHistoryWrite, TokenMetadataOnchainWrite,
-    bytes_to_hex, ensure_icon_url_scan_row, mark_bcmr_onchain_run, mark_no_locator_walked,
-    pick_bcmr_onchain_batch, pool_from_env, try_acquire_bcmr_onchain_lock,
-    update_token_authchain_head, upsert_token_metadata_history, upsert_token_metadata_onchain,
+    self, BcmrChangeEventWrite, HistoryUpsertOutcome, OnchainBcmrTarget, PgPool,
+    TokenMetadataHistoryWrite, TokenMetadataOnchainWrite, bump_pull_epoch, bytes_to_hex,
+    ensure_icon_url_scan_row, get_prior_verified_version, insert_bcmr_change_event,
+    mark_bcmr_onchain_run, mark_no_locator_walked, pick_bcmr_onchain_batch, pool_from_env,
+    pulled_event_exists, try_acquire_bcmr_onchain_lock, update_token_authchain_head,
+    upsert_token_metadata_history, upsert_token_metadata_onchain,
 };
 use workers::safe_http::safe_client_builder;
 
@@ -67,6 +73,11 @@ const DEFAULT_MAX_HOPS: usize = 15;
 /// content_hash + publisher URI / our /bcmr/<hash>.json mirror remain the
 /// durable pointer.
 const INLINE_BODY_CAP: usize = 256 * 1024;
+/// Wall-clock hysteresis (seconds) before a verified-then-failing head is
+/// declared `version_pulled` (watchdog R1). 24h: long enough that a transient
+/// gateway/IPFS outage doesn't cry "rug", short enough that a real pull is
+/// surfaced within a day. Overridable via `BCMR_PULLED_WALLCLOCK_S`.
+const DEFAULT_PULLED_WALLCLOCK_S: i64 = 24 * 3600;
 
 fn init_tracing() {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
@@ -74,6 +85,29 @@ fn init_tracing() {
         .with_env_filter(filter)
         .with_target(false)
         .try_init();
+}
+
+/// Counts of change events newly emitted (after idempotency dedup), by type.
+/// Surfaced in the run summary so an operator can spot a `version_pulled` spike
+/// (which usually means a BlockBook/gateway incident, not a real mass-rug —
+/// cross-check carson health before believing it).
+#[derive(Default, Debug, Clone, Copy)]
+struct EventCounts {
+    new_version: usize,
+    version_mismatch: usize,
+    version_pulled: usize,
+    version_restored: usize,
+    authority_moved: usize,
+}
+
+impl EventCounts {
+    fn add(&mut self, other: EventCounts) {
+        self.new_version += other.new_version;
+        self.version_mismatch += other.version_mismatch;
+        self.version_pulled += other.version_pulled;
+        self.version_restored += other.version_restored;
+        self.authority_moved += other.authority_moved;
+    }
 }
 
 #[derive(Default, Debug)]
@@ -99,6 +133,7 @@ struct RunStats {
     /// "publisher extended their authchain past the indexer" — operator
     /// should bump the env var or investigate a specific category.
     max_hops_hit: usize,
+    events: EventCounts,
 }
 
 #[tokio::main]
@@ -128,6 +163,8 @@ async fn main() -> Result<()> {
     let max_body_bytes: usize =
         parse_or_default("BCMR_ONCHAIN_MAX_BODY_BYTES", DEFAULT_MAX_BODY_BYTES);
     let max_hops: usize = parse_or_default("BCMR_ONCHAIN_MAX_HOPS", DEFAULT_MAX_HOPS);
+    let pulled_wallclock_s: i64 =
+        parse_or_default("BCMR_PULLED_WALLCLOCK_S", DEFAULT_PULLED_WALLCLOCK_S);
 
     // SSRF-safe outbound HTTP client. Same shape as sync-icons:
     //   - SafeResolver drops every DNS answer in private/loopback/link-local
@@ -164,7 +201,17 @@ async fn main() -> Result<()> {
     let mut stats = RunStats::default();
 
     for target in &batch {
-        match walk_one(&pool, &bb, &http, target, max_hops, max_body_bytes).await {
+        match walk_one(
+            &pool,
+            &bb,
+            &http,
+            target,
+            max_hops,
+            max_body_bytes,
+            pulled_wallclock_s,
+        )
+        .await
+        {
             Ok(s) => {
                 stats.walked += 1;
                 stats.hops_total += s.hops_total;
@@ -174,6 +221,7 @@ async fn main() -> Result<()> {
                 stats.mismatched += s.mismatched;
                 stats.fetch_errors += s.fetch_errors;
                 stats.upserts += s.upserts;
+                stats.events.add(s.events);
                 if s.hit_max_hops {
                     stats.max_hops_hit += 1;
                 }
@@ -207,6 +255,11 @@ async fn main() -> Result<()> {
         skipped_no_locator = stats.skipped_no_locator,
         max_hops_hit = stats.max_hops_hit,
         walk_errors = stats.walk_errors,
+        ev_new_version = stats.events.new_version,
+        ev_version_mismatch = stats.events.version_mismatch,
+        ev_version_pulled = stats.events.version_pulled,
+        ev_version_restored = stats.events.version_restored,
+        ev_authority_moved = stats.events.authority_moved,
         elapsed_s = format!("{:.1}", elapsed),
         "bcmr-onchain run complete"
     );
@@ -225,6 +278,7 @@ struct CategoryStats {
     fetch_errors: usize,
     upserts: usize,
     hit_max_hops: bool,
+    events: EventCounts,
 }
 
 /// Walk one category's authchain and persist results.
@@ -235,6 +289,7 @@ async fn walk_one(
     target: &OnchainBcmrTarget,
     max_hops: usize,
     max_body_bytes: usize,
+    pulled_wallclock_secs: i64,
 ) -> Result<CategoryStats> {
     let mut stats = CategoryStats::default();
     let category_hex = bytes_to_hex(&target.category);
@@ -402,14 +457,54 @@ async fn walk_one(
             head_controller_addr: hop.controller_addr.clone(),
             body_oversize,
         };
-        if let Err(e) = upsert_token_metadata_history(pool, &history).await {
-            error!(
+        // Flat fields of THIS version, for the change-event diff — captured
+        // before `flat` is moved into best_verified below.
+        let new_fields = flat.as_ref().map(|f| VersionFields {
+            name: f.name.clone(),
+            symbol: f.symbol.clone(),
+            decimals: Some(f.decimals),
+            icon_uri: f.icon_uri.clone(),
+            description: f.description.clone(),
+        });
+
+        let outcome = match upsert_token_metadata_history(pool, &history).await {
+            Ok(o) => o,
+            Err(e) => {
+                error!(
+                    category = %category_hex,
+                    tx = %hex::encode(hop.txid),
+                    error = %e,
+                    "failed to upsert token_metadata_history; skipping this hop"
+                );
+                continue;
+            }
+        };
+
+        // M2: classify this observation into change events (idempotent). The
+        // history row above is the durable record; alerting is best-effort, so
+        // a detection error is logged but never fails the walk.
+        if let Err(e) = detect_and_emit_events(
+            pool,
+            &target.category,
+            hop,
+            &locator.content_hash,
+            new_fields.as_ref(),
+            body_verified,
+            &outcome,
+            block_height_i32,
+            block_time,
+            pulled_wallclock_secs,
+            now,
+            &mut stats.events,
+        )
+        .await
+        {
+            warn!(
                 category = %category_hex,
                 tx = %hex::encode(hop.txid),
                 error = %e,
-                "failed to upsert token_metadata_history; skipping this hop"
+                "change-event detection failed for hop; continuing"
             );
-            continue;
         }
 
         if body_verified
@@ -473,5 +568,208 @@ async fn walk_one(
         }
     }
 
+    // M2: a max-hops-hit is a standing "investigate this authchain" flag —
+    // emitted once per category (deduped by the partial unique index). Uses the
+    // genesis txid as the sentinel authchain_tx since it's a per-category walk
+    // outcome, not a specific publication.
+    if stats.hit_max_hops {
+        let ev = BcmrChangeEventWrite {
+            category: target.category.clone(),
+            authchain_tx: target.genesis_txid.clone(),
+            event_type: EventType::MaxHopsHit.as_str(),
+            severity: EventType::MaxHopsHit.default_severity().as_str(),
+            prev_content_hash: None,
+            new_content_hash: None,
+            prev_addr: None,
+            new_addr: None,
+            detail: Some(serde_json::json!({ "max_hops": max_hops })),
+            block_height: None,
+            block_time: None,
+            pull_epoch: None,
+        };
+        if let Err(e) = insert_bcmr_change_event(pool, &ev).await {
+            warn!(category = %category_hex, error = %e, "failed to emit max_hops_hit event");
+        }
+    }
+
     Ok(stats)
+}
+
+/// Classify one walker observation of a locator-bearing hop into change events
+/// and append them, idempotently. The history archive is the durable record;
+/// alerting is best-effort, so the caller treats an error here as non-fatal.
+///
+/// Event rules (watchdog M2):
+/// - A freshly-seen VERIFIED hop whose content_hash differs from the prior
+///   verified version → `new_version` (info), with a field diff.
+/// - A freshly-seen UNVERIFIED hop (hash mismatch / unfetchable) → the rug
+///   signature `version_mismatch` (critical). First-ever versions are archived
+///   silently (no prior to change from) unless they're unverifiable.
+/// - The controlling authority moved between versions → `authority_moved`
+///   (critical if it coincides with a content change, else warning).
+/// - The current head, previously verified, has been failing past the
+///   wall-clock threshold → `version_pulled` (critical), one per pull epoch.
+/// - A head re-verifying after an alerted pull → `version_restored` (info),
+///   then the epoch advances so a re-pull is a fresh alert.
+#[allow(clippy::too_many_arguments)]
+async fn detect_and_emit_events(
+    pool: &PgPool,
+    category: &[u8],
+    hop: &AuthchainHop,
+    new_content_hash: &[u8],
+    new_fields: Option<&VersionFields>,
+    now_verified: bool,
+    outcome: &HistoryUpsertOutcome,
+    block_height: Option<i32>,
+    block_time: Option<chrono::DateTime<Utc>>,
+    pulled_wallclock_secs: i64,
+    now: chrono::DateTime<Utc>,
+    counts: &mut EventCounts,
+) -> Result<()> {
+    let authchain_tx = hop.txid.to_vec();
+    let new_addr = hop.controller_addr.clone();
+
+    // ── New-hop events: first observation of this authchain_tx ───────────────
+    if outcome.inserted {
+        let prior = get_prior_verified_version(pool, category, &authchain_tx).await?;
+
+        if now_verified {
+            // Only a genuine change relative to a PRIOR verified version is an
+            // alert. The first-ever version is archived silently (it changes
+            // nothing) — this also avoids a backfill event storm on first walk.
+            if let Some(p) = prior.as_ref() {
+                let hash_changed = p.content_hash.as_slice() != new_content_hash;
+                if hash_changed {
+                    let detail = new_fields.map(|nf| diff_detail(&field_diff(&p.fields, nf)));
+                    let ev = BcmrChangeEventWrite {
+                        category: category.to_vec(),
+                        authchain_tx: authchain_tx.clone(),
+                        event_type: EventType::NewVersion.as_str(),
+                        severity: EventType::NewVersion.default_severity().as_str(),
+                        prev_content_hash: Some(p.content_hash.clone()),
+                        new_content_hash: Some(new_content_hash.to_vec()),
+                        prev_addr: p.controller_addr.clone(),
+                        new_addr: new_addr.clone(),
+                        detail,
+                        block_height,
+                        block_time,
+                        pull_epoch: None,
+                    };
+                    if insert_bcmr_change_event(pool, &ev).await? {
+                        counts.new_version += 1;
+                    }
+                }
+                // Authority handoff between versions — critical if it lands with
+                // a content change (the classic compromise pattern), else a
+                // standalone warning (authNFT moved wallets, same metadata).
+                if authority_moved(p.controller_addr.as_deref(), new_addr.as_deref()) {
+                    let ev = BcmrChangeEventWrite {
+                        category: category.to_vec(),
+                        authchain_tx: authchain_tx.clone(),
+                        event_type: EventType::AuthorityMoved.as_str(),
+                        severity: authority_moved_severity(hash_changed).as_str(),
+                        prev_content_hash: Some(p.content_hash.clone()),
+                        new_content_hash: Some(new_content_hash.to_vec()),
+                        prev_addr: p.controller_addr.clone(),
+                        new_addr: new_addr.clone(),
+                        detail: None,
+                        block_height,
+                        block_time,
+                        pull_epoch: None,
+                    };
+                    if insert_bcmr_change_event(pool, &ev).await? {
+                        counts.authority_moved += 1;
+                    }
+                }
+            }
+        } else {
+            // A freshly-seen publication we could not verify (hash mismatch or
+            // unfetchable on first sight) — the rug signature. Worth alerting
+            // even with no prior (a token whose very first BCMR doesn't verify).
+            let prev_hash = prior.as_ref().map(|p| p.content_hash.clone());
+            let prev_addr = prior.as_ref().and_then(|p| p.controller_addr.clone());
+            let detail = new_fields.map(|nf| {
+                serde_json::json!({
+                    "claimed": {
+                        "name": nf.name,
+                        "symbol": nf.symbol,
+                        "icon_uri": nf.icon_uri,
+                    }
+                })
+            });
+            let ev = BcmrChangeEventWrite {
+                category: category.to_vec(),
+                authchain_tx: authchain_tx.clone(),
+                event_type: EventType::VersionMismatch.as_str(),
+                severity: EventType::VersionMismatch.default_severity().as_str(),
+                prev_content_hash: prev_hash,
+                new_content_hash: Some(new_content_hash.to_vec()),
+                prev_addr,
+                new_addr: new_addr.clone(),
+                detail,
+                block_height,
+                block_time,
+                pull_epoch: None,
+            };
+            if insert_bcmr_change_event(pool, &ev).await? {
+                counts.version_mismatch += 1;
+            }
+        }
+    }
+
+    // ── Head pull / restore: state of the CURRENT head over time ─────────────
+    // Only the live head matters — an old, spent hop's URL going dead is normal
+    // link rot (its body is already archived), not a rug.
+    if hop.is_head {
+        let age_secs = outcome.last_verified_at.map(|lv| (now - lv).num_seconds());
+        if pull_threshold_crossed(now_verified, age_secs, pulled_wallclock_secs) {
+            let ev = BcmrChangeEventWrite {
+                category: category.to_vec(),
+                authchain_tx: authchain_tx.clone(),
+                event_type: EventType::VersionPulled.as_str(),
+                severity: EventType::VersionPulled.default_severity().as_str(),
+                prev_content_hash: None,
+                new_content_hash: Some(new_content_hash.to_vec()),
+                prev_addr: None,
+                new_addr: new_addr.clone(),
+                detail: Some(serde_json::json!({
+                    "consecutive_fetch_failures": outcome.consecutive_fetch_failures,
+                    "pulled_wallclock_secs": pulled_wallclock_secs,
+                })),
+                block_height,
+                block_time,
+                pull_epoch: Some(outcome.pull_epoch),
+            };
+            if insert_bcmr_change_event(pool, &ev).await? {
+                counts.version_pulled += 1;
+            }
+        } else if now_verified && outcome.prev_body_verified == Some(false) {
+            // Head re-verified after a failure — a genuine RESTORE only if a
+            // pull was actually alerted for this epoch (else it was a
+            // sub-threshold blip nobody was paged about).
+            if pulled_event_exists(pool, category, &authchain_tx, outcome.pull_epoch).await? {
+                let ev = BcmrChangeEventWrite {
+                    category: category.to_vec(),
+                    authchain_tx: authchain_tx.clone(),
+                    event_type: EventType::VersionRestored.as_str(),
+                    severity: EventType::VersionRestored.default_severity().as_str(),
+                    prev_content_hash: None,
+                    new_content_hash: Some(new_content_hash.to_vec()),
+                    prev_addr: None,
+                    new_addr,
+                    detail: None,
+                    block_height,
+                    block_time,
+                    pull_epoch: Some(outcome.pull_epoch),
+                };
+                if insert_bcmr_change_event(pool, &ev).await? {
+                    counts.version_restored += 1;
+                }
+                // Advance the epoch so a subsequent pull is a fresh crossing.
+                bump_pull_epoch(pool, category, &authchain_tx).await?;
+            }
+        }
+    }
+
+    Ok(())
 }
