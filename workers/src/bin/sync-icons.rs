@@ -26,10 +26,12 @@
 //!   NEVER touches `adult` blocks — those are real content decisions.
 //!
 //! - `reflag` (one-shot, operator-run) — backfills source-icon provenance
-//!   (format + native dimensions) for `review` rows decided before that
-//!   tracking existed (`source_format IS NULL`). Reprocesses them in place;
-//!   the decision is unchanged. Drives the token page's "icon adjusted"
-//!   disclosure. Never touches cleared/blocked operator decisions.
+//!   (format + native dimensions) for already-decided icons (`cleared` /
+//!   `review`) whose `source_format IS NULL`, i.e. decided before that
+//!   tracking existed. Re-fetches + decodes each source and fills the
+//!   `source_*` columns IN PLACE — the decision is NOT re-run, so a cleared
+//!   icon stays cleared. Bounded by ICON_REFLAG_MAX_AGE_HOURS. Drives the
+//!   token page's "icon adjusted" disclosure.
 //!
 //! Env vars:
 //! - DATABASE_URL                       — Postgres connection
@@ -37,6 +39,7 @@
 //! - ICON_VISION_DISABLED               — `1` to skip Vision; new icons land in `state='review'` for manual review (default unset)
 //! - ICON_MODE                          — `pending` (default) | `rescan` | `reheal` | `reflag`
 //! - ICON_REHEAL_REASONS                — comma list for `reheal` mode (default `oversize,unsupported_format`; `adult` is rejected)
+//! - ICON_REFLAG_MAX_AGE_HOURS          — `reflag` only backfills icons decided within this window (default 168 = 7 days)
 //! - ICON_TICK_BATCH                    — max URLs per pending tick (default 200)
 //! - ICON_RESCAN_BATCH                  — max URLs per rescan tick (default 500)
 //! - ICON_NSFW_BLOCK_THRESHOLD          — default 0.9 (unused when ICON_VISION_DISABLED=1)
@@ -73,6 +76,10 @@ const DEFAULT_REHEAL_REASONS: &str = "oversize,unsupported_format";
 /// The ONLY reasons `reheal` will ever act on. A hard allowlist so a typo
 /// (or `adult`) can never re-serve content that was blocked on its pixels.
 const ALLOWED_REHEAL_REASONS: &[&str] = &["oversize", "unsupported_format"];
+/// `reflag` only re-fetches icons decided within this many hours, so a
+/// provenance backfill touches the recent gap, never the legacy corpus
+/// (in-standard, correctly provenance-less). 7 days covers any heal batch.
+const DEFAULT_REFLAG_MAX_AGE_HOURS: i64 = 168;
 const PER_REQUEST_DELAY: Duration = Duration::from_millis(35);
 /// Per-tick wallclock budget. A hostile gateway that hangs just under
 /// the per-request timeout could otherwise stall a tick for
@@ -351,33 +358,25 @@ async fn run_reheal(pool: &pg::PgPool, http: &reqwest::Client) -> Result<()> {
     Ok(())
 }
 
-/// `reflag` mode — backfill source-icon provenance for `review` rows that
-/// predate adjustment tracking (`source_format IS NULL`). Reprocesses them
-/// in place so they re-land in `review` with their format + dimensions
-/// recorded (Vision is disabled in review mode, so the decision doesn't
-/// change). One-shot, operator-triggered; never touches cleared/blocked
-/// operator decisions.
+/// `reflag` mode — backfill source-icon provenance (format + native
+/// dimensions) for already-decided icons that predate provenance tracking,
+/// IN PLACE. Re-fetches + decodes each source to read its geometry and fills
+/// the `source_*` columns WITHOUT re-deciding — a `cleared` icon stays
+/// cleared. Bounded by ICON_REFLAG_MAX_AGE_HOURS so it only re-fetches the
+/// recent gap, never the in-standard legacy corpus. One-shot,
+/// operator-triggered; never touches the operator decision itself.
 async fn run_reflag(pool: &pg::PgPool, http: &reqwest::Client) -> Result<()> {
-    let cfg = load_pending_config()?;
-
-    let uris = pg::select_review_uris_for_reflag(pool).await?;
-    if uris.is_empty() {
-        info!("reflag: no review rows missing provenance — nothing to do");
-        return Ok(());
-    }
-    let (urls_reset, rows_deleted) = pg::reset_review_for_reflag(pool).await?;
-    info!(
-        uris = uris.len(),
-        urls_reset,
-        rows_deleted,
-        "reflag: reset provenance-less review rows to pending; reprocessing now"
-    );
+    let max_age_hours: i64 =
+        parse_or_default("ICON_REFLAG_MAX_AGE_HOURS", DEFAULT_REFLAG_MAX_AGE_HOURS);
 
     let started = Instant::now();
-    let summary = drain(pool, http, &uris, &cfg).await;
+    let (updated, skipped) =
+        workers::sync_icons::backfill_provenance(pool, http, max_age_hours).await?;
     let elapsed = started.elapsed().as_secs_f64();
     info!(
-        ?summary,
+        updated,
+        skipped,
+        max_age_hours,
         elapsed_s = format!("{:.1}", elapsed),
         "sync-icons (reflag) complete"
     );

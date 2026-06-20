@@ -30,6 +30,11 @@ pub const ICON_SIZE_CAP_BYTES: usize = 16 * 1024 * 1024;
 /// and aborts decompression bombs hard.
 pub const DECODED_ALLOC_CAP_BYTES: u64 = 64 * 1024 * 1024;
 
+/// Hard per-side dimension cap, checked against the header before decode.
+/// Secondary to the area check (w*h*4 vs DECODED_ALLOC_CAP_BYTES) — rejects
+/// an absurd single dimension cheaply even if the other side is small.
+pub const MAX_DECODE_DIM: u32 = 16_384;
+
 /// HTTP timeout per icon fetch. Generous because IPFS gateways can be slow
 /// on first-byte; tighter than this and we'd false-fail healthy icons.
 pub const FETCH_TIMEOUT: Duration = Duration::from_secs(20);
@@ -452,12 +457,30 @@ fn decode_raster(bytes: &[u8]) -> Result<(DynamicImage, &'static str)> {
         return Err(anyhow!("unsupported image format: {:?}", format));
     }
 
-    // Apply the decompression-bomb cap. `image` 0.25's Limits struct gates
-    // BOTH the dimensions AND the total allocation (which is what we
-    // actually care about — a 30k×30k indexed-color PNG passes any
-    // reasonable dimension cap but allocates GBs).
+    // Header-only dimension probe FIRST — the load-bearing bomb guard.
+    // `Limits.max_alloc` is NOT honored uniformly across decoders: the BMP
+    // decoder (uncompressed) allocates width×height×bpp up front from the
+    // header, so a BMP/ICO claiming e.g. 160000×160000 aborts the whole
+    // process with a ~100 GB allocation before max_alloc is ever consulted.
+    // `into_dimensions` parses only the header (no pixel buffer), so we can
+    // reject absurd geometry cheaply before any decoder allocates.
+    let (w, h) = ImageReader::with_format(Cursor::new(bytes), format)
+        .into_dimensions()
+        .context("could not read image dimensions")?;
+    if (w as u64).saturating_mul(h as u64).saturating_mul(4) > DECODED_ALLOC_CAP_BYTES {
+        return Err(anyhow!(
+            "image dimensions {}x{} exceed the decode allocation cap",
+            w,
+            h
+        ));
+    }
+
+    // Belt-and-suspenders for the decoders that DO honor it: cap both the
+    // per-side dimensions and the total allocation.
     let mut limits = Limits::default();
     limits.max_alloc = Some(DECODED_ALLOC_CAP_BYTES);
+    limits.max_image_width = Some(MAX_DECODE_DIM);
+    limits.max_image_height = Some(MAX_DECODE_DIM);
 
     let mut reader = ImageReader::with_format(Cursor::new(bytes), format);
     reader.limits(limits);
@@ -612,6 +635,33 @@ mod tests {
         let decoded = decode_image(&bmp).expect("BMP should now decode");
         assert_eq!((decoded.image.width(), decoded.image.height()), (8, 8));
         assert_eq!(decoded.source_format, "bmp", "source format drives the 'adjusted' note");
+    }
+
+    #[test]
+    fn rejects_dimension_bomb_bmp() {
+        // A 54-byte BMP header declaring a 160000×160000 image (~100 GB of
+        // pixels). The uncompressed BMP decoder allocates width×height×bpp
+        // up front and ignores Limits.max_alloc, so without the header
+        // dimension probe this would abort the whole process. The probe
+        // must reject it as an ordinary Err instead.
+        let mut bmp = Vec::new();
+        bmp.extend_from_slice(b"BM");
+        bmp.extend_from_slice(&0u32.to_le_bytes()); // file size (ignored)
+        bmp.extend_from_slice(&0u32.to_le_bytes()); // reserved
+        bmp.extend_from_slice(&54u32.to_le_bytes()); // pixel data offset
+        bmp.extend_from_slice(&40u32.to_le_bytes()); // DIB header size
+        bmp.extend_from_slice(&160_000i32.to_le_bytes()); // width
+        bmp.extend_from_slice(&160_000i32.to_le_bytes()); // height
+        bmp.extend_from_slice(&1u16.to_le_bytes()); // planes
+        bmp.extend_from_slice(&24u16.to_le_bytes()); // bpp
+        bmp.extend_from_slice(&0u32.to_le_bytes()); // compression BI_RGB
+        bmp.extend_from_slice(&0u32.to_le_bytes()); // image size
+        bmp.extend_from_slice(&2835i32.to_le_bytes()); // x ppm
+        bmp.extend_from_slice(&2835i32.to_le_bytes()); // y ppm
+        bmp.extend_from_slice(&0u32.to_le_bytes()); // colors used
+        bmp.extend_from_slice(&0u32.to_le_bytes()); // important colors
+        let result = decode_image(&bmp);
+        assert!(result.is_err(), "dimension-bomb BMP must be rejected, not decoded");
     }
 
     #[test]

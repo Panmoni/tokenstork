@@ -19,7 +19,8 @@ use crate::icons::{
 };
 use crate::pg::{
     IconModerationWrite, PgPool, find_icon_moderation_state, link_url_to_hash,
-    mark_icon_fetch_failed, upsert_icon_moderation,
+    mark_icon_fetch_failed, select_rows_needing_provenance, set_icon_provenance,
+    upsert_icon_moderation,
 };
 
 /// Per-URL pipeline outcome. Surfaced as a discriminated tag so the
@@ -255,6 +256,68 @@ pub async fn process_url(
             Ok(if is_review { Outcome::Review } else { Outcome::Cleared })
         }
     }
+}
+
+/// Reflag — re-derive + record source provenance (format + native
+/// dimensions) for already-decided icons that predate provenance tracking,
+/// IN PLACE. Re-fetches each source, decodes it to read the geometry, and
+/// fills the moderation row's `source_*` columns WITHOUT re-deciding — a
+/// `cleared` icon stays cleared (it is NOT pushed back through the
+/// review/clear state machine). Bounded to icons decided within
+/// `max_age_hours` so it touches the recent gap, never the legacy corpus.
+/// Returns `(updated, skipped)`.
+pub async fn backfill_provenance(
+    pool: &PgPool,
+    http: &reqwest::Client,
+    max_age_hours: i64,
+) -> Result<(usize, usize)> {
+    let rows = select_rows_needing_provenance(pool, max_age_hours).await?;
+    let mut updated = 0usize;
+    let mut skipped = 0usize;
+
+    for (hash, uri) in &rows {
+        // Re-fetch the source. Only attribute provenance derived from the
+        // SAME bytes this row was decided on — if the source drifted, skip
+        // rather than record a different image's geometry.
+        let bytes = match fetch_and_hash(http, uri).await {
+            crate::icons::FetchOutcome::Ok { bytes, sha256 } => {
+                if sha256.as_slice() != hash.as_slice() {
+                    warn!(uri = %uri, "reflag: source drifted from stored hash; skipping");
+                    skipped += 1;
+                    continue;
+                }
+                bytes
+            }
+            _ => {
+                skipped += 1;
+                continue;
+            }
+        };
+
+        // Decode (header-guarded) to read source format + native dimensions.
+        let decoded = match tokio::task::spawn_blocking(move || decode_image(&bytes)).await {
+            Ok(Ok(d)) => d,
+            Ok(Err(e)) => {
+                warn!(uri = %uri, error = %e, "reflag: decode failed; skipping");
+                skipped += 1;
+                continue;
+            }
+            Err(e) => {
+                warn!(uri = %uri, error = %e, "reflag: decode task panicked; skipping");
+                skipped += 1;
+                continue;
+            }
+        };
+
+        let (w, h) = (decoded.image.width() as i32, decoded.image.height() as i32);
+        if set_icon_provenance(pool, hash, decoded.source_format, w, h).await? {
+            updated += 1;
+        } else {
+            skipped += 1;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(35)).await;
+    }
+    Ok((updated, skipped))
 }
 
 /// Per-URL placeholder hash for cases where we never read the bytes

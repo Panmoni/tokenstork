@@ -2464,61 +2464,64 @@ pub async fn reset_blocked_for_reheal(
     Ok((urls_reset, rows_deleted))
 }
 
-/// Reflag — list `review`-state icon URLs whose adjustment provenance was
-/// never recorded (`source_format IS NULL`, i.e. decided before that
-/// tracking existed). Replaying them re-derives the source format +
-/// dimensions without changing the operator-facing decision (Vision-disabled
-/// review icons re-land in `review`). Captured before [`reset_review_for_reflag`]
-/// severs the links.
-pub async fn select_review_uris_for_reflag(pool: &PgPool) -> Result<Vec<String>> {
-    let rows: Vec<(String,)> = sqlx::query_as(
-        "SELECT s.icon_uri
-           FROM icon_url_scan s
-           JOIN icon_moderation m ON m.content_hash = s.content_hash
-          WHERE m.state = 'review'
-            AND m.source_format IS NULL",
+/// Reflag — list decided icons (`cleared`/`review`) whose adjustment
+/// provenance was never recorded (`source_format IS NULL`), bounded to those
+/// decided within the last `max_age_hours` so a backfill re-fetches only the
+/// recent gap (the heal batch) and never the whole legacy corpus — legacy
+/// cleared icons are in-standard and correctly carry no provenance. Returns
+/// `(content_hash, a representative icon_uri)`; rows with no scan row are
+/// skipped (nothing to re-fetch). The caller re-derives provenance IN PLACE
+/// without changing the decision (see [`set_icon_provenance`]).
+pub async fn select_rows_needing_provenance(
+    pool: &PgPool,
+    max_age_hours: i64,
+) -> Result<Vec<(Vec<u8>, String)>> {
+    let rows: Vec<(Vec<u8>, String)> = sqlx::query_as(
+        "SELECT m.content_hash,
+                (SELECT s.icon_uri FROM icon_url_scan s
+                  WHERE s.content_hash = m.content_hash
+                  ORDER BY s.icon_uri LIMIT 1) AS uri
+           FROM icon_moderation m
+          WHERE m.state IN ('cleared', 'review')
+            AND m.source_format IS NULL
+            AND m.scanned_at > now() - make_interval(hours => $1::int)
+            AND EXISTS (SELECT 1 FROM icon_url_scan s WHERE s.content_hash = m.content_hash)",
     )
+    .bind(max_age_hours)
     .fetch_all(pool)
     .await
-    .context("selecting review URIs for reflag")?;
-    Ok(rows.into_iter().map(|(s,)| s).collect())
+    .context("selecting rows needing icon provenance")?;
+    Ok(rows)
 }
 
-/// Reflag — reset the provenance-less `review` rows to pending so the
-/// pipeline reprocesses them. Same null-then-delete ordering as
-/// [`reset_blocked_for_reheal`] (the FK forbids deleting a still-referenced
-/// moderation row). Returns `(urls_reset, rows_deleted)`. Only ever touches
-/// `review` rows — operator `cleared`/`blocked` decisions are untouched.
-pub async fn reset_review_for_reflag(pool: &PgPool) -> Result<(u64, u64)> {
-    let mut tx = pool.begin().await.context("begin reflag transaction")?;
-
-    let urls_reset = sqlx::query(
-        "UPDATE icon_url_scan
-            SET content_hash = NULL,
-                last_fetched_at = NULL,
-                fetch_error = NULL,
-                fail_count = 0
-          WHERE content_hash IN (
-                SELECT content_hash FROM icon_moderation
-                 WHERE state = 'review' AND source_format IS NULL
-          )",
+/// Reflag — record source-icon provenance for one already-decided row,
+/// IN PLACE. Only fills columns that are still NULL and never touches
+/// `state`/`decided_by`/the on-disk file, so a `cleared` icon stays cleared
+/// (no re-decision, no revert to `review`). Returns true if a row was
+/// updated. Idempotent.
+pub async fn set_icon_provenance(
+    pool: &PgPool,
+    content_hash: &[u8],
+    source_format: &str,
+    source_width: i32,
+    source_height: i32,
+) -> Result<bool> {
+    let res = sqlx::query(
+        "UPDATE icon_moderation
+            SET source_format = $2,
+                source_width  = $3,
+                source_height = $4
+          WHERE content_hash = $1
+            AND source_format IS NULL",
     )
-    .execute(&mut *tx)
+    .bind(content_hash)
+    .bind(source_format)
+    .bind(source_width)
+    .bind(source_height)
+    .execute(pool)
     .await
-    .context("resetting icon_url_scan rows for reflag")?
-    .rows_affected();
-
-    let rows_deleted = sqlx::query(
-        "DELETE FROM icon_moderation
-          WHERE state = 'review' AND source_format IS NULL",
-    )
-    .execute(&mut *tx)
-    .await
-    .context("deleting provenance-less review rows for reflag")?
-    .rows_affected();
-
-    tx.commit().await.context("commit reflag transaction")?;
-    Ok((urls_reset, rows_deleted))
+    .context("setting icon provenance")?;
+    Ok(res.rows_affected() > 0)
 }
 
 /// Idempotent insert of a single icon URL into the scan queue. Called
