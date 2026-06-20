@@ -1,23 +1,26 @@
+<script lang="ts">
+	import * as m from '$lib/paraglide/messages';
+</script>
+
 <svelte:head>
-	<title>Learn — Token Stork</title>
+	<title>{m.learn_meta_title()}</title>
 	<meta
 		name="description"
-		content="Tutorials and resources for building with BCH CashTokens."
+		content={m.learn_meta_description()}
 	/>
 </svelte:head>
 
 <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 	<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent mb-6">
-		Learn
+		{m.learn_h1()}
 	</h1>
 
 	<div class="prose prose-slate dark:prose-invert max-w-none">
 		<p class="mb-6 ts-text-body">
-			To get started, here are foundational CashTokens tutorials. We'll be adding more resources to
-			this page over time.
+			{m.learn_intro()}
 		</p>
 
-		<h2 class="text-2xl font-bold text-slate-900 dark:text-white mt-8 mb-4">Start here</h2>
+		<h2 class="text-2xl font-bold text-slate-900 dark:text-white mt-8 mb-4">{m.learn_start_here()}</h2>
 		<ul class="list-disc list-inside ml-5 space-y-2 ts-text-body">
 			<li>
 				<a
@@ -26,7 +29,7 @@
 					rel="noopener noreferrer"
 				>
 					About Bitcoin Cash
-				</a> — a concise primer on BCH's UTXO model, covenants, and why CashTokens exist.
+				</a> {m.learn_about_bch_desc()}
 			</li>
 			<li>
 				<a
@@ -35,13 +38,13 @@
 					rel="noopener noreferrer"
 				>
 					Introduction to CashTokens
-				</a> — the official walkthrough of fungible and non-fungible tokens on BCH.
+				</a> {m.learn_intro_ct_desc()}
 			</li>
 		</ul>
 
-		<h2 class="text-2xl font-bold text-slate-900 dark:text-white mt-10 mb-4">Token Pioneers series</h2>
+		<h2 class="text-2xl font-bold text-slate-900 dark:text-white mt-10 mb-4">{m.learn_pioneers_h()}</h2>
 		<p class="mb-3 ts-text-body">
-			Hands-on tutorials for minting and working with CashTokens end-to-end.
+			{m.learn_pioneers_intro()}
 		</p>
 		<ul class="list-disc list-inside ml-5 space-y-2 ts-text-body">
 			<li>
@@ -82,16 +85,15 @@
 			</li>
 		</ul>
 
-		<h2 class="text-2xl font-bold text-slate-900 dark:text-white mt-10 mb-4">Smart contracts with CashScript</h2>
+		<h2 class="text-2xl font-bold text-slate-900 dark:text-white mt-10 mb-4">{m.learn_cashscript_h()}</h2>
 		<p class="mb-3 ts-text-body">
-			CashScript is the high-level language most CashTokens projects use to write BCH smart contracts
-			and covenants.
+			{m.learn_cashscript_intro()}
 		</p>
 		<ul class="list-disc list-inside ml-5 space-y-2 ts-text-body">
 			<li>
 				<a href="https://cashscript.org/" target="_blank" rel="noopener noreferrer">
 					cashscript.org
-				</a> — project homepage, installation, and full documentation.
+				</a> {m.learn_cashscript_org_desc()}
 			</li>
 			<li>
 				<a
@@ -100,11 +102,11 @@
 					rel="noopener noreferrer"
 				>
 					Covenants guide
-				</a> — how to constrain how coins can be spent, the foundation of most on-chain BCH apps.
+				</a> {m.learn_covenants_desc()}
 			</li>
 		</ul>
 
-		<h2 class="text-2xl font-bold text-slate-900 dark:text-white mt-10 mb-4">Video</h2>
+		<h2 class="text-2xl font-bold text-slate-900 dark:text-white mt-10 mb-4">{m.learn_video_h()}</h2>
 		<ul class="list-disc list-inside ml-5 space-y-2 ts-text-body">
 			<li>
 				<a
@@ -113,7 +115,7 @@
 					rel="noopener noreferrer"
 				>
 					CashScript Explained
-				</a> — short overview of what CashScript is and why it matters (BCH Clips).
+				</a> {m.learn_video_explained_desc()}
 			</li>
 			<li>
 				<a
@@ -122,16 +124,16 @@
 					rel="noopener noreferrer"
 				>
 					CashScript Tutorial #1: Write your first BCH smart contract
-				</a> — step-by-step build-along by MrZwets.
+				</a> {m.learn_video_tut1_desc()}
 			</li>
 		</ul>
 
-		<h2 class="text-2xl font-bold text-slate-900 dark:text-white mt-10 mb-4">Reference</h2>
+		<h2 class="text-2xl font-bold text-slate-900 dark:text-white mt-10 mb-4">{m.learn_reference_h()}</h2>
 		<ul class="list-disc list-inside ml-5 space-y-2 ts-text-body">
 			<li>
 				<a href="https://cashtokens.org/" target="_blank" rel="noopener noreferrer">
 					cashtokens.org
-				</a> — the official CashTokens spec hub.
+				</a> {m.learn_ref_ct_desc()}
 			</li>
 			<li>
 				<a
@@ -140,17 +142,17 @@
 					rel="noopener noreferrer"
 				>
 					BCMR CHIP
-				</a> — the metadata standard behind the "BCMR metadata" card on every token page.
+				</a> {m.learn_ref_bcmr_desc()}
 			</li>
 			<li>
 				<a href="https://bchworks.com/" target="_blank" rel="noopener noreferrer">
 					BCHWorks
-				</a> — beginner-friendly BCH information + tutorials.
+				</a> {m.learn_ref_bchworks_desc()}
 			</li>
 		</ul>
 
 		<p class="mt-10 text-sm ts-text-muted">
-			Have a tutorial or resource to suggest? Email
+			{m.learn_suggest()}
 			<a href="mailto:hello@panmoni.com">hello@panmoni.com</a>.
 		</p>
 	</div>

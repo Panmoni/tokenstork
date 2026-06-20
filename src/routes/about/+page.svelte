@@ -1,82 +1,82 @@
+<script lang="ts">
+	import * as m from '$lib/paraglide/messages';
+	import { localizeHref } from '$lib/paraglide/runtime';
+</script>
+
 <svelte:head>
-	<title>About — Token Stork</title>
+	<title>{m.about_meta_title()}</title>
 	<meta
 		name="description"
-		content="TokenStork is a market-cap site for BCH CashTokens, built and maintained by George Donnelly."
+		content={m.about_meta_description()}
 	/>
 </svelte:head>
 
 <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 	<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent mb-6">
-		About Token Stork
+		{m.about_h1()}
 	</h1>
 
 	<div class="prose prose-slate dark:prose-invert max-w-none">
 		<p class="ts-text-body">
-			TokenStork.com is a market-cap site for
+			{m.about_intro_1()}
 			<a href="https://bchworks.com/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">BCH</a>
 			<a href="https://cashtokens.org/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">CashTokens</a>
-			built and maintained by
+			{m.about_intro_2()}
 			<a href="https://georgedonnelly.com/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">George Donnelly</a>.
-			<a href="https://github.com/Panmoni/tokenstork" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">The code is open-source</a>.
-			You can review the pending
-			<a href="https://github.com/Panmoni/tokenstork/issues" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">issues</a>
-			or the <a href="/roadmap" class="text-violet-600 dark:text-violet-400 hover:underline">roadmap</a>.
+			<a href="https://github.com/Panmoni/tokenstork" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">{m.about_code_oss()}</a>.
+			{m.about_intro_3()}
+			<a href="https://github.com/Panmoni/tokenstork/issues" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">{m.about_issues()}</a>
+			{m.about_intro_or()} <a href={localizeHref('/roadmap')} class="text-violet-600 dark:text-violet-400 hover:underline">{m.about_roadmap_link()}</a>.
 		</p>
 		<p class="mt-4 ts-text-body">
-			I welcome your suggestions, criticisms, bug reports and general feedback any time. Let me know
-			what functionality would be of assistance to you, and I will probably add it!
+			{m.about_feedback()}
 		</p>
 	</div>
 
 	<div class="grid gap-5 md:grid-cols-2 mt-10">
 		<section class="p-6 rounded-xl border ts-border-subtle ts-surface-panel">
-			<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-3">Need help building?</h2>
+			<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-3">{m.about_help_h2()}</h2>
 			<p class="ts-text-body">
-				Want to build a dapp on BCH but need some technical help? <strong>Hire me!</strong> Email
+				{m.about_help_1()} <strong>{m.about_help_hire()}</strong> {m.about_help_2()}
 				<a href="mailto:george@panmoni.com" class="text-violet-600 dark:text-violet-400 hover:underline">george@panmoni.com</a>
-				and I'll build what you need.
+				{m.about_help_3()}
 			</p>
 		</section>
 
 		<section class="p-6 rounded-xl border ts-border-subtle ts-surface-panel">
-			<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-3">Get the latest BCH news</h2>
+			<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-3">{m.about_news_h2()}</h2>
 			<p class="ts-text-body">
-				Join
-				<a href="https://www.reddit.com/r/BCHCashTokens/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">r/BCHCashTokens</a>,
-				the only remaining censorship-free BCH subreddit where everything related to BCH is on-topic.
+				{m.about_news_1()}
+				<a href="https://www.reddit.com/r/BCHCashTokens/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">r/BCHCashTokens</a>{m.about_news_2()}
 			</p>
 		</section>
 
 		<section class="p-6 rounded-xl border md:col-span-2 ts-border-subtle ts-surface-panel">
 			<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-3">
-				TokenStork BCH Metadata Registry
+				{m.about_registry_h2()}
 			</h2>
 			<p class="ts-text-body">
-				TokenStork also hosts
+				{m.about_registry_1()}
 				<a
 					href="https://tokenstork.com/.well-known/bitcoin-cash-metadata-registry.json"
 					target="_blank"
 					rel="noopener noreferrer"
 					class="text-violet-600 dark:text-violet-400 hover:underline"
-				>TokenStorkRegistry</a>,
-				a BCH Metadata Registry. PRs are welcome at our
+				>TokenStorkRegistry</a>{m.about_registry_2()}
 				<a
 					href="https://github.com/Panmoni/tokenstork/blob/main/public/.well-known/bitcoin-cash-metadata-registry.json"
 					target="_blank"
 					rel="noopener noreferrer"
 					class="text-violet-600 dark:text-violet-400 hover:underline"
-				>GitHub repo</a>. For now, the registry mirrors
+				>{m.about_registry_repo()}</a>{m.about_registry_3()}
 				<a href="https://otr.cash" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">otr.cash</a>.
 			</p>
 		</section>
 
 		<section class="p-6 rounded-xl border border-violet-200 dark:border-violet-900/50 bg-violet-50/40 dark:bg-violet-950/20 md:col-span-2">
-			<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-3">Support this project</h2>
+			<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-3">{m.about_support_h2()}</h2>
 			<p class="mb-4 ts-text-body">
-				TokenStork is self-funded. Ongoing costs include a ~$50/month VPS bill (where the archival BCH node, Postgres, indexer workers, and web app all live), domain
-				registration, and my time. If the site is useful to you, please consider chipping in by
-				donating to the address below. Thank you!
+				{m.about_support_body()}
 			</p>
 			<p class="font-mono text-sm border rounded px-3 py-2 inline-block select-all break-all ts-text-primary ts-border-strong ts-surface-panel">
 				bitcoincash:qz3pxmwda8gd42wa8k9yfxcwhcaapeuhygjc8mc4m8
@@ -84,60 +84,60 @@
 		</section>
 
 		<section class="p-6 rounded-xl border md:col-span-2 ts-border-subtle ts-surface-panel">
-			<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-3">Acknowledgments</h2>
+			<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-3">{m.about_ack_h2()}</h2>
 			<p class="mb-4 ts-text-body">
-				TokenStork is made possible through the open-source projects and APIs below. Thank you
-				for your collaboration!
+				{m.about_ack_intro()}
 			</p>
 			<ul class="list-disc list-inside ml-2 space-y-1.5 ts-text-body">
 				<li>
+					<a href="https://cashtokens.org/docs/category/cashtokens-chip/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">CashTokens CHIP</a>
+					{m.about_ack_cashtokens()}
+				</li>
+				<li>
 					<a href="https://github.com/bitjson/chip-bcmr" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">CHIP-BCMR</a>
-					— the on-chain metadata-registry standard our hourly authchain walker reads directly
-					from each token's authchain (with sha256 verification of the publisher's JSON body
-					against the on-chain locator)
+					{m.about_ack_chipbcmr()}
 				</li>
 				<li>
 					<a href="https://cauldron.quest/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Cauldron</a>
-					— AMM protocol + public price/TVL indexer feeding our directory and per-token pages
+					{m.about_ack_cauldron()}
 				</li>
 				<li>
 					<a href="https://tapswap.cash/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Tapswap</a>
 					+
 					<a href="https://x.com/mainnet_pat" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">mainnet_pat</a>
-					— MPSW P2P marketplace protocol, reverse-engineered from the reference indexer so we
-					detect listings entirely from our own BCHN
+					{m.about_ack_tapswap()}
 				</li>
 				<li>
 					<a href="https://github.com/mainnet-pat/blockbook" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">BlockBook (cashtokens fork)</a>
-					by
+					{m.about_by()}
 					<a href="https://x.com/mainnet_pat" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">mainnet_pat</a>
-					— per-category holder, UTXO, and NFT indexer, built on
+					{m.about_ack_blockbook()}
 					<a href="https://github.com/trezor/blockbook" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Trezor's BlockBook</a>
 				</li>
 				<li>
 					<a href="https://www.coingecko.com/en" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">CoinGecko</a>
-					— live BCH/USD price feed
+					{m.about_ack_coingecko()}
 				</li>
 				<li>
 					<a href="https://bchn.org/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Bitcoin Cash Node (BCHN)</a>
-					— the archival full node underpinning every on-chain read; a fork of
-					<a href="https://www.bitcoinabc.org/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Bitcoin ABC</a>, itself a fork of the
+					{m.about_ack_bchn_1()}
+					<a href="https://www.bitcoinabc.org/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Bitcoin ABC</a>{m.about_ack_bchn_2()}
 					<a href="https://bitcoincore.org/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">original Bitcoin node</a>
-					— each only minor patches atop the last, honoring the long legacy of Bitcoin development
+					{m.about_ack_bchn_3()}
 				</li>
 				<li>
 					<a href="https://bchworks.com/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">BCHWorks</a>
-					— Bitcoin Cash educational content
+					{m.about_ack_bchworks()}
 				</li>
 			</ul>
 		</section>
 
 		<section class="p-6 rounded-xl border md:col-span-2 ts-border-subtle ts-surface-panel">
-			<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-3">Contact</h2>
+			<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-3">{m.about_contact_h2()}</h2>
 			<p class="ts-text-body">
-				Please email
+				{m.about_contact_1()}
 				<a href="mailto:hello@panmoni.com" class="text-violet-600 dark:text-violet-400 hover:underline">hello@panmoni.com</a>
-				and we'll be thrilled to assist you.
+				{m.about_contact_2()}
 			</p>
 		</section>
 	</div>

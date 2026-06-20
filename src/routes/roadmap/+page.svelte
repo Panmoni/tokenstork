@@ -1,142 +1,96 @@
-<svelte:head>
-	<title>Roadmap — Token Stork</title>
-	<meta
-		name="description"
-		content="What's next on TokenStork."
-	/>
-</svelte:head>
-
 <script lang="ts">
+	import * as m from '$lib/paraglide/messages';
+
 	// Roadmap items. `status` drives the icon + color. Last groomed 2026-06-20 —
 	// the "Shipped" section was retired; this page now lists only forward-looking
 	// work. If anything drifts by more than a quarter, come back and groom. The
 	// original roadmap had a version-number scheme (0.0.3, 0.0.4, …) that turned
 	// out to be ambitious vaporware; we now group by theme + status.
+	//
+	// Titles + bullets are i18n message functions (rm_* keys). When grooming,
+	// edit the en/es catalogs and the key lists below in lockstep.
 	interface Item {
 		title: string;
 		status: 'planned' | 'later';
 		bullets: string[];
 	}
 
-	const planned: Item[] = [
+	const planned = $derived<Item[]>([
 		{
-			title: 'Operational hardening',
+			title: m.rm_p1_title(),
 			status: 'planned',
-			bullets: [
-				'Nightly pg_dump + offsite ship (Backblaze B2 / Hetzner Storage Box, ~€1/mo) with 7-daily / 4-weekly retention.',
-				'UptimeRobot free-tier monitor on /api/tokens?limit=1.',
-				'Weekly Netcup snapshot toggle.'
-			]
+			bullets: [m.rm_p1_b1(), m.rm_p1_b2(), m.rm_p1_b3()]
 		},
 		{
-			title: 'Airdrop tools — follow-ups',
+			title: m.rm_p2_title(),
 			status: 'planned',
-			bullets: [
-				'Standalone airdrop page — paste/import any address list (manual entry, paste-many, CSV) and airdrop a chosen token to all of them in one tx.',
-				'Set-algebra recipient builder: union / intersect / exclude across multiple categories + blocklists + watchlists.',
-				'Block-height snapshots ("holders as of block 950,000") + multi-venue DEX-pool unwrapping so LP contracts don\'t eat budget meant for real holders.',
-				'WalletConnect v2 direct-sign in-page (currently paste-signed-hex matching /mint).'
-			]
+			bullets: [m.rm_p2_b1(), m.rm_p2_b2(), m.rm_p2_b3(), m.rm_p2_b4()]
 		},
 		{
-			title: 'Token claim + management',
+			title: m.rm_p3_title(),
 			status: 'planned',
-			bullets: [
-				'Wallet owners of a category can manage it via TokenStork: dividends, mint-NFT management, and minting additional supply for FT+NFT hybrids. (BCMR publish/update for tokens whose authority NFT you hold already ships at /publish-bcmr; mass distribution ships at /airdrops.)',
-				'Import-existing-token flow for tokens minted elsewhere.'
-			]
+			bullets: [m.rm_p3_b1(), m.rm_p3_b2()]
 		},
 		{
-			title: 'Stats follow-ups + tagging',
+			title: m.rm_p4_title(),
 			status: 'planned',
-			bullets: [
-				'Long-window (7d / 30d) gainers, losers, and TVL movers on /stats — the 24h windows are live; the longer windows are next now that enough price history has accumulated.',
-				'Community-submitted tags for filtering the directory (stablecoin, memecoin, utility, DAO, etc.).',
-				'NFT-aware Tapswap arbitrage — current /arbitrage is FT-only on the Tapswap side; NFT listings need per-commitment treatment.'
-			]
-		},
-	];
-
-	const later: Item[] = [
-		{
-			title: 'Personal portfolio + alerts',
-			status: 'later',
-			bullets: [
-				'Portfolio with P&L: manual buy entries OR derived from on-chain holdings at the linked wallet via BlockBook.',
-				'Per-user price alerts (wallet-delivered notification, or email-as-metadata-only — never used for login).',
-				'Personal annotations on tokens ("this one was the rug").'
-			]
-		},
-		{
-			title: 'Ecosystem leaderboards',
-			status: 'later',
-			bullets: [
-				'/defi page — BCH locked across covenant families (Cauldron, AnyHedge, Moria, BCH Bull, BCH Guru, Badgers, Emerald DAO, BCH PUMP). Headline "Total BCH locked in DeFi".',
-				'/nft page — minted / max supply, mint price, mint revenue, floor price, holders, last mint, mints in the last 7 days.',
-				'Backed by a hand-curated projects/issuers layer that also powers category filter chips.',
-				'Wallet-support badges ("Listed in Zapit / Paytaca / Cashonize / Electron Cash") via periodic scrape.'
-			]
-		},
-		{
-			title: 'BCMR identity management',
-			status: 'later',
-			bullets: [
-				'Create and update BCMR identities for people and organisations.',
-				'Full audit log of metadata changes.',
-				'Updates feed when tokens revise their BCMR data; "recently updated" + "listed in registry X" badges on token cards.'
-			]
-		},
-		{
-			title: 'On-chain fundraising + dividends',
-			status: 'later',
-			bullets: [
-				'Launch ICOs via form with accountability milestones + transparent treasury + investor voting.',
-				'Dividend distribution tool.',
-				'Trading-volume tracking + flipstarter integration.'
-			]
-		},
-		{
-			title: 'Performance + accessibility pass',
-			status: 'later',
-			bullets: [
-				'Lighthouse pass: responsive images, CLS, CSP/XSS hardening.',
-				'Streaming + suspense + islands for parallelised page loads.',
-				'A11y sweep: aria labels, keyboard nav, screen-reader trend summaries.',
-				'Custom site themes; responsive breakpoint audit.'
-			]
-		},
-		{
-			title: 'Ecosystem surfaces',
-			status: 'later',
-			bullets: [
-				'Exchanges tab (volumes, pairs, founding).',
-				'Dapps tab + news tab.',
-				'Comments + reviews on tokens, dapps, NFT series.',
-				'Airdrops calendar + upcoming events.',
-				'Heatmaps, embeddable widgets, public API documentation.'
-			]
-		},
-		{
-			title: 'Real-world contracts',
-			status: 'later',
-			bullets: [
-				'Additional on-chain products — annuities, structured payouts.',
-				'Outreach for RWA tokenisation partnerships on CashTokens.',
-				'Tokenisation use-case content + tooling demos.'
-			]
+			bullets: [m.rm_p4_b1(), m.rm_p4_b2(), m.rm_p4_b3()]
 		}
-	];
+	]);
+
+	const later = $derived<Item[]>([
+		{
+			title: m.rm_l1_title(),
+			status: 'later',
+			bullets: [m.rm_l1_b1(), m.rm_l1_b2(), m.rm_l1_b3()]
+		},
+		{
+			title: m.rm_l2_title(),
+			status: 'later',
+			bullets: [m.rm_l2_b1(), m.rm_l2_b2(), m.rm_l2_b3(), m.rm_l2_b4()]
+		},
+		{
+			title: m.rm_l3_title(),
+			status: 'later',
+			bullets: [m.rm_l3_b1(), m.rm_l3_b2(), m.rm_l3_b3()]
+		},
+		{
+			title: m.rm_l4_title(),
+			status: 'later',
+			bullets: [m.rm_l4_b1(), m.rm_l4_b2(), m.rm_l4_b3()]
+		},
+		{
+			title: m.rm_l5_title(),
+			status: 'later',
+			bullets: [m.rm_l5_b1(), m.rm_l5_b2(), m.rm_l5_b3(), m.rm_l5_b4()]
+		},
+		{
+			title: m.rm_l6_title(),
+			status: 'later',
+			bullets: [m.rm_l6_b1(), m.rm_l6_b2(), m.rm_l6_b3(), m.rm_l6_b4(), m.rm_l6_b5()]
+		},
+		{
+			title: m.rm_l7_title(),
+			status: 'later',
+			bullets: [m.rm_l7_b1(), m.rm_l7_b2(), m.rm_l7_b3()]
+		}
+	]);
 </script>
+
+<svelte:head>
+	<title>{m.roadmap_meta_title()}</title>
+	<meta
+		name="description"
+		content={m.roadmap_meta_description()}
+	/>
+</svelte:head>
 
 <main class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 	<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent mb-4">
-		Roadmap
+		{m.roadmap_h1()}
 	</h1>
 	<p class="mb-10 ts-text-muted">
-		TokenStork.com aims to be a market-cap site for BCH CashTokens and a
-		comprehensive service provider for on-chain CashTokens operations and data.
-		Working with CashTokens should be smooth and easy, and TokenStork.com aims
-		to make it that way. Below is what's next.
+		{m.roadmap_intro()}
 	</p>
 
 	<section class="mb-12">
@@ -145,7 +99,7 @@
 				<circle cx="12" cy="12" r="10" />
 				<polyline points="12 6 12 12 16 14" />
 			</svg>
-			Planned — next few months
+			{m.roadmap_planned_h()}
 		</h2>
 		<div class="grid gap-5">
 			{#each planned as item (item.title)}
@@ -167,7 +121,7 @@
 				<circle cx="12" cy="12" r="10" />
 				<polyline points="12 6 12 12 16 14" />
 			</svg>
-			Later — aspirational
+			{m.roadmap_later_h()}
 		</h2>
 		<div class="grid gap-5">
 			{#each later as item (item.title)}
@@ -184,14 +138,13 @@
 	</section>
 
 	<p class="text-xs mt-10 ts-text-muted">
-		Roadmap last refreshed 2026-06-20. If you'd like to see something on here
-		that isn't yet — email <a href="mailto:hello@panmoni.com" class="text-violet-600 dark:text-violet-400 hover:underline">hello@panmoni.com</a>
-		or
+		{m.roadmap_footer_1()} <a href="mailto:hello@panmoni.com" class="text-violet-600 dark:text-violet-400 hover:underline">hello@panmoni.com</a>
+		{m.roadmap_footer_or()}
 		<a
 			href="https://github.com/Panmoni/tokenstork/issues"
 			target="_blank"
 			rel="noopener noreferrer"
 			class="text-violet-600 dark:text-violet-400 hover:underline"
-		>open an issue on GitHub</a>.
+		>{m.roadmap_footer_issue()}</a>.
 	</p>
 </main>
