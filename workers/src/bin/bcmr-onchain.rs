@@ -39,15 +39,17 @@ use chrono::{TimeZone, Utc};
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
-use workers::bcmr::BcmrToken;
-use workers::bcmr_onchain::{AuthchainHop, FetchedBody, fetch_and_verify_bcmr, walk_authchain};
+use workers::bcmr::{BcmrFlat, BcmrToken};
+use workers::bcmr_onchain::{
+    AuthchainHop, BodyArchive, FetchedBody, body_archive, fetch_and_verify_bcmr, walk_authchain,
+};
 use workers::blockbook::BlockbookClient;
 use workers::env::parse_or_default;
 use workers::pg::{
     self, OnchainBcmrTarget, TokenMetadataHistoryWrite, TokenMetadataOnchainWrite,
     bytes_to_hex, ensure_icon_url_scan_row, mark_bcmr_onchain_run, mark_no_locator_walked,
-    pick_bcmr_onchain_batch, pool_from_env, update_token_authchain_head,
-    upsert_token_metadata_history, upsert_token_metadata_onchain,
+    pick_bcmr_onchain_batch, pool_from_env, try_acquire_bcmr_onchain_lock,
+    update_token_authchain_head, upsert_token_metadata_history, upsert_token_metadata_onchain,
 };
 use workers::safe_http::safe_client_builder;
 
@@ -56,6 +58,15 @@ const DEFAULT_STALE_HOURS: i32 = 72;
 const DEFAULT_FETCH_TIMEOUT_S: u64 = 10;
 const DEFAULT_MAX_BODY_BYTES: usize = 8 * 1024 * 1024;
 const DEFAULT_MAX_HOPS: usize = 15;
+/// Inline-archive cap for `token_metadata_history.body` / `unverified_body`
+/// (watchdog R8). The verifier still needs the full 8 MiB body to hash, but we
+/// archive at most this many bytes per version inline — a hostile publisher can
+/// rotate the authchain head indefinitely (each new hop is a new keep-once
+/// row), so an uncapped per-hop body would be a storage write-amplifier.
+/// Bodies above the cap set `body_oversize=true` and leave `body` NULL; the
+/// content_hash + publisher URI / our /bcmr/<hash>.json mirror remain the
+/// durable pointer.
+const INLINE_BODY_CAP: usize = 256 * 1024;
 
 fn init_tracing() {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
@@ -95,6 +106,18 @@ async fn main() -> Result<()> {
     init_tracing();
 
     let pool = pool_from_env().await.context("connecting to Postgres")?;
+
+    // Run-level mutex (watchdog R4): refuse to start a second concurrent walk.
+    // A manual run overlapping the systemd timer would otherwise let two walks
+    // race the per-hop `consecutive_fetch_failures` read-modify-write and
+    // double-count into a false `version_pulled` alert. Released on pool
+    // shutdown at end of run.
+    if !try_acquire_bcmr_onchain_lock(&pool).await? {
+        info!("another bcmr-onchain run holds the advisory lock; exiting");
+        pg::shutdown(pool).await;
+        return Ok(());
+    }
+
     let bb = BlockbookClient::from_env().context("building BlockBook client")?;
     let bb = bb.with_slot(pool.clone());
 
@@ -252,11 +275,10 @@ async fn walk_one(
 
     // Track best verified hop: highest block_height (None = mempool, treat
     // as latest). Ties: later in iteration order wins (closer to head).
-    // Carries the typed BcmrToken (drives flat fields like name/symbol) AND
-    // the raw serde_json::Value (cached as token_metadata.bcmr_body so the
-    // detail-page rich card renders without a per-request external HTTP
-    // call to the publisher's URI).
-    let mut best_verified: Option<(usize, &AuthchainHop, BcmrToken, serde_json::Value)> = None;
+    // Carries the flattened fields (drive name/symbol/etc) AND the raw
+    // serde_json::Value (cached as token_metadata.bcmr_body so the detail-page
+    // rich card renders without a per-request external HTTP call).
+    let mut best_verified: Option<(usize, &AuthchainHop, BcmrFlat, serde_json::Value)> = None;
 
     for (idx, hop) in hops.iter().enumerate() {
         let Some(locator) = hop.locator.as_ref() else {
@@ -269,48 +291,62 @@ async fn walk_one(
         let block_time = hop.block_time.and_then(|t| Utc.timestamp_opt(t, 0).single());
         let block_height_i32 = hop.block_height.and_then(|h| i32::try_from(h).ok());
 
-        let (body_verified, body_size, parsed) = match &outcome {
+        // Per-hop capture (watchdog M1): persist the resolved body + flat fields
+        // for EVERY hop, not just the latest verified one. `body` holds a
+        // verified canonical body (inline-capped); `unverified_body` holds a
+        // sha256-MISMATCH body (the rug-signature payload), kept separate so
+        // readers never confuse it for canonical. `flat` drives the stored
+        // name/symbol/decimals/icon/description for the version-history diff.
+        let mut body_col: Option<serde_json::Value> = None;
+        let mut unverified_col: Option<serde_json::Value> = None;
+        let mut body_oversize = false;
+        let mut flat: Option<BcmrFlat> = None;
+        let mut raw_value: Option<serde_json::Value> = None;
+
+        let (body_verified, body_size) = match &outcome {
             FetchedBody::Verified { bytes, size } => {
                 stats.verified += 1;
-                // Parse to Value first (untyped); from_value to BcmrToken
-                // separately. The Value is cached as bcmr_body for the UI
-                // even when the typed parse fails (a malformed-but-hash-
-                // verified body still represents an authentic publication
-                // intent we can show as raw JSON).
-                let parsed: Option<(BcmrToken, serde_json::Value)> =
-                    match serde_json::from_slice::<serde_json::Value>(bytes) {
-                        Ok(value) => {
-                            match serde_json::from_value::<BcmrToken>(value.clone()) {
-                                Ok(t) => Some((t, value)),
-                                Err(e) => {
-                                    stats.verified_but_unparseable += 1;
-                                    warn!(
-                                        category = %category_hex,
-                                        uri = %locator.uri,
-                                        error = %e,
-                                        "BCMR body verified by hash but failed to parse as BcmrToken"
-                                    );
-                                    None
-                                }
+                match serde_json::from_slice::<serde_json::Value>(bytes) {
+                    Ok(value) => {
+                        // Inline-archive cap (R8): keep the hash + size always,
+                        // but only archive the body inline when it's small
+                        // enough. The full value still feeds token_metadata's
+                        // single-row (bounded) bcmr_body cache below.
+                        match body_archive(true, *size, INLINE_BODY_CAP) {
+                            BodyArchive::VerifiedInline => body_col = Some(value.clone()),
+                            BodyArchive::VerifiedOversize => body_oversize = true,
+                            BodyArchive::UnverifiedInline | BodyArchive::UnverifiedTooLarge => {}
+                        }
+                        raw_value = Some(value.clone());
+                        match serde_json::from_value::<BcmrToken>(value) {
+                            Ok(t) => flat = Some(t.into_flat(&category_hex)),
+                            Err(e) => {
+                                stats.verified_but_unparseable += 1;
+                                warn!(
+                                    category = %category_hex,
+                                    uri = %locator.uri,
+                                    error = %e,
+                                    "BCMR body verified by hash but failed to parse as BcmrToken"
+                                );
                             }
                         }
-                        Err(e) => {
-                            stats.verified_but_unparseable += 1;
-                            warn!(
-                                category = %category_hex,
-                                uri = %locator.uri,
-                                error = %e,
-                                "BCMR body verified by hash but is not valid JSON"
-                            );
-                            None
-                        }
-                    };
-                (true, Some(*size as i32), parsed)
+                    }
+                    Err(e) => {
+                        stats.verified_but_unparseable += 1;
+                        warn!(
+                            category = %category_hex,
+                            uri = %locator.uri,
+                            error = %e,
+                            "BCMR body verified by hash but is not valid JSON"
+                        );
+                    }
+                }
+                (true, Some(*size as i32))
             }
             FetchedBody::Mismatch {
+                bytes,
                 size,
                 observed_sha256,
-                ..
             } => {
                 stats.mismatched += 1;
                 warn!(
@@ -318,9 +354,20 @@ async fn walk_one(
                     uri = %locator.uri,
                     expected = %hex::encode(locator.content_hash),
                     observed = %hex::encode(observed_sha256),
-                    "BCMR body sha256 mismatch — recording history row but not upserting metadata"
+                    "BCMR body sha256 mismatch — recording history row (unverified_body) but not upserting metadata"
                 );
-                (false, Some(*size as i32), None)
+                // Capture the UNTRUSTED body so the M2 version_mismatch event
+                // has a payload to diff and the timeline can show what the
+                // attacker tried to publish. Best-effort parse; never trusted.
+                if let Ok(value) = serde_json::from_slice::<serde_json::Value>(bytes) {
+                    if body_archive(false, *size, INLINE_BODY_CAP) == BodyArchive::UnverifiedInline {
+                        unverified_col = Some(value.clone());
+                    }
+                    if let Ok(t) = serde_json::from_value::<BcmrToken>(value) {
+                        flat = Some(t.into_flat(&category_hex));
+                    }
+                }
+                (false, Some(*size as i32))
             }
             FetchedBody::Error(msg) => {
                 stats.fetch_errors += 1;
@@ -330,10 +377,11 @@ async fn walk_one(
                     error = %msg,
                     "BCMR fetch error — recording history row with body_verified=false"
                 );
-                (false, None, None)
+                (false, None)
             }
         };
 
+        let flat_ref = flat.as_ref();
         let history = TokenMetadataHistoryWrite {
             category: target.category.clone(),
             authchain_tx: hop.txid.to_vec(),
@@ -344,6 +392,15 @@ async fn walk_one(
             body_verified,
             body_size_bytes: body_size,
             fetched_at: Some(now),
+            body: body_col,
+            unverified_body: unverified_col,
+            name: flat_ref.and_then(|f| f.name.clone()),
+            symbol: flat_ref.and_then(|f| f.symbol.clone()),
+            decimals: flat_ref.map(|f| f.decimals),
+            icon_uri: flat_ref.and_then(|f| f.icon_uri.clone()),
+            description: flat_ref.and_then(|f| f.description.clone()),
+            head_controller_addr: hop.controller_addr.clone(),
+            body_oversize,
         };
         if let Err(e) = upsert_token_metadata_history(pool, &history).await {
             error!(
@@ -356,14 +413,13 @@ async fn walk_one(
         }
 
         if body_verified
-            && let Some((token, value)) = parsed
+            && let (Some(flat_val), Some(value)) = (flat, raw_value)
         {
-            best_verified = Some((idx, hop, token, value));
+            best_verified = Some((idx, hop, flat_val, value));
         }
     }
 
-    if let Some((_, hop, token, body_value)) = best_verified.take() {
-        let flat = token.into_flat(&category_hex);
+    if let Some((_, hop, flat, body_value)) = best_verified.take() {
         // Seed icon-pipeline queue for the icon URI (idempotent).
         if let Some(uri) = flat.icon_uri.as_deref()
             && let Err(e) = ensure_icon_url_scan_row(pool, uri).await

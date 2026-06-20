@@ -1295,3 +1295,61 @@ CREATE INDEX IF NOT EXISTS bcmr_tokenstork_submissions_category_idx
 -- Filled rows get `bcmr_source='otr'`; their icon URIs are seeded into the
 -- icon pipeline exactly like on-chain ones.
 ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_otr_run_at TIMESTAMPTZ;
+
+-- ============================================================================
+-- BCMR Watchdog (docs/bcmr-watchdog-plan.md) — turn the per-hop history archive
+-- into an immutable, diffable, scorable, alertable record of every BCMR version.
+--
+-- M1 (this block): capture the resolved body + flat fields + authority address
+-- per version, at first observation, KEEP-ONCE (a later re-walk whose fetch now
+-- fails must never null a previously-captured snapshot — that immutability IS the
+-- product). The walker already fetches + sha256-verifies every locator-bearing
+-- hop's body; it simply discarded all but the latest. We now persist each.
+-- ============================================================================
+
+-- Verified/canonical body — populated ONLY when sha256(body) == content_hash AND
+-- the body is <= INLINE_BODY_CAP (256 KiB; see bcmr-onchain.rs). Larger verified
+-- bodies set body_oversize=true and leave body NULL — content_hash + the
+-- publisher URI / our /bcmr/<hash>.json mirror remain the durable pointer, so an
+-- attacker who rotates the head indefinitely can't amplify our storage by 8 MiB
+-- per dust hop.
+ALTER TABLE token_metadata_history ADD COLUMN IF NOT EXISTS body JSONB;
+-- Untrusted body for a sha256-MISMATCH hop (a publication whose body did NOT match
+-- its on-chain hash — the rug signature). Kept separate from `body` so readers can
+-- never confuse it for canonical; body_verified=false flags it. Also capped.
+ALTER TABLE token_metadata_history ADD COLUMN IF NOT EXISTS unverified_body JSONB;
+-- Flat fields parsed from whichever body we have (verified or unverified). Readers
+-- MUST gate trust on body_verified; these exist so the version-history timeline and
+-- change-event diffs render claimed identity per version without re-parsing JSON.
+ALTER TABLE token_metadata_history ADD COLUMN IF NOT EXISTS name        TEXT;
+ALTER TABLE token_metadata_history ADD COLUMN IF NOT EXISTS symbol      TEXT;
+ALTER TABLE token_metadata_history ADD COLUMN IF NOT EXISTS decimals    SMALLINT;
+ALTER TABLE token_metadata_history ADD COLUMN IF NOT EXISTS icon_uri    TEXT;
+ALTER TABLE token_metadata_history ADD COLUMN IF NOT EXISTS description TEXT;
+-- vout[0] controlling address of the carrying tx (authority key for this hop).
+-- Powers authority-key-movement detection in the trust score. NULL when BlockBook
+-- doesn't render it (degrades gracefully — see bcmr-onchain.rs risk note).
+ALTER TABLE token_metadata_history ADD COLUMN IF NOT EXISTS head_controller_addr TEXT;
+-- true = a verified body existed but exceeded INLINE_BODY_CAP, so `body` is NULL
+-- by design (not by failure). Lets readers distinguish "too big to archive inline"
+-- from "never captured".
+ALTER TABLE token_metadata_history
+  ADD COLUMN IF NOT EXISTS body_oversize BOOLEAN NOT NULL DEFAULT false;
+-- Live counter (NOT keep-once): consecutive re-walks whose fetch failed/mismatched
+-- since the last successful verify. Drives the wall-clock `version_pulled`
+-- hysteresis in M2 so a transient gateway blip doesn't cry "rug".
+ALTER TABLE token_metadata_history
+  ADD COLUMN IF NOT EXISTS consecutive_fetch_failures INTEGER NOT NULL DEFAULT 0;
+-- Wall-clock anchor for the pull threshold: when this hop's body last verified.
+ALTER TABLE token_metadata_history ADD COLUMN IF NOT EXISTS last_verified_at TIMESTAMPTZ;
+-- R5 audited escape hatch: keep-once is permanent EXCEPT a content-hash-validated,
+-- operator-initiated correction (admin path only — the walker NEVER writes these).
+-- A correction is only accepted when sha256(new_body) == content_hash, so it can
+-- never introduce a body that didn't match the on-chain commitment.
+ALTER TABLE token_metadata_history ADD COLUMN IF NOT EXISTS body_corrected_at TIMESTAMPTZ;
+ALTER TABLE token_metadata_history ADD COLUMN IF NOT EXISTS correction_reason TEXT;
+-- R3 idempotency anchor for pull/restore alert crossings (M2). Incremented each
+-- time a pulled head is restored, so a SUBSEQUENT genuine pull is a fresh crossing
+-- rather than a duplicate swallowed by the unique index. Lives on the head hop row.
+ALTER TABLE token_metadata_history
+  ADD COLUMN IF NOT EXISTS pull_epoch INTEGER NOT NULL DEFAULT 0;

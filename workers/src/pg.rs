@@ -916,6 +916,11 @@ pub async fn upsert_token_metadata_onchain(
 /// per locator-bearing hop; mismatched/unfetched bodies still get rows so
 /// operators can see "a publication was attempted at height X but body
 /// didn't verify".
+///
+/// The `body` / `unverified_body` / flat-field / `head_controller_addr`
+/// columns are captured at FIRST observation and KEPT-ONCE (a later re-walk
+/// whose fetch now fails never overwrites them — that immutability is the
+/// BCMR-watchdog product promise; see [`upsert_token_metadata_history`]).
 #[derive(Debug, Clone)]
 pub struct TokenMetadataHistoryWrite {
     pub category: Vec<u8>,
@@ -927,22 +932,95 @@ pub struct TokenMetadataHistoryWrite {
     pub body_verified: bool,
     pub body_size_bytes: Option<i32>,
     pub fetched_at: Option<chrono::DateTime<chrono::Utc>>,
+    // ── M1 watchdog: per-version snapshot (keep-once) ──────────────────────
+    /// Verified canonical body — `Some` only when sha256 matched AND the body
+    /// fit under the inline cap (else `body_oversize` is set and this is None).
+    pub body: Option<serde_json::Value>,
+    /// Untrusted body of a sha256-MISMATCH hop — kept separate so readers can
+    /// never mistake it for canonical (the rug-signature payload).
+    pub unverified_body: Option<serde_json::Value>,
+    pub name: Option<String>,
+    pub symbol: Option<String>,
+    pub decimals: Option<i16>,
+    pub icon_uri: Option<String>,
+    pub description: Option<String>,
+    /// vout[0] controlling authority address at this hop (normalized cashaddr).
+    pub head_controller_addr: Option<String>,
+    /// true = a verified body existed but exceeded the inline cap, so `body`
+    /// is deliberately None (distinguish "too big to archive" from "lost").
+    pub body_oversize: bool,
+}
+
+/// Result of an [`upsert_token_metadata_history`] write. Carries the state
+/// M2's change-event detection needs but that Postgres `RETURNING` cannot
+/// expose on its own (there is no `OLD` qualifier in a RETURNING clause): the
+/// prior `body_verified`, captured under the same `FOR UPDATE` row lock that
+/// serializes concurrent walker runs.
+#[derive(Debug, Clone)]
+pub struct HistoryUpsertOutcome {
+    /// true = this `(category, authchain_tx)` row did not exist before the write.
+    pub inserted: bool,
+    /// `body_verified` of the row BEFORE this write (None when newly inserted).
+    pub prev_body_verified: Option<bool>,
+    /// `consecutive_fetch_failures` AFTER this write (0 on a verify).
+    pub consecutive_fetch_failures: i32,
+    /// `pull_epoch` AFTER this write (M2 increments it on a restore).
+    pub pull_epoch: i32,
 }
 
 /// Upsert into `token_metadata_history` keyed on `(category, authchain_tx)`.
-/// On conflict, refresh the verification result + size + fetched_at — useful
-/// for "the body was unfetchable last time, now it works" transitions.
+///
+/// **Keep-once.** The captured snapshot columns (`body`, `unverified_body`,
+/// flat fields, `head_controller_addr`) use `COALESCE(existing, EXCLUDED)` so
+/// the FIRST non-null observation is permanent. A later re-walk whose fetch
+/// now fails passes NULLs and leaves the archived snapshot intact — the whole
+/// point of the watchdog. The only sanctioned overwrite is the audited,
+/// content-hash-validated operator correction path (admin-only; never here).
+///
+/// **Concurrency + transition detection.** A `SELECT … FOR UPDATE` reads and
+/// locks the prior row inside the same transaction as the upsert. This (a)
+/// serializes overlapping walker runs so the `consecutive_fetch_failures`
+/// read-modify-write can't double-count into a false `version_pulled`, and (b)
+/// hands M2 the prior `body_verified` (RETURNING can't, as it only exposes the
+/// post-update row).
 pub async fn upsert_token_metadata_history(
     pool: &PgPool,
     w: &TokenMetadataHistoryWrite,
-) -> Result<()> {
-    sqlx::query(
+) -> Result<HistoryUpsertOutcome> {
+    let mut tx: Transaction<'_, Postgres> = pool
+        .begin()
+        .await
+        .context("begin token_metadata_history tx")?;
+
+    // Lock + read the prior row (if any). Holds the row lock for the upsert.
+    let prev: Option<(bool, i32, i32)> = sqlx::query_as(
+        "SELECT body_verified, consecutive_fetch_failures, pull_epoch
+           FROM token_metadata_history
+          WHERE category = $1 AND authchain_tx = $2
+          FOR UPDATE",
+    )
+    .bind(&w.category)
+    .bind(&w.authchain_tx)
+    .fetch_optional(&mut *tx)
+    .await
+    .context("lock prior token_metadata_history row")?;
+
+    let inserted = prev.is_none();
+    let prev_body_verified = prev.as_ref().map(|p| p.0);
+
+    let post: (i32, i32) = sqlx::query_as(
         r#"
         INSERT INTO token_metadata_history
             (category, authchain_tx, block_height, block_time,
              content_hash, publication_uri,
-             body_verified, body_size_bytes, fetched_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+             body_verified, body_size_bytes, fetched_at,
+             body, unverified_body, name, symbol, decimals, icon_uri,
+             description, head_controller_addr, body_oversize,
+             consecutive_fetch_failures, last_verified_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+                $15, $16, $17, $18,
+                CASE WHEN $7 THEN 0 ELSE 1 END,
+                CASE WHEN $7 THEN now() ELSE NULL END)
         ON CONFLICT (category, authchain_tx) DO UPDATE SET
             block_height    = EXCLUDED.block_height,
             block_time      = EXCLUDED.block_time,
@@ -950,19 +1028,46 @@ pub async fn upsert_token_metadata_history(
             publication_uri = EXCLUDED.publication_uri,
             body_verified   = EXCLUDED.body_verified,
             body_size_bytes = EXCLUDED.body_size_bytes,
-            fetched_at      = EXCLUDED.fetched_at
+            fetched_at      = EXCLUDED.fetched_at,
+            -- keep-once: first non-null capture is permanent (immutability).
+            body                 = COALESCE(token_metadata_history.body, EXCLUDED.body),
+            unverified_body      = COALESCE(token_metadata_history.unverified_body, EXCLUDED.unverified_body),
+            name                 = COALESCE(token_metadata_history.name, EXCLUDED.name),
+            symbol               = COALESCE(token_metadata_history.symbol, EXCLUDED.symbol),
+            decimals             = COALESCE(token_metadata_history.decimals, EXCLUDED.decimals),
+            icon_uri             = COALESCE(token_metadata_history.icon_uri, EXCLUDED.icon_uri),
+            description          = COALESCE(token_metadata_history.description, EXCLUDED.description),
+            head_controller_addr = COALESCE(token_metadata_history.head_controller_addr, EXCLUDED.head_controller_addr),
+            -- latch: once a verified-but-oversize body was seen, stay flagged.
+            body_oversize        = token_metadata_history.body_oversize OR EXCLUDED.body_oversize,
+            -- live counter: reset on verify, else +1 (drives M2 pull hysteresis).
+            consecutive_fetch_failures = CASE WHEN EXCLUDED.body_verified THEN 0
+                ELSE token_metadata_history.consecutive_fetch_failures + 1 END,
+            -- wall-clock anchor: bump on verify, never null it otherwise.
+            last_verified_at = CASE WHEN EXCLUDED.body_verified THEN now()
+                ELSE token_metadata_history.last_verified_at END
+        RETURNING consecutive_fetch_failures, pull_epoch
         "#,
     )
-    .bind(&w.category)
-    .bind(&w.authchain_tx)
-    .bind(w.block_height)
-    .bind(w.block_time)
-    .bind(&w.content_hash)
-    .bind(&w.publication_uri)
-    .bind(w.body_verified)
-    .bind(w.body_size_bytes)
-    .bind(w.fetched_at)
-    .execute(pool)
+    .bind(&w.category)              // $1
+    .bind(&w.authchain_tx)         // $2
+    .bind(w.block_height)          // $3
+    .bind(w.block_time)            // $4
+    .bind(&w.content_hash)         // $5
+    .bind(&w.publication_uri)      // $6
+    .bind(w.body_verified)         // $7
+    .bind(w.body_size_bytes)       // $8
+    .bind(w.fetched_at)            // $9
+    .bind(&w.body)                 // $10
+    .bind(&w.unverified_body)      // $11
+    .bind(&w.name)                 // $12
+    .bind(&w.symbol)               // $13
+    .bind(w.decimals)              // $14
+    .bind(&w.icon_uri)             // $15
+    .bind(&w.description)          // $16
+    .bind(&w.head_controller_addr) // $17
+    .bind(w.body_oversize)         // $18
+    .fetch_one(&mut *tx)
     .await
     .with_context(|| {
         format!(
@@ -971,7 +1076,17 @@ pub async fn upsert_token_metadata_history(
             bytes_to_hex(&w.authchain_tx)
         )
     })?;
-    Ok(())
+
+    tx.commit()
+        .await
+        .context("commit token_metadata_history tx")?;
+
+    Ok(HistoryUpsertOutcome {
+        inserted,
+        prev_body_verified,
+        consecutive_fetch_failures: post.0,
+        pull_epoch: post.1,
+    })
 }
 
 pub async fn mark_bcmr_onchain_run(pool: &PgPool) -> Result<()> {
@@ -2722,6 +2837,27 @@ pub async fn try_acquire_icons_lock(pool: &PgPool) -> Result<bool> {
 /// hash of "tokenstork-sync-icons" so it doesn't collide with any other
 /// advisory-lock user in this DB.
 const SYNC_ICONS_LOCK_KEY: i64 = 0x547F_69C0_4373_4F4B; // ~"TstorkSI"
+
+/// Try to acquire the exclusive run-level advisory lock for the on-chain BCMR
+/// walker. Returns `Ok(true)` if acquired, `Ok(false)` if another run already
+/// holds it. Released automatically on session disconnect (pool shutdown at
+/// end of run). Without this, a manual `bcmr-onchain` run overlapping the
+/// systemd timer would let two walks do the `consecutive_fetch_failures`
+/// read-modify-write concurrently and double-count into a false
+/// `version_pulled` alert (watchdog R4). Distinct key from the per-call
+/// BlockBook pacing lock (987654321) — that one is a different concern.
+pub async fn try_acquire_bcmr_onchain_lock(pool: &PgPool) -> Result<bool> {
+    let row: (bool,) = sqlx::query_as("SELECT pg_try_advisory_lock($1)")
+        .bind(BCMR_ONCHAIN_LOCK_KEY)
+        .fetch_one(pool)
+        .await
+        .context("acquiring bcmr-onchain advisory lock")?;
+    Ok(row.0)
+}
+
+/// Stable lock key for `try_acquire_bcmr_onchain_lock`. Hand-picked so it
+/// doesn't collide with `SYNC_ICONS_LOCK_KEY` or the BlockBook pacing lock.
+const BCMR_ONCHAIN_LOCK_KEY: i64 = 0x42_434D_524F_4E31; // ~"BCMRON1"
 
 /// Touch the `sync_state.last_icons_run_at` heartbeat. Operator alerts off
 /// staleness of this column the way they do for `last_tail_run_at`.
