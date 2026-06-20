@@ -12,9 +12,12 @@
 //     tapswap, and Fex price as soon as the batch resolves (~50-200ms).
 //   Tier 2 — Slower CTE-based DB queries (price history, TVL/holders rank).
 //     Fills the price chart and rank badges (~100-500ms).
-//   Tier 3 — External API calls (Cauldron live price, BlockBook RPC for
-//     BCMR eligibility). Fills the hero price display, Cauldron venue
-//     card, and publish CTA (~500ms–5s).
+//   Tier 3 — External API calls, split into two independent deferreds so a
+//     slow one never blocks the other:
+//       tier3          — Cauldron live price/TVL (price+valuelocked fetched
+//         concurrently). Fills the hero price display and Cauldron venue card.
+//       canPublishBcmr — BlockBook authchain walk for BCMR-publish eligibility
+//         (~500ms–10s, signed-in only). Fills the publish CTA on its own.
 
 import { error } from '@sveltejs/kit';
 import { query, hexFromBytes, bytesFromHex } from '$lib/server/db';
@@ -867,23 +870,19 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 		};
 	});
 
-	// ─── TIER 3 DEFERRED: external API results (Cauldron price, BCMR) ────
-	const tier3Promise = Promise.all([
-		cauldronPromise,
-		bcmrEligibilityPromise
-	]).then(([cauldron, bcmrEligibility]) => {
-		// Arbitrage eligibility — uses Cauldron's live price (tier3) plus
-		// tapswap offers and Fex price which are already available in tier1.
-		// We compute the final arbitrage status here since it needs live USD
-		// prices from Cauldron, but the eligibility (≥2 venues present) could
-		// have been computed earlier. The UI will show the badge when the
-		// total reachable venues are ≥2, regardless of live price.
-		return {
-			priceUSD: cauldron.priceUSD,
-			tvlUSD: cauldron.tvlUSD,
-			canPublishBcmr: bcmrEligibility
-		};
-	});
+	// ─── TIER 3 DEFERRED: external API results ───────────────────────────
+	// Split into two independent deferreds so the price hero (Cauldron) does
+	// NOT wait on the BCMR eligibility check. The eligibility check runs a
+	// cold BlockBook authchain walk (500ms–10s); previously it was bundled
+	// with Cauldron in one Promise.all, which gated the price display behind
+	// that walk for signed-in users. Now Cauldron resolves the hero the moment
+	// it returns, and the publish CTA streams in separately when the walk ends.
+	const tier3Promise = cauldronPromise.then((cauldron) => ({
+		priceUSD: cauldron.priceUSD,
+		tvlUSD: cauldron.tvlUSD
+	}));
+
+	const canPublishBcmrPromise = bcmrEligibilityPromise;
 
 	// ─── RETURN ──────────────────────────────────────────────────────────
 	// Token + BCMR are synchronous (initial HTML stream). Tier1/2/3 are
@@ -897,6 +896,7 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 		tier1: tier1Promise,
 		tier2: tier2Promise,
 		tier3: tier3Promise,
+		canPublishBcmr: canPublishBcmrPromise,
 		tvlRank: tvlRankPromise,
 		holdersRank: holdersRankPromise
 	};

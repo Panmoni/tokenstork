@@ -340,10 +340,10 @@
 						Airdrop to holders
 					</a>
 				{/await}
-				{#await data.tier3}
-					<!-- BCMR publish CTA uses tier3 (eligibility check) -->
-				{:then t3}
-					{#if t3.canPublishBcmr}
+				{#await data.canPublishBcmr}
+					<!-- BCMR publish CTA — own deferred (BlockBook authchain walk) -->
+				{:then canPublish}
+					{#if canPublish}
 						<a
 							href="/publish-bcmr"
 							class="inline-flex items-center gap-1 px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold"

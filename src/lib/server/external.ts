@@ -220,39 +220,47 @@ export async function fetchCauldron(
 	bchPriceUSD: number
 ): Promise<CauldronStats> {
 	assertValidCategory(category);
-	let priceUSD = 0;
-	let tvlUSD = 0;
-	try {
-		const priceRes = await timedFetch(
-			`${CAULDRON_INDEXER}/price/${category}/current`,
-			{ timeoutMs: 5000 }
-		);
-		if (priceRes.ok) {
-			const priceData = await priceRes.json();
-			if (priceData?.price != null) {
-				priceUSD =
-					satoshisToBCH(priceData.price * Math.pow(10, decimals)) * bchPriceUSD;
+	// Price and TVL are independent indexer endpoints — fire both concurrently
+	// so latency is max(price, tvl) rather than price + tvl. Each soft-fails to
+	// 0 independently so one slow/failed leg never blocks the other's result.
+	const [priceUSD, tvlUSD] = await Promise.all([
+		(async () => {
+			try {
+				const priceRes = await timedFetch(
+					`${CAULDRON_INDEXER}/price/${category}/current`,
+					{ timeoutMs: 5000 }
+				);
+				if (priceRes.ok) {
+					const priceData = await priceRes.json();
+					if (priceData?.price != null) {
+						return satoshisToBCH(priceData.price * Math.pow(10, decimals)) * bchPriceUSD;
+					}
+				}
+			} catch (err) {
+				console.error('[external] Cauldron price fetch failed:', err);
 			}
-		}
-	} catch (err) {
-		console.error('[external] Cauldron price fetch failed:', err);
-	}
-	try {
-		const tvlRes = await timedFetch(
-			`${CAULDRON_INDEXER}/valuelocked/${category}`,
-			{ timeoutMs: 5000 }
-		);
-		if (tvlRes.ok) {
-			const tvlData = await tvlRes.json();
-			if (tvlData?.satoshis != null) {
-				// Double-sided pool — multiply by 2 to reflect the combined value,
-				// matching the calculation in app/utils/getTokenData.ts.
-				tvlUSD = satoshisToBCH(tvlData.satoshis) * bchPriceUSD * 2;
+			return 0;
+		})(),
+		(async () => {
+			try {
+				const tvlRes = await timedFetch(
+					`${CAULDRON_INDEXER}/valuelocked/${category}`,
+					{ timeoutMs: 5000 }
+				);
+				if (tvlRes.ok) {
+					const tvlData = await tvlRes.json();
+					if (tvlData?.satoshis != null) {
+						// Double-sided pool — multiply by 2 to reflect the combined value,
+						// matching the calculation in app/utils/getTokenData.ts.
+						return satoshisToBCH(tvlData.satoshis) * bchPriceUSD * 2;
+					}
+				}
+			} catch (err) {
+				console.error('[external] Cauldron TVL fetch failed:', err);
 			}
-		}
-	} catch (err) {
-		console.error('[external] Cauldron TVL fetch failed:', err);
-	}
+			return 0;
+		})()
+	]);
 	return { priceUSD, tvlUSD };
 }
 
