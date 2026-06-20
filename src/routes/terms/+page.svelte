@@ -309,7 +309,7 @@
 	<p class="mb-8 ts-text-muted">
 		Last updated: {lastUpdated}. See also our <a
 			href="/privacy"
-			class="text-violet-600 hover:underline">Privacy Policy</a
+			class="text-violet-600 dark:text-violet-400 hover:underline">Privacy Policy</a
 		>.
 	</p>
 

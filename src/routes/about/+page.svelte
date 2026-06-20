@@ -14,14 +14,14 @@
 	<div class="prose prose-slate dark:prose-invert max-w-none">
 		<p class="ts-text-body">
 			TokenStork.com is a market-cap site for
-			<a href="https://bchworks.com/" target="_blank" rel="noopener noreferrer">BCH</a>
-			<a href="https://cashtokens.org/" target="_blank" rel="noopener noreferrer">CashTokens</a>
+			<a href="https://bchworks.com/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">BCH</a>
+			<a href="https://cashtokens.org/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">CashTokens</a>
 			built and maintained by
-			<a href="https://georgedonnelly.com/" target="_blank" rel="noopener noreferrer">George Donnelly</a>.
-			<a href="https://github.com/Panmoni/tokenstork" target="_blank" rel="noopener noreferrer">The code is open-source</a>.
+			<a href="https://georgedonnelly.com/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">George Donnelly</a>.
+			<a href="https://github.com/Panmoni/tokenstork" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">The code is open-source</a>.
 			You can review the pending
-			<a href="https://github.com/Panmoni/tokenstork/issues" target="_blank" rel="noopener noreferrer">issues</a>
-			or the <a href="/roadmap">roadmap</a>.
+			<a href="https://github.com/Panmoni/tokenstork/issues" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">issues</a>
+			or the <a href="/roadmap" class="text-violet-600 dark:text-violet-400 hover:underline">roadmap</a>.
 		</p>
 		<p class="mt-4 ts-text-body">
 			I welcome your suggestions, criticisms, bug reports and general feedback any time. Let me know

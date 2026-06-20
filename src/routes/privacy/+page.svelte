@@ -262,7 +262,7 @@
 	<p class="mb-8 ts-text-muted">
 		Last updated: {lastUpdated}. See also our <a
 			href="/terms"
-			class="text-violet-600 hover:underline">Terms of Service</a
+			class="text-violet-600 dark:text-violet-400 hover:underline">Terms of Service</a
 		>.
 	</p>
 
