@@ -25,6 +25,7 @@ export interface TokenReport {
 	moderatorNote: string | null;
 	tokenName: string | null;
 	tokenSymbol: string | null;
+	hidden: boolean; // true iff the token is currently in token_moderation
 }
 
 interface DbRow {
@@ -39,6 +40,7 @@ interface DbRow {
 	moderator_note: string | null;
 	token_name: string | null;
 	token_symbol: string | null;
+	hidden: boolean;
 }
 
 function rowToReport(r: DbRow): TokenReport {
@@ -53,7 +55,8 @@ function rowToReport(r: DbRow): TokenReport {
 		reviewedAt: r.reviewed_at ? Math.floor(r.reviewed_at.getTime() / 1000) : null,
 		moderatorNote: r.moderator_note,
 		tokenName: r.token_name,
-		tokenSymbol: r.token_symbol
+		tokenSymbol: r.token_symbol,
+		hidden: r.hidden
 	};
 }
 
@@ -69,9 +72,11 @@ export async function listReports(
 	const res = await query<DbRow>(
 		`SELECT r.id, r.category, r.reason, r.details, r.reporter_email, r.status,
 		        r.created_at, r.reviewed_at, r.moderator_note,
-		        m.name AS token_name, m.symbol AS token_symbol
+		        m.name AS token_name, m.symbol AS token_symbol,
+		        (mod.category IS NOT NULL) AS hidden
 		   FROM token_reports r
 		   LEFT JOIN token_metadata m ON m.category = r.category
+		   LEFT JOIN token_moderation mod ON mod.category = r.category
 		   ${where}
 		   ORDER BY r.created_at DESC
 		   LIMIT $1 OFFSET $2`,

@@ -36,6 +36,50 @@
 		}
 	}
 
+	// Hide / un-hide the reported token via token_moderation. Hiding passes
+	// the report's own reason + reportId so the same call also closes the
+	// report (→ actioned) atomically. The buttons elsewhere only set triage
+	// labels; THIS is the only control that actually removes a token.
+	async function moderate(
+		report: { id: number; categoryHex: string; reason: string },
+		action: 'hide' | 'unhide'
+	) {
+		let note: string | null = null;
+		if (action === 'hide') {
+			const input = prompt(
+				'Moderator note (audit trail; not shown to the reporter):',
+				`hidden per report #${report.id}`
+			);
+			if (input === null) return; // cancelled
+			note = input.trim() || null;
+		} else if (!confirm('Un-hide this token? It will reappear across the site.')) {
+			return;
+		}
+		busy = report.id;
+		error = null;
+		try {
+			const res = await fetch(`/api/admin/tokens/${report.categoryHex}/moderate`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify(
+					action === 'hide'
+						? { action: 'hide', reason: report.reason, note, reportId: report.id }
+						: { action: 'unhide' }
+				)
+			});
+			if (!res.ok) {
+				const body = (await res.json().catch(() => ({}))) as { message?: string };
+				error = body.message ?? `${action} failed (HTTP ${res.status})`;
+				return;
+			}
+			await invalidateAll();
+		} catch (err) {
+			error = (err as Error).message ?? 'Network error';
+		} finally {
+			busy = null;
+		}
+	}
+
 	function tone(status: string): string {
 		if (status === 'actioned')
 			return 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300';
@@ -114,9 +158,16 @@
 								{/if}
 							</div>
 						</div>
-						<span class={`px-2 py-0.5 rounded text-[11px] font-semibold ${tone(r.status)}`}>
-							{r.status}
-						</span>
+						<div class="flex flex-col items-end gap-1 shrink-0">
+							<span class={`px-2 py-0.5 rounded text-[11px] font-semibold ${tone(r.status)}`}>
+								{r.status}
+							</span>
+							{#if r.hidden}
+								<span
+									class="px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-600 text-white"
+								>token hidden</span>
+							{/if}
+						</div>
 					</div>
 
 					{#if r.details}
@@ -157,6 +208,23 @@
 								disabled={busy === r.id}
 								class="px-3 py-1.5 rounded-md border ts-border-subtle text-xs font-semibold hover:bg-slate-50 dark:hover:bg-zinc-800 disabled:opacity-50"
 							>Reopen</button>
+						{/if}
+						<span class="mx-1 ts-text-muted">·</span>
+						{#if r.hidden}
+							<button
+								type="button"
+								onclick={() => moderate(r, 'unhide')}
+								disabled={busy === r.id}
+								class="px-3 py-1.5 rounded-md border border-rose-400 text-rose-700 dark:text-rose-300 text-xs font-semibold hover:bg-rose-50 dark:hover:bg-rose-950/30 disabled:opacity-50"
+							>Unhide token</button>
+						{:else}
+							<button
+								type="button"
+								onclick={() => moderate(r, 'hide')}
+								disabled={busy === r.id}
+								class="px-3 py-1.5 rounded-md bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold disabled:opacity-50"
+								title="Removes the token from the site and marks this report actioned"
+							>Hide token</button>
 						{/if}
 						<a
 							href={`/token/${r.categoryHex}`}
