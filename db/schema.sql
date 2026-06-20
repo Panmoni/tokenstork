@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS token_metadata (
   description     TEXT,
   icon_uri        TEXT,
   bcmr_revision   TIMESTAMPTZ,                                         -- revision timestamp from the BCMR json itself
-  bcmr_source     TEXT,                                                -- 'onchain' (canonical, written by sync-bcmr-onchain) | 'onchain-empty' (walker visited, no on-chain BCMR locator found — sentinel keeps the row out of the priority-1 brand-new bucket on subsequent ticks). Legacy 'paytaca' / 'paytaca-missing' rows from the retired Phase 4b worker may remain on long-running deployments.
+  bcmr_source     TEXT,                                                -- 'onchain' (canonical, sha256-verified, written by sync-bcmr-onchain) | 'onchain-empty' (walker visited, no on-chain BCMR locator found — sentinel keeps the row out of the priority-1 brand-new bucket on subsequent ticks) | 'otr' (gap-fill from the OpenTokenRegistry mirror via sync-bcmr-otr — only ever written to non-onchain rows; never masks a canonical 'onchain' row). Legacy 'paytaca' / 'paytaca-missing' rows from the retired Phase 4b worker may remain on long-running deployments.
   fetched_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -185,24 +185,32 @@ ALTER TABLE token_venue_listings ADD COLUMN IF NOT EXISTS pools_total_tvl_sats N
 -- ============================================================================
 -- Per-venue price/TVL history. Append-only; one row per category per
 -- sync-cauldron run. Drives the directory grid's 1h/24h/7d % change
--- columns and the 7-day sparklines. `token_venue_listings` holds the
--- current snapshot (single row per venue/category); this table keeps
--- the time series.
+-- columns and sparklines AND the token-detail price+volume chart, whose
+-- range toggles go out to 1y / All-time (see PRICE_RANGES in
+-- src/routes/token/[category]/+page.server.ts). `token_venue_listings`
+-- holds the current snapshot (single row per venue/category); this table
+-- keeps the full time series the long-horizon charts read.
 --
--- Retention: at current cadence (~317 listed × 6 runs/day) this is
--- ~57k rows/month → ~700k rows/year, which Postgres happily keeps in
--- RAM and serves from the (category, venue, ts DESC) index without
--- sweat. No pruning today.
+-- Retention: the 10 min fast-pass for already-listed tokens dominates the
+-- row rate (NOT the 4 h full pass). Measured 2026-06-20: ~2.6M rows across
+-- 355 categories in 57 days ≈ 46k rows/day ≈ ~17M rows/year — about 24× the
+-- original 6-runs/day estimate. Postgres still serves these from the
+-- (category, venue, ts DESC) index without sweat. No pruning today, and the
+-- long-horizon charts depend on there being none.
 --
 -- Revisit when any of these hit:
 -- (1) we add a second venue writing more than a few hundred rows/hour,
--- (2) the table exceeds ~10M rows (~15 years at current rates),
--- (3) the LATERAL subqueries in /+page.server.ts start showing in
---     the slow-query log.
--- Simple fix when the time comes: `DELETE FROM token_price_history
--- WHERE ts < now() - INTERVAL '90 days'` on a weekly systemd timer.
--- 90 days is 10× the longest window the UI queries (7d), so dropping
--- anything older is safe.
+-- (2) the table exceeds ~10M rows — at the real ~17M/year rate that is
+--     months away, not years; this is now the binding constraint,
+-- (3) the window CTEs in /+page.server.ts start showing in the slow-query
+--     log (the 1y/All buckets scan the full per-category series).
+--
+-- DO NOT prune at 90 days. The token-detail chart now queries 1y and
+-- All-time windows, so a `DELETE ... WHERE ts < now() - INTERVAL '90 days'`
+-- would silently truncate those charts to a 90-day flat line. If pruning
+-- ever becomes necessary, either (a) keep a retention horizon well past the
+-- longest UI window, or (b) downsample old rows into a coarser roll-up
+-- table the long-horizon ranges read from instead of deleting outright.
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS token_price_history (
   category     BYTEA            NOT NULL REFERENCES tokens(category) ON DELETE CASCADE,
@@ -1268,3 +1276,22 @@ CREATE INDEX IF NOT EXISTS bcmr_tokenstork_submissions_pending_idx
 
 CREATE INDEX IF NOT EXISTS bcmr_tokenstork_submissions_category_idx
   ON bcmr_tokenstork_submissions (category);
+
+-- ============================================================================
+-- OTR (OpenTokenRegistry) gap-fill — sync-bcmr-otr.
+-- ============================================================================
+-- A daily worker (workers/src/bin/bcmr-otr.rs) pulls the OpenTokenRegistry
+-- multi-token BCMR from otr.cash/.well-known/bitcoin-cash-metadata-registry.json
+-- and fills `token_metadata` for categories the on-chain authchain walker
+-- could not satisfy (no on-chain BCMR locator). It is strictly secondary:
+--   * It performs a GUARDED UPDATE (never an INSERT), so it only augments a
+--     row the on-chain walker already created (normally 'onchain-empty').
+--   * The `bcmr_source IS DISTINCT FROM 'onchain'` guard makes the write a
+--     no-op against any canonical 'onchain' row — OTR can never clobber
+--     sha256-verified on-chain metadata.
+--   * It never touches `token_metadata.fetched_at` (the on-chain picker's
+--     priority-2 stale clock), so the periodic on-chain re-check that can
+--     upgrade an OTR row to 'onchain' is never starved.
+-- Filled rows get `bcmr_source='otr'`; their icon URIs are seeded into the
+-- icon pipeline exactly like on-chain ones.
+ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_otr_run_at TIMESTAMPTZ;
