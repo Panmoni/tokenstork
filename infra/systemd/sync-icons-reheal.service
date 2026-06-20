@@ -1,0 +1,73 @@
+[Unit]
+Description=tokenstork sync-icons (reheal mode) — re-run recoverable icon blocks
+Documentation=https://github.com/Panmoni/tokenstork
+Documentation=file:///opt/tokenstork/docs/icon-safety-plan.md
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=oneshot
+User=tokenstork
+Group=tokenstork
+WorkingDirectory=/opt/tokenstork
+ExecStart=/opt/tokenstork/workers/target/release/sync-icons
+
+# ICON_MODE=reheal re-runs the pending pipeline over icons currently
+# blocked for a RECOVERABLE reason (oversize, unsupported_format): it
+# resets those rows to pending (deleting the stale block so the
+# content-hash dedupe can't short-circuit the re-fetch) and reprocesses
+# them with the current size cap, downscaling, and bmp/ico decoders.
+# `adult` blocks are real content decisions and are NEVER touched — the
+# Rust enforces a hard reason allowlist regardless of ICON_REHEAL_REASONS.
+#
+# Operator-run, one-shot:
+#   sudo systemctl start sync-icons-reheal.service
+#   sudo journalctl -u sync-icons-reheal.service -f
+# To narrow the scope (default is both recoverable reasons):
+#   sudo systemctl set-environment ICON_REHEAL_REASONS=oversize
+#   sudo systemctl start sync-icons-reheal.service
+#   sudo systemctl unset-environment ICON_REHEAL_REASONS
+#
+# Same binary as sync-icons.service — the mode dispatch lives in the Rust
+# code, not in separate binaries.
+Environment="ICON_MODE=reheal"
+Environment="RUST_LOG=info"
+EnvironmentFile=-/etc/tokenstork/env
+
+StateDirectory=tokenstork
+StateDirectoryMode=0755
+
+# Hardening — same profile as sync-icons.service.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectProc=invisible
+ProcSubset=pid
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallArchitectures=native
+# UMask=0022 (NOT 0077) so healed files are mode 0644 — Caddy serves
+# /icons/<hash>.webp as a different user and needs world-read.
+UMask=0022
+ReadWritePaths=/var/lib/tokenstork
+
+# A reheal pass walks the recoverable-block backlog (tens of URLs today),
+# some of which may be dead sources that hang to the 20s fetch timeout.
+# The binary's own 10-min wallclock budget caps a single run; this is the
+# unit-level guard above it.
+TimeoutStartSec=30min
