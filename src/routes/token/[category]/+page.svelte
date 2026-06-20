@@ -430,7 +430,7 @@
 						{/if}
 					{/await}
 					<div class="mt-1 text-xs ts-text-muted">
-						per {heroSymbol || 'token'} · via {heroSource}
+						per {heroSymbol || 'token'} · via <a href="https://app.cauldron.quest/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">{heroSource}</a>
 					</div>
 				</div>
 			{/if}
