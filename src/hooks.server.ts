@@ -115,52 +115,75 @@ export const handle: Handle = async ({ event, resolve }) => {
 	return response;
 };
 
-// Route prefixes that must NEVER be edge-cached: auth, admin, and the
-// stateful wizards / per-user surfaces. Matched on segment boundaries so
-// `/mint` does NOT also denylist `/mints` (a public read page).
-const NO_CACHE_PREFIXES = ['/login', '/admin', '/watchlist', '/mint', '/publish-bcmr', '/api'];
+// Route prefixes that must NEVER be cached anywhere: auth, admin, per-user
+// surfaces, the action/tool wizards, and the whole API. Matched on segment
+// boundaries so `/mint` does NOT also match `/mints` (a public read page).
+//
+// These get an EXPLICIT `private, no-store` (below) rather than just being
+// skipped. Omitting a header is NOT enough: Cloudflare's "respect origin"
+// cache rule still cached a header-less /mint 200 (observed live as HIT).
+// An explicit no-store is the only thing that makes respect-origin bypass.
+const NO_STORE_PREFIXES = [
+	'/login',
+	'/admin',
+	'/watchlist',
+	'/mint',
+	'/publish-bcmr',
+	'/airdrops/new',
+	'/api'
+];
 
-function isCacheableRoute(pathname: string): boolean {
-	for (const prefix of NO_CACHE_PREFIXES) {
-		if (pathname === prefix || pathname.startsWith(prefix + '/')) return false;
+function isNoStoreRoute(pathname: string): boolean {
+	for (const prefix of NO_STORE_PREFIXES) {
+		if (pathname === prefix || pathname.startsWith(prefix + '/')) return true;
 	}
-	return true;
+	return false;
 }
 
 /**
- * Tier 4 — anonymous page micro-caching at the edge.
+ * Tier 4 — cache-control policy applied to every response.
  *
- * For ANONYMOUS, GET, 200, text/html responses on public read routes, mark
- * the document publicly cacheable for a short window with a long stale-
- * while-revalidate tail. This lets Cloudflare serve the static shell +
- * skeleton from the edge near-instantly while the live grid hydrates
- * client-side (see +page.svelte). `max-age=0` keeps browsers revalidating
- * (so a shared browser never holds a stale page); only the shared CDN
- * caches, via `s-maxage`.
+ * Three outcomes:
+ *  1. Response already declared its own Cache-Control (e.g. the /api
+ *     endpoints' s-maxage directives) → leave it untouched.
+ *  2. Admin / auth / per-user / tool / API route → explicit
+ *     `private, no-store`, for ANY method/status/auth-state, so neither the
+ *     edge nor a browser can ever retain it. (Just omitting a header let
+ *     Cloudflare's respect-origin rule cache /mint — observed live.)
+ *  3. Otherwise — ANONYMOUS, GET, 200, text/html public read pages → mark
+ *     the document publicly cacheable for a short window with a long
+ *     stale-while-revalidate tail, so Cloudflare serves the static shell +
+ *     skeleton from the edge while the live grid hydrates client-side (see
+ *     +page.svelte). `max-age=0` keeps browsers revalidating; only the
+ *     shared CDN caches, via `s-maxage`.
  *
- * Safety:
- *  - Gated on `!event.locals.user`, so a logged-in user's personalized
- *    HTML (watchlist stars, vote state) is NEVER marked public.
- *  - Skipped when a header already set cache-control (don't clobber the
- *    /api endpoints' own directives) or when the response sets a cookie.
- *  - text/html gate excludes /api JSON and SvelteKit `__data.json`
- *    revalidation payloads, so client polling always reaches fresh origin
- *    data (which itself hits the in-process SWR memo).
+ * Safety: the public branch is gated on `!event.locals.user` and a
+ * text/html 200, so a logged-in user's personalized HTML (watchlist stars,
+ * vote state) is never marked public, and /api JSON / SvelteKit
+ * `__data.json` payloads never get the shell policy.
  *
- * INERT until the Cloudflare side is configured — CF does not cache HTML
- * by default regardless of these headers. The companion Cache Rules
- * ("Cache Everything" for HTML + "Bypass cache when the session cookie is
- * present") are documented in docs/caching.md.
+ * The public branch is INERT until Cloudflare is configured — CF does not
+ * cache HTML by default. The companion Cache Rule (cache eligible when the
+ * session cookie is absent, respect origin) is documented in
+ * docs/caching.md.
  */
 function applyEdgeCacheHeaders(event: Parameters<Handle>[0]['event'], response: Response): void {
+	// (1) Respect a policy the handler already set.
+	if (response.headers.has('cache-control')) return;
+
+	// (2) Never-cache routes: hard no-store regardless of method/status/auth.
+	if (isNoStoreRoute(event.url.pathname)) {
+		response.headers.set('cache-control', 'private, no-store');
+		return;
+	}
+
+	// (3) Public read pages — anonymous only.
 	if (event.request.method !== 'GET') return;
 	if (event.locals.user) return;
 	if (response.status !== 200) return;
-	if (response.headers.has('cache-control')) return;
 	if (response.headers.has('set-cookie')) return;
 	const contentType = response.headers.get('content-type') ?? '';
 	if (!contentType.includes('text/html')) return;
-	if (!isCacheableRoute(event.url.pathname)) return;
 
 	response.headers.set('cache-control', 'public, max-age=0, s-maxage=30, stale-while-revalidate=300');
 }
