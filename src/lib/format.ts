@@ -161,6 +161,52 @@ function bigintToApproxNumber(n: bigint): number {
 }
 
 /**
+ * Format a USD price for display across the *entire* CashToken price range.
+ *
+ * The problem this solves: token prices span many orders of magnitude. A
+ * token can trade at $1,200 or at $0.0000002. A flat `toFixed(6)` renders the
+ * tiny one as the useless "$0.000000" — it looks free even though it isn't —
+ * while a flat `toFixed(2)` does the same one tier up. Instead we pick decimal
+ * places from the value's magnitude so ~3 significant figures always survive
+ * past the leading zeros, then trim noise trailing zeros:
+ *
+ *   >= 1        →  2 decimals, grouped       ($1,200.00, $1,000.99, $1.00)
+ *   0.01 – 1    →  up to 4 dp, min 2 kept    ($0.10, $0.0123, $0.01)
+ *   < 0.01      →  3 sig-figs past the zeros ($0.0000002, $0.001234)
+ *   <= 0 / nan  →  em dash                   (—)
+ *
+ * This is the canonical price formatter — the hero price, the AMM venue rows
+ * and (via the same ladder) the PriceChart y-axis all read consistently. The
+ * customary mid-range cases the user cares about ("0.01", "1000.99") are
+ * untouched; only the all-zeros tail is fixed.
+ */
+export function formatPriceUSD(value: number | null | undefined): string {
+	if (value == null || !Number.isFinite(value) || value <= 0) return '—';
+
+	// $1 and up: customary two-decimal currency, with thousands separators.
+	if (value >= 1) {
+		return `$${value.toLocaleString('en-US', {
+			minimumFractionDigits: 2,
+			maximumFractionDigits: 2
+		})}`;
+	}
+
+	// Cents range: 4 dp is plenty. Trim trailing zeros but never drop below two
+	// decimals, so $0.10 stays "$0.10" rather than collapsing to "$0.1".
+	if (value >= 0.01) {
+		return `$${value.toFixed(4).replace(/(\.\d{2}\d*?)0+$/, '$1')}`;
+	}
+
+	// Sub-cent: keep three significant figures past the leading zeros so the
+	// real price is visible, then strip the now-redundant trailing zeros.
+	// magnitude = exponent of the first significant digit (negative here);
+	// decimals = -magnitude + 2 yields 3 sig-figs (e.g. 0.0000002 → 9 dp).
+	const magnitude = Math.floor(Math.log10(value));
+	const decimals = -magnitude + 2;
+	return `$${value.toFixed(decimals).replace(/0+$/, '')}`;
+}
+
+/**
  * Convert a Cauldron venue-listing price (sats per smallest-unit-of-token,
  * the raw value we store in `token_venue_listings`) into a dollar string.
  *
@@ -177,11 +223,7 @@ export function formatVenuePriceUSD(
 	if (priceSats == null || bchPriceUSD == null || bchPriceUSD <= 0) return '—';
 	if (!Number.isFinite(priceSats) || priceSats <= 0) return '—';
 	const bchPerToken = (priceSats * Math.pow(10, decimals)) / 1e8;
-	const usd = bchPerToken * bchPriceUSD;
-	if (!Number.isFinite(usd) || usd <= 0) return '—';
-	if (usd >= 1) return `$${usd.toFixed(2)}`;
-	if (usd >= 0.01) return `$${usd.toFixed(4)}`;
-	return `$${usd.toFixed(6)}`;
+	return formatPriceUSD(bchPerToken * bchPriceUSD);
 }
 
 /**

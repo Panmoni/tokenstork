@@ -2,6 +2,7 @@
 	import {
 		humanizeNumericSupply,
 		formatMarketCap,
+		formatPriceUSD,
 		stripEmoji,
 		getAgeBadge,
 		ageBadgeLabel,
@@ -242,11 +243,6 @@
 		downvoted: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
 		controversial: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
 	};
-	function fmtUsd(v: number): string {
-		if (v >= 1) return `$${v.toFixed(2)}`;
-		return `$${v.toFixed(6)}`;
-	}
-
 	function giniTier(g: number): { label: string; classes: string } {
 		if (g < 0.4) return { label: 'Excellent', classes: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' };
 		if (g < 0.6) return { label: 'Good', classes: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' };
@@ -417,7 +413,7 @@
 			{#if t3.priceUSD > 0}
 				<div class="shrink-0 sm:text-right">
 					<div class="text-4xl md:text-5xl font-mono font-bold tracking-tight ts-text-strong leading-none">
-						{fmtUsd(heroPrice)}
+						{formatPriceUSD(heroPrice)}
 					</div>
 					{#await data.tier1}
 						<div class="mt-2 w-16 h-4 {sk}"></div>
@@ -957,7 +953,7 @@
 							{#if ext.min != null && ext.max != null}
 								<div class="flex justify-between gap-3">
 									<dt class="ts-text-muted">{windowKey} range</dt>
-									<dd class="font-mono ts-text-primary">{fmtUsd(ext.min)} – {fmtUsd(ext.max)}</dd>
+									<dd class="font-mono ts-text-primary">{formatPriceUSD(ext.min)} – {formatPriceUSD(ext.max)}</dd>
 								</div>
 							{/if}
 						{/each}
@@ -1018,7 +1014,7 @@
 							<div class="grid grid-cols-2 gap-2 text-sm">
 								<div>
 									<div class="text-xs text-slate-500 mb-1">Price</div>
-									<div class="font-mono">{t3.priceUSD > 0 ? (t3.priceUSD >= 1 ? `$${t3.priceUSD.toFixed(2)}` : `$${t3.priceUSD.toFixed(6)}`) : '—'}</div>
+									<div class="font-mono">{formatPriceUSD(t3.priceUSD)}</div>
 								</div>
 								<div>
 									<div class="text-xs text-slate-500 mb-1">TVL</div>
@@ -1037,7 +1033,7 @@
 						<div class="grid grid-cols-2 gap-2 text-sm">
 							<div>
 								<div class="text-xs text-slate-500 mb-1">Price</div>
-								<div class="font-mono">{t1.fexPriceUSD > 0 ? (t1.fexPriceUSD >= 1 ? `$${t1.fexPriceUSD.toFixed(2)}` : `$${t1.fexPriceUSD.toFixed(6)}`) : '—'}</div>
+								<div class="font-mono">{formatPriceUSD(t1.fexPriceUSD)}</div>
 							</div>
 							<div>
 								<div class="text-xs text-slate-500 mb-1">TVL</div>
