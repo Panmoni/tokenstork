@@ -24,23 +24,31 @@ const config = {
 		version: {
 			name: pkg.version
 		},
-		// Content Security Policy. Hash mode makes SvelteKit emit a
-		// `<meta http-equiv="Content-Security-Policy">` tag in every SSR
-		// response, with SHA-256 hashes of its own inline hydration script
-		// + component-scoped inline styles. This replaces the
-		// `'unsafe-inline'`-script Caddy header CSP we used to ship — the
-		// previous policy had to allow every inline script (XSS-via-
-		// injection surface), and now only SvelteKit's specific scripts
-		// (whose hashes change every build) are accepted.
+		// Content Security Policy. Nonce mode makes SvelteKit stamp a
+		// per-response `nonce-...` onto every inline script it emits AND
+		// list that nonce in the `content-security-policy` response header,
+		// so `script-src` never needs `'unsafe-inline'` (the XSS-via-
+		// injection surface the old Caddy header CSP had).
 		//
-		// The Caddy CSP header is removed in lockstep with this change so
-		// the browser enforces ONE CSP per response. (Two CSPs in the
-		// same response are intersected — a header CSP without our
-		// build's hashes would reject everything SvelteKit emits inline.)
+		// Why nonce and NOT hash: SvelteKit streams deferred `load`
+		// promises (the homepage token grid, the token-detail tiers) by
+		// appending `<script>...resolve(id, ...)</script>` chunks to the
+		// response AFTER the CSP header has already been sent. In hash mode
+		// their SHA-256s can't be added to the policy retroactively and
+		// they carry no nonce, so the browser blocks them and every
+		// `{#await}` hangs on its skeleton forever (this was exactly the
+		// "homepage grid never loads" bug). Nonce mode tags those late
+		// chunks with the same nonce already in the header, so they run.
+		// (No route prerenders — nonce mode is incompatible with
+		// prerendering, which would throw at build time.)
 		//
-		// Add new third-party CDNs here, not via a Caddy header override.
+		// The Caddy CSP header is removed in lockstep so the browser
+		// enforces ONE CSP per response. (Two CSPs are intersected — a
+		// Caddy CSP without our per-response nonce would reject everything
+		// SvelteKit emits inline.) Add new third-party CDNs here, not via a
+		// Caddy header override.
 		csp: {
-			mode: 'hash',
+			mode: 'nonce',
 			directives: {
 				'default-src': ['self'],
 				'script-src': ['self'],
@@ -48,8 +56,8 @@ const config = {
 				// `style=""` attributes were refactored to SVG geometry
 				// (chart bars on /stats) + a CSS class on app.html's
 				// body wrapper. Any new inline-style usage will fail at
-				// browser runtime; SvelteKit's `mode: 'hash'` handles
-				// `<style>` blocks emitted by component scoping.
+				// browser runtime; nonce mode nonces the `<style>` blocks
+				// emitted by component scoping.
 				'style-src': ['self'],
 				'img-src': ['self', 'https:', 'data:'],
 				'font-src': ['self', 'data:'],
