@@ -63,6 +63,18 @@ MemoryHigh=24G
 MemoryMax=26G
 OOMPolicy=stop
 
+# MemorySwapMax caps how much of BlockBook's working set can spill to
+# swap. Bounds the 2026-06-13 swap-thrash blast radius: under memory
+# pressure the kernel can push at most 4G of BlockBook's anon pages to
+# swap before reclaim has to evict RocksDB cache instead (which is
+# re-readable from disk) rather than swapping unboundedly. Previously
+# this lived ONLY in a `systemctl set-property` runtime drop-in
+# (/etc/systemd/system.control/...), which (a) wasn't in git and (b)
+# its sibling 50-CPUQuota.conf silently overrode the CPUQuota above.
+# Consolidated into the unit file 2026-06-20 as the single source of
+# truth; the runtime drop-ins were removed.
+MemorySwapMax=4G
+
 # ── Thrash risk ──
 # RocksDB's working set sits at ~24 GB on this 32 GB box. During an
 # enrichment sweep or BCMR authchain walk, query concurrency pushes the
