@@ -24,7 +24,13 @@ const VALID_STATES: ReadonlyArray<IconState | 'all'> = [
 	'pending',
 	'all'
 ];
-const PAGE_SIZE = 60;
+// The queue is an operator workbench: show the whole backlog on one page so
+// the operator can select-all and bulk-approve in a single pass rather than
+// clicking through pages. Capped (not unbounded) so a pathological backlog
+// can't render tens of thousands of image cards or blow the per-row rollup
+// query past its statement timeout; the Newer/Older nav stays as the
+// overflow fallback for anything beyond one page.
+const PAGE_SIZE = 500;
 
 export const load: PageServerLoad = async ({ locals, url }) => {
 	if (!locals.user) {

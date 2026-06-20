@@ -203,6 +203,67 @@ export async function clearIcon(
 	return rowToModeration(res.rows[0]);
 }
 
+export interface BulkClearResult {
+	/// Hashes successfully flipped to `cleared`.
+	cleared: string[];
+	/// Hashes we did NOT clear, each with the reason (no file on disk, or
+	/// no matching moderation row).
+	skipped: { hash: string; reason: string }[];
+}
+
+/**
+ * Bulk variant of {@link clearIcon}: approve many hashes in one round trip
+ * so the operator can clear a reviewed batch at once. The same on-disk
+ * invariant holds PER HASH — a hash whose transcoded WebP is missing is
+ * SKIPPED (never cleared), so a batch approve can never paint a broken icon
+ * across the public directory. The DB flip is a single UPDATE over the
+ * survivors. Returns which hashes cleared and which were skipped (and why)
+ * so the UI can report partial success.
+ */
+export async function bulkClearIcons(
+	contentHashesHex: string[],
+	operatorCashaddr: string,
+	note: string | null
+): Promise<BulkClearResult> {
+	// De-dupe + normalise; an empty set is a no-op.
+	const hashes = [...new Set(contentHashesHex.map((h) => h.toLowerCase()))];
+	const skipped: { hash: string; reason: string }[] = [];
+	const clearable: string[] = [];
+
+	// File-existence checks fan out in parallel — same gate as clearIcon,
+	// just batched. A missing WebP means there are no bytes to serve, so
+	// the hash is skipped rather than cleared.
+	await Promise.all(
+		hashes.map(async (h) => {
+			if (await fileExists(iconFilePath(h))) clearable.push(h);
+			else skipped.push({ hash: h, reason: 'no image on disk' });
+		})
+	);
+	if (clearable.length === 0) return { cleared: [], skipped };
+
+	// Pass hashes as a text[] and decode() inside the query — unambiguous
+	// to serialise and still index-friendly (the IN-subquery yields the
+	// same bytea values content_hash is indexed on).
+	const res = await query<{ content_hash: Buffer }>(
+		`UPDATE icon_moderation
+		    SET state = 'cleared',
+		        block_reason = NULL,
+		        decided_by = $2,
+		        decided_at = now(),
+		        moderator_note = $3
+		  WHERE content_hash IN (SELECT decode(h, 'hex') FROM unnest($1::text[]) AS t(h))
+		RETURNING content_hash`,
+		[clearable, operatorCashaddr, note]
+	);
+	const clearedSet = new Set(res.rows.map((r) => hexFromBytes(r.content_hash)!));
+	// A clearable hash with no matching row (e.g. deleted between page load
+	// and submit) won't come back from RETURNING — report it as skipped.
+	for (const h of clearable) {
+		if (!clearedSet.has(h)) skipped.push({ hash: h, reason: 'no moderation row' });
+	}
+	return { cleared: [...clearedSet], skipped };
+}
+
 /**
  * Block an icon: delete the on-disk WebP (the load-bearing step — stops
  * Caddy serving it) THEN flip the row to `state='blocked'` with a reason.

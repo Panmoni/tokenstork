@@ -7,6 +7,77 @@
 	let busy = $state<string | null>(null);
 	let error = $state<string | null>(null);
 
+	// Bulk-approve selection. A row is "clearable" iff it has a file on disk
+	// and isn't already cleared — only those can be approved (Clear requires
+	// the WebP present), so Select-all and the checkboxes target that set.
+	let selected = $state<Set<string>>(new Set());
+	let bulkNote = $state('');
+	let bulkBusy = $state(false);
+	let bulkResult = $state<string | null>(null);
+
+	type Row = (typeof data.rows)[number];
+	function isClearable(row: Row): boolean {
+		return row.hasFile && row.state !== 'cleared';
+	}
+	const clearableRows = $derived(data.rows.filter(isClearable));
+	const selectedCount = $derived(selected.size);
+
+	function toggleSelect(hash: string) {
+		const next = new Set(selected);
+		if (next.has(hash)) next.delete(hash);
+		else next.add(hash);
+		selected = next;
+	}
+	function selectAllClearable() {
+		selected = new Set(clearableRows.map((r) => r.contentHashHex));
+	}
+	function deselectAll() {
+		selected = new Set();
+	}
+
+	async function approveSelected() {
+		// Submit only hashes still clearable on the current page (the set may
+		// hold stragglers after an invalidate).
+		const live = new Set(clearableRows.map((r) => r.contentHashHex));
+		const hashes = [...selected].filter((h) => live.has(h));
+		if (hashes.length === 0) return;
+		if (
+			!confirm(
+				`Approve (Clear) ${hashes.length} icon${hashes.length === 1 ? '' : 's'}? They will be served publicly.`
+			)
+		)
+			return;
+		bulkBusy = true;
+		error = null;
+		bulkResult = null;
+		try {
+			const res = await fetch('/api/admin/icons/bulk-clear', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ hashes, note: bulkNote.trim() || null })
+			});
+			const b = (await res.json().catch(() => ({}))) as {
+				message?: string;
+				cleared?: string[];
+				skipped?: { hash: string; reason: string }[];
+			};
+			if (!res.ok) {
+				error = b.message ?? `Bulk approve failed (HTTP ${res.status})`;
+				return;
+			}
+			const cleared = b.cleared?.length ?? 0;
+			const skip = b.skipped?.length ?? 0;
+			bulkResult = `Approved ${cleared} icon${cleared === 1 ? '' : 's'}${skip ? ` · ${skip} skipped` : ''}.`;
+			selected = new Set();
+			bulkNote = '';
+			await invalidateAll();
+		} catch (err) {
+			error = (err as Error).message ?? 'Network error';
+		} finally {
+			bulkBusy = false;
+		}
+	}
+
 	// Images in the review queue are, by definition, borderline (the NSFW
 	// gate scored them between block + review thresholds). Blur every
 	// preview by default and require an explicit click to reveal, so the
@@ -118,7 +189,9 @@
 			Operator review of BCMR token icons in the safety pipeline.
 			<strong>Clear</strong> serves the image at <code class="text-xs">/icons/&lt;hash&gt;.webp</code>;
 			<strong>Block</strong> deletes the on-disk WebP and records the reason. Each row is one unique
-			image hash — clearing or blocking it applies to every token that uses it.
+			image hash — clearing or blocking it applies to every token that uses it. To work the queue
+			fast: <strong>Select all</strong>, uncheck the bad ones, then <strong>Approve selected</strong>
+			to clear the rest in one click. Block the bad ones individually.
 		</p>
 		<p class="mt-2 text-xs ts-text-muted">Signed in as <code class="font-mono">{data.me}</code></p>
 	</header>
@@ -150,9 +223,62 @@
 			<p class="ts-text-muted">No icons in <code class="font-mono">{data.state}</code> state.</p>
 		</div>
 	{:else}
+		<!-- Bulk-approve toolbar. Sticky so it stays reachable while scrolling
+		     a long queue: select all (or all-then-deselect-the-bad-ones), add
+		     an optional inline note, approve the lot in one click. -->
+		<div
+			class="sticky top-0 z-20 mb-4 flex flex-wrap items-center gap-2 rounded-lg border ts-border-subtle ts-surface-panel shadow-sm px-3 py-2 text-sm"
+		>
+			<button
+				type="button"
+				onclick={selectAllClearable}
+				disabled={clearableRows.length === 0}
+				class="px-2.5 py-1 rounded-md border ts-border-subtle hover:bg-slate-50 dark:hover:bg-zinc-800 disabled:opacity-40"
+			>
+				Select all ({clearableRows.length})
+			</button>
+			<button
+				type="button"
+				onclick={deselectAll}
+				disabled={selectedCount === 0}
+				class="px-2.5 py-1 rounded-md border ts-border-subtle hover:bg-slate-50 dark:hover:bg-zinc-800 disabled:opacity-40"
+			>
+				Deselect
+			</button>
+			<span class="ts-text-muted tabular-nums">{selectedCount} selected</span>
+			<input
+				type="text"
+				bind:value={bulkNote}
+				placeholder="Optional note (audit trail; not shown to users)"
+				class="flex-1 min-w-[12rem] rounded-md border ts-border-subtle bg-transparent px-2 py-1 text-xs ts-text-strong"
+			/>
+			<button
+				type="button"
+				onclick={approveSelected}
+				disabled={selectedCount === 0 || bulkBusy}
+				class="px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold disabled:opacity-40"
+			>
+				{bulkBusy ? 'Approving…' : `Approve selected (${selectedCount})`}
+			</button>
+		</div>
+
+		{#if bulkResult}
+			<div
+				class="mb-4 p-3 rounded-md bg-emerald-50 dark:bg-emerald-950/30 text-sm text-emerald-700 dark:text-emerald-300"
+			>
+				{bulkResult}
+			</div>
+		{/if}
+
 		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 			{#each data.rows as row (row.contentHashHex)}
-				<div class="rounded-xl border ts-border-subtle ts-surface-panel p-3 flex flex-col">
+				<div
+					class={`rounded-xl border ts-surface-panel p-3 flex flex-col ${
+						selected.has(row.contentHashHex)
+							? 'ring-2 ring-emerald-500 border-emerald-500'
+							: 'ts-border-subtle'
+					}`}
+				>
 					<!-- Preview -->
 					<div class="relative aspect-square rounded-lg overflow-hidden bg-slate-100 dark:bg-zinc-800 mb-3">
 						{#if row.hasFile}
@@ -196,6 +322,19 @@
 						>
 							{row.state}{#if row.blockReason} · {row.blockReason}{/if}
 						</span>
+						{#if isClearable(row)}
+							<label
+								class="absolute top-1 right-1 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/60 text-white text-[11px] cursor-pointer select-none"
+							>
+								<input
+									type="checkbox"
+									checked={selected.has(row.contentHashHex)}
+									onchange={() => toggleSelect(row.contentHashHex)}
+									class="accent-emerald-500"
+								/>
+								select
+							</label>
+						{/if}
 					</div>
 
 					<!-- Metadata -->
