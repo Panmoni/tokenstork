@@ -8,7 +8,10 @@ import { fetchCrc20Symbols } from '$lib/server/crc20';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ setHeaders }) => {
-	setHeaders({ 'cache-control': 'public, max-age=60' });
+	// Global symbol-bucket aggregate, cookie-independent — make it CDN-
+	// cacheable (s-maxage) with a stale-while-revalidate window so the
+	// edge absorbs repeats and never blocks callers at expiry.
+	setHeaders({ 'cache-control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=600' });
 	try {
 		const symbols = await fetchCrc20Symbols();
 		return json({ symbols, count: symbols.length });

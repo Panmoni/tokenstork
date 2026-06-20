@@ -10,13 +10,28 @@
 // query.
 
 import { query } from './db';
+import { cached } from './cache';
 
 // Average TVL (in satoshis) of the top half of Cauldron-listed tokens
 // whose TVL is > 0, excluding moderated categories. Returns 0 when
 // nothing is listed — in that case no gate applies (marketCapUSD still
 // clears the `>= 0` check) and the cosmetic impact is nil because there
 // is no ranking to pollute.
+//
+// Global (no per-request inputs) and slow-moving — the average drifts
+// only as TVL shifts across the listed set — so it's memoized with a
+// generous SWR window. Every surface that renders a market cap (the
+// homepage grid and each token-detail page) would otherwise re-run this
+// aggregate on the request's critical path.
 export async function computeMcapTvlThresholdSats(): Promise<number> {
+	return cached(
+		'mcap-tvl-threshold',
+		{ freshMs: 60_000, staleMs: 120_000 },
+		computeMcapTvlThresholdSatsUncached
+	);
+}
+
+async function computeMcapTvlThresholdSatsUncached(): Promise<number> {
 	const res = await query<{ avg_tvl: string | null }>(
 		`WITH listed AS (
 			SELECT vl.tvl_satoshis

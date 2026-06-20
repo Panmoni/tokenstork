@@ -8,6 +8,7 @@
 
 import { query } from './db';
 import { NOT_MODERATED_CLAUSE } from '../moderation';
+import { cached } from './cache';
 
 export interface MoverDisplay {
 	categoryHex: string;
@@ -52,7 +53,15 @@ const EMPTY: MoversResult = {
 	has24hHistory: false
 };
 
+// Global ranking shared by /stats and the homepage — identical for every
+// requester and recomputed from token_price_history. Memoized with a
+// short SWR window so the heavy 24h window query runs at most once per
+// freshMs across all concurrent page loads instead of per request.
 export async function getMovers24h(): Promise<MoversResult> {
+	return cached('movers-24h', { freshMs: 30_000, staleMs: 60_000 }, getMovers24hUncached);
+}
+
+async function getMovers24hUncached(): Promise<MoversResult> {
 	try {
 		// 24h movers — for every Cauldron-listed category that has BOTH a
 		// price point ≥ 23h ago AND a price point within the last 23h, emit

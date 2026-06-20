@@ -201,7 +201,11 @@ export const GET: RequestHandler = async ({ url, request, getClientAddress, setH
 		// repeats (with `vary: Cookie`, every distinct cookie value
 		// instantiates its own cache entry, defeating the whole point).
 		setHeaders({
-			'cache-control': 'public, max-age=60, s-maxage=300'
+			// stale-while-revalidate: Cloudflare keeps serving the cached
+			// copy for up to 10 min past s-maxage expiry while it
+			// revalidates against origin in the background, so a request at
+			// the expiry boundary never blocks on the DB.
+			'cache-control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=600'
 		});
 	} else {
 		// `private` rather than `public` because the response varies by
@@ -210,7 +214,11 @@ export const GET: RequestHandler = async ({ url, request, getClientAddress, setH
 		// variants into one cache entry. The browser cache still serves
 		// repeat hits on the same URL within 60 s, which is what we want.
 		setHeaders({
-			'cache-control': 'private, max-age=60',
+			// Browser-only revalidation window (CDN won't store `private`):
+			// a repeat of the exact same URL within 60 s is fresh, and for
+			// the next 2 min the browser may show the cached body while it
+			// revalidates in the background.
+			'cache-control': 'private, max-age=60, stale-while-revalidate=120',
 			vary: 'Cookie'
 		});
 	}

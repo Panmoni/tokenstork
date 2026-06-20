@@ -3,6 +3,7 @@
 	import Movers24h from '$lib/components/Movers24h.svelte';
 	import { iconHrefFor } from '$lib/icons';
 	import { stripEmoji } from '$lib/format';
+	import { invalidate } from '$app/navigation';
 
 	let { data } = $props();
 
@@ -10,6 +11,53 @@
 
 	// Skeleton utility classes
 	const sk = 'animate-pulse bg-slate-200 dark:bg-zinc-700 rounded';
+
+	// Tier 3 — fresh-data hydration over the (edge-cached) static shell.
+	//
+	// `data.tokenGrid` is a deferred promise that SSR streams in: the first
+	// paint shows the skeleton, then the real grid. We mirror each resolved
+	// value into `liveGrid` and, ONCE it's set, render from `liveGrid`
+	// instead of the `{#await}` block. That matters for refreshes: calling
+	// `invalidate('app:home-grid')` re-runs only the page load (see
+	// +page.server.ts `depends`), which makes `data.tokenGrid` a NEW pending
+	// promise — if we rendered straight off the await we'd flash back to the
+	// skeleton every cycle. Rendering off `liveGrid` keeps the current rows
+	// on screen until the fresh ones land.
+	type Grid = Awaited<typeof data.tokenGrid>;
+	let liveGrid = $state<Grid | null>(null);
+
+	$effect(() => {
+		// Re-runs on first load AND on every invalidation (new promise).
+		const pending = data.tokenGrid;
+		let cancelled = false;
+		pending
+			.then((g) => {
+				if (!cancelled) liveGrid = g;
+			})
+			.catch(() => {
+				/* keep showing the last good grid on a transient failure */
+			});
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	// Poll the grid every 30s and on tab re-focus, but only while the tab is
+	// visible — a backgrounded tab shouldn't keep hitting the server. The
+	// in-process SWR memo (default view) and the API/edge caches absorb the
+	// repeats; this just converges a possibly-stale cached shell to live data.
+	$effect(() => {
+		const REFRESH_MS = 30_000;
+		const refresh = () => {
+			if (document.visibilityState === 'visible') invalidate('app:home-grid');
+		};
+		const timer = setInterval(refresh, REFRESH_MS);
+		document.addEventListener('visibilitychange', refresh);
+		return () => {
+			clearInterval(timer);
+			document.removeEventListener('visibilitychange', refresh);
+		};
+	});
 </script>
 
 <svelte:head>
@@ -84,26 +132,34 @@
 		grid matching TokenGrid's responsive layout, with icon circles + text
 		line placeholders for each row.
 	-->
-	{#await data.tokenGrid}
-		<div class="animate-pulse space-y-3">
-			{#each Array(5) as _}
-				<div class="flex items-center gap-3 p-3 rounded-xl border ts-border-subtle">
-					<div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-zinc-700"></div>
-					<div class="flex-1 space-y-2">
-						<div class="h-4 bg-slate-200 dark:bg-zinc-700 rounded w-1/3"></div>
-						<div class="h-3 bg-slate-200 dark:bg-zinc-700 rounded w-1/2"></div>
-					</div>
-				</div>
-			{/each}
-		</div>
-	{:then tg}
-		{#if tg.error}
+	{#snippet gridView(grid: Grid)}
+		{#if grid.error}
 			<div class="text-center py-12">
-				<div class="text-red-500 text-lg mb-2">{tg.error}</div>
+				<div class="text-red-500 text-lg mb-2">{grid.error}</div>
 				<div class="ts-text-muted">Please try again in a moment.</div>
 			</div>
 		{:else}
-			<TokenGrid tokens={tg.tokens} total={tg.total} limit={tg.limit} offset={tg.offset} />
+			<TokenGrid tokens={grid.tokens} total={grid.total} limit={grid.limit} offset={grid.offset} />
 		{/if}
-	{/await}
+	{/snippet}
+
+	{#if liveGrid}
+		{@render gridView(liveGrid)}
+	{:else}
+		{#await data.tokenGrid}
+			<div class="animate-pulse space-y-3">
+				{#each Array(5) as _}
+					<div class="flex items-center gap-3 p-3 rounded-xl border ts-border-subtle">
+						<div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-zinc-700"></div>
+						<div class="flex-1 space-y-2">
+							<div class="h-4 bg-slate-200 dark:bg-zinc-700 rounded w-1/3"></div>
+							<div class="h-3 bg-slate-200 dark:bg-zinc-700 rounded w-1/2"></div>
+						</div>
+					</div>
+				{/each}
+			</div>
+		{:then tg}
+			{@render gridView(tg)}
+		{/await}
+	{/if}
 </main>

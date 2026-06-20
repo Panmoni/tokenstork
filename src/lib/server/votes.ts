@@ -7,6 +7,7 @@
 
 import { query, withTransaction, hexFromBytes } from './db';
 import { NOT_MODERATED_CLAUSE } from '$lib/moderation';
+import { cached } from './cache';
 
 export type Vote = 'up' | 'down';
 export type VoteState = Vote | null;
@@ -293,6 +294,18 @@ export async function listUserVotes(
  *  appearing on any leaderboard, in lockstep with every other public
  *  read path. */
 export async function getVoteLeaderboards(): Promise<{
+	mostUpvoted: VoteLeader[];
+	mostDownvoted: VoteLeader[];
+	mostControversial: VoteLeader[];
+	totalVotes: number;
+}> {
+	// Global leaderboard, identical for every visitor and computed live
+	// from the (expensive) tenure-MATERIALIZED weighted-score CTE. Memoize
+	// with a short SWR window so the homepage doesn't re-run it per load.
+	return cached('vote-leaderboards', { freshMs: 30_000, staleMs: 60_000 }, getVoteLeaderboardsUncached);
+}
+
+async function getVoteLeaderboardsUncached(): Promise<{
 	mostUpvoted: VoteLeader[];
 	mostDownvoted: VoteLeader[];
 	mostControversial: VoteLeader[];

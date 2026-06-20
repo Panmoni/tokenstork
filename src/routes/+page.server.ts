@@ -11,6 +11,7 @@ import {
 	VOTE_CONTRIBUTION_SQL
 } from '$lib/server/votes';
 import { NOT_MODERATED_CLAUSE } from '$lib/moderation';
+import { cached } from '$lib/server/cache';
 import type { PageServerLoad } from './$types';
 import type { TokenApiRow, TokenType } from '$lib/types';
 
@@ -135,7 +136,13 @@ const DEFAULT_SORT = 'tvl';
 
 const PAGE_SIZE = 100;
 
-export const load: PageServerLoad = async ({ url }) => {
+export const load: PageServerLoad = async ({ url, depends }) => {
+	// Tier-3 client revalidation hook: the browser re-pulls fresh grid data
+	// over the (possibly edge-cached) static shell by calling
+	// `invalidate('app:home-grid')`, which re-runs only this load. See
+	// src/routes/+page.svelte for the polling + focus refresh wiring.
+	depends('app:home-grid');
+
 	const sortKey = url.searchParams.get('sort') ?? DEFAULT_SORT;
 	const sort = VALID_SORTS[sortKey] ?? VALID_SORTS[DEFAULT_SORT];
 	const typeParam = url.searchParams.get('type');
@@ -452,28 +459,44 @@ export const load: PageServerLoad = async ({ url }) => {
 	// scan would defeat the whole hoist.
 	const tenureCte = `WITH tenure AS MATERIALIZED (${VOTE_TENURE_CTE_BODY})`;
 
-	try {
-		const [countRes, mcapTvlThresholdSats] = await Promise.all([
+	// Tier 5: the most-requested permutation (default sort, page 1, no
+	// filters/search) is served from a short-TTL stale-while-revalidate
+	// memo so the heavy CTE runs at most once per freshMs across all
+	// visitors instead of once per request. Every other permutation
+	// (filtered / searched / paged) runs live — too many distinct cache
+	// keys, and far lower traffic each.
+	const isDefaultView =
+		sortKey === DEFAULT_SORT &&
+		offset === 0 &&
+		!searchActive &&
+		!typeParam &&
+		!onlyCauldron &&
+		!onlyTapswap &&
+		!onlyFex &&
+		!onlyNew24h &&
+		!onlyNew7d &&
+		!onlyNew30d &&
+		!onlyListed &&
+		!crc20Param &&
+		!giniTierParam;
+
+	// Builds the page-1 grid result. THROWS on any DB error so the memo
+	// never caches a failure (cached() stores resolved values only); the
+	// caller maps a rejection to the UI's error shape below.
+	const computeGrid = async (): Promise<{
+		tokens: TokenApiRow[];
+		total: number;
+		limit: number;
+		offset: number;
+		error: string | null;
+	}> => {
+		// count + data are independent — run them concurrently.
+		const [countRes, dataRes] = await Promise.all([
 			query<{ total: string }>(
 				`SELECT COUNT(*)::bigint AS total ${fromJoins} ${whereClause}`,
 				values
 			),
-			computeMcapTvlThresholdSats()
-		]);
-		const total = Number(countRes.rows[0]?.total ?? 0);
-
-		// Deferred: fire the heavy CTE token-grid query immediately so it
-		// runs concurrently with movers+voteLeaders (~50ms) instead of
-		// serializing behind them — restores the pre-streaming concurrency.
-		const tokenGridPromise = (async (): Promise<{
-			tokens: TokenApiRow[];
-			total: number;
-			limit: number;
-			offset: number;
-			error: string | null;
-		}> => {
-			try {
-				const dataRes = await query<DbRow>(
+			query<DbRow>(
 					`${tenureCte},
 					top AS (
 						SELECT
@@ -521,93 +544,115 @@ export const load: PageServerLoad = async ({ url }) => {
 					  FROM top
 					  ${fromJoinsHeavy}
 					  ORDER BY ${outerSearchOrderPrefix}${OUTER_SORTS[sortKey] ?? OUTER_SORTS[DEFAULT_SORT]}`,
-					[...values, PAGE_SIZE, offset]
-				);
+				[...values, PAGE_SIZE, offset]
+			)
+		]);
+		const total = Number(countRes.rows[0]?.total ?? 0);
 
-				const firstNMap = await getFirstNMap();
+		const firstNMap = await getFirstNMap();
 
-				const tokens: TokenApiRow[] = dataRes.rows.map((row) => {
-					const verifiedAt = row.verified_at?.getTime() ?? null;
-					const firstSeenAt = Math.floor(row.first_seen_at.getTime() / 1000);
-					const genesisTime = Math.floor(row.genesis_time.getTime() / 1000);
-					const categoryHex = hexFromBytes(row.category)!;
-					const firstNRank = firstNMap.get(categoryHex) ?? null;
-					const metaAt = row.metadata_fetched_at?.getTime();
-					const updatedAtMs = Math.max(verifiedAt ?? 0, metaAt ?? 0, row.first_seen_at.getTime());
-					let tvl: number | null = null;
-					if (row.cauldron_tvl_satoshis != null) {
-						const parsed = Number(row.cauldron_tvl_satoshis);
-						if (Number.isFinite(parsed)) tvl = parsed;
-					}
-					let fexTvl: number | null = null;
-					if (row.fex_tvl_satoshis != null) {
-						const parsed = Number(row.fex_tvl_satoshis);
-						if (Number.isFinite(parsed)) fexTvl = parsed;
-					}
-					const pct = (oldP: number | null): number | null => {
-						const now = row.cauldron_price_sats;
-						if (now == null || oldP == null || oldP === 0) return null;
-						return ((now - oldP) / oldP) * 100;
-					};
-					const sparklinePoints = Array.isArray(row.sparkline_points)
-						? row.sparkline_points.filter((n) => Number.isFinite(n))
-						: [];
-					return {
-						id: categoryHex,
-						name: row.name,
-						symbol: row.symbol,
-						decimals: row.decimals ?? 0,
-						description: row.description,
-						icon: row.icon_uri,
-						tokenType: row.token_type,
-						isVerifiedOnchain: row.verified_at !== null,
-						isFullyBurned: row.is_fully_burned ?? false,
-						currentSupply: row.current_supply ?? null,
-						liveUtxoCount: row.live_utxo_count,
-						liveNftCount: row.live_nft_count,
-						holderCount: row.holder_count,
-						hasActiveMinting: row.has_active_minting ?? false,
-						firstSeenAt,
-						genesisTime,
-						firstNRank,
-						genesisBlock: row.genesis_block,
-						updatedAt: Math.floor(updatedAtMs / 1000),
-						cauldronPriceSats: row.cauldron_price_sats,
-						cauldronTvlSatoshis: tvl,
-						tapswapListingCount: row.tapswap_listing_count ? Number(row.tapswap_listing_count) : 0,
-						fexPriceSats: row.fex_price_sats,
-						fexTvlSatoshis: fexTvl,
-						priceChange1hPct: pct(row.price_sats_1h_ago),
-						priceChange24hPct: pct(row.price_sats_24h_ago),
-						priceChange7dPct: pct(row.price_sats_7d_ago),
-						sparklinePoints,
-						iconClearedHash: row.icon_cleared_hash ?? null,
-						upCount: row.up_count ?? 0,
-						downCount: row.down_count ?? 0,
-						isCrc20: row.is_crc20 === true,
-						crc20Symbol: row.crc20_symbol ?? null,
-						crc20SymbolIsHex: row.crc20_symbol_is_hex === true,
-						crc20IsCanonical: row.crc20_is_canonical === true,
-						crc20Name: row.crc20_name ?? null
-					};
-				});
-
-				return { tokens, total, limit: PAGE_SIZE, offset, error: null };
-			} catch (err) {
-				console.error('[+page.server] token grid query failed:', err);
-				return { tokens: [], total: 0, limit: PAGE_SIZE, offset: 0, error: 'Directory is temporarily unavailable.' };
+		const tokens: TokenApiRow[] = dataRes.rows.map((row) => {
+			const verifiedAt = row.verified_at?.getTime() ?? null;
+			const firstSeenAt = Math.floor(row.first_seen_at.getTime() / 1000);
+			const genesisTime = Math.floor(row.genesis_time.getTime() / 1000);
+			const categoryHex = hexFromBytes(row.category)!;
+			const firstNRank = firstNMap.get(categoryHex) ?? null;
+			const metaAt = row.metadata_fetched_at?.getTime();
+			const updatedAtMs = Math.max(verifiedAt ?? 0, metaAt ?? 0, row.first_seen_at.getTime());
+			let tvl: number | null = null;
+			if (row.cauldron_tvl_satoshis != null) {
+				const parsed = Number(row.cauldron_tvl_satoshis);
+				if (Number.isFinite(parsed)) tvl = parsed;
 			}
-		})();
+			let fexTvl: number | null = null;
+			if (row.fex_tvl_satoshis != null) {
+				const parsed = Number(row.fex_tvl_satoshis);
+				if (Number.isFinite(parsed)) fexTvl = parsed;
+			}
+			const pct = (oldP: number | null): number | null => {
+				const now = row.cauldron_price_sats;
+				if (now == null || oldP == null || oldP === 0) return null;
+				return ((now - oldP) / oldP) * 100;
+			};
+			const sparklinePoints = Array.isArray(row.sparkline_points)
+				? row.sparkline_points.filter((n) => Number.isFinite(n))
+				: [];
+			return {
+				id: categoryHex,
+				name: row.name,
+				symbol: row.symbol,
+				decimals: row.decimals ?? 0,
+				description: row.description,
+				icon: row.icon_uri,
+				tokenType: row.token_type,
+				isVerifiedOnchain: row.verified_at !== null,
+				isFullyBurned: row.is_fully_burned ?? false,
+				currentSupply: row.current_supply ?? null,
+				liveUtxoCount: row.live_utxo_count,
+				liveNftCount: row.live_nft_count,
+				holderCount: row.holder_count,
+				hasActiveMinting: row.has_active_minting ?? false,
+				firstSeenAt,
+				genesisTime,
+				firstNRank,
+				genesisBlock: row.genesis_block,
+				updatedAt: Math.floor(updatedAtMs / 1000),
+				cauldronPriceSats: row.cauldron_price_sats,
+				cauldronTvlSatoshis: tvl,
+				tapswapListingCount: row.tapswap_listing_count ? Number(row.tapswap_listing_count) : 0,
+				fexPriceSats: row.fex_price_sats,
+				fexTvlSatoshis: fexTvl,
+				priceChange1hPct: pct(row.price_sats_1h_ago),
+				priceChange24hPct: pct(row.price_sats_24h_ago),
+				priceChange7dPct: pct(row.price_sats_7d_ago),
+				sparklinePoints,
+				iconClearedHash: row.icon_cleared_hash ?? null,
+				upCount: row.up_count ?? 0,
+				downCount: row.down_count ?? 0,
+				isCrc20: row.is_crc20 === true,
+				crc20Symbol: row.crc20_symbol ?? null,
+				crc20SymbolIsHex: row.crc20_symbol_is_hex === true,
+				crc20IsCanonical: row.crc20_is_canonical === true,
+				crc20Name: row.crc20_name ?? null
+			};
+		});
 
-		// Synchronous: movers + vote leaders (~50ms). Render instantly
-		// while the heavy token-grid query streams in.
-		const [movers, voteLeaders] = await Promise.all([getMovers24h(), getVoteLeaderboards()]);
+		return { tokens, total, limit: PAGE_SIZE, offset, error: null };
+	};
+
+	// Fire the grid immediately (memoized for the default view) so it runs
+	// concurrently with the global aggregates below.
+	const gridResult = isDefaultView
+		? cached('home:grid:default', { freshMs: 15_000, staleMs: 45_000 }, computeGrid)
+		: computeGrid();
+
+	// Map a failed grid to the UI's error shape — NOT memoized (computeGrid
+	// rejected, so cached() stored nothing and the next caller retries).
+	const tokenGrid = gridResult.catch((err) => {
+		console.error('[+page.server] token grid query failed:', err);
+		return {
+			tokens: [] as TokenApiRow[],
+			total: 0,
+			limit: PAGE_SIZE,
+			offset,
+			error: 'Directory is temporarily unavailable.'
+		};
+	});
+
+	try {
+		// Global aggregates — each internally memoized (SWR) now, and
+		// already running concurrently with the grid fired above.
+		const [mcapTvlThresholdSats, movers, voteLeaders] = await Promise.all([
+			computeMcapTvlThresholdSats(),
+			getMovers24h(),
+			getVoteLeaderboards()
+		]);
 
 		return {
 			mcapTvlThresholdSats,
 			movers,
 			voteLeaders,
-			tokenGrid: tokenGridPromise
+			tokenGrid
 		};
 	} catch (err) {
 		console.error('[+page.server] load failed:', err);
@@ -615,7 +660,9 @@ export const load: PageServerLoad = async ({ url }) => {
 			mcapTvlThresholdSats: 0,
 			movers: { topGainers24h: [], topLosers24h: [], topTvlMovers24h: [], has24hHistory: false },
 			voteLeaders: { mostUpvoted: [], mostDownvoted: [], mostControversial: [], totalVotes: 0 },
-			tokenGrid: Promise.resolve({ tokens: [], total: 0, limit: PAGE_SIZE, offset: 0, error: 'Directory is temporarily unavailable.' })
+			// Reuse the resilient grid promise — a globals failure must not
+			// blank the directory.
+			tokenGrid
 		};
 	}
 };

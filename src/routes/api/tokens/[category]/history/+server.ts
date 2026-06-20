@@ -92,10 +92,14 @@ export const GET: RequestHandler = async ({
 		// cache on every distinct cookie value and undermine the
 		// s-maxage benefit.
 		setHeaders({
-			'cache-control': 'public, max-age=60, s-maxage=300'
+			// stale-while-revalidate: Cloudflare serves the cached copy for
+			// up to 10 min past s-maxage expiry while revalidating in the
+			// background, so chart loads never block on the DB at the
+			// expiry boundary.
+			'cache-control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=600'
 		});
 	} else {
-		setHeaders({ 'cache-control': 'private, max-age=60', vary: 'Cookie' });
+		setHeaders({ 'cache-control': 'private, max-age=60, stale-while-revalidate=120', vary: 'Cookie' });
 	}
 
 	try {

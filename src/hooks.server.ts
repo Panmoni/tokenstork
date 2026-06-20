@@ -110,5 +110,57 @@ export const handle: Handle = async ({ event, resolve }) => {
 			);
 		}
 	}
-	return resolve(event);
+	const response = await resolve(event);
+	applyEdgeCacheHeaders(event, response);
+	return response;
 };
+
+// Route prefixes that must NEVER be edge-cached: auth, admin, and the
+// stateful wizards / per-user surfaces. Matched on segment boundaries so
+// `/mint` does NOT also denylist `/mints` (a public read page).
+const NO_CACHE_PREFIXES = ['/login', '/admin', '/watchlist', '/mint', '/publish-bcmr', '/api'];
+
+function isCacheableRoute(pathname: string): boolean {
+	for (const prefix of NO_CACHE_PREFIXES) {
+		if (pathname === prefix || pathname.startsWith(prefix + '/')) return false;
+	}
+	return true;
+}
+
+/**
+ * Tier 4 — anonymous page micro-caching at the edge.
+ *
+ * For ANONYMOUS, GET, 200, text/html responses on public read routes, mark
+ * the document publicly cacheable for a short window with a long stale-
+ * while-revalidate tail. This lets Cloudflare serve the static shell +
+ * skeleton from the edge near-instantly while the live grid hydrates
+ * client-side (see +page.svelte). `max-age=0` keeps browsers revalidating
+ * (so a shared browser never holds a stale page); only the shared CDN
+ * caches, via `s-maxage`.
+ *
+ * Safety:
+ *  - Gated on `!event.locals.user`, so a logged-in user's personalized
+ *    HTML (watchlist stars, vote state) is NEVER marked public.
+ *  - Skipped when a header already set cache-control (don't clobber the
+ *    /api endpoints' own directives) or when the response sets a cookie.
+ *  - text/html gate excludes /api JSON and SvelteKit `__data.json`
+ *    revalidation payloads, so client polling always reaches fresh origin
+ *    data (which itself hits the in-process SWR memo).
+ *
+ * INERT until the Cloudflare side is configured — CF does not cache HTML
+ * by default regardless of these headers. The companion Cache Rules
+ * ("Cache Everything" for HTML + "Bypass cache when the session cookie is
+ * present") are documented in docs/caching.md.
+ */
+function applyEdgeCacheHeaders(event: Parameters<Handle>[0]['event'], response: Response): void {
+	if (event.request.method !== 'GET') return;
+	if (event.locals.user) return;
+	if (response.status !== 200) return;
+	if (response.headers.has('cache-control')) return;
+	if (response.headers.has('set-cookie')) return;
+	const contentType = response.headers.get('content-type') ?? '';
+	if (!contentType.includes('text/html')) return;
+	if (!isCacheableRoute(event.url.pathname)) return;
+
+	response.headers.set('cache-control', 'public, max-age=0, s-maxage=30, stale-while-revalidate=300');
+}

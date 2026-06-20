@@ -22,14 +22,31 @@ import { query } from '$lib/server/db';
 import { NOT_MODERATED_CLAUSE } from '$lib/moderation';
 import { listWatchlistCategories } from '$lib/server/watchlist';
 import { listUserVotes, type Vote } from '$lib/server/votes';
+import { cached } from '$lib/server/cache';
 import type { LayoutServerLoad } from './$types';
 
+interface GlobalMetrics {
+	tokensTracked: number;
+	tailLastBlock: number | null;
+	newIn24h: number;
+	totalTvlSats: number;
+	listedCount: number;
+	tokenTxs24h: number;
+}
+
 export const load: LayoutServerLoad = async ({ locals }) => {
+	// Global counters are identical for every visitor and recomputed from
+	// 7 ecosystem-wide aggregates. They ran on EVERY request to EVERY route
+	// (the MetricsBar is in the root layout) — so memoize them with a short
+	// SWR window. Fire the (usually-cached) promise first so the per-user
+	// fetch below overlaps with it.
+	const metricsPromise = cached('layout:global-metrics', { freshMs: 30_000, staleMs: 60_000 }, loadGlobalMetrics);
+
 	// When authenticated, fetch (a) the user's watchlist categories and
 	// (b) the user's vote map so the star + vote buttons on every
 	// token-rendering surface know current state without N+1 lookups.
 	// Both are small index range scans; firing them in parallel adds no
-	// measurable latency.
+	// measurable latency. Per-user — NOT memoized.
 	let watchlistCategoryHexes: string[] = [];
 	let userVoteByCategory: Record<string, Vote> = {};
 	if (locals.user) {
@@ -48,6 +65,24 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			console.error('[+layout.server] votes fetch failed:', vRes.reason);
 		}
 	}
+
+	const metrics = await metricsPromise;
+
+	return {
+		...metrics,
+		user: locals.user ?? null,
+		watchlistCategoryHexes,
+		userVoteByCategory
+	};
+};
+
+/**
+ * Compute the ecosystem-wide MetricsBar counters. Global (no per-request
+ * inputs) so the result is shared across all sessions via the `cached`
+ * memo above. If any single query fails we log + fall back to a sensible
+ * default so the layout never 500s over a stats hiccup.
+ */
+async function loadGlobalMetrics(): Promise<GlobalMetrics> {
 	// Every tokens-reading query excludes moderation-hidden categories via
 	// NOT_MODERATED_CLAUSE ($lib/moderation) — single source of truth so
 	// schema evolution is one-line governance. The `sync_state` query is
@@ -196,9 +231,6 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 		newIn24h,
 		totalTvlSats,
 		listedCount,
-		tokenTxs24h,
-		user: locals.user ?? null,
-		watchlistCategoryHexes,
-		userVoteByCategory
+		tokenTxs24h
 	};
-};
+}
