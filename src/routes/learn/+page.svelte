@@ -155,3 +155,34 @@
 		</p>
 	</div>
 </main>
+
+<style>
+	/* The Tailwind typography plugin (@tailwindcss/typography) is NOT
+	   installed, so the `prose prose-slate dark:prose-invert` classes are
+	   inert: content links inherited the body text color with no underline
+	   and read as plain, non-obvious text. Style them explicitly in the
+	   site's violet accent with a persistent underline so they're clearly
+	   clickable. Dark mode keys off the global `.dark` class on <html>
+	   (darkMode: "class"). Hex values are inlined rather than using Tailwind
+	   `theme()` to stay independent of how scoped styles resolve functions. */
+	.prose a {
+		color: #6d28d9; /* violet-700 */
+		font-weight: 500;
+		text-decoration: underline;
+		text-decoration-color: rgba(167, 139, 250, 0.7); /* violet-400 @ 70% */
+		text-underline-offset: 4px;
+		transition: color 0.15s ease, text-decoration-color 0.15s ease;
+	}
+	.prose a:hover {
+		color: #5b21b6; /* violet-800 */
+		text-decoration-color: #7c3aed; /* violet-600 */
+	}
+	:global(.dark) .prose a {
+		color: #a78bfa; /* violet-400 */
+		text-decoration-color: rgba(167, 139, 250, 0.5);
+	}
+	:global(.dark) .prose a:hover {
+		color: #c4b5fd; /* violet-300 */
+		text-decoration-color: #c4b5fd;
+	}
+</style>
