@@ -748,6 +748,19 @@
 		</div>
 	{/if}
 
+	<!-- Icon-adjusted disclosure — only for cleared icons whose BCMR source
+	     was out of standard (oversized or a non-web format) and we transcoded
+	     it. Informational (sky), not a warning. -->
+	{#if token.iconAdjustment}
+		<div
+			class="mb-6 px-3 py-2 rounded-lg border text-xs bg-sky-50 dark:bg-sky-950/30 border-sky-200 dark:border-sky-900/40 text-sky-800 dark:text-sky-200"
+			role="note"
+		>
+			<span class="font-medium">Icon adjusted:</span> the publisher's BCMR icon was out of standard
+			({token.iconAdjustment}); TokenStork transcoded it to display safely.
+		</div>
+	{/if}
+
 	<!--
 		Stats grid — tier1. Skeleton matches exact 5-column grid layout
 		with 8 card shapes.

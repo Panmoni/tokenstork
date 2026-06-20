@@ -14,6 +14,46 @@
 
 import { PLACEHOLDER_ICON } from './format';
 
+// Max stored-WebP dimension per side — MUST match the worker's
+// `WEBP_MAX_DIM` (workers/src/icons.rs). A cleared icon whose source was
+// larger than this on either side was downscaled by the pipeline.
+export const ICON_MAX_DIM = 512;
+
+// Source formats considered "in standard" for a BCMR token icon. Anything
+// else the pipeline accepts (BMP, ICO) is a non-standard source we
+// converted — worth disclosing. Transcoding these standard formats to WebP
+// is normal and NOT flagged.
+const STANDARD_ICON_FORMATS = new Set(['png', 'jpeg', 'gif', 'webp', 'svg']);
+
+/**
+ * Describe how a token's served (cleared) icon was adjusted from the
+ * publisher's BCMR source — or `null` if it was used as-is. Drives the
+ * token page's transparency note. Inputs come from the `imo_clear` join on
+ * the +page.server.ts row (only the cleared decision carries the bytes we
+ * actually serve). Returns a human phrase like "converted from BMP and
+ * resized from 2400×2400px", or null when nothing was adjusted / unknown
+ * (legacy cleared icons have null provenance and are in-standard).
+ */
+export function describeIconAdjustment(input: {
+	clearedHash: string | null | undefined;
+	sourceFormat: string | null | undefined;
+	sourceWidth: number | null | undefined;
+	sourceHeight: number | null | undefined;
+}): string | null {
+	// Only the served icon matters; no cleared hash → nothing rendered.
+	if (!input.clearedHash) return null;
+	const fmt = input.sourceFormat;
+	const w = input.sourceWidth;
+	const h = input.sourceHeight;
+	const reformatted = !!fmt && !STANDARD_ICON_FORMATS.has(fmt);
+	const downscaled = w != null && h != null && Math.max(w, h) > ICON_MAX_DIM;
+	if (!reformatted && !downscaled) return null;
+	const parts: string[] = [];
+	if (reformatted) parts.push(`converted from ${fmt!.toUpperCase()}`);
+	if (downscaled) parts.push(`resized from ${w}×${h}px`);
+	return parts.join(' and ');
+}
+
 export function iconHrefFor(
 	rawUri: string | null | undefined,
 	clearedHash: string | null | undefined

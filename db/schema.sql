@@ -763,6 +763,18 @@ ALTER TABLE icon_moderation ADD COLUMN IF NOT EXISTS decided_by    TEXT;        
 ALTER TABLE icon_moderation ADD COLUMN IF NOT EXISTS decided_at    TIMESTAMPTZ; -- when the operator decided
 ALTER TABLE icon_moderation ADD COLUMN IF NOT EXISTS moderator_note TEXT;       -- optional operator commentary (audit only)
 
+-- Icon-adjustment provenance. The pipeline transcodes every icon to WebP
+-- and downscales any source whose longest side exceeds the stored-WebP cap
+-- (512 px). These columns record the SOURCE's format + native dimensions so
+-- the token page can disclose when a publisher's BCMR icon was out of
+-- standard (oversized, or a non-web format like BMP/ICO) and we adjusted it
+-- to display safely. NULL = decided before this tracking existed (legacy
+-- cleared icons were already in-standard) or never decoded (oversize/fetch
+-- failures). Recorded only on paths where the bytes were decoded.
+ALTER TABLE icon_moderation ADD COLUMN IF NOT EXISTS source_format TEXT;        -- png|jpeg|gif|webp|svg|bmp|ico
+ALTER TABLE icon_moderation ADD COLUMN IF NOT EXISTS source_width  INTEGER;     -- decoded source width (px), pre-downscale
+ALTER TABLE icon_moderation ADD COLUMN IF NOT EXISTS source_height INTEGER;     -- decoded source height (px), pre-downscale
+
 CREATE TABLE IF NOT EXISTS icon_url_scan (
   icon_uri        TEXT        PRIMARY KEY,                    -- raw BCMR URI (re-fetch-on-change works via natural URL key)
   content_hash    BYTEA       REFERENCES icon_moderation(content_hash),

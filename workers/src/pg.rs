@@ -2359,6 +2359,63 @@ pub async fn reset_blocked_for_reheal(
     Ok((urls_reset, rows_deleted))
 }
 
+/// Reflag — list `review`-state icon URLs whose adjustment provenance was
+/// never recorded (`source_format IS NULL`, i.e. decided before that
+/// tracking existed). Replaying them re-derives the source format +
+/// dimensions without changing the operator-facing decision (Vision-disabled
+/// review icons re-land in `review`). Captured before [`reset_review_for_reflag`]
+/// severs the links.
+pub async fn select_review_uris_for_reflag(pool: &PgPool) -> Result<Vec<String>> {
+    let rows: Vec<(String,)> = sqlx::query_as(
+        "SELECT s.icon_uri
+           FROM icon_url_scan s
+           JOIN icon_moderation m ON m.content_hash = s.content_hash
+          WHERE m.state = 'review'
+            AND m.source_format IS NULL",
+    )
+    .fetch_all(pool)
+    .await
+    .context("selecting review URIs for reflag")?;
+    Ok(rows.into_iter().map(|(s,)| s).collect())
+}
+
+/// Reflag — reset the provenance-less `review` rows to pending so the
+/// pipeline reprocesses them. Same null-then-delete ordering as
+/// [`reset_blocked_for_reheal`] (the FK forbids deleting a still-referenced
+/// moderation row). Returns `(urls_reset, rows_deleted)`. Only ever touches
+/// `review` rows — operator `cleared`/`blocked` decisions are untouched.
+pub async fn reset_review_for_reflag(pool: &PgPool) -> Result<(u64, u64)> {
+    let mut tx = pool.begin().await.context("begin reflag transaction")?;
+
+    let urls_reset = sqlx::query(
+        "UPDATE icon_url_scan
+            SET content_hash = NULL,
+                last_fetched_at = NULL,
+                fetch_error = NULL,
+                fail_count = 0
+          WHERE content_hash IN (
+                SELECT content_hash FROM icon_moderation
+                 WHERE state = 'review' AND source_format IS NULL
+          )",
+    )
+    .execute(&mut *tx)
+    .await
+    .context("resetting icon_url_scan rows for reflag")?
+    .rows_affected();
+
+    let rows_deleted = sqlx::query(
+        "DELETE FROM icon_moderation
+          WHERE state = 'review' AND source_format IS NULL",
+    )
+    .execute(&mut *tx)
+    .await
+    .context("deleting provenance-less review rows for reflag")?
+    .rows_affected();
+
+    tx.commit().await.context("commit reflag transaction")?;
+    Ok((urls_reset, rows_deleted))
+}
+
 /// Idempotent insert of a single icon URL into the scan queue. Called
 /// from `sync-bcmr` after upserting `token_metadata` so newly-discovered
 /// icon URIs land in the queue without waiting for the next bootstrap
@@ -2448,20 +2505,33 @@ pub struct IconModerationWrite<'a> {
     pub nsfw_score: Option<f32>,
     pub block_reason: Option<&'a str>,
     pub bytes_size: i32,
+    /// Source-icon provenance for the token page's "adjusted" disclosure.
+    /// `None` on paths where the bytes were never decoded (oversize) — the
+    /// decoded paths (clear/review/adult) fill these in.
+    pub source_format: Option<&'a str>,
+    pub source_width: Option<i32>,
+    pub source_height: Option<i32>,
 }
 
 /// Insert (or update) the content-hash decision row.
 pub async fn upsert_icon_moderation(pool: &PgPool, w: &IconModerationWrite<'_>) -> Result<()> {
     sqlx::query(
         "INSERT INTO icon_moderation
-           (content_hash, source_url, state, scanned_at, nsfw_score, block_reason, bytes_size)
-         VALUES ($1, $2, $3, now(), $4, $5, $6)
+           (content_hash, source_url, state, scanned_at, nsfw_score, block_reason,
+            bytes_size, source_format, source_width, source_height)
+         VALUES ($1, $2, $3, now(), $4, $5, $6, $7, $8, $9)
          ON CONFLICT (content_hash) DO UPDATE SET
            state        = EXCLUDED.state,
            scanned_at   = now(),
            nsfw_score   = EXCLUDED.nsfw_score,
            block_reason = EXCLUDED.block_reason,
-           bytes_size   = EXCLUDED.bytes_size",
+           bytes_size   = EXCLUDED.bytes_size,
+           -- Keep any previously-derived provenance if this write doesn't
+           -- carry it (e.g. a later re-link path), so a re-decide can't
+           -- blank out the columns the token page reads.
+           source_format = COALESCE(EXCLUDED.source_format, icon_moderation.source_format),
+           source_width  = COALESCE(EXCLUDED.source_width,  icon_moderation.source_width),
+           source_height = COALESCE(EXCLUDED.source_height, icon_moderation.source_height)",
     )
     .bind(w.content_hash)
     .bind(w.source_url)
@@ -2469,6 +2539,9 @@ pub async fn upsert_icon_moderation(pool: &PgPool, w: &IconModerationWrite<'_>) 
     .bind(w.nsfw_score)
     .bind(w.block_reason)
     .bind(w.bytes_size)
+    .bind(w.source_format)
+    .bind(w.source_width)
+    .bind(w.source_height)
     .execute(pool)
     .await
     .context("upserting icon_moderation")?;

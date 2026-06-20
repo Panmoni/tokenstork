@@ -27,7 +27,7 @@ import { fetchCrc20Detail } from '$lib/server/crc20';
 import { computeMcapTvlThresholdSats } from '$lib/server/mcapThreshold';
 import { getVoteCounts, getLeaderboardStandings } from '$lib/server/votes';
 import { getMovers24h } from '$lib/server/movers';
-import { resolveIconStatus } from '$lib/icons';
+import { resolveIconStatus, describeIconAdjustment } from '$lib/icons';
 import type { PageServerLoad } from './$types';
 import type { TokenType } from '$lib/types';
 import { fetchBchPrice } from '$lib/server/bchPrice';
@@ -52,6 +52,10 @@ interface TokenRow {
 	icon_block_reason: string | null;
 	icon_fetch_error: string | null;
 	icon_scan_present: boolean;
+	// Provenance of the CLEARED icon (from imo_clear), for the "adjusted" note.
+	icon_source_format: string | null;
+	icon_source_width: number | null;
+	icon_source_height: number | null;
 	bcmr_publication_uri: string | null;
 	bcmr_source: string | null;
 	bcmr_body: unknown;
@@ -248,6 +252,9 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 				m.bcmr_body,
 				m.fetched_at AS bcmr_fetched_at,
 				encode(imo_clear.content_hash, 'hex') AS icon_cleared_hash,
+				imo_clear.source_format AS icon_source_format,
+				imo_clear.source_width  AS icon_source_width,
+				imo_clear.source_height AS icon_source_height,
 				imo_any.state          AS icon_state,
 				imo_any.block_reason   AS icon_block_reason,
 				ius.fetch_error        AS icon_fetch_error,
@@ -313,6 +320,16 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 			bcmr != null
 	});
 
+	// If the served icon was adjusted from a non-standard BCMR source
+	// (oversized, or a non-web format), describe it for the transparency
+	// note. null = used as-is or legacy (unknown provenance).
+	const iconAdjustment = describeIconAdjustment({
+		clearedHash: row.icon_cleared_hash,
+		sourceFormat: row.icon_source_format,
+		sourceWidth: row.icon_source_width,
+		sourceHeight: row.icon_source_height
+	});
+
 	// ─── TIER 0 SYNC DATA: everything available without further I/O ───────
 	const token = {
 		id: hexFromBytes(row.category)!,
@@ -330,6 +347,7 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 		icon: row.icon_uri ?? bcmr?.iconUri ?? null,
 		iconClearedHash: row.icon_cleared_hash ?? null,
 		iconStatus,
+		iconAdjustment,
 		bcmrFetchedAt: row.bcmr_fetched_at
 			? Math.floor(row.bcmr_fetched_at.getTime() / 1000)
 			: null,

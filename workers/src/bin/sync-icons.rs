@@ -25,11 +25,17 @@
 //!   reprocesses them with the current decoders + size cap + downscaling.
 //!   NEVER touches `adult` blocks — those are real content decisions.
 //!
+//! - `reflag` (one-shot, operator-run) — backfills source-icon provenance
+//!   (format + native dimensions) for `review` rows decided before that
+//!   tracking existed (`source_format IS NULL`). Reprocesses them in place;
+//!   the decision is unchanged. Drives the token page's "icon adjusted"
+//!   disclosure. Never touches cleared/blocked operator decisions.
+//!
 //! Env vars:
 //! - DATABASE_URL                       — Postgres connection
 //! - GOOGLE_VISION_API_KEY              — required for `pending` mode unless ICON_VISION_DISABLED=1 (rescan doesn't call Vision)
 //! - ICON_VISION_DISABLED               — `1` to skip Vision; new icons land in `state='review'` for manual review (default unset)
-//! - ICON_MODE                          — `pending` (default) | `rescan` | `reheal`
+//! - ICON_MODE                          — `pending` (default) | `rescan` | `reheal` | `reflag`
 //! - ICON_REHEAL_REASONS                — comma list for `reheal` mode (default `oversize,unsupported_format`; `adult` is rejected)
 //! - ICON_TICK_BATCH                    — max URLs per pending tick (default 200)
 //! - ICON_RESCAN_BATCH                  — max URLs per rescan tick (default 500)
@@ -80,6 +86,7 @@ enum Mode {
     Pending,
     Rescan,
     Reheal,
+    Reflag,
 }
 
 impl Mode {
@@ -87,6 +94,7 @@ impl Mode {
         match std::env::var("ICON_MODE").as_deref() {
             Ok("rescan") => Mode::Rescan,
             Ok("reheal") => Mode::Reheal,
+            Ok("reflag") => Mode::Reflag,
             // Default to pending for any other value (including unset
             // and the explicit "pending"). Operator typos fail safe.
             _ => Mode::Pending,
@@ -156,6 +164,7 @@ async fn main() -> Result<()> {
         Mode::Pending => run_pending(&pool, &http).await?,
         Mode::Rescan => run_rescan(&pool, &http).await?,
         Mode::Reheal => run_reheal(&pool, &http).await?,
+        Mode::Reflag => run_reflag(&pool, &http).await?,
     }
 
     mark_icons_run(&pool).await?;
@@ -338,6 +347,39 @@ async fn run_reheal(pool: &pg::PgPool, http: &reqwest::Client) -> Result<()> {
         ?summary,
         elapsed_s = format!("{:.1}", elapsed),
         "sync-icons (reheal) complete"
+    );
+    Ok(())
+}
+
+/// `reflag` mode — backfill source-icon provenance for `review` rows that
+/// predate adjustment tracking (`source_format IS NULL`). Reprocesses them
+/// in place so they re-land in `review` with their format + dimensions
+/// recorded (Vision is disabled in review mode, so the decision doesn't
+/// change). One-shot, operator-triggered; never touches cleared/blocked
+/// operator decisions.
+async fn run_reflag(pool: &pg::PgPool, http: &reqwest::Client) -> Result<()> {
+    let cfg = load_pending_config()?;
+
+    let uris = pg::select_review_uris_for_reflag(pool).await?;
+    if uris.is_empty() {
+        info!("reflag: no review rows missing provenance — nothing to do");
+        return Ok(());
+    }
+    let (urls_reset, rows_deleted) = pg::reset_review_for_reflag(pool).await?;
+    info!(
+        uris = uris.len(),
+        urls_reset,
+        rows_deleted,
+        "reflag: reset provenance-less review rows to pending; reprocessing now"
+    );
+
+    let started = Instant::now();
+    let summary = drain(pool, http, &uris, &cfg).await;
+    let elapsed = started.elapsed().as_secs_f64();
+    info!(
+        ?summary,
+        elapsed_s = format!("{:.1}", elapsed),
+        "sync-icons (reflag) complete"
     );
     Ok(())
 }

@@ -390,6 +390,24 @@ fn rasterize_svg(bytes: &[u8]) -> Result<Vec<u8>> {
 pub struct DecodedImage {
     pub image: DynamicImage,
     pub vision_bytes: Option<Vec<u8>>,
+    /// Detected SOURCE format label (png|jpeg|gif|webp|bmp|ico|svg). Drives
+    /// the token page's "icon adjusted — converted from <FMT>" disclosure;
+    /// `svg` here means the source was SVG (rasterized before this point).
+    pub source_format: &'static str,
+}
+
+/// Stable lowercase label for a decoded raster format. Only the allowlisted
+/// formats reach here; `other` is a defensive catch-all.
+fn format_label(format: ImageFormat) -> &'static str {
+    match format {
+        ImageFormat::Png => "png",
+        ImageFormat::Jpeg => "jpeg",
+        ImageFormat::Gif => "gif",
+        ImageFormat::WebP => "webp",
+        ImageFormat::Bmp => "bmp",
+        ImageFormat::Ico => "ico",
+        _ => "other",
+    }
 }
 
 /// Decode bytes into a [`DecodedImage`], applying a strict allocation cap
@@ -410,14 +428,14 @@ pub struct DecodedImage {
 pub fn decode_image(bytes: &[u8]) -> Result<DecodedImage> {
     if looks_like_svg(bytes) {
         let png = rasterize_svg(bytes)?;
-        let image = decode_raster(&png)?;
-        return Ok(DecodedImage { image, vision_bytes: Some(png) });
+        let (image, _) = decode_raster(&png)?;
+        return Ok(DecodedImage { image, vision_bytes: Some(png), source_format: "svg" });
     }
-    let image = decode_raster(bytes)?;
-    Ok(DecodedImage { image, vision_bytes: None })
+    let (image, source_format) = decode_raster(bytes)?;
+    Ok(DecodedImage { image, vision_bytes: None, source_format })
 }
 
-fn decode_raster(bytes: &[u8]) -> Result<DynamicImage> {
+fn decode_raster(bytes: &[u8]) -> Result<(DynamicImage, &'static str)> {
     // Sniff format from the bytes (don't trust `Content-Type` or extension).
     let format = image::guess_format(bytes).context("could not guess image format")?;
 
@@ -444,7 +462,7 @@ fn decode_raster(bytes: &[u8]) -> Result<DynamicImage> {
     let mut reader = ImageReader::with_format(Cursor::new(bytes), format);
     reader.limits(limits);
     let img = reader.decode().context("decode failed")?;
-    Ok(img)
+    Ok((img, format_label(format)))
 }
 
 /// Encode a decoded image to a static WebP. Failure here means the
@@ -593,6 +611,7 @@ mod tests {
             .expect("encode test BMP");
         let decoded = decode_image(&bmp).expect("BMP should now decode");
         assert_eq!((decoded.image.width(), decoded.image.height()), (8, 8));
+        assert_eq!(decoded.source_format, "bmp", "source format drives the 'adjusted' note");
     }
 
     #[test]
@@ -619,6 +638,7 @@ mod tests {
         assert_eq!(decoded.image.height(), 4);
         // Raster input → caller sends original bytes to Vision.
         assert!(decoded.vision_bytes.is_none(), "raster input should not need re-encoded vision bytes");
+        assert_eq!(decoded.source_format, "png");
     }
 
     #[test]
@@ -649,6 +669,7 @@ mod tests {
         let decoded = decode_image(svg).expect("svg decode");
         assert_eq!(decoded.image.width(), 32);
         assert_eq!(decoded.image.height(), 32);
+        assert_eq!(decoded.source_format, "svg", "SVG source labelled svg, not the raster png");
         // SVG path MUST surface vision bytes — original SVG would crash Vision.
         let vision_bytes = decoded.vision_bytes.expect("svg path should produce vision_bytes");
         // Vision-side bytes are PNG (signature 89 50 4E 47 …).

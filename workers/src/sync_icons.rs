@@ -86,6 +86,9 @@ pub async fn process_url(
                     nsfw_score: None,
                     block_reason: Some("oversize"),
                     bytes_size: observed_bytes.min(i32::MAX as usize) as i32,
+                    source_format: None,
+                    source_width: None,
+                    source_height: None,
                 },
             )
             .await?;
@@ -132,8 +135,8 @@ pub async fn process_url(
                 return Ok(Outcome::TranscodeError);
             }
         };
-    let (img, vision_bytes) = match decode_result {
-        Ok(d) => (d.image, d.vision_bytes),
+    let (img, vision_bytes, source_format) = match decode_result {
+        Ok(d) => (d.image, d.vision_bytes, d.source_format),
         Err(e) => {
             warn!(uri = %uri, error = %e, "decode failed; marking unsupported (no Vision call made)");
             upsert_icon_moderation(
@@ -145,6 +148,9 @@ pub async fn process_url(
                     nsfw_score: None,
                     block_reason: Some("unsupported_format"),
                     bytes_size: bytes.len() as i32,
+                    source_format: None,
+                    source_width: None,
+                    source_height: None,
                 },
             )
             .await?;
@@ -152,6 +158,11 @@ pub async fn process_url(
             return Ok(Outcome::BlockedUnsupported);
         }
     };
+    // Source-icon provenance for the token page's "adjusted" disclosure:
+    // native decoded dimensions (pre-downscale) + detected source format.
+    // `encode_to_webp` downscales anything whose longest side exceeds
+    // WEBP_MAX_DIM, so these capture what the publisher actually published.
+    let (source_width, source_height) = (img.width() as i32, img.height() as i32);
 
     // 4. NSFW gate (or manual-review bypass when Vision is disabled).
     // For raster inputs we send the original bytes (saves a re-encode
@@ -185,6 +196,9 @@ pub async fn process_url(
                     nsfw_score: score,
                     block_reason: Some("adult"),
                     bytes_size: bytes.len() as i32,
+                    source_format: Some(source_format),
+                    source_width: Some(source_width),
+                    source_height: Some(source_height),
                 },
             )
             .await?;
@@ -231,6 +245,9 @@ pub async fn process_url(
                     nsfw_score: score,
                     block_reason: None,
                     bytes_size: bytes.len() as i32,
+                    source_format: Some(source_format),
+                    source_width: Some(source_width),
+                    source_height: Some(source_height),
                 },
             )
             .await?;
