@@ -527,7 +527,17 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 		  GROUP BY bucket
 		  ORDER BY bucket ASC`,
 		[categoryBytes]
-	);
+	).catch((err) => {
+		// Soft-fail: this LAG-window CTE is the slowest tier-2 query, so
+		// under DB load it's the most likely to time out. Without this
+		// catch a rejection propagates through tier2Promise's Promise.all
+		// and rejects the whole streamed chunk — and the template's
+		// {#await data.tier2} has no {:catch}, so the chart section would
+		// silently vanish. Degrade to empty buckets instead: the chart
+		// then renders its honest "not enough history" empty-state.
+		console.error('[token detail] price-history query failed:', err);
+		return { rows: [] as PriceBucketRow[] };
+	});
 
 	const tvlRankRes = query<{ rank: string }>(
 		`WITH self AS (

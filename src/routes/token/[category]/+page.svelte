@@ -1079,6 +1079,17 @@
 			</div>
 			<p class="mt-2 text-xs ts-text-muted">Volume is a lower-bound estimate from |TVL deltas| between consecutive snapshots — within-bucket round-trip activity isn't visible at our 4 h sync cadence (10 min fast-pass for already-listed tokens). Price is the per-bucket mean.</p>
 			</section>
+		{:catch}
+			<section class="mb-8" id="chart">
+				<div class="flex items-baseline justify-between mb-3">
+					<h2 class="text-xl font-bold text-slate-900 dark:text-white">Price &amp; volume</h2>
+				</div>
+				<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
+					<div class="flex items-center justify-center h-64 rounded-lg border bg-slate-50/50 dark:bg-zinc-900/30 text-sm px-4 text-center ts-text-muted ts-border-subtle">
+						The price chart couldn't load just now — refresh in a moment to try again.
+					</div>
+				</div>
+			</section>
 		{/await}
 
 	<!--
