@@ -1,5 +1,7 @@
 <script lang="ts">
 	import Sparkline from '$lib/components/Sparkline.svelte';
+	import * as m from '$lib/paraglide/messages';
+	import { getLocale, localizeHref } from '$lib/paraglide/runtime';
 
 	let { data } = $props();
 
@@ -36,7 +38,7 @@
 		if (!Number.isFinite(n)) return '—';
 		if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
 		if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-		return n.toLocaleString('en-US');
+		return n.toLocaleString(getLocale());
 	};
 
 	// Fee ratio = miner fees as a percentage of total economic value
@@ -88,10 +90,10 @@
 		const t = new Date(iso).getTime();
 		if (!Number.isFinite(t)) return iso;
 		const diff = (Date.now() - t) / 1000;
-		if (diff < 60) return `${Math.floor(diff)}s ago`;
-		if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-		if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-		if (diff < 86400 * 30) return `${Math.floor(diff / 86400)}d ago`;
+		if (diff < 60) return m.bl_rel_s({ n: Math.floor(diff) });
+		if (diff < 3600) return m.wl_ago_m({ n: Math.floor(diff / 60) });
+		if (diff < 86400) return m.wl_ago_h({ n: Math.floor(diff / 3600) });
+		if (diff < 86400 * 30) return m.wl_ago_d({ n: Math.floor(diff / 86400) });
 		return new Date(iso).toISOString().slice(0, 10);
 	};
 
@@ -121,23 +123,20 @@
 </script>
 
 <svelte:head>
-	<title>Blocks — Token Stork</title>
+	<title>{m.bl_meta_title()}</title>
 	<meta
 		name="description"
-		content="Per-block economics dashboard for Bitcoin Cash from CashTokens activation forward: tx count, miner take, fees, total economic value transferred, block size."
+		content={m.bl_meta_description()}
 	/>
 </svelte:head>
 
 <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 	<div class="mb-8">
 		<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent">
-			Blocks
+			{m.bl_h1()}
 		</h1>
 		<p class="mt-2 max-w-3xl ts-text-muted">
-			Per-block economics for Bitcoin Cash from CashTokens activation (block 792,772) onward.
-			Each row summarizes a single block: how many transactions it contains, what the miner
-			collected, how much of that was fees vs. the protocol subsidy, and the total economic
-			value transferred across non-coinbase outputs.
+			{m.bl_intro()}
 		</p>
 	</div>
 
@@ -149,14 +148,14 @@
 	<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
 		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
 			<div class="text-xs uppercase tracking-wider ts-text-muted">
-				Blocks indexed
+				{m.bl_blocks_indexed()}
 			</div>
 			<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
 				{fmtCount(data.summaryAll.blockCount)}
 			</div>
 			<div class="mt-1 text-xs ts-text-muted">
-				since {data.summaryAll.minHeight ?? '—'}
-				{#if data.summaryAll.maxHeight !== null}· tip {data.summaryAll.maxHeight}{/if}
+				{m.bl_since()} {data.summaryAll.minHeight ?? '—'}
+				{#if data.summaryAll.maxHeight !== null}{m.bl_tip()} {data.summaryAll.maxHeight}{/if}
 			</div>
 		</div>
 
@@ -164,13 +163,13 @@
 			<div class="flex items-start justify-between">
 				<div>
 					<div class="text-xs uppercase tracking-wider ts-text-muted">
-						Tx — last 7d
+						{m.bl_tx_7d()}
 					</div>
 					<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
 						{fmtCount(data.summary7d.totalTxCount)}
 					</div>
 					<div class="mt-1 text-xs ts-text-muted">
-						avg {data.summary7d.blockCount > 0 ? Math.round(data.summary7d.totalTxCount / data.summary7d.blockCount) : 0}/block
+						{m.mn_avg_per_block({ n: data.summary7d.blockCount > 0 ? Math.round(data.summary7d.totalTxCount / data.summary7d.blockCount) : 0 })}
 					</div>
 				</div>
 				<Sparkline points={txCountSpark} width={64} height={28} />
@@ -181,7 +180,7 @@
 			<div class="flex items-start justify-between">
 				<div>
 					<div class="text-xs uppercase tracking-wider ts-text-muted">
-						Fees — last 7d
+						{m.bl_fees_7d()}
 					</div>
 					<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
 						{fmtBch(data.summary7d.totalFeesSats)}
@@ -198,7 +197,7 @@
 			<div class="flex items-start justify-between">
 				<div>
 					<div class="text-xs uppercase tracking-wider ts-text-muted">
-						Economic value — 7d
+						{m.bl_econ_7d()}
 					</div>
 					<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
 						{fmtBch(data.summary7d.totalEconomicSats)}
@@ -221,35 +220,35 @@
 	<div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
 		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
 			<div class="text-xs uppercase tracking-wider ts-text-muted">
-				Avg block time — 24h
+				{m.bl_block_time_24h()}
 			</div>
 			<div class="mt-2 text-3xl font-semibold {blockTimeColor(data.blockTime.w24h.avgSeconds)}">
 				{fmtBlockTime(data.blockTime.w24h.avgSeconds)}
 			</div>
 			<div class="mt-1 text-xs ts-text-muted">
-				{fmtCount(data.blockTime.w24h.blocks)} {data.blockTime.w24h.blocks === 1 ? 'block' : 'blocks'} · target 10m 00s
+				{fmtCount(data.blockTime.w24h.blocks)} {data.blockTime.w24h.blocks === 1 ? m.bl_block() : m.bl_blocks()} {m.bl_target()}
 			</div>
 		</div>
 		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
 			<div class="text-xs uppercase tracking-wider ts-text-muted">
-				Avg block time — 7d
+				{m.bl_block_time_7d()}
 			</div>
 			<div class="mt-2 text-3xl font-semibold {blockTimeColor(data.blockTime.w7d.avgSeconds)}">
 				{fmtBlockTime(data.blockTime.w7d.avgSeconds)}
 			</div>
 			<div class="mt-1 text-xs ts-text-muted">
-				{fmtCount(data.blockTime.w7d.blocks)} blocks
+				{fmtCount(data.blockTime.w7d.blocks)} {m.bl_blocks()}
 			</div>
 		</div>
 		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
 			<div class="text-xs uppercase tracking-wider ts-text-muted">
-				Avg block time — 30d
+				{m.bl_block_time_30d()}
 			</div>
 			<div class="mt-2 text-3xl font-semibold {blockTimeColor(data.blockTime.w30d.avgSeconds)}">
 				{fmtBlockTime(data.blockTime.w30d.avgSeconds)}
 			</div>
 			<div class="mt-1 text-xs ts-text-muted">
-				{fmtCount(data.blockTime.w30d.blocks)} blocks
+				{fmtCount(data.blockTime.w30d.blocks)} {m.bl_blocks()}
 			</div>
 		</div>
 	</div>
@@ -261,54 +260,54 @@
 	<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
 		<div class="p-4 rounded-xl border bg-slate-50/50 dark:bg-zinc-900/50 ts-border-subtle">
 			<div class="text-xs uppercase tracking-wider mb-2 ts-text-muted">
-				Last 30 days
+				{m.bl_last_30d()}
 			</div>
 			<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-sm">
 				<div>
-					<div class="text-xs text-slate-500">Blocks</div>
+					<div class="text-xs text-slate-500">{m.bl_lbl_blocks()}</div>
 					<div class="font-mono">{fmtCount(data.summary30d.blockCount)}</div>
 				</div>
 				<div>
-					<div class="text-xs text-slate-500">Txs</div>
+					<div class="text-xs text-slate-500">{m.bl_lbl_txs()}</div>
 					<div class="font-mono">{fmtCount(data.summary30d.totalTxCount)}</div>
 				</div>
 				<div>
-					<div class="text-xs text-slate-500">Fees</div>
+					<div class="text-xs text-slate-500">{m.bl_lbl_fees()}</div>
 					<div class="font-mono">{fmtBch(data.summary30d.totalFeesSats)}</div>
 				</div>
 				<div>
-					<div class="text-xs text-slate-500" title="Sum of outputs across non-coinbase txs">Value</div>
+					<div class="text-xs text-slate-500" title={m.bl_value_title()}>{m.bl_lbl_value()}</div>
 					<div class="font-mono">{fmtBch(data.summary30d.totalEconomicSats)}</div>
 				</div>
 				<div>
-					<div class="text-xs text-slate-500" title="Miner fees as a percentage of total economic value transferred">Fee / Value</div>
+					<div class="text-xs text-slate-500" title={m.bl_fee_value_title()}>{m.bl_lbl_fee_value()}</div>
 					<div class="font-mono">{fmtFeeRatio(data.summary30d.totalFeesSats, data.summary30d.totalEconomicSats)}</div>
 				</div>
 			</div>
 		</div>
 		<div class="p-4 rounded-xl border bg-slate-50/50 dark:bg-zinc-900/50 ts-border-subtle">
 			<div class="text-xs uppercase tracking-wider mb-2 ts-text-muted">
-				All time (since CashTokens activation)
+				{m.bl_all_time_full()}
 			</div>
 			<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-sm">
 				<div>
-					<div class="text-xs text-slate-500">Blocks</div>
+					<div class="text-xs text-slate-500">{m.bl_lbl_blocks()}</div>
 					<div class="font-mono">{fmtCount(data.summaryAll.blockCount)}</div>
 				</div>
 				<div>
-					<div class="text-xs text-slate-500">Txs</div>
+					<div class="text-xs text-slate-500">{m.bl_lbl_txs()}</div>
 					<div class="font-mono">{fmtCount(data.summaryAll.totalTxCount)}</div>
 				</div>
 				<div>
-					<div class="text-xs text-slate-500">Fees</div>
+					<div class="text-xs text-slate-500">{m.bl_lbl_fees()}</div>
 					<div class="font-mono">{fmtBch(data.summaryAll.totalFeesSats)}</div>
 				</div>
 				<div>
-					<div class="text-xs text-slate-500" title="Sum of outputs across non-coinbase txs">Value</div>
+					<div class="text-xs text-slate-500" title={m.bl_value_title()}>{m.bl_lbl_value()}</div>
 					<div class="font-mono">{fmtBch(data.summaryAll.totalEconomicSats)}</div>
 				</div>
 				<div>
-					<div class="text-xs text-slate-500" title="Miner fees as a percentage of total economic value transferred">Fee / Value</div>
+					<div class="text-xs text-slate-500" title={m.bl_fee_value_title()}>{m.bl_lbl_fee_value()}</div>
 					<div class="font-mono">{fmtFeeRatio(data.summaryAll.totalFeesSats, data.summaryAll.totalEconomicSats)}</div>
 				</div>
 			</div>
@@ -318,27 +317,26 @@
 	{#if data.rows.length === 0}
 		<div class="p-8 rounded-xl border bg-slate-50 dark:bg-zinc-900/50 text-center ts-border-subtle">
 			<p class="ts-text-muted">
-				No blocks indexed yet. The backfill will populate this page in ~30 minutes; the live
-				tail walker keeps it current from there.
+				{m.bl_empty()}
 			</p>
 		</div>
 	{:else}
 		<!-- Desktop table -->
 		<div class="hidden md:block overflow-hidden rounded-xl border ts-border-subtle">
 			<div class="grid grid-cols-[0.8fr_1.4fr_0.7fr_0.6fr_0.9fr_0.8fr_0.9fr_0.6fr] gap-2 px-4 py-3 bg-slate-50 dark:bg-zinc-900/50 border-b text-xs font-semibold uppercase tracking-wider items-center ts-text-muted ts-border-subtle">
-				<div>Height</div>
-				<div>Time</div>
-				<div class="text-right">Hash</div>
-				<div class="text-right">Txs</div>
-				<div class="text-right" title="Coinbase output = subsidy + fees">Miner take</div>
-				<div class="text-right">Fees</div>
-				<div class="text-right" title="Sum of outputs across non-coinbase txs">Value</div>
-				<div class="text-right">Size</div>
+				<div>{m.bl_col_height()}</div>
+				<div>{m.bl_col_time()}</div>
+				<div class="text-right">{m.bl_col_hash()}</div>
+				<div class="text-right">{m.bl_lbl_txs()}</div>
+				<div class="text-right" title={m.bl_miner_take_title()}>{m.bl_col_miner_take()}</div>
+				<div class="text-right">{m.bl_lbl_fees()}</div>
+				<div class="text-right" title={m.bl_value_title()}>{m.bl_lbl_value()}</div>
+				<div class="text-right">{m.bl_col_size()}</div>
 			</div>
 			{#each data.rows as r (r.height)}
 				<div class="grid grid-cols-[0.8fr_1.4fr_0.7fr_0.6fr_0.9fr_0.8fr_0.9fr_0.6fr] gap-2 px-4 py-3 border-b last:border-b-0 items-center hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors text-sm ts-border-subtle">
 					<div class="font-mono font-semibold text-slate-900 dark:text-white">
-						{r.height.toLocaleString('en-US')}
+						{r.height.toLocaleString(getLocale())}
 					</div>
 					<div class="ts-text-muted">
 						<div>{fmtRelative(r.time)}</div>
@@ -357,7 +355,7 @@
 							{shortHash(r.hashHex)} ↗
 						</a>
 					</div>
-					<div class="text-right font-mono">{r.txCount.toLocaleString('en-US')}</div>
+					<div class="text-right font-mono">{r.txCount.toLocaleString(getLocale())}</div>
 					<div class="text-right font-mono">
 						<div>{fmtBch(r.coinbaseSats)}</div>
 						<div class="text-xs text-slate-400">{fmtUsd(r.coinbaseSats, data.bchPriceUSD)}</div>
@@ -382,7 +380,7 @@
 				<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
 					<div class="flex items-baseline justify-between mb-2">
 						<div class="font-mono text-lg font-semibold text-slate-900 dark:text-white">
-							{r.height.toLocaleString('en-US')}
+							{r.height.toLocaleString(getLocale())}
 						</div>
 						<a
 							href={explorerUrl(r.hashHex)}
@@ -399,25 +397,25 @@
 					</div>
 					<div class="grid grid-cols-2 gap-2 text-sm">
 						<div>
-							<div class="text-xs text-slate-500">Txs</div>
-							<div class="font-mono">{r.txCount.toLocaleString('en-US')}</div>
+							<div class="text-xs text-slate-500">{m.bl_lbl_txs()}</div>
+							<div class="font-mono">{r.txCount.toLocaleString(getLocale())}</div>
 						</div>
 						<div>
-							<div class="text-xs text-slate-500">Size</div>
+							<div class="text-xs text-slate-500">{m.bl_col_size()}</div>
 							<div class="font-mono">{fmtBytes(r.sizeBytes)}</div>
 						</div>
 						<div>
-							<div class="text-xs text-slate-500">Miner take</div>
+							<div class="text-xs text-slate-500">{m.bl_col_miner_take()}</div>
 							<div class="font-mono">{fmtBch(r.coinbaseSats)}</div>
 						</div>
 						<div>
-							<div class="text-xs text-slate-500">Fees</div>
+							<div class="text-xs text-slate-500">{m.bl_lbl_fees()}</div>
 							<div class="font-mono {Number(r.feesSats) > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500'}">
 								{fmtBch(r.feesSats)}
 							</div>
 						</div>
 						<div class="col-span-2">
-							<div class="text-xs text-slate-500">Economic value</div>
+							<div class="text-xs text-slate-500">{m.bl_econ_value()}</div>
 							<div class="font-mono">{fmtBch(r.totalOutputSats)} <span class="text-xs text-slate-400">{fmtUsd(r.totalOutputSats, data.bchPriceUSD)}</span></div>
 						</div>
 					</div>
@@ -428,23 +426,23 @@
 		<!-- Pagination -->
 		<div class="mt-6 flex items-center justify-between text-sm">
 			<div class="ts-text-muted">
-				Page {data.page} · {data.pageSize} per page
+				{m.bl_page_info({ page: data.page, size: data.pageSize })}
 			</div>
 			<div class="flex gap-2">
 				{#if showPrev}
 					<a
-						href={`/blocks${prevPage === 1 ? '' : `?page=${prevPage}`}`}
+						href={localizeHref(`/blocks${prevPage === 1 ? '' : `?page=${prevPage}`}`)}
 						class="px-3 py-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-700 ts-text-strong ts-surface-chip"
 					>
-						← Newer
+						← {m.ui_newer()}
 					</a>
 				{/if}
 				{#if showNext}
 					<a
-						href={`/blocks?page=${nextPage}`}
+						href={localizeHref(`/blocks?page=${nextPage}`)}
 						class="px-3 py-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-700 ts-text-strong ts-surface-chip"
 					>
-						Older →
+						{m.ui_older()} →
 					</a>
 				{/if}
 			</div>
@@ -452,32 +450,13 @@
 	{/if}
 
 	<section class="mt-10 p-5 rounded-xl border bg-slate-50/50 dark:bg-zinc-900/30 ts-border-subtle">
-		<h2 class="text-base font-semibold text-slate-900 dark:text-white mb-2">Notes</h2>
+		<h2 class="text-base font-semibold text-slate-900 dark:text-white mb-2">{m.ui_notes()}</h2>
 		<ul class="text-sm space-y-1.5 list-disc list-inside ts-text-muted">
-			<li>
-				<strong>Miner take</strong> is the sum of the coinbase transaction's outputs — what the
-				block's miner actually claimed. It equals the protocol <em>subsidy</em> plus all
-				transaction fees, and a miner can legally claim less (any unclaimed sats are burned).
-			</li>
-			<li>
-				<strong>Fees</strong> are derived as <code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">miner_take − subsidy_at_height</code>, where the subsidy follows the BCH halving schedule (50 BCH from genesis, halving every 210,000 blocks). At the current era subsidy is 6.25 BCH per block.
-			</li>
-			<li>
-				<strong>Economic value</strong> is the sum of every output across the block's
-				non-coinbase transactions. It overstates "value transferred" because most txs include
-				change-back-to-self outputs — but it's a useful, deterministic-from-the-block lens
-				without needing to fetch every prev-output to compute net flows.
-			</li>
-			<li>
-				Block hashes link out to
-				<a class="text-violet-600 dark:text-violet-400 hover:underline" href="https://explorer.salemkode.com/" target="_blank" rel="noopener noreferrer">salemkode.com</a>
-				for full transaction-level detail. tokenstork.com indexes the per-block summary; the
-				explorer has the per-tx breakdown.
-			</li>
-			<li>
-				Coverage starts at block <strong>792,772</strong> (CashTokens activation, May 2023).
-				Pre-activation history is out of scope.
-			</li>
+			<li>{@html m.bl_note1()}</li>
+			<li>{@html m.bl_note2()}</li>
+			<li>{@html m.bl_note3()}</li>
+			<li>{@html m.bl_note4()}</li>
+			<li>{@html m.bl_note5()}</li>
 		</ul>
 	</section>
 </main>
