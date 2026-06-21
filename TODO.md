@@ -7,6 +7,7 @@
 - Token claim / management
 - One-click "submit to TokenStork BCMR registry"
 - BCMR support workflow for existing-but-unregistered tokens
+- Activate BCMR watchdog alerts: set BCMR_WEBHOOK_URL (+ optional BCMR_WEBHOOK_SECRET) in /etc/tokenstork/env → point at Telegram/Discord/ntfy; enable sync-bcmr-events.timer. Until set, change events just queue in bcmr_change_events (no push notifications)
 - cc: replace blockbook, review plan first
 - warrant canary tool
 - form a DAO from token holders, proposals, votes, profiles, etc
