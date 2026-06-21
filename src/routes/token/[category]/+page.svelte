@@ -21,6 +21,8 @@
 	import VoteButton from '$lib/components/VoteButton.svelte';
 	import { Tooltip, TooltipTrigger, TooltipContent } from '$lib/components/ui/tooltip';
 	import InfoTooltip from '$lib/components/InfoTooltip.svelte';
+	import * as m from '$lib/paraglide/messages';
+	import { localizeHref } from '$lib/paraglide/runtime';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -195,9 +197,9 @@
 		return {
 			href: uri,
 			label: host,
-			title: "Open the on-chain-published BCMR JSON (the publisher's own copy)",
+			title: m.td_bcmr_json_title(),
 			gatewayHref,
-			gatewayTitle: 'View via ipfs.io public gateway (HTTPS proxy for the ipfs:// link)'
+			gatewayTitle: m.td_bcmr_gateway_title()
 		};
 	});
 
@@ -209,47 +211,47 @@
 	const hasExtremes = $derived(false); // overridden in tier1
 
 	function formatAge(days: number): string {
-		if (days < 1) return 'today';
-		if (days === 1) return '1 day ago';
-		if (days < 30) return `${days} days ago`;
+		if (days < 1) return m.td_today();
+		if (days === 1) return m.td_age_1day();
+		if (days < 30) return m.td_age_days({ n: days });
 		const months = Math.floor(days / 30);
-		if (months < 12) return `${months} mo ago`;
+		if (months < 12) return m.td_age_mo({ n: months });
 		const years = Math.floor(days / 365);
 		const rem = Math.floor((days % 365) / 30);
-		return rem > 0 ? `${years}y ${rem}mo ago` : `${years}y ago`;
+		return rem > 0 ? m.td_age_y_mo({ y: years, rem }) : m.td_age_y({ y: years });
 	}
 	function formatRelative(unixSec: number | null | undefined): string | null {
 		if (unixSec == null) return null;
 		const diffSec = Math.floor(Date.now() / 1000) - unixSec;
-		if (diffSec < 60) return 'just now';
-		if (diffSec < 3600) return `${Math.floor(diffSec / 60)} min ago`;
-		if (diffSec < 86_400) return `${Math.floor(diffSec / 3600)}h ago`;
+		if (diffSec < 60) return m.td_rel_now();
+		if (diffSec < 3600) return m.td_rel_min({ n: Math.floor(diffSec / 60) });
+		if (diffSec < 86_400) return m.td_rel_h({ n: Math.floor(diffSec / 3600) });
 		const days = Math.floor(diffSec / 86_400);
-		if (days < 30) return `${days}d ago`;
+		if (days < 30) return m.td_rel_d({ n: days });
 		const months = Math.floor(days / 30);
-		if (months < 12) return `${months}mo ago`;
-		return `${Math.floor(days / 365)}y ago`;
+		if (months < 12) return m.td_rel_mo({ n: months });
+		return m.td_rel_y({ n: Math.floor(days / 365) });
 	}
 	function formatAbsoluteDate(unixSec: number | null | undefined): string | null {
 		if (unixSec == null) return null;
 		return new Date(unixSec * 1000).toISOString().slice(0, 10);
 	}
-	const BUCKET_LABEL: Record<'upvoted' | 'downvoted' | 'controversial', string> = {
-		upvoted: 'Most upvoted',
-		downvoted: 'Most downvoted',
-		controversial: 'Most controversial'
-	};
+	const BUCKET_LABEL = $derived<Record<'upvoted' | 'downvoted' | 'controversial', string>>({
+		upvoted: m.home_most_upvoted(),
+		downvoted: m.home_most_downvoted(),
+		controversial: m.home_most_controversial()
+	});
 	const BUCKET_TONE: Record<'upvoted' | 'downvoted' | 'controversial', string> = {
 		upvoted: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300',
 		downvoted: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
 		controversial: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
 	};
 	function giniTier(g: number): { label: string; classes: string } {
-		if (g < 0.4) return { label: 'Excellent', classes: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' };
-		if (g < 0.6) return { label: 'Good', classes: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' };
-		if (g < 0.75) return { label: 'Fair', classes: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' };
-		if (g < 0.9) return { label: 'Poor', classes: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300' };
-		return { label: 'Whale-controlled', classes: 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300' };
+		if (g < 0.4) return { label: m.td_gini_excellent(), classes: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' };
+		if (g < 0.6) return { label: m.td_gini_good(), classes: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' };
+		if (g < 0.75) return { label: m.td_gini_fair(), classes: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' };
+		if (g < 0.9) return { label: m.td_gini_poor(), classes: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300' };
+		return { label: m.td_gini_whale(), classes: 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300' };
 	}
 
 	// Report form state
@@ -331,14 +333,14 @@
 					<div class="w-32 h-7 {sk}"></div>
 				{:then t1}
 					<a
-						href={`/airdrops/new?recipient=${token.id}`}
+						href={localizeHref(`/airdrops/new?recipient=${token.id}`)}
 						class="inline-flex items-center gap-1 px-3 py-1 rounded bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold"
-						title="Airdrop a token you hold to all holders of this token"
+						title={m.td_airdrop_title()}
 					>
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4">
 							<path d="M12 2v6m-3-3 3 3 3-3M5 10h14l-1.5 11h-11Z" />
 						</svg>
-						Airdrop to holders
+						{m.td_airdrop_to_holders()}
 					</a>
 				{/await}
 				{#await data.canPublishBcmr}
@@ -346,16 +348,16 @@
 				{:then canPublish}
 					{#if canPublish}
 						<a
-							href="/publish-bcmr"
+							href={localizeHref('/publish-bcmr')}
 							class="inline-flex items-center gap-1 px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold"
 							title={token.bcmrSource === 'onchain'
-								? 'Update this category\'s BCMR metadata. You hold the authority NFT.'
-								: 'Publish BCMR metadata so this token displays a name, symbol, icon, and description. You hold the authority NFT.'}
+								? m.td_update_bcmr_title()
+								: m.td_publish_bcmr_title()}
 						>
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4">
 								<path d="M9 12h6m-6 4h6M5 4v16h14V8l-4-4H5z" />
 							</svg>
-							{token.bcmrSource === 'onchain' ? 'Update BCMR' : 'Publish BCMR'}
+							{token.bcmrSource === 'onchain' ? m.pubbcmr_update_bcmr() : m.pubbcmr_publish_bcmr()}
 						</a>
 					{/if}
 				{/await}
@@ -377,10 +379,10 @@
 				{#if token.isVerifiedOnchain}
 					<Tooltip>
 						<TooltipTrigger class="text-xs text-emerald-600 dark:text-emerald-400 cursor-help">
-							✓ Verified on-chain
+							{m.td_verified()}
 						</TooltipTrigger>
 						<TooltipContent>
-							Confirmed on-chain via our local BCHN: this category id appears in a real CashTokens genesis transaction at the genesis block, and current supply / live UTXOs / holders are derived from the indexed UTXO set (not from a third-party indexer or self-reported metadata).
+							{m.td_verified_tip()}
 						</TooltipContent>
 					</Tooltip>
 				{/if}
@@ -416,15 +418,15 @@
 					</Tooltip>
 				{/if}
 				{#if token.isFullyBurned}
-					<span class="text-xs text-red-600">Fully burned</span>
+					<span class="text-xs text-red-600">{m.td_fully_burned()}</span>
 				{/if}
 				{#if token.hasActiveMinting}
 					<Tooltip>
 						<TooltipTrigger class="text-xs text-amber-600 cursor-help">
-							Minting open
+							{m.td_minting_open()}
 						</TooltipTrigger>
 						<TooltipContent>
-							At least one live UTXO of this category carries the `minting` NFT capability. Whoever holds that UTXO can mint additional NFTs of this category at any time. Supply is not capped at the level shown — treat the supply number as a snapshot rather than the maximum.
+							{m.td_minting_tip()}
 						</TooltipContent>
 					</Tooltip>
 				{/if}
@@ -454,7 +456,7 @@
 						{#if heroPct != null && heroPct !== 0}
 							<div
 								class={`mt-2 text-sm font-semibold ${heroPct >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}
-								title="24h price change on Cauldron"
+								title={m.td_24h_change_title()}
 							>
 								{heroPct >= 0 ? '▲ +' : '▼ '}{heroPct.toFixed(2)}%
 								<span class="opacity-70 font-normal">24h</span>
@@ -462,7 +464,7 @@
 						{/if}
 					{/await}
 					<div class="mt-1 text-xs ts-text-muted">
-						per {heroSymbol || 'token'} · via <a href="https://app.cauldron.quest/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">{heroSource}</a>
+						{m.td_per()} {heroSymbol || m.td_token()} · {m.td_via()} <a href="https://app.cauldron.quest/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">{heroSource}</a>
 					</div>
 				</div>
 			{/if}
@@ -521,21 +523,21 @@
 				{/if}
 				{#if bcmr.status}
 					<div class="flex items-center gap-1.5 text-xs">
-						<span class="uppercase tracking-wider ts-text-muted">Status</span>
+						<span class="uppercase tracking-wider ts-text-muted">{m.td_status()}</span>
 						<span class="px-2 py-0.5 rounded font-medium ts-text-strong ts-surface-chip">{bcmr.status}</span>
 					</div>
 				{/if}
 				{#if bcmr.splitId}
 					{@const validSplitId = /^[0-9a-f]{64}$/i.test(bcmr.splitId)}
 					<div class="flex items-center gap-1.5 text-xs min-w-0">
-						<span class="uppercase tracking-wider flex-shrink-0 ts-text-muted">Split from</span>
+						<span class="uppercase tracking-wider flex-shrink-0 ts-text-muted">{m.td_split_from()}</span>
 						{#if validSplitId}
-							<a href={`/token/${bcmr.splitId.toLowerCase()}`} data-sveltekit-preload-data="hover" class="font-mono text-violet-600 dark:text-violet-400 hover:underline truncate" title={bcmr.splitId}>
+							<a href={localizeHref(`/token/${bcmr.splitId.toLowerCase()}`)} data-sveltekit-preload-data="hover" class="font-mono text-violet-600 dark:text-violet-400 hover:underline truncate" title={bcmr.splitId}>
 								{bcmr.splitId.slice(0, 10)}…{bcmr.splitId.slice(-6)}
 							</a>
 						{:else}
-							<span class="font-mono truncate ts-text-muted" title="Invalid hex splitId — not rendered as link">
-								{bcmr.splitId.slice(0, 10)}… <em class="not-italic">(invalid)</em>
+							<span class="font-mono truncate ts-text-muted" title={m.td_invalid_splitid_title()}>
+								{bcmr.splitId.slice(0, 10)}… <em class="not-italic">{m.td_invalid()}</em>
 							</span>
 						{/if}
 					</div>
@@ -576,66 +578,66 @@
 						</svg>
 						<div>
 							<h2 class="text-lg font-semibold text-slate-900 dark:text-white inline-flex items-center gap-1.5">
-								CRC-20 token
+								{m.td_crc20_token()}
 								<InfoTooltip
-									href="/faq#faq-crc20-vs-bcmr"
-									label="What's the difference between CRC-20 and BCMR?"
-									text="What's the difference between CRC-20 and BCMR?"
+									href={localizeHref('/faq#faq-crc20-vs-bcmr')}
+									label={m.td_crc20_vs_bcmr_q()}
+									text={m.td_crc20_vs_bcmr_q()}
 									class="w-5 h-5 rounded-full hover:text-amber-700 dark:hover:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40"
 								/>
 							</h2>
 							<p class="text-xs ts-text-muted">
-								On-chain naming claim via covenant in genesis transaction.
-								<a href="https://crc20.cash/" target="_blank" rel="noopener noreferrer" class="text-amber-700 dark:text-amber-400 hover:underline">Learn more →</a>
+								{m.td_crc20_subtitle()}
+								<a href="https://crc20.cash/" target="_blank" rel="noopener noreferrer" class="text-amber-700 dark:text-amber-400 hover:underline">{m.td_learn_more()} →</a>
 							</p>
 						</div>
 					</div>
 					{#if crc20.isCanonical}
-						<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-600 text-white text-xs font-semibold" title={`This category is the canonical winner for "${crc20.symbol}" — the earliest valid genesis under the per-symbol sort.`}>
-							🏆 Canonical winner for "{crc20.symbol || '<empty>'}"
+						<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-600 text-white text-xs font-semibold" title={m.td_canonical_winner_title({ symbol: crc20.symbol ?? '<empty>' })}>
+							🏆 {m.td_canonical_winner_for()} "{crc20.symbol || '<empty>'}"
 						</span>
 					{:else}
-						<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-200 dark:bg-zinc-800 text-xs font-semibold ts-text-strong" title="This category claims the same symbol but lost the per-symbol canonical sort to an earlier genesis.">
-							Non-canonical contender for "{crc20.symbol || '<empty>'}"
+						<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-200 dark:bg-zinc-800 text-xs font-semibold ts-text-strong" title={m.td_noncanonical_title()}>
+							{m.td_noncanonical_for()} "{crc20.symbol || '<empty>'}"
 						</span>
 					{/if}
 				</div>
 				<dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
 					<div>
-						<dt class="text-xs uppercase tracking-wider mb-0.5 ts-text-muted">On-chain symbol</dt>
+						<dt class="text-xs uppercase tracking-wider mb-0.5 ts-text-muted">{m.td_onchain_symbol()}</dt>
 						<dd class="font-mono text-slate-900 dark:text-white break-all">
 							{crc20.symbol || '<empty>'}
-							{#if crc20.symbolIsHex}<span class="ml-2 text-[10px] uppercase tracking-wider text-amber-700 dark:text-amber-400" title="Symbol bytes are not valid UTF-8; rendered as hex.">non-UTF-8</span>{/if}
+							{#if crc20.symbolIsHex}<span class="ml-2 text-[10px] uppercase tracking-wider text-amber-700 dark:text-amber-400" title={m.td_nonutf8_title()}>{m.crc_non_utf8()}</span>{/if}
 						</dd>
-						<dd class="text-xs font-mono mt-1 ts-text-muted">bytes: 0x{crc20.symbolBytesHex || '(empty)'}</dd>
+						<dd class="text-xs font-mono mt-1 ts-text-muted">{m.td_bytes()} 0x{crc20.symbolBytesHex || m.td_empty_paren()}</dd>
 					</div>
 					<div>
-						<dt class="text-xs uppercase tracking-wider mb-0.5 ts-text-muted">On-chain decimals</dt>
+						<dt class="text-xs uppercase tracking-wider mb-0.5 ts-text-muted">{m.td_onchain_decimals()}</dt>
 						<dd class="font-mono text-slate-900 dark:text-white">{crc20.decimals}</dd>
 					</div>
 					<div class="sm:col-span-2">
-						<dt class="text-xs uppercase tracking-wider mb-0.5 ts-text-muted">On-chain name</dt>
-						<dd class="font-mono text-slate-900 dark:text-white break-all">{crc20.name ?? '<non-UTF-8 bytes>'}</dd>
+						<dt class="text-xs uppercase tracking-wider mb-0.5 ts-text-muted">{m.td_onchain_name()}</dt>
+						<dd class="font-mono text-slate-900 dark:text-white break-all">{crc20.name ?? m.td_nonutf8_bytes()}</dd>
 						{#if token.name && crc20.name && token.name !== crc20.name}
-							<dd class="text-xs text-amber-700 dark:text-amber-400 mt-1">⚠ BCMR name (<span class="font-mono">{stripEmoji(token.name)}</span>) differs from the on-chain claim.</dd>
+							<dd class="text-xs text-amber-700 dark:text-amber-400 mt-1">⚠ {m.td_name_differs_1()}<span class="font-mono">{stripEmoji(token.name)}</span>{m.td_name_differs_2()}</dd>
 						{/if}
 					</div>
 					<div>
-						<dt class="text-xs uppercase tracking-wider mb-0.5 ts-text-muted">Genesis provenance</dt>
+						<dt class="text-xs uppercase tracking-wider mb-0.5 ts-text-muted">{m.td_genesis_provenance()}</dt>
 						<dd class="text-xs ts-text-strong">
-							Commit block <span class="font-mono">{crc20.commitBlock.toLocaleString()}</span><br />
-							Reveal block <span class="font-mono">{crc20.revealBlock.toLocaleString()}</span><br />
-							Fair genesis height <span class="font-mono">{crc20.fairGenesisHeight.toLocaleString()}</span>
+							{m.td_commit_block()} <span class="font-mono">{crc20.commitBlock.toLocaleString()}</span><br />
+							{m.td_reveal_block()} <span class="font-mono">{crc20.revealBlock.toLocaleString()}</span><br />
+							{m.td_fair_genesis()} <span class="font-mono">{crc20.fairGenesisHeight.toLocaleString()}</span>
 							<InfoTooltip
-								label="How fair genesis height is computed"
-								text="max(commit_block, reveal_block - 20). Drives the per-symbol canonical sort."
+								label={m.td_fair_genesis_label()}
+								text={m.td_fair_genesis_text()}
 								class="align-middle"
 								iconClass="w-3.5 h-3.5"
 							/>
 						</dd>
 					</div>
 					<div>
-						<dt class="text-xs uppercase tracking-wider mb-0.5 ts-text-muted">Recipient pubkey</dt>
+						<dt class="text-xs uppercase tracking-wider mb-0.5 ts-text-muted">{m.td_recipient_pubkey()}</dt>
 						<dd class="font-mono text-xs break-all ts-text-strong">{crc20.recipientPubkeyHex.slice(0, 16)}…{crc20.recipientPubkeyHex.slice(-8)}</dd>
 					</div>
 				</dl>
@@ -645,14 +647,14 @@
 							<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 transition-transform group-open:rotate-90" aria-hidden="true">
 								<path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
 							</svg>
-							<span>Contenders for "{crc20.symbol || '<empty>'}" ({crc20.contenders.length})</span>
+							<span>{m.td_contenders_for()} "{crc20.symbol || '<empty>'}" ({crc20.contenders.length})</span>
 						</summary>
 						<ul class="mt-3 space-y-1.5 text-xs">
 							{#each crc20.contenders as cont (cont.categoryHex)}
 <li class="flex items-center gap-2"> 
-									{#if cont.isCanonical}<span class="px-1.5 py-0.5 rounded bg-amber-600 text-white text-[10px] font-semibold">winner</span>{:else}<span class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-zinc-800 text-[10px] ts-text-muted">n.c.</span>{/if}
-									{#if cont.categoryHex === token.id}<span class="font-mono ts-text-strong">{cont.categoryHex.slice(0, 12)}…{cont.categoryHex.slice(-6)}</span><span class="text-amber-700 dark:text-amber-400 font-medium">(this token)</span>{:else}<a href={`/token/${cont.categoryHex}`} data-sveltekit-preload-data="hover" class="font-mono text-violet-600 dark:text-violet-400 hover:underline">{cont.categoryHex.slice(0, 12)}…{cont.categoryHex.slice(-6)}</a>{/if}
-									<span class="ml-auto ts-text-faint">fair height {cont.fairGenesisHeight.toLocaleString()}</span>
+									{#if cont.isCanonical}<span class="px-1.5 py-0.5 rounded bg-amber-600 text-white text-[10px] font-semibold">{m.td_winner()}</span>{:else}<span class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-zinc-800 text-[10px] ts-text-muted">n.c.</span>{/if}
+									{#if cont.categoryHex === token.id}<span class="font-mono ts-text-strong">{cont.categoryHex.slice(0, 12)}…{cont.categoryHex.slice(-6)}</span><span class="text-amber-700 dark:text-amber-400 font-medium">{m.td_this_token()}</span>{:else}<a href={localizeHref(`/token/${cont.categoryHex}`)} data-sveltekit-preload-data="hover" class="font-mono text-violet-600 dark:text-violet-400 hover:underline">{cont.categoryHex.slice(0, 12)}…{cont.categoryHex.slice(-6)}</a>{/if}
+									<span class="ml-auto ts-text-faint">{m.td_fair_height()} {cont.fairGenesisHeight.toLocaleString()}</span>
 								</li>
 							{/each}
 						</ul>
@@ -691,7 +693,7 @@
 		{#if showBadges}
 			<div class="mb-6 flex flex-wrap items-center gap-2">
 				{#if t1.firstNRank != null}
-					<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-xs font-semibold" title="Permanent rank: this is the {firstNText.toLowerCase()} minted on Bitcoin Cash, ordered by (genesis block, category hex).">
+					<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-xs font-semibold" title={m.td_first_n_title({ label: firstNText.toLowerCase() })}>
 						🏛️ {firstNText}
 					</span>
 				{/if}
@@ -701,7 +703,7 @@
 						: ageBadge === 'week'
 							? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
 							: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'}
-					<span class={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold ${ageTone}`} title="This category was minted on-chain within the warning window.">
+					<span class={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold ${ageTone}`} title={m.td_age_window_title()}>
 						⚠️ {ageBadgeLabel(ageBadge)}
 					</span>
 				{/if}
@@ -709,8 +711,8 @@
 					<!-- TVL rank skeleton -->
 				{:then tvlRank}
 					{#if tvlRank != null}
-						<a href="/?sort=tvl" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-600 text-white text-xs font-semibold hover:bg-cyan-700" title={`Ranked #${tvlRank} by Cauldron pool TVL.`}>
-							🏆 #{tvlRank} by Cauldron TVL
+						<a href={localizeHref('/?sort=tvl')} class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-600 text-white text-xs font-semibold hover:bg-cyan-700" title={m.td_tvl_rank_title({ rank: tvlRank })}>
+							🏆 #{tvlRank} {m.td_by_cauldron_tvl()}
 						</a>
 					{/if}
 				{/await}
@@ -718,49 +720,49 @@
 					<!-- Holders rank skeleton -->
 				{:then holdersRank}
 					{#if holdersRank != null}
-						<a href="/?sort=holders" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700" title={`Ranked #${holdersRank} by distinct on-chain holders.`}>
-							👥 #{holdersRank} by Holders
+						<a href={localizeHref('/?sort=holders')} class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700" title={m.td_holders_rank_title({ rank: holdersRank })}>
+							👥 #{holdersRank} {m.td_by_holders()}
 						</a>
 					{/if}
 				{/await}
 				{#if t1.cauldronTvlSharePct != null && t1.cauldronTvlSharePct >= 10}
-					<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-600 text-white text-xs font-semibold" title="This token's Cauldron pool TVL is {t1.cauldronTvlSharePct.toFixed(1)}% of the entire Cauldron exchange.">
-						⚡ {t1.cauldronTvlSharePct.toFixed(1)}% of Cauldron TVL
+					<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-600 text-white text-xs font-semibold" title={m.td_cauldron_share_title({ pct: t1.cauldronTvlSharePct.toFixed(1) })}>
+						⚡ {t1.cauldronTvlSharePct.toFixed(1)}% {m.td_of_cauldron_tvl()}
 					</span>
 				{/if}
 				{#each standings as s (s.bucket)}
-					<a href="/#community-sentiment" class={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${BUCKET_TONE[s.bucket]}`} title={`Ranked #${s.currentRank} in ${BUCKET_LABEL[s.bucket]} on ${t1.leaderboardStandings.latestDay}. Click to view leaderboards.`}>
+					<a href={localizeHref('/#community-sentiment')} class={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${BUCKET_TONE[s.bucket]}`} title={m.td_standing_title({ rank: s.currentRank ?? 0, bucket: BUCKET_LABEL[s.bucket], day: t1.leaderboardStandings.latestDay ?? '' })}>
 						<span>#{s.currentRank} {BUCKET_LABEL[s.bucket]}</span>
-						{#if s.streakDays >= 3}<span class="opacity-80" title="{s.streakDays}-day streak in the top 5">🔥{s.streakDays}d</span>{/if}
-						{#if s.medalGold > 0}<span title="{s.medalGold} day{s.medalGold === 1 ? '' : 's'} ranked #1 lifetime">🥇{s.medalGold}</span>{:else if s.medalSilver > 0}<span title="{s.medalSilver} day{s.medalSilver === 1 ? '' : 's'} ranked top-3 lifetime">🥈{s.medalSilver}</span>{:else if s.medalBronze > 0}<span title="{s.medalBronze} day{s.medalBronze === 1 ? '' : 's'} ranked top-5 lifetime">🥉{s.medalBronze}</span>{/if}
+						{#if s.streakDays >= 3}<span class="opacity-80" title={m.td_streak_title({ n: s.streakDays })}>🔥{s.streakDays}d</span>{/if}
+						{#if s.medalGold > 0}<span title={m.td_medal_gold_title({ n: s.medalGold })}>🥇{s.medalGold}</span>{:else if s.medalSilver > 0}<span title={m.td_medal_silver_title({ n: s.medalSilver })}>🥈{s.medalSilver}</span>{:else if s.medalBronze > 0}<span title={m.td_medal_bronze_title({ n: s.medalBronze })}>🥉{s.medalBronze}</span>{/if}
 					</a>
 				{/each}
 				{#if t1.moverBadges.gainerRank > 0}
 					{@const pct = t1.moverBadges.pricePct ?? 0}
-					<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs font-semibold" title="Top {t1.moverBadges.gainerRank} of 5 24h gainers on Cauldron">
-						📈 #{t1.moverBadges.gainerRank} 24h gainer{#if pct !== 0}<span class="opacity-80">+{pct.toFixed(1)}%</span>{/if}
+					<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs font-semibold" title={m.td_gainer_title({ n: t1.moverBadges.gainerRank })}>
+						📈 #{t1.moverBadges.gainerRank} {m.td_24h_gainer()}{#if pct !== 0}<span class="opacity-80">+{pct.toFixed(1)}%</span>{/if}
 					</span>
 				{/if}
 				{#if t1.moverBadges.loserRank > 0}
 					{@const pct = t1.moverBadges.pricePct ?? 0}
-					<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-xs font-semibold" title="Top {t1.moverBadges.loserRank} of 5 24h losers on Cauldron">
-						📉 #{t1.moverBadges.loserRank} 24h loser{#if pct !== 0}<span class="opacity-80">{pct.toFixed(1)}%</span>{/if}
+					<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-xs font-semibold" title={m.td_loser_title({ n: t1.moverBadges.loserRank })}>
+						📉 #{t1.moverBadges.loserRank} {m.td_24h_loser()}{#if pct !== 0}<span class="opacity-80">{pct.toFixed(1)}%</span>{/if}
 					</span>
 				{/if}
 				{#if t1.moverBadges.tvlMoverRank > 0}
 					{@const pct = t1.moverBadges.tvlPct ?? 0}
-					<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 text-xs font-semibold" title="Top {t1.moverBadges.tvlMoverRank} of 5 24h TVL movers on Cauldron">
-						💧 #{t1.moverBadges.tvlMoverRank} TVL mover{#if pct !== 0}<span class="opacity-80">{pct >= 0 ? '+' : ''}{pct.toFixed(1)}%</span>{/if}
+					<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 text-xs font-semibold" title={m.td_tvl_mover_title({ n: t1.moverBadges.tvlMoverRank })}>
+						💧 #{t1.moverBadges.tvlMoverRank} {m.td_tvl_mover()}{#if pct !== 0}<span class="opacity-80">{pct >= 0 ? '+' : ''}{pct.toFixed(1)}%</span>{/if}
 					</span>
 				{/if}
 				{#if t1.arbitrage?.eligible}
-					<a href="/arbitrage" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-fuchsia-100 dark:bg-fuchsia-900/30 text-fuchsia-700 dark:text-fuchsia-300 text-xs font-semibold hover:bg-fuchsia-200 dark:hover:bg-fuchsia-900/50" title={`Listed on ${t1.arbitrage.venuesPresent} venues — visible on the /arbitrage page${t1.arbitrage.rawSpreadPct != null ? ` with a ${t1.arbitrage.rawSpreadPct.toFixed(2)}% raw spread` : ''}`}>
-						⇄ Arbitrage{#if t1.arbitrage.rawSpreadPct != null}<span class="opacity-80">{t1.arbitrage.rawSpreadPct.toFixed(2)}%</span>{/if}
+					<a href={localizeHref('/arbitrage')} class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-fuchsia-100 dark:bg-fuchsia-900/30 text-fuchsia-700 dark:text-fuchsia-300 text-xs font-semibold hover:bg-fuchsia-200 dark:hover:bg-fuchsia-900/50" title={m.td_arbitrage_title({ venues: t1.arbitrage.venuesPresent }) + (t1.arbitrage.rawSpreadPct != null ? m.td_arbitrage_spread({ spread: t1.arbitrage.rawSpreadPct.toFixed(2) }) : '')}>
+						⇄ {m.td_arbitrage()}{#if t1.arbitrage.rawSpreadPct != null}<span class="opacity-80">{t1.arbitrage.rawSpreadPct.toFixed(2)}%</span>{/if}
 					</a>
 				{/if}
 				{#if t1.watchlistCount > 0}
-					<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium ts-text-strong ts-surface-chip" title="Number of distinct wallets that have added this token to their watchlist">
-						⭐ On {t1.watchlistCount} watchlist{t1.watchlistCount === 1 ? '' : 's'}
+					<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium ts-text-strong ts-surface-chip" title={m.td_watchlist_count_title()}>
+						⭐ {t1.watchlistCount === 1 ? m.td_on_watchlists_one({ count: t1.watchlistCount }) : m.td_on_watchlists_many({ count: t1.watchlistCount })}
 					</span>
 				{/if}
 			</div>
@@ -775,7 +777,7 @@
 				? 'bg-slate-50 dark:bg-zinc-900/40 border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-200'
 				: 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-amber-200'}
 		<div class={`mb-6 px-3 py-2 rounded-lg border text-xs ${tone}`} role="note">
-			<span class="font-medium">Icon:</span> {token.iconStatus.label}
+			<span class="font-medium">{m.td_icon_label()}</span> {token.iconStatus.label}
 		</div>
 	{/if}
 
@@ -787,8 +789,7 @@
 			class="mb-6 px-3 py-2 rounded-lg border text-xs bg-sky-50 dark:bg-sky-950/30 border-sky-200 dark:border-sky-900/40 text-sky-800 dark:text-sky-200"
 			role="note"
 		>
-			<span class="font-medium">Icon adjusted:</span> the publisher's BCMR icon was out of standard
-			({token.iconAdjustment}); TokenStork transcoded it to display safely.
+			<span class="font-medium">{m.td_icon_adjusted_label()}</span> {m.td_icon_adjusted_1()}{token.iconAdjustment}{m.td_icon_adjusted_2()}
 		</div>
 	{/if}
 
@@ -818,17 +819,17 @@
 		})()}
 		<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-8">
 			<div class="p-4 rounded-xl border ts-border-subtle">
-				<div class="text-xs uppercase tracking-wider mb-1 ts-text-muted">Supply</div>
+				<div class="text-xs uppercase tracking-wider mb-1 ts-text-muted">{m.grid_col_supply()}</div>
 				<div class="text-xl font-mono">{decimalSupply}</div>
 			</div>
 			<div class="p-4 rounded-xl border ts-border-subtle">
-				<div class="text-xs uppercase tracking-wider mb-1 ts-text-muted">Holders</div>
+				<div class="text-xs uppercase tracking-wider mb-1 ts-text-muted">{m.grid_col_holders()}</div>
 				<div class="text-xl">{token.holderCount ?? '—'}</div>
 			</div>
 			<div class="p-4 rounded-xl border ts-border-subtle">
 				<Tooltip>
-					<TooltipTrigger class="block text-xs uppercase tracking-wider mb-1 cursor-help text-left ts-text-muted">Distribution</TooltipTrigger>
-					<TooltipContent>Gini coefficient of the holder fungible-balance distribution. 0 = perfectly equal; 1 = one address owns everything. Exchange covenants count as single 'holders' here. Suppressed for fewer than 10 holders and pure-NFT collections.</TooltipContent>
+					<TooltipTrigger class="block text-xs uppercase tracking-wider mb-1 cursor-help text-left ts-text-muted">{m.td_distribution()}</TooltipTrigger>
+					<TooltipContent>{m.td_distribution_tip()}</TooltipContent>
 				</Tooltip>
 				{#if token.giniCoefficient != null}
 					{@const tier = giniTier(token.giniCoefficient)}
@@ -842,10 +843,10 @@
 			</div>
 			<div class="p-4 rounded-xl border ts-border-subtle">
 				{#await data.tier3}
-					<div class="text-xs uppercase tracking-wider mb-1 ts-text-muted">TVL (USD)</div>
+					<div class="text-xs uppercase tracking-wider mb-1 ts-text-muted">{m.td_tvl_usd()}</div>
 					<div class="w-20 h-6 {sk}"></div>
 				{:then t3}
-					<div class="text-xs uppercase tracking-wider mb-1 ts-text-muted">TVL (USD)</div>
+					<div class="text-xs uppercase tracking-wider mb-1 ts-text-muted">{m.td_tvl_usd()}</div>
 					<div class="text-xl font-mono">
 						{t3.tvlUSD > 0 ? formatMarketCap(t3.tvlUSD.toString()) : '—'}
 					</div>
@@ -853,29 +854,29 @@
 			</div>
 			{#if marketCapUSD > 0 && t1.fexTvlUSD >= t1.mcapTvlThresholdUSD}
 				<div class="p-4 rounded-xl border col-span-2 md:col-span-1 ts-border-subtle">
-					<div class="text-xs uppercase tracking-wider mb-1 ts-text-muted" title="Hidden for tokens whose Cauldron TVL is below the average TVL of the top half of listed tokens.">Market cap</div>
+					<div class="text-xs uppercase tracking-wider mb-1 ts-text-muted" title={m.td_market_cap_title()}>{m.td_market_cap()}</div>
 					<div class="text-xl font-mono">{formatMarketCap(marketCapUSD.toString())}</div>
 				</div>
 			{/if}
 			<div class="p-4 rounded-xl border ts-border-subtle">
-				<div class="text-xs uppercase tracking-wider mb-1 ts-text-muted">Genesis block</div>
+				<div class="text-xs uppercase tracking-wider mb-1 ts-text-muted">{m.td_genesis_block()}</div>
 				<div class="text-xl font-mono">
-					<a href={`https://explorer.salemkode.com/block/${token.genesisBlock}`} target="_blank" rel="noopener noreferrer" title="View block on SalemKode Explorer" class="hover:text-violet-600">
+					<a href={`https://explorer.salemkode.com/block/${token.genesisBlock}`} target="_blank" rel="noopener noreferrer" title={m.td_view_block_title()} class="hover:text-violet-600">
 						{token.genesisBlock.toLocaleString()}
 					</a>
 				</div>
 			</div>
 			<div class="p-4 rounded-xl border ts-border-subtle">
 				<Tooltip>
-					<TooltipTrigger class="block text-xs uppercase tracking-wider mb-1 cursor-help text-left ts-text-muted">Live UTXOs</TooltipTrigger>
-					<TooltipContent>Number of currently-unspent on-chain outputs that carry this token category. Counted by our local BlockBook indexer.</TooltipContent>
+					<TooltipTrigger class="block text-xs uppercase tracking-wider mb-1 cursor-help text-left ts-text-muted">{m.td_live_utxos()}</TooltipTrigger>
+					<TooltipContent>{m.td_live_utxos_tip()}</TooltipContent>
 				</Tooltip>
 				<div class="text-xl font-mono">{token.liveUtxoCount ?? '—'}</div>
 			</div>
 			<div class="p-4 rounded-xl border ts-border-subtle">
 				<Tooltip>
-					<TooltipTrigger class="block text-xs uppercase tracking-wider mb-1 cursor-help text-left ts-text-muted">Live NFTs</TooltipTrigger>
-					<TooltipContent>Number of unspent NFT outputs of this category. Each NFT in CashTokens is a UTXO with non-empty commitment data.</TooltipContent>
+					<TooltipTrigger class="block text-xs uppercase tracking-wider mb-1 cursor-help text-left ts-text-muted">{m.td_live_nfts()}</TooltipTrigger>
+					<TooltipContent>{m.td_live_nfts_tip()}</TooltipContent>
 				</Tooltip>
 				<div class="text-xl font-mono">{token.liveNftCount ?? '—'}</div>
 			</div>
@@ -915,25 +916,25 @@
 			(t1.priceExtremes['30d'].min != null && t1.priceExtremes['30d'].max != null)}
 		<section class="mb-8 grid grid-cols-1 md:grid-cols-2 gap-3">
 			<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
-				<div class="text-xs uppercase tracking-wider mb-3 ts-text-muted">Profile</div>
+				<div class="text-xs uppercase tracking-wider mb-3 ts-text-muted">{m.td_profile()}</div>
 				<dl class="space-y-2 text-sm">
 					<div class="flex justify-between gap-3">
-						<dt class="ts-text-muted">Age</dt>
+						<dt class="ts-text-muted">{m.td_age()}</dt>
 						<dd class="font-mono ts-text-primary" title={new Date(token.genesisTime * 1000).toISOString()}>
 							{formatAge(ageDays)} <span class="text-slate-500 ml-1">({ageDays.toLocaleString()}d)</span>
 						</dd>
 					</div>
 					{#if t1.topHolderSharePct != null}
 						<div class="flex justify-between gap-3">
-							<dt class="ts-text-muted">Top holder controls</dt>
-							<dd class="font-mono {t1.topHolderSharePct >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-zinc-100'}" title="Largest single holder's balance ÷ current supply">
+							<dt class="ts-text-muted">{m.td_top_holder_controls()}</dt>
+							<dd class="font-mono {t1.topHolderSharePct >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-zinc-100'}" title={m.td_top_holder_title()}>
 								{t1.topHolderSharePct.toFixed(t1.topHolderSharePct >= 10 ? 1 : 2)}%
 							</dd>
 						</div>
 					{/if}
 					{#if t1.top10HolderSharePct != null && t1.holders.length >= 5}
 						<div class="flex justify-between gap-3">
-							<dt class="ts-text-muted">Top {t1.holders.length} hold</dt>
+							<dt class="ts-text-muted">{m.td_top_n_hold({ count: t1.holders.length })}</dt>
 							<dd class="font-mono ts-text-primary">{t1.top10HolderSharePct.toFixed(t1.top10HolderSharePct >= 10 ? 1 : 2)}%</dd>
 						</div>
 					{/if}
@@ -941,36 +942,36 @@
 						<div class="flex justify-between gap-3">
 							<dt class="ts-text-muted">
 								<Tooltip>
-									<TooltipTrigger class="cursor-help text-left">Herfindahl (HHI)</TooltipTrigger>
-									<TooltipContent>Herfindahl-Hirschman Index across the full holder set. Sum of squared shares. Range [1/N, 1]. Suppressed for fewer than 10 holders.</TooltipContent>
+									<TooltipTrigger class="cursor-help text-left">{m.td_hhi()}</TooltipTrigger>
+									<TooltipContent>{m.td_hhi_tip()}</TooltipContent>
 								</Tooltip>
 							</dt>
-							<dd class="font-mono ts-text-primary" title="Herfindahl index — Σ(share)²">{t1.herfindahlIndex.toFixed(4)}</dd>
+							<dd class="font-mono ts-text-primary" title={m.td_hhi_title()}>{t1.herfindahlIndex.toFixed(4)}</dd>
 						</div>
 					{/if}
 					{#if showHybridComposition}
 						<div class="flex justify-between gap-3">
-							<dt class="ts-text-muted">Composition</dt>
-							<dd class="font-mono ts-text-primary">{ftCount.toLocaleString()} FT UTXOs · {(token.liveNftCount ?? 0).toLocaleString()} NFTs</dd>
+							<dt class="ts-text-muted">{m.td_composition()}</dt>
+							<dd class="font-mono ts-text-primary">{m.td_composition_value({ ft: ftCount.toLocaleString(), nft: (token.liveNftCount ?? 0).toLocaleString() })}</dd>
 						</div>
 					{/if}
 					{#if t1.venueListings.cauldronFirstListedAt}
 						<div class="flex justify-between gap-3">
-							<dt class="ts-text-muted">Listed on Cauldron</dt>
-							<dd class="font-mono ts-text-primary" title={`First seen on Cauldron at ${formatAbsoluteDate(t1.venueListings.cauldronFirstListedAt)}`}>
+							<dt class="ts-text-muted">{m.td_listed_cauldron_label()}</dt>
+							<dd class="font-mono ts-text-primary" title={m.td_first_seen_title({ date: formatAbsoluteDate(t1.venueListings.cauldronFirstListedAt) ?? '' })}>
 								{formatAbsoluteDate(t1.venueListings.cauldronFirstListedAt)}
 							</dd>
 						</div>
 					{/if}
 					{#if t1.venueListings.fexFirstListedAt}
 						<div class="flex justify-between gap-3">
-							<dt class="ts-text-muted">Listed on Fex</dt>
+							<dt class="ts-text-muted">{m.td_listed_fex_label()}</dt>
 							<dd class="font-mono ts-text-primary">{formatAbsoluteDate(t1.venueListings.fexFirstListedAt)}</dd>
 						</div>
 					{/if}
 					{#if token.bcmrFetchedAt}
 						<div class="flex justify-between gap-3">
-							<dt class="ts-text-muted">BCMR refreshed</dt>
+							<dt class="ts-text-muted">{m.td_bcmr_refreshed()}</dt>
 							<dd class="font-mono ts-text-primary" title={new Date(token.bcmrFetchedAt * 1000).toISOString()}>
 								{formatRelative(token.bcmrFetchedAt)}
 							</dd>
@@ -978,21 +979,21 @@
 					{/if}
 					{#if t1.reportCount > 0}
 						<div class="flex justify-between gap-3">
-							<dt class="ts-text-muted">Open reports</dt>
-							<dd class="font-mono text-amber-600 dark:text-amber-400" title="Number of unactioned user reports against this token">{t1.reportCount}</dd>
+							<dt class="ts-text-muted">{m.td_open_reports()}</dt>
+							<dd class="font-mono text-amber-600 dark:text-amber-400" title={m.td_open_reports_title()}>{t1.reportCount}</dd>
 						</div>
 					{/if}
 				</dl>
 			</div>
 			{#if hasTradingExtremes || t1.recentActivity.recentTradeBuckets > 0}
 				<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
-					<div class="text-xs uppercase tracking-wider mb-3 ts-text-muted">Trading</div>
+					<div class="text-xs uppercase tracking-wider mb-3 ts-text-muted">{m.td_trading()}</div>
 					<dl class="space-y-2 text-sm">
 						{#if t1.recentActivity.recentTradeBuckets > 0}
 							<div class="flex justify-between gap-3">
-								<dt class="ts-text-muted" title="Number of price-history buckets in the last 24h with non-zero TVL delta — proxy for trade activity">24h activity</dt>
+								<dt class="ts-text-muted" title={m.td_24h_activity_title()}>{m.td_24h_activity()}</dt>
 								<dd class="font-mono ts-text-primary">
-									{t1.recentActivity.recentTradeBuckets} active bucket{t1.recentActivity.recentTradeBuckets === 1 ? '' : 's'}
+									{t1.recentActivity.recentTradeBuckets === 1 ? m.td_active_buckets_one({ count: t1.recentActivity.recentTradeBuckets }) : m.td_active_buckets_many({ count: t1.recentActivity.recentTradeBuckets })}
 									{#if t1.recentActivity.recentVolumeUSD > 0}
 										<span class="text-slate-500 ml-1">· ~${t1.recentActivity.recentVolumeUSD.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
 									{/if}
@@ -1003,13 +1004,13 @@
 							{@const ext = t1.priceExtremes[windowKey]}
 							{#if ext.min != null && ext.max != null}
 								<div class="flex justify-between gap-3">
-									<dt class="ts-text-muted">{windowKey} range</dt>
+									<dt class="ts-text-muted">{m.td_range({ window: windowKey })}</dt>
 									<dd class="font-mono ts-text-primary">{formatPriceUSD(ext.min)} – {formatPriceUSD(ext.max)}</dd>
 								</div>
 							{/if}
 						{/each}
 					</dl>
-					<p class="mt-3 text-[11px] ts-text-muted">Volume is a lower-bound estimate from |TVL deltas|; price extremes are sampled at our 4 h Cauldron sync cadence.</p>
+					<p class="mt-3 text-[11px] ts-text-muted">{m.td_trading_note()}</p>
 				</div>
 			{/if}
 		</section>
@@ -1036,7 +1037,7 @@
 	{:then t1}
 
 	<section class="mb-8">
-				<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-3">AMM venues</h2>
+				<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-3">{m.td_amm_venues()}</h2>
 				<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 					{#await data.tier3}
 						<div class="p-4 rounded-xl border opacity-60 ts-border-subtle">
@@ -1059,16 +1060,16 @@
 									<span class="font-semibold">Cauldron</span>
 								</div>
 								{#if t3.priceUSD > 0}
-									<a href={`https://app.cauldron.quest/swap/${token.id}`} target="_blank" rel="noopener noreferrer" class="text-xs text-violet-600 hover:underline">View on Cauldron →</a>
+									<a href={`https://app.cauldron.quest/swap/${token.id}`} target="_blank" rel="noopener noreferrer" class="text-xs text-violet-600 hover:underline">{m.td_view_on_cauldron()} →</a>
 								{/if}
 							</div>
 							<div class="grid grid-cols-2 gap-2 text-sm">
 								<div>
-									<div class="text-xs text-slate-500 mb-1">Price</div>
+									<div class="text-xs text-slate-500 mb-1">{m.grid_col_price()}</div>
 									<div class="font-mono">{formatPriceUSD(t3.priceUSD)}</div>
 								</div>
 								<div>
-									<div class="text-xs text-slate-500 mb-1">TVL</div>
+									<div class="text-xs text-slate-500 mb-1">{m.grid_col_tvl()}</div>
 									<div class="font-mono">{t3.tvlUSD > 0 ? formatMarketCap(t3.tvlUSD.toString()) : '—'}</div>
 								</div>
 							</div>
@@ -1115,11 +1116,11 @@
 		<section class="mb-8" id="chart">
 			<div class="flex items-baseline justify-between mb-3 flex-wrap gap-y-2">
 				<h2 class="text-xl font-bold text-slate-900 dark:text-white">
-					Price &amp; volume
+					{m.td_price_volume()}
 					<span class="ml-2 text-sm font-normal text-slate-500">Cauldron · {t2.priceChart.rangeLabel}</span>
 				</h2>
 				<div class="flex flex-wrap gap-1 text-xs">
-					{#each [{ key: '24h', label: '24h' }, { key: '7d', label: '7d' }, { key: '30d', label: '30d' }, { key: '90d', label: '90d' }, { key: '1y', label: '1y' }, { key: 'all', label: 'All' }] as r (r.key)}
+					{#each [{ key: '24h', label: '24h' }, { key: '7d', label: '7d' }, { key: '30d', label: '30d' }, { key: '90d', label: '90d' }, { key: '1y', label: '1y' }, { key: 'all', label: m.td_range_all() }] as r (r.key)}
 						{@const active = t2.priceChart.range === r.key}
 						<a href={`?range=${r.key}#chart`} class={`px-2.5 py-1 rounded-md font-medium transition-colors ${active ? 'bg-violet-600 text-white' : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-200 hover:bg-slate-200 dark:hover:bg-zinc-700'}`} aria-current={active ? 'page' : undefined}>{r.label}</a>
 					{/each}
@@ -1128,16 +1129,16 @@
 			<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
 				<PriceChart buckets={t2.priceChart.buckets} decimals={data.token.decimals} bchPriceUSD={data.bchPriceUSD} rangeLabel={t2.priceChart.rangeLabel} />
 			</div>
-			<p class="mt-2 text-xs ts-text-muted">Volume is a lower-bound estimate from |TVL deltas| between consecutive snapshots — within-bucket round-trip activity isn't visible at our 4 h sync cadence (10 min fast-pass for already-listed tokens). Price is the per-bucket mean.</p>
+			<p class="mt-2 text-xs ts-text-muted">{m.td_chart_note()}</p>
 			</section>
 		{:catch}
 			<section class="mb-8" id="chart">
 				<div class="flex items-baseline justify-between mb-3">
-					<h2 class="text-xl font-bold text-slate-900 dark:text-white">Price &amp; volume</h2>
+					<h2 class="text-xl font-bold text-slate-900 dark:text-white">{m.td_price_volume()}</h2>
 				</div>
 				<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
 					<div class="flex items-center justify-center h-64 rounded-lg border bg-slate-50/50 dark:bg-zinc-900/30 text-sm px-4 text-center ts-text-muted ts-border-subtle">
-						The price chart couldn't load just now — refresh in a moment to try again.
+						{m.td_chart_error()}
 					</div>
 				</div>
 			</section>
@@ -1163,19 +1164,19 @@
 			<section class="mb-8">
 				<div class="flex items-baseline justify-between mb-4">
 					<h2 class="text-xl font-bold text-slate-900 dark:text-white">
-						Open listings on Tapswap (P2P)
+						{m.td_tapswap_h2()}
 						<span class="ml-2 text-sm font-normal text-slate-500">{t1.tapswapOffers.length}</span>
 					</h2>
-					<a href={`https://tapswap.cash/trade/${token.id}`} target="_blank" rel="noopener noreferrer" class="text-sm text-violet-600 hover:underline">View on Tapswap →</a>
+					<a href={`https://tapswap.cash/trade/${token.id}`} target="_blank" rel="noopener noreferrer" class="text-sm text-violet-600 hover:underline">{m.td_view_on_tapswap()} →</a>
 				</div>
 				<div class="overflow-hidden rounded-xl border ts-border-subtle">
 					<table class="w-full text-sm">
 						<thead class="bg-slate-50 dark:bg-zinc-900/50 border-b text-xs font-semibold uppercase tracking-wider ts-text-muted ts-border-subtle">
 							<tr>
-								<th class="text-left px-4 py-3">Offering</th>
-								<th class="text-right px-4 py-3">Asking</th>
-								<th class="text-right px-4 py-3">USD</th>
-								<th class="text-left px-4 py-3">Maker</th>
+								<th class="text-left px-4 py-3">{m.td_tw_offering()}</th>
+								<th class="text-right px-4 py-3">{m.td_tw_asking()}</th>
+								<th class="text-right px-4 py-3">{m.td_tw_usd()}</th>
+								<th class="text-left px-4 py-3">{m.td_tw_maker()}</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -1200,7 +1201,7 @@
 									<td class="px-4 py-3 text-right font-mono ts-text-strong">
 										{wantUsd > 0 ? `$${wantUsd < 1 ? wantUsd.toFixed(4) : wantUsd.toFixed(2)}` : '—'}
 									</td>
-									<td class="px-4 py-3 font-mono text-xs text-slate-500" title="Maker public-key hash (raw bytes; cashaddr rendering deferred)">
+									<td class="px-4 py-3 font-mono text-xs text-slate-500" title={m.td_maker_title()}>
 										{offer.makerPkhHex.slice(0, 10)}…{offer.makerPkhHex.slice(-6)}
 									</td>
 								</tr>
@@ -1208,7 +1209,7 @@
 						</tbody>
 					</table>
 				</div>
-				<p class="mt-2 text-xs ts-text-muted">Listings aggregated from on-chain MPSW OP_RETURNs via our own BCHN — not from Tapswap's API. Close events (sale / cancellation) are not tracked yet; a stale listing that's already been taken will drop off once that enhancement ships.</p>
+				<p class="mt-2 text-xs ts-text-muted">{m.td_tapswap_note()}</p>
 			</section>
 		{/if}
 		{/await}
@@ -1226,17 +1227,17 @@
 			{#if bcmr.nftsDescription || nftEntries.length > 0 || extEntries.length > 0}
 				<section class="mb-8">
 					<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-4">
-						BCMR technical
-						<span class="ml-2 text-sm font-normal text-slate-500">NFT schema + extensions</span>
+						{m.td_bcmr_technical()}
+						<span class="ml-2 text-sm font-normal text-slate-500">{m.td_bcmr_technical_sub()}</span>
 					</h2>
 					<div class="rounded-xl border divide-y divide-slate-200 dark:divide-zinc-800 ts-border-subtle ts-surface-panel">
 						{#if bcmr.nftsDescription || nftEntries.length > 0}
 							<div class="p-5">
-								<div class="text-xs uppercase tracking-wider mb-2 ts-text-muted">NFTs</div>
+								<div class="text-xs uppercase tracking-wider mb-2 ts-text-muted">{m.td_nfts()}</div>
 								{#if bcmr.nftsDescription}<p class="text-sm mb-3 ts-text-strong">{bcmr.nftsDescription}</p>{/if}
 								{#if nftEntries.length > 0}
 									<details class="text-sm">
-										<summary class="cursor-pointer text-violet-600 dark:text-violet-400 hover:underline select-none">{nftEntries.length} NFT type{nftEntries.length === 1 ? '' : 's'} defined — show raw</summary>
+										<summary class="cursor-pointer text-violet-600 dark:text-violet-400 hover:underline select-none">{nftEntries.length === 1 ? m.td_nft_types_one({ count: nftEntries.length }) : m.td_nft_types_many({ count: nftEntries.length })}</summary>
 										<pre class="mt-3 p-3 rounded bg-slate-50 dark:bg-zinc-950 border text-xs font-mono overflow-auto max-h-96 ts-border-subtle">{JSON.stringify(bcmr.nftTypes, null, 2)}</pre>
 									</details>
 								{/if}
@@ -1244,9 +1245,9 @@
 						{/if}
 						{#if extEntries.length > 0}
 							<div class="p-5">
-								<div class="text-xs uppercase tracking-wider mb-2 ts-text-muted">Extensions</div>
+								<div class="text-xs uppercase tracking-wider mb-2 ts-text-muted">{m.td_extensions()}</div>
 								<details class="text-sm">
-									<summary class="cursor-pointer text-violet-600 dark:text-violet-400 hover:underline select-none">{extEntries.length} extension{extEntries.length === 1 ? '' : 's'} — show raw</summary>
+									<summary class="cursor-pointer text-violet-600 dark:text-violet-400 hover:underline select-none">{extEntries.length === 1 ? m.td_extensions_one({ count: extEntries.length }) : m.td_extensions_many({ count: extEntries.length })}</summary>
 									<pre class="mt-3 p-3 rounded bg-slate-50 dark:bg-zinc-950 border text-xs font-mono overflow-auto max-h-96 ts-border-subtle">{JSON.stringify(bcmr.extensions, null, 2)}</pre>
 								</details>
 							</div>
@@ -1279,15 +1280,15 @@
 				catch { return 0n; }
 			})()}
 			<section class="mb-8">
-				<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-4">Top holders</h2>
+				<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-4">{m.td_top_holders()}</h2>
 				<div class="overflow-x-auto rounded-xl border ts-border-subtle">
 					<table class="w-full text-sm">
 						<thead class="bg-slate-50 dark:bg-zinc-900/50 border-b text-xs font-semibold uppercase tracking-wider ts-text-muted ts-border-subtle">
 							<tr>
-								<th class="text-left px-4 py-3">Address</th>
-								<th class="text-right px-4 py-3">Balance</th>
-								<th class="text-right px-4 py-3">% Supply</th>
-								<th class="text-right px-4 py-3">NFTs</th>
+								<th class="text-left px-4 py-3">{m.td_th_address()}</th>
+								<th class="text-right px-4 py-3">{m.td_th_balance()}</th>
+								<th class="text-right px-4 py-3">{m.td_th_pct_supply()}</th>
+								<th class="text-right px-4 py-3">{m.td_th_nfts()}</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -1330,9 +1331,9 @@
 	<!-- BCMR JSON link — tier0 -->
 	{#if bcmrJsonLink}
 		<div class="mt-8 text-sm ts-text-muted">
-			<span class="uppercase tracking-wider text-xs mr-2">BCMR JSON</span>
+			<span class="uppercase tracking-wider text-xs mr-2">{m.td_bcmr_json()}</span>
 			<a href={bcmrJsonLink.href} target="_blank" rel="noopener noreferrer" class="font-mono text-violet-600 dark:text-violet-400 hover:underline" title={bcmrJsonLink.title}>{bcmrJsonLink.label} ↗</a>
-			{#if bcmrJsonLink.gatewayHref}<span class="mx-1">·</span><a href={bcmrJsonLink.gatewayHref} target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline text-xs" title={bcmrJsonLink.gatewayTitle}>via ipfs.io ↗</a>{/if}
+			{#if bcmrJsonLink.gatewayHref}<span class="mx-1">·</span><a href={bcmrJsonLink.gatewayHref} target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline text-xs" title={bcmrJsonLink.gatewayTitle}>{m.td_via_ipfs()} ↗</a>{/if}
 		</div>
 	{/if}
 
@@ -1376,9 +1377,9 @@
 
 	<!-- Footer links -->
 	<div class="flex items-center justify-between text-sm mt-8 pt-6 border-t ts-border-subtle">
-		<a href="/" class="text-violet-600 hover:underline">← All tokens</a>
+		<a href={localizeHref('/')} class="text-violet-600 hover:underline">← {m.td_all_tokens()}</a>
 		{#if !showReport && reportStatus !== 'ok'}
-			<button type="button" onclick={() => (showReport = true)} class="text-xs hover:text-violet-600 dark:hover:text-violet-400 ts-text-muted">Report this token</button>
+			<button type="button" onclick={() => (showReport = true)} class="text-xs hover:text-violet-600 dark:hover:text-violet-400 ts-text-muted">{m.td_report_token()}</button>
 		{/if}
 	</div>
 
@@ -1386,36 +1387,36 @@
 	{#if showReport || reportStatus === 'ok'}
 		<section class="mt-6 p-5 rounded-xl border bg-slate-50/50 dark:bg-zinc-900/30 ts-border-subtle" aria-label="Report this token">
 			{#if reportStatus === 'ok'}
-				<h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-2">Thanks — we'll review it.</h2>
-				<p class="text-sm ts-text-muted">Your report has been recorded. The operator will triage it shortly.</p>
+				<h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-2">{m.td_report_thanks_h()}</h2>
+				<p class="text-sm ts-text-muted">{m.td_report_thanks_body()}</p>
 			{:else}
-				<h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-1">Report this token</h2>
-				<p class="text-xs mb-4 ts-text-muted">Flag content you believe violates good-faith use of the directory. Your report is anonymous by default; leave an email only if you'd like a follow-up.</p>
+				<h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-1">{m.td_report_token()}</h2>
+				<p class="text-xs mb-4 ts-text-muted">{m.td_report_intro()}</p>
 				<form onsubmit={submitReport} class="space-y-3">
 					<div>
-						<label for="report-reason" class="block text-xs font-medium mb-1 ts-text-strong">Reason</label>
+						<label for="report-reason" class="block text-xs font-medium mb-1 ts-text-strong">{m.td_report_reason()}</label>
 						<select id="report-reason" bind:value={reportReason} disabled={reportStatus === 'submitting'} class="w-full px-3 py-2 rounded-lg border text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 ts-border-strong ts-surface-panel">
 							{#each REPORT_REASONS as r (r)}<option value={r}>{REPORT_REASON_LABELS[r]}</option>{/each}
 						</select>
 					</div>
 					<div>
-						<label for="report-details" class="block text-xs font-medium mb-1 ts-text-strong">Details <span class="text-slate-400 font-normal">(optional)</span></label>
-						<textarea id="report-details" bind:value={reportDetails} disabled={reportStatus === 'submitting'} maxlength={2000} rows={4} placeholder="Why is this token problematic? Any context you can share helps us triage." class="w-full px-3 py-2 rounded-lg border text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 resize-y ts-border-strong ts-surface-panel"></textarea>
+						<label for="report-details" class="block text-xs font-medium mb-1 ts-text-strong">{m.td_report_details()} <span class="text-slate-400 font-normal">{m.td_optional()}</span></label>
+						<textarea id="report-details" bind:value={reportDetails} disabled={reportStatus === 'submitting'} maxlength={2000} rows={4} placeholder={m.td_report_details_ph()} class="w-full px-3 py-2 rounded-lg border text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 resize-y ts-border-strong ts-surface-panel"></textarea>
 					</div>
 					<div>
-						<label for="report-email" class="block text-xs font-medium mb-1 ts-text-strong">Your email <span class="text-slate-400 font-normal">(optional; for follow-up only)</span></label>
+						<label for="report-email" class="block text-xs font-medium mb-1 ts-text-strong">{m.td_report_email()} <span class="text-slate-400 font-normal">{m.td_optional_followup()}</span></label>
 						<input id="report-email" type="email" bind:value={reportEmail} disabled={reportStatus === 'submitting'} maxlength={200} placeholder="you@example.com" class="w-full px-3 py-2 rounded-lg border text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 ts-border-strong ts-surface-panel" />
 					</div>
 					{#if reportStatus === 'ratelimited'}
-						<p class="text-sm text-amber-600 dark:text-amber-400">You've submitted several reports recently. Please wait a bit before sending another.</p>
+						<p class="text-sm text-amber-600 dark:text-amber-400">{m.td_report_ratelimited()}</p>
 					{:else if reportStatus === 'error'}
-						<p class="text-sm text-red-600 dark:text-red-400">Couldn't submit right now. Please try again in a moment.</p>
+						<p class="text-sm text-red-600 dark:text-red-400">{m.td_report_error()}</p>
 					{/if}
 					<div class="flex items-center gap-3 pt-1">
 						<button type="submit" disabled={reportStatus === 'submitting'} class="px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed">
-							{reportStatus === 'submitting' ? 'Sending…' : 'Submit report'}
+							{reportStatus === 'submitting' ? m.td_report_sending() : m.td_report_submit()}
 						</button>
-						<button type="button" onclick={() => { showReport = false; reportStatus = 'idle'; }} disabled={reportStatus === 'submitting'} class="text-sm hover:text-slate-700 dark:hover:text-zinc-100 disabled:opacity-50 ts-text-muted">Cancel</button>
+						<button type="button" onclick={() => { showReport = false; reportStatus = 'idle'; }} disabled={reportStatus === 'submitting'} class="text-sm hover:text-slate-700 dark:hover:text-zinc-100 disabled:opacity-50 ts-text-muted">{m.login_cancel()}</button>
 					</div>
 				</form>
 			{/if}
