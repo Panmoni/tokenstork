@@ -14,6 +14,7 @@
 - social features like viibclub, short updates, hivemind voting
 - add ticketing functionality https://github.com/Panmoni/ticket
 - Commenting and discussions?
+- add more languages
 
 ## Marketing
 - marketing machine
