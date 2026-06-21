@@ -584,29 +584,14 @@ async fn walk_one(
         warn!(category = %category_hex, error = %e, "failed to recompute bcmr profile");
     }
 
-    // M2: a max-hops-hit is a standing "investigate this authchain" flag —
-    // emitted once per category (deduped by the partial unique index). Uses the
-    // genesis txid as the sentinel authchain_tx since it's a per-category walk
-    // outcome, not a specific publication.
-    if stats.hit_max_hops {
-        let ev = BcmrChangeEventWrite {
-            category: target.category.clone(),
-            authchain_tx: target.genesis_txid.clone(),
-            event_type: EventType::MaxHopsHit.as_str(),
-            severity: EventType::MaxHopsHit.default_severity().as_str(),
-            prev_content_hash: None,
-            new_content_hash: None,
-            prev_addr: None,
-            new_addr: None,
-            detail: Some(serde_json::json!({ "max_hops": max_hops })),
-            block_height: None,
-            block_time: None,
-            pull_epoch: None,
-        };
-        if let Err(e) = insert_bcmr_change_event(pool, &ev).await {
-            warn!(category = %category_hex, error = %e, "failed to emit max_hops_hit event");
-        }
-    }
+    // NOTE: max_hops_hit is intentionally a STAT only (counted in the run
+    // summary via `stats.hit_max_hops` → RunStats.max_hops_hit), NOT a change
+    // event. In production ~40% of categories hit the hop bound (long or
+    // mis-resolved authchains — a pre-existing walker characteristic), so
+    // emitting one event per category would flood the operator webhook with
+    // low-signal warnings and bury the criticals (version_pulled /
+    // version_mismatch). The EventType::MaxHopsHit variant + schema check value
+    // are kept for the run-summary stat and a possible future opt-in.
 
     Ok(stats)
 }
