@@ -1,6 +1,6 @@
 // BCMR trust/stability scoring (watchdog M4). Pure mapper: a per-token
 // `token_bcmr_profile` summary row (recomputed by the on-chain walker) → a
-// tier + label + human-readable reasons for the directory/detail badge.
+// tier + structured reason codes for the directory/detail badge.
 //
 // "Trust" here is strictly about METADATA STABILITY, not the token's value or
 // legitimacy: a token that hasn't touched its BCMR in two years reads very
@@ -8,7 +8,12 @@
 // metadata just got pulled. The whole point of the watchdog is to make that
 // difference legible.
 //
-// Pure + dependency-free so it stays trivially correct under `pnpm run check`.
+// Pure + dependency-free, and crucially LOCALE-FREE: it returns reason CODES +
+// raw numeric params, never user-facing English. The component renders them via
+// Paraglide `m.*()` (i18n) using its existing localized age formatter — so the
+// badge is translated like the rest of the page, and this stays trivially
+// correct under `pnpm run check` without dragging the i18n runtime into
+// $lib/server (where `m.*()` isn't used anywhere else).
 
 export interface BcmrProfileRow {
 	/** Distinct content_hash ever published (verified or not). */
@@ -35,12 +40,29 @@ export type BcmrTrustTier =
 	| 'established'
 	| 'stable';
 
+export type BcmrTrustReasonCode =
+	| 'pulled'
+	| 'never_verified'
+	| 'authority_moved'
+	| 'unverified_ratio'
+	| 'first_published'
+	| 'versions'
+	| 'last_changed';
+
+/** One reason for the badge tooltip — a code + the params its message needs.
+ *  `ageDays` is whole days (the component formats it via its localized age
+ *  helper); `count`/`unverified`/`total` are plain counts. */
+export interface BcmrTrustReason {
+	code: BcmrTrustReasonCode;
+	ageDays?: number;
+	count?: number;
+	unverified?: number;
+	total?: number;
+}
+
 export interface BcmrTrust {
 	tier: BcmrTrustTier;
-	/** Short badge label. */
-	label: string;
-	/** Human-readable bullets explaining the tier (for a tooltip). */
-	reasons: string[];
+	reasons: BcmrTrustReason[];
 }
 
 const DAY = 86_400;
@@ -54,26 +76,11 @@ const VOLATILE_DAYS = 30;
 // Untouched at least this long (with few versions) → genuinely stable.
 const STABLE_DAYS = 365;
 
-function approxAge(seconds: number): string {
-	if (seconds < 2 * DAY) return 'today';
-	const days = Math.floor(seconds / DAY);
-	if (days < 14) return `${days}d ago`;
-	if (days < 60) return `${Math.floor(days / 7)}w ago`;
-	if (days < 730) return `${Math.floor(days / 30)}mo ago`;
-	return `${Math.floor(days / 365)}y ago`;
-}
-
-function approxSpan(seconds: number): string {
-	const days = Math.floor(seconds / DAY);
-	if (days < 1) return 'less than a day';
-	if (days < 60) return `${days} days`;
-	if (days < 730) return `${Math.floor(days / 30)} months`;
-	return `${Math.floor(days / 365)} years`;
-}
+const days = (seconds: number): number => Math.floor(seconds / DAY);
 
 /**
  * Score a token's BCMR metadata stability. `nowSec` is injected (not read from
- * the clock) so the function is pure and testable.
+ * the clock) so the function is pure.
  *
  * Tiers, first match wins:
  *  - suspicious — current metadata pulled, or a publication that never verified,
@@ -86,30 +93,29 @@ function approxSpan(seconds: number): string {
  */
 export function scoreBcmrTrust(p: BcmrProfileRow | null, nowSec: number): BcmrTrust {
 	if (!p || p.totalCount === 0) {
-		return { tier: 'none', label: 'No on-chain BCMR', reasons: [] };
+		return { tier: 'none', reasons: [] };
 	}
 
-	const reasons: string[] = [];
+	const reasons: BcmrTrustReason[] = [];
 
 	// ── Suspicious signals (take precedence over everything) ────────────────
 	if (p.everPulled) {
-		reasons.push('current metadata was pulled or stopped verifying');
+		reasons.push({ code: 'pulled' });
 	}
 	if (p.verifiedCount === 0) {
-		reasons.push('no publication has ever verified against its on-chain hash');
+		reasons.push({ code: 'never_verified' });
 	}
-	const moveAge =
-		p.authorityMovedAt != null ? nowSec - p.authorityMovedAt : null;
+	const moveAge = p.authorityMovedAt != null ? nowSec - p.authorityMovedAt : null;
 	if (moveAge != null && moveAge <= RECENT_AUTHORITY_MOVE_DAYS * DAY) {
-		reasons.push(`authority key moved ${approxAge(moveAge)}`);
+		reasons.push({ code: 'authority_moved', ageDays: days(moveAge) });
 	}
 	// Many publications but most don't verify — churny + untrustworthy.
 	const unverified = p.totalCount - p.verifiedCount;
 	if (p.totalCount >= 2 && unverified > p.verifiedCount) {
-		reasons.push(`${unverified} of ${p.totalCount} publications did not verify`);
+		reasons.push({ code: 'unverified_ratio', unverified, total: p.totalCount });
 	}
 	if (reasons.length > 0) {
-		return { tier: 'suspicious', label: '⚠ Unstable', reasons };
+		return { tier: 'suspicious', reasons };
 	}
 
 	// From here, every version that exists is verified history.
@@ -117,11 +123,7 @@ export function scoreBcmrTrust(p: BcmrProfileRow | null, nowSec: number): BcmrTr
 	const sinceFirst = p.firstPublishedAt != null ? nowSec - p.firstPublishedAt : null;
 
 	if (sinceFirst != null && sinceFirst < NEW_DAYS * DAY) {
-		return {
-			tier: 'new',
-			label: 'New',
-			reasons: [`BCMR first published ${approxAge(sinceFirst)}`]
-		};
+		return { tier: 'new', reasons: [{ code: 'first_published', ageDays: days(sinceFirst) }] };
 	}
 
 	if (
@@ -131,28 +133,26 @@ export function scoreBcmrTrust(p: BcmrProfileRow | null, nowSec: number): BcmrTr
 	) {
 		return {
 			tier: 'volatile',
-			label: 'Volatile',
 			reasons: [
-				`${p.versionCount} versions, last changed ${approxAge(sinceChange)}`
+				{ code: 'versions', count: p.versionCount },
+				{ code: 'last_changed', ageDays: days(sinceChange) }
 			]
 		};
 	}
 
-	if (
-		sinceChange != null &&
-		sinceChange >= STABLE_DAYS * DAY &&
-		p.versionCount <= 2
-	) {
+	if (sinceChange != null && sinceChange >= STABLE_DAYS * DAY && p.versionCount <= 2) {
 		return {
 			tier: 'stable',
-			label: 'Stable',
 			reasons: [
-				`${p.versionCount} version${p.versionCount === 1 ? '' : 's'}, unchanged for ${approxSpan(sinceChange)}`
+				{ code: 'versions', count: p.versionCount },
+				{ code: 'last_changed', ageDays: days(sinceChange) }
 			]
 		};
 	}
 
-	const r: string[] = [`${p.versionCount} version${p.versionCount === 1 ? '' : 's'}`];
-	if (sinceChange != null) r.push(`last changed ${approxAge(sinceChange)}`);
-	return { tier: 'established', label: 'Established', reasons: r };
+	const reasonsOut: BcmrTrustReason[] = [{ code: 'versions', count: p.versionCount }];
+	if (sinceChange != null) {
+		reasonsOut.push({ code: 'last_changed', ageDays: days(sinceChange) });
+	}
+	return { tier: 'established', reasons: reasonsOut };
 }

@@ -220,6 +220,30 @@
 		const rem = Math.floor((days % 365) / 30);
 		return rem > 0 ? m.td_age_y_mo({ y: years, rem }) : m.td_age_y({ y: years });
 	}
+	// BCMR trust badge (M4): map the pure tier/reason codes from bcmrTrust.ts to
+	// localized strings. Reasons reuse formatAge() so dates are localized too.
+	function trustLabel(tier: typeof data.bcmrTrust.tier): string {
+		switch (tier) {
+			case 'suspicious': return m.td_trust_label_suspicious();
+			case 'new': return m.td_trust_label_new();
+			case 'volatile': return m.td_trust_label_volatile();
+			case 'established': return m.td_trust_label_established();
+			case 'stable': return m.td_trust_label_stable();
+			default: return m.td_trust_label_none();
+		}
+	}
+	function trustReason(r: (typeof data.bcmrTrust.reasons)[number]): string {
+		switch (r.code) {
+			case 'pulled': return m.td_trust_reason_pulled();
+			case 'never_verified': return m.td_trust_reason_never_verified();
+			case 'authority_moved': return m.td_trust_reason_authority_moved({ age: formatAge(r.ageDays ?? 0) });
+			case 'unverified_ratio': return m.td_trust_reason_unverified_ratio({ unverified: r.unverified ?? 0, total: r.total ?? 0 });
+			case 'first_published': return m.td_trust_reason_first_published({ age: formatAge(r.ageDays ?? 0) });
+			case 'last_changed': return m.td_trust_reason_last_changed({ age: formatAge(r.ageDays ?? 0) });
+			case 'versions': return (r.count ?? 0) === 1 ? m.td_trust_reason_versions_one() : m.td_trust_reason_versions_many({ count: r.count ?? 0 });
+			default: return '';
+		}
+	}
 	function formatRelative(unixSec: number | null | undefined): string | null {
 		if (unixSec == null) return null;
 		const diffSec = Math.floor(Date.now() / 1000) - unixSec;
@@ -401,18 +425,18 @@
 											? 'text-amber-600 dark:text-amber-400'
 											: 'ts-text-muted'}"
 						>
-							BCMR: {data.bcmrTrust.label}
+							BCMR: {trustLabel(tier)}
 						</TooltipTrigger>
 						<TooltipContent>
-							<div class="font-medium mb-1">Metadata stability</div>
+							<div class="font-medium mb-1">{m.td_trust_tooltip_title()}</div>
 							{#if data.bcmrTrust.reasons.length}
 								<ul class="list-disc pl-4 space-y-0.5">
 									{#each data.bcmrTrust.reasons as reason}
-										<li>{reason}</li>
+										<li>{trustReason(reason)}</li>
 									{/each}
 								</ul>
 							{:else}
-								<p>How long this token's BCMR metadata has been stable, and whether its identity or authority key has changed.</p>
+								<p>{m.td_trust_tooltip_fallback()}</p>
 							{/if}
 						</TooltipContent>
 					</Tooltip>
@@ -1341,23 +1365,23 @@
 	{#await data.bcmrVersions then versions}
 		{#if versions && versions.length > 0}
 			<section class="mt-8">
-				<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-1">BCMR version history</h2>
-				<p class="text-xs ts-text-muted mb-4">Every metadata publication we've archived for this token, newest first. Each snapshot is immutable from our side; the pin link returns that exact version as of its block.</p>
+				<h2 class="text-xl font-bold text-slate-900 dark:text-white mb-1">{m.td_bcmr_history_h2()}</h2>
+				<p class="text-xs ts-text-muted mb-4">{m.td_bcmr_history_intro()}</p>
 				<ol class="space-y-3">
 					{#each versions as v (v.authchainTx)}
 						<li class="text-sm border-l-2 pl-3 {v.bodyVerified ? 'border-emerald-400' : 'border-red-400'}">
 							<div class="flex items-center gap-2 flex-wrap">
 								{#if v.bodyVerified}
-									<span class="text-xs text-emerald-600 dark:text-emerald-400">✓ verified</span>
+									<span class="text-xs text-emerald-600 dark:text-emerald-400">{m.td_bcmr_verified()}</span>
 								{:else}
-									<span class="text-xs text-red-600 dark:text-red-400">⚠ did not verify</span>
+									<span class="text-xs text-red-600 dark:text-red-400">{m.td_bcmr_unverified()}</span>
 								{/if}
 								<span class="text-xs ts-text-muted">
-									{#if v.blockHeight != null}block {v.blockHeight}{:else}mempool{/if}
+									{#if v.blockHeight != null}{m.td_bcmr_block({ n: v.blockHeight })}{:else}{m.td_bcmr_mempool()}{/if}
 									{#if v.blockTime != null}· {new Date(v.blockTime * 1000).toISOString().slice(0, 10)}{/if}
 								</span>
 								{#if v.bodyVerified && v.blockHeight != null}
-									<a href="/api/tokens/{token.id}/bcmr?as_of_block={v.blockHeight}" target="_blank" rel="noopener noreferrer" class="text-xs text-violet-600 dark:text-violet-400 hover:underline" title="Fetch this exact BCMR version as of its block">pin ↗</a>
+									<a href="/api/tokens/{token.id}/bcmr?as_of_block={v.blockHeight}" target="_blank" rel="noopener noreferrer" class="text-xs text-violet-600 dark:text-violet-400 hover:underline" title={m.td_bcmr_pin_title()}>{m.td_bcmr_pin()}</a>
 								{/if}
 							</div>
 							<div class="ts-text-body">
@@ -1365,9 +1389,9 @@
 								{#if v.symbol}<span class="text-xs text-slate-500 font-mono ml-1">{stripEmoji(v.symbol)}</span>{/if}
 							</div>
 							{#if v.changedFields.length > 0}
-								<div class="text-xs text-amber-700 dark:text-amber-400">changed: {v.changedFields.join(', ')}</div>
+								<div class="text-xs text-amber-700 dark:text-amber-400">{m.td_bcmr_changed({ fields: v.changedFields.join(', ') })}</div>
 							{/if}
-							<div class="text-[10px] font-mono ts-text-muted truncate">sha256 {v.contentHash.slice(0, 16)}…{#if v.bodyOversize} · body too large to archive inline{/if}</div>
+							<div class="text-[10px] font-mono ts-text-muted truncate">sha256 {v.contentHash.slice(0, 16)}…{#if v.bodyOversize} · {m.td_bcmr_oversize()}{/if}</div>
 						</li>
 					{/each}
 				</ol>
