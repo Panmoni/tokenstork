@@ -1,5 +1,7 @@
 <script lang="ts">
 	import Sparkline from '$lib/components/Sparkline.svelte';
+	import * as m from '$lib/paraglide/messages';
+	import { getLocale } from '$lib/paraglide/runtime';
 
 	let { data } = $props();
 
@@ -19,7 +21,7 @@
 		if (!Number.isFinite(n)) return '—';
 		if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
 		if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-		return n.toLocaleString('en-US');
+		return n.toLocaleString(getLocale());
 	};
 
 	// Pool-share percentage relative to the window's total blocks.
@@ -48,22 +50,20 @@
 </script>
 
 <svelte:head>
-	<title>Mining — Token Stork</title>
+	<title>{m.mn_meta_title()}</title>
 	<meta
 		name="description"
-		content="BCH mining pool attribution + fee market dynamics, derived from on-chain coinbase scriptSig analysis since CashTokens activation."
+		content={m.mn_meta_description()}
 	/>
 </svelte:head>
 
 <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 	<div class="mb-8">
 		<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent">
-			Mining
+			{m.mn_h1()}
 		</h1>
 		<p class="mt-2 max-w-3xl ts-text-muted">
-			Mining-pool attribution + fee market dynamics for Bitcoin Cash since CashTokens
-			activation (block 792,772). Pool identity is decoded from each block's coinbase
-			scriptSig — the same byte-pattern matching every BCH explorer does.
+			{m.mn_intro()}
 		</p>
 	</div>
 
@@ -73,13 +73,13 @@
 			<div class="flex items-start justify-between">
 				<div>
 					<div class="text-xs uppercase tracking-wider ts-text-muted">
-						Blocks — last 30d
+						{m.mn_blocks_30d()}
 					</div>
 					<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
 						{fmtCount(totalBlocks30d)}
 					</div>
 					<div class="mt-1 text-xs ts-text-muted">
-						across {data.pool30d.length} {data.pool30d.length === 1 ? 'pool' : 'pools'}
+						{data.pool30d.length === 1 ? m.mn_across_one({ count: data.pool30d.length }) : m.mn_across_many({ count: data.pool30d.length })}
 					</div>
 				</div>
 				<Sparkline points={blocksSpark} width={64} height={28} />
@@ -90,13 +90,13 @@
 			<div class="flex items-start justify-between">
 				<div>
 					<div class="text-xs uppercase tracking-wider ts-text-muted">
-						Tx — last 30d
+						{m.mn_tx_30d()}
 					</div>
 					<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
 						{fmtCount(totalTxs30d)}
 					</div>
 					<div class="mt-1 text-xs ts-text-muted">
-						avg {totalBlocks30d > 0 ? Math.round(totalTxs30d / totalBlocks30d) : 0}/block
+						{m.mn_avg_per_block({ n: totalBlocks30d > 0 ? Math.round(totalTxs30d / totalBlocks30d) : 0 })}
 					</div>
 				</div>
 			</div>
@@ -106,13 +106,13 @@
 			<div class="flex items-start justify-between">
 				<div>
 					<div class="text-xs uppercase tracking-wider ts-text-muted">
-						Fees — last 30d
+						{m.mn_fees_30d()}
 					</div>
 					<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
 						{fmtBch(totalFees30dSats)}
 					</div>
 					<div class="mt-1 text-xs ts-text-muted">
-						miner take above subsidy
+						{m.mn_miner_take()}
 					</div>
 				</div>
 				<Sparkline points={feesSpark} width={64} height={28} />
@@ -123,13 +123,13 @@
 			<div class="flex items-start justify-between">
 				<div>
 					<div class="text-xs uppercase tracking-wider ts-text-muted">
-						Fee rate — 30d avg
+						{m.mn_fee_rate_30d()}
 					</div>
 					<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
 						{avgFeeRate30d.toFixed(2)}
 					</div>
 					<div class="mt-1 text-xs ts-text-muted">
-						sats per byte (proxy)
+						{m.mn_sats_per_byte()}
 					</div>
 				</div>
 				<Sparkline points={feeRateSpark} width={64} height={28} />
@@ -140,21 +140,21 @@
 	<!-- Pool attribution tables. Three side-by-side windows. -->
 	<section class="mb-8">
 		<h2 class="text-xl font-semibold text-slate-900 dark:text-white mb-4">
-			Mining pool attribution
+			{m.mn_pool_attr_h2()}
 		</h2>
 		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 			{#each [
-				{ label: '7 days', stats: data.pool7d, total: totalBlocks7d },
-				{ label: '30 days', stats: data.pool30d, total: totalBlocks30d },
-				{ label: 'All time', stats: data.poolAll, total: totalBlocksAll }
+				{ label: m.mn_7days(), stats: data.pool7d, total: totalBlocks7d },
+				{ label: m.mn_30days(), stats: data.pool30d, total: totalBlocks30d },
+				{ label: m.mn_all_time(), stats: data.poolAll, total: totalBlocksAll }
 			] as window (window.label)}
 				<div class="rounded-xl border overflow-hidden ts-border-subtle">
 					<div class="px-4 py-3 bg-slate-50 dark:bg-zinc-900/50 border-b text-xs font-semibold uppercase tracking-wider ts-text-muted ts-border-subtle">
-						{window.label} · {fmtCount(window.total)} blocks
+						{window.label} · {fmtCount(window.total)} {m.mn_blocks()}
 					</div>
 					{#if window.stats.length === 0}
 						<div class="px-4 py-6 text-sm text-center ts-text-muted">
-							No blocks in this window yet.
+							{m.mn_no_blocks()}
 						</div>
 					{:else}
 						{#each window.stats as p (p.pool)}
@@ -177,30 +177,12 @@
 	</section>
 
 	<section class="mt-10 p-5 rounded-xl border bg-slate-50/50 dark:bg-zinc-900/30 ts-border-subtle">
-		<h2 class="text-base font-semibold text-slate-900 dark:text-white mb-2">Notes</h2>
+		<h2 class="text-base font-semibold text-slate-900 dark:text-white mb-2">{m.ui_notes()}</h2>
 		<ul class="text-sm space-y-1.5 list-disc list-inside ts-text-muted">
-			<li>
-				<strong>Pool attribution</strong> is decoded from each block's coinbase scriptSig
-				via byte-substring matching against a hand-curated list of pool tags
-				(<code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">/ViaBTC/</code>,
-				<code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">/AntPool/</code>,
-				<code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">Foundry USA Pool</code>, etc.). Solo miners and
-				unrecognized tags bucket as <em>Unknown</em>.
-			</li>
-			<li>
-				<strong>Fee rate</strong> is sats / byte computed from the day's total fees ÷ total
-				block bytes. It's a proxy for the fee market — actual mempool fee rates are higher
-				because empty space in low-utilization blocks brings the average down.
-			</li>
-			<li>
-				<strong>Miner take</strong> per block is the coinbase output value (subsidy + fees).
-				Today the BCH subsidy is fixed at 6.25 BCH/block until the next halving in 2028; fee
-				revenue is a small fraction on top.
-			</li>
-			<li>
-				Coverage starts at block <strong>792,772</strong> (CashTokens activation, May 2023).
-				Pre-activation history is out of scope for this site.
-			</li>
+			<li>{@html m.mn_note1()}</li>
+			<li>{@html m.mn_note2()}</li>
+			<li>{@html m.mn_note3()}</li>
+			<li>{@html m.mn_note4()}</li>
 		</ul>
 	</section>
 </main>

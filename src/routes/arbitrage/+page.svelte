@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { stripEmoji, formatMarketCap } from '$lib/format';
 	import { iconHrefFor } from '$lib/icons';
+	import * as m from '$lib/paraglide/messages';
+	import { localizeHref } from '$lib/paraglide/runtime';
 
 	type VenueId = 'cauldron' | 'fex' | 'tapswap';
 
@@ -50,23 +52,20 @@
 </script>
 
 <svelte:head>
-	<title>Cross-venue arbitrage — Token Stork</title>
+	<title>{m.arb_meta_title()}</title>
 	<meta
 		name="description"
-		content="BCH CashTokens listed on multiple venues (Cauldron, Fex, Tapswap), ranked by raw price spread. Informational only — slippage, mempool risk, and execution cost not modelled."
+		content={m.arb_meta_description()}
 	/>
 </svelte:head>
 
 <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 	<div class="mb-8">
 		<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent">
-			Arbitrage
+			{m.arb_h1()}
 		</h1>
 		<p class="mt-2 max-w-3xl ts-text-muted">
-			Tokens listed on at least two of three venues — Cauldron AMM, Fex AMM, and Tapswap P2P —
-			with a meaningful price gap between them. The "net" column deducts a per-row fee specific
-			to the cheapest-vs-most-expensive venue pair (see notes). Slippage, mining cost, and the
-			chance the gap closes before you act are NOT modelled.
+			{m.arb_intro()}
 		</p>
 	</div>
 
@@ -77,35 +76,35 @@
 	-->
 	<div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
 		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
-			<div class="text-xs uppercase tracking-wider ts-text-muted">Tokens on ≥ 2 venues</div>
+			<div class="text-xs uppercase tracking-wider ts-text-muted">{m.arb_on_2_venues()}</div>
 			<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{data.totalRows}</div>
 			<div class="mt-1 text-xs ts-text-muted">Cauldron / Fex / Tapswap</div>
 		</div>
 		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
-			<div class="text-xs uppercase tracking-wider ts-text-muted">Filter</div>
+			<div class="text-xs uppercase tracking-wider ts-text-muted">{m.arb_filter()}</div>
 			<div class="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">≥ {data.minSpreadPct}%</div>
-			<div class="mt-1 text-xs ts-text-muted">{data.rows.length} matching</div>
+			<div class="mt-1 text-xs ts-text-muted">{m.arb_matching({ count: data.rows.length })}</div>
 		</div>
 		<div class="p-4 rounded-xl border flex flex-col justify-between ts-border-subtle ts-surface-panel">
-			<div class="text-xs uppercase tracking-wider ts-text-muted">View</div>
+			<div class="text-xs uppercase tracking-wider ts-text-muted">{m.arb_view()}</div>
 			<div class="mt-2 flex flex-wrap gap-2">
 				<a
-					href="/arbitrage"
+					href={localizeHref('/arbitrage')}
 					class="px-3 py-1 rounded-lg text-xs font-medium {data.minSpreadPct === 1 && !data.showAll ? 'bg-violet-600 text-white' : 'bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700'} ts-text-strong"
 				>
-					≥ 1% (default)
+					{m.arb_default()}
 				</a>
 				<a
-					href="/arbitrage?min=5"
+					href={localizeHref('/arbitrage?min=5')}
 					class="px-3 py-1 rounded-lg text-xs font-medium {data.minSpreadPct === 5 ? 'bg-violet-600 text-white' : 'bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700'} ts-text-strong"
 				>
 					≥ 5%
 				</a>
 				<a
-					href="/arbitrage?showAll=1"
+					href={localizeHref('/arbitrage?showAll=1')}
 					class="px-3 py-1 rounded-lg text-xs font-medium {data.showAll ? 'bg-violet-600 text-white' : 'bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700'} ts-text-strong"
 				>
-					Show all
+					{m.arb_show_all()}
 				</a>
 			</div>
 		</div>
@@ -113,37 +112,36 @@
 
 	{#if data.bchPriceUSD === 0}
 		<div class="mb-6 p-4 rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/20 text-sm text-amber-700 dark:text-amber-300">
-			BCH price feed is unavailable, so USD columns show — for now. Spread % is independent of
-			the BCH price and is still accurate; refresh the page in a moment.
+			{m.arb_bch_unavailable()}
 		</div>
 	{/if}
 
 	{#if data.rows.length === 0}
 		<div class="p-8 rounded-xl border bg-slate-50 dark:bg-zinc-900/50 text-center ts-border-subtle">
 			<p class="ts-text-muted">
-				No tokens currently meet the {data.minSpreadPct}% spread filter.
+				{m.arb_empty({ pct: data.minSpreadPct })}
 			</p>
 			<p class="text-sm mt-2 ts-text-faint">
-				{data.totalRows} tokens are listed on at least two venues. Try the
-				<a href="/arbitrage?showAll=1" class="text-violet-600 hover:underline">show-all view</a>
-				to inspect them.
+				{m.arb_empty_2_before({ total: data.totalRows })}
+				<a href={localizeHref('/arbitrage?showAll=1')} class="text-violet-600 hover:underline">{m.arb_show_all_view()}</a>
+				{m.arb_empty_2_after()}
 			</p>
 		</div>
 	{:else}
 		<!-- Desktop table -->
 		<div class="hidden md:block overflow-hidden rounded-xl border ts-border-subtle">
 			<div class="grid grid-cols-[2.4fr_0.9fr_0.9fr_0.9fr_0.7fr_0.8fr_1.4fr] gap-2 px-4 py-3 bg-slate-50 dark:bg-zinc-900/50 border-b text-xs font-semibold uppercase tracking-wider items-center ts-text-muted ts-border-subtle">
-				<div>Token</div>
+				<div>{m.grid_col_token()}</div>
 				<div class="text-right">Cauldron</div>
 				<div class="text-right">Fex</div>
 				<div class="text-right">Tapswap</div>
-				<div class="text-right" title="Absolute price gap, ignoring fees and slippage">Spread</div>
-				<div class="text-right" title="Spread minus the venue-pair-specific round-trip taker fee">Net</div>
-				<div class="text-right">Action</div>
+				<div class="text-right" title={m.arb_col_spread_title()}>{m.arb_col_spread()}</div>
+				<div class="text-right" title={m.arb_col_net_title()}>{m.arb_col_net()}</div>
+				<div class="text-right">{m.arb_col_action()}</div>
 			</div>
 			{#each data.rows as r (r.id)}
 				<div class="grid grid-cols-[2.4fr_0.9fr_0.9fr_0.9fr_0.7fr_0.8fr_1.4fr] gap-2 px-4 py-3 border-b last:border-b-0 items-center hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors ts-border-subtle">
-					<a href={`/token/${r.id}`} data-sveltekit-preload-data="hover" class="flex items-center gap-3 min-w-0 no-underline group">
+					<a href={localizeHref(`/token/${r.id}`)} data-sveltekit-preload-data="hover" class="flex items-center gap-3 min-w-0 no-underline group">
 						<img src={iconHrefFor(r.icon, r.iconClearedHash)} alt="" class="w-8 h-8 rounded-full shrink-0 ts-surface-chip" loading="lazy" />
 						<div class="min-w-0">
 							<div class="font-semibold text-slate-900 dark:text-white truncate group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
@@ -151,11 +149,11 @@
 								{#if r.symbol}<span class="ml-2 text-xs text-slate-500 font-mono">{stripEmoji(r.symbol)}</span>{/if}
 							</div>
 							<div class="text-xs truncate ts-text-muted">
-								{#if r.cauldronPresent}Cauldron TVL {fmtTvl(r.cauldronTvlUSD)}{/if}
+								{#if r.cauldronPresent}{m.arb_cauldron_tvl()} {fmtTvl(r.cauldronTvlUSD)}{/if}
 								{#if r.cauldronPresent && r.fexPresent} · {/if}
-								{#if r.fexPresent}Fex TVL {fmtTvl(r.fexTvlUSD)}{/if}
+								{#if r.fexPresent}{m.arb_fex_tvl()} {fmtTvl(r.fexTvlUSD)}{/if}
 								{#if (r.cauldronPresent || r.fexPresent) && r.tapswapPresent} · {/if}
-								{#if r.tapswapPresent}Tapswap {r.tapswapFtListingCount} {r.tapswapFtListingCount === 1 ? 'listing' : 'listings'}{/if}
+								{#if r.tapswapPresent}Tapswap {r.tapswapFtListingCount === 1 ? m.arb_listing_one({ count: r.tapswapFtListingCount }) : m.arb_listing_many({ count: r.tapswapFtListingCount })}{/if}
 							</div>
 						</div>
 					</a>
@@ -171,8 +169,8 @@
 					<div class="text-right">
 						<span
 							class="px-2 py-0.5 rounded text-xs font-mono {spreadColor(r.rawSpreadPct, r.totalFeePct)}"
-							aria-label="Spread {r.rawSpreadPct.toFixed(2)} percent"
-							title="Buy {venueLabel[r.cheapestVenue]}, sell {venueLabel[r.mostExpensiveVenue]} — fee {r.totalFeePct.toFixed(1)}%"
+							aria-label={m.arb_spread_aria({ pct: r.rawSpreadPct.toFixed(2) })}
+							title={m.arb_spread_title({ buy: venueLabel[r.cheapestVenue], sell: venueLabel[r.mostExpensiveVenue], fee: r.totalFeePct.toFixed(1) })}
 						>
 							{r.rawSpreadPct.toFixed(2)}%
 						</span>
@@ -186,18 +184,18 @@
 							target="_blank"
 							rel="noopener noreferrer"
 							class="px-2 py-1 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-colors no-underline whitespace-nowrap"
-							title="Buy on the cheaper venue"
+							title={m.arb_buy_title()}
 						>
-							Buy {venueLabel[r.cheapestVenue]} →
+							{m.arb_buy()} {venueLabel[r.cheapestVenue]} →
 						</a>
 						<a
 							href={venueURL(r.mostExpensiveVenue, r.id)}
 							target="_blank"
 							rel="noopener noreferrer"
 							class="px-2 py-1 rounded bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 hover:bg-rose-200 dark:hover:bg-rose-900/50 transition-colors no-underline whitespace-nowrap"
-							title="Sell on the more-expensive venue"
+							title={m.arb_sell_title()}
 						>
-							Sell {venueLabel[r.mostExpensiveVenue]} →
+							{m.arb_sell()} {venueLabel[r.mostExpensiveVenue]} →
 						</a>
 					</div>
 				</div>
@@ -218,7 +216,7 @@
 						</div>
 						<span
 							class="px-2 py-0.5 rounded text-xs font-mono {spreadColor(r.rawSpreadPct, r.totalFeePct)}"
-							aria-label="Spread {r.rawSpreadPct.toFixed(2)} percent"
+							aria-label={m.arb_spread_aria({ pct: r.rawSpreadPct.toFixed(2) })}
 						>
 							{r.rawSpreadPct.toFixed(2)}%
 						</span>
@@ -242,23 +240,23 @@
 							href={venueURL(r.cheapestVenue, r.id)}
 							target="_blank"
 							rel="noopener noreferrer"
-							title="Buy on the cheaper venue"
+							title={m.arb_buy_title()}
 							class="flex-1 text-center px-3 py-2 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 no-underline"
 						>
-							Buy {venueLabel[r.cheapestVenue]}
+							{m.arb_buy()} {venueLabel[r.cheapestVenue]}
 						</a>
 						<a
 							href={venueURL(r.mostExpensiveVenue, r.id)}
 							target="_blank"
 							rel="noopener noreferrer"
-							title="Sell on the more-expensive venue"
+							title={m.arb_sell_title()}
 							class="flex-1 text-center px-3 py-2 rounded bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 no-underline"
 						>
-							Sell {venueLabel[r.mostExpensiveVenue]}
+							{m.arb_sell()} {venueLabel[r.mostExpensiveVenue]}
 						</a>
 					</div>
 					<div class="mt-2 text-xs text-slate-500 text-center">
-						Net after {r.totalFeePct.toFixed(1)}% fees: <span class="font-mono {r.netSpreadPct > 0 ? 'text-emerald-600 dark:text-emerald-400' : ''}">{r.netSpreadPct >= 0 ? '+' : ''}{r.netSpreadPct.toFixed(2)}%</span>
+						{m.arb_net_after({ fee: r.totalFeePct.toFixed(1) })} <span class="font-mono {r.netSpreadPct > 0 ? 'text-emerald-600 dark:text-emerald-400' : ''}">{r.netSpreadPct >= 0 ? '+' : ''}{r.netSpreadPct.toFixed(2)}%</span>
 					</div>
 				</div>
 			{/each}
@@ -266,17 +264,13 @@
 	{/if}
 
 	<section class="mt-10 p-5 rounded-xl border bg-slate-50/50 dark:bg-zinc-900/30 ts-border-subtle">
-		<h2 class="text-base font-semibold text-slate-900 dark:text-white mb-2">Notes</h2>
+		<h2 class="text-base font-semibold text-slate-900 dark:text-white mb-2">{m.ui_notes()}</h2>
 		<ul class="text-sm space-y-1.5 list-disc list-inside ts-text-muted">
-			<li>
-				Cauldron / Fex prices come from <code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">token_venue_listings</code>; Tapswap price is the lowest <code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">want_sats / has_amount</code> across open FT-only listings (NFTs are excluded — different price semantics). Refresh cadence: Cauldron 4 h discovery + 10 min fast-pass; Fex 4 h; Tapswap is event-driven, near real-time.
-			</li>
-			<li>
-				<strong>Per-venue taker fees</strong> — buy leg (when you fill): Cauldron {data.buyFeePct.cauldron}% / Fex {data.buyFeePct.fex}% / Tapswap {data.buyFeePct.tapswap}% (the 3% Tapswap platform fee is paid by the maker out of <code class="text-xs px-1.5 py-0.5 rounded font-mono ts-surface-chip">want_sats</code>, not the taker). Sell leg (when you create the listing): Cauldron {data.sellFeePct.cauldron}% / Fex {data.sellFeePct.fex}% / Tapswap {data.sellFeePct.tapswap}%. The Net column subtracts whichever pair this row's cheapest-vs-most-expensive venues actually use.
-			</li>
-			<li>Slippage on thin pools (or absorbing all listings on Tapswap) eats the spread before you do. Always sanity-check against the live venue UI before committing funds.</li>
-			<li>Tapswap NFT listings are tracked but not surfaced here — each NFT is unique by commitment and "lowest ask" doesn't aggregate cleanly across them. Day-1 is FT-only; NFT-specific arbitrage is a tracked follow-up.</li>
-			<li>tokenstork.com displays public market data; nothing here is investment advice or an offer.</li>
+			<li>{@html m.arb_note1()}</li>
+			<li>{@html m.arb_note2({ buyC: data.buyFeePct.cauldron, buyF: data.buyFeePct.fex, buyT: data.buyFeePct.tapswap, sellC: data.sellFeePct.cauldron, sellF: data.sellFeePct.fex, sellT: data.sellFeePct.tapswap })}</li>
+			<li>{m.arb_note3()}</li>
+			<li>{m.arb_note4()}</li>
+			<li>{m.arb_note5()}</li>
 		</ul>
 	</section>
 </main>
