@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
+	import * as m from '$lib/paraglide/messages';
+	import { localizeHref } from '$lib/paraglide/runtime';
 
 	// Up/down vote control. Three click semantics (matches Reddit / YouTube):
 	//   ↑ on none → up
@@ -49,7 +51,7 @@
 	async function castVote(target: Vote) {
 		if (!user) {
 			const path = page.url.pathname + page.url.search;
-			await goto(`/login?return=${encodeURIComponent(path)}`);
+			await goto(localizeHref('/login') + `?return=${encodeURIComponent(path)}`);
 			return;
 		}
 		if (busy) return;
@@ -87,7 +89,7 @@
 				optimisticUp = prevUp;
 				optimisticDown = prevDown;
 				const path = page.url.pathname + page.url.search;
-				await goto(`/login?return=${encodeURIComponent(path)}`);
+				await goto(localizeHref('/login') + `?return=${encodeURIComponent(path)}`);
 				return;
 			}
 			if (res.status === 429) {
@@ -143,13 +145,13 @@
 		}}
 		disabled={busy}
 		class="inline-flex items-center justify-center p-0.5 rounded transition-colors {upActive ? 'text-emerald-500 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-300' : 'text-slate-400 hover:text-emerald-500 dark:text-zinc-400 dark:hover:text-emerald-400'} disabled:opacity-50"
-		aria-label={upActive ? 'Retract upvote' : 'Upvote'}
+		aria-label={upActive ? m.vote_retract_up() : m.vote_up()}
 		aria-pressed={upActive}
 		title={user
 			? upActive
-				? 'You upvoted (click to retract)'
-				: 'Click to upvote'
-			: 'Sign in to vote'}
+				? m.vote_title_up_active()
+				: m.vote_title_up()
+			: m.vote_title_signin()}
 	>
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
@@ -166,7 +168,7 @@
 		</svg>
 	</button>
 
-	<span class="tabular-nums {textClass} {scoreColorClass}" title="Net score: {displayUp} up · {displayDown} down">
+	<span class="tabular-nums {textClass} {scoreColorClass}" title={m.vote_score_title({ up: displayUp, down: displayDown })}>
 		{score}
 	</span>
 
@@ -179,13 +181,13 @@
 		}}
 		disabled={busy}
 		class="inline-flex items-center justify-center p-0.5 rounded transition-colors {downActive ? 'text-rose-500 hover:text-rose-600 dark:text-rose-400 dark:hover:text-rose-300' : 'text-slate-400 hover:text-rose-500 dark:text-zinc-400 dark:hover:text-rose-400'} disabled:opacity-50"
-		aria-label={downActive ? 'Retract downvote' : 'Downvote'}
+		aria-label={downActive ? m.vote_retract_down() : m.vote_down()}
 		aria-pressed={downActive}
 		title={user
 			? downActive
-				? 'You downvoted (click to retract)'
-				: 'Click to downvote'
-			: 'Sign in to vote'}
+				? m.vote_title_down_active()
+				: m.vote_title_down()
+			: m.vote_title_signin()}
 	>
 		<svg
 			xmlns="http://www.w3.org/2000/svg"

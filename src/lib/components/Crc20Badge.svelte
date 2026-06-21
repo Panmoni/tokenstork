@@ -1,4 +1,5 @@
 <script lang="ts">
+	import * as m from '$lib/paraglide/messages';
 	// CRC-20 badge. Renders a small amber pill for canonical winners and a
 	// muted slate pill for non-canonical contenders that lost the per-symbol
 	// canonical sort. Tooltip explains the meaning. See docs/crc20-plan.md
@@ -22,8 +23,8 @@
 
 	const tooltip = $derived(
 		isCanonical
-			? `CRC-20 — owns the symbol "${display}" on-chain via covenant${symbolIsHex ? ' (raw bytes; non-UTF-8)' : ''}`
-			: `CRC-20 — also claims "${display}" but lost the canonical sort to an earlier genesis`
+			? m.crc20_tip_canonical({ symbol: display }) + (symbolIsHex ? m.crc20_tip_canonical_hex() : '')
+			: m.crc20_tip_noncanonical({ symbol: display })
 	);
 
 	const sizeClass = $derived(

@@ -18,6 +18,8 @@
 	import Sparkline from './Sparkline.svelte';
 	import StarButton from './StarButton.svelte';
 	import VoteButton from './VoteButton.svelte';
+	import * as m from '$lib/paraglide/messages';
+	import { localizeHref } from '$lib/paraglide/runtime';
 	import type { TokenApiRow, TokenType } from '$lib/types';
 
 	interface Props {
@@ -139,11 +141,11 @@ onDestroy(() => {
 		<div class="relative flex-1">
 			<input
 				type="search"
-				placeholder="Search name, symbol, description, or category..."
+				placeholder={m.grid_search_ph()}
 				bind:value={searchInput}
 				oninput={onSearchInput}
 				class="w-full pl-10 pr-4 py-3 rounded-xl border text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all ts-border-strong ts-surface-panel"
-				aria-label="Search tokens"
+				aria-label={m.header_search_aria()}
 			/>
 			<svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -153,16 +155,16 @@ onDestroy(() => {
 			value={typeFilter}
 			onchange={(e) => setType((e.currentTarget as HTMLSelectElement).value)}
 			class="px-4 py-3 rounded-xl border text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 ts-border-strong ts-surface-panel"
-			aria-label="Filter by type"
+			aria-label={m.grid_filter_type_aria()}
 		>
-			<option value="all">All types</option>
+			<option value="all">{m.grid_all_types()}</option>
 			<option value="FT">FT</option>
 			<option value="NFT">NFT</option>
 			<option value="FT+NFT">FT + NFT</option>
 		</select>
 		<label
 			class="flex items-center gap-2 px-4 py-3 rounded-xl border text-sm cursor-pointer select-none hover:border-violet-500 transition-colors ts-text-strong ts-border-strong ts-surface-panel"
-			title="Only show tokens currently listed on the Cauldron DEX"
+			title={m.grid_filter_cauldron_title()}
 		>
 			<input
 				type="checkbox"
@@ -175,7 +177,7 @@ onDestroy(() => {
 		</label>
 		<label
 			class="flex items-center gap-2 px-4 py-3 rounded-xl border text-sm cursor-pointer select-none hover:border-emerald-500 transition-colors ts-text-strong ts-border-strong ts-surface-panel"
-			title="Only show tokens with open P2P listings on Tapswap"
+			title={m.grid_filter_tapswap_title()}
 		>
 			<input
 				type="checkbox"
@@ -188,7 +190,7 @@ onDestroy(() => {
 		</label>
 		<label
 			class="flex items-center gap-2 px-4 py-3 rounded-xl border text-sm cursor-pointer select-none hover:border-sky-500 transition-colors ts-text-strong ts-border-strong ts-surface-panel"
-			title="Only show tokens currently listed on Fex.cash (AMM)"
+			title={m.grid_filter_fex_title()}
 		>
 			<input
 				type="checkbox"
@@ -215,20 +217,20 @@ onDestroy(() => {
 			class="grid grid-cols-[4.5fr_1.2fr_0.8fr_0.8fr_0.8fr_1.2fr_1.2fr_1fr_1.2fr] gap-2 px-4 py-3 bg-slate-50 dark:bg-zinc-900/50 border-b text-xs font-semibold uppercase tracking-wider items-center ts-text-muted ts-border-subtle"
 		>
 			<button type="button" class="text-left cursor-pointer hover:text-violet-600 dark:hover:text-violet-400" onclick={() => setSort('name')}>
-				Token {sort === 'name' ? '↕' : ''}
+				{m.grid_col_token()} {sort === 'name' ? '↕' : ''}
 			</button>
-			<div class="text-right">Price</div>
-			<div class="text-right" title="Price change vs. the nearest history point ≥1h old. Cauldron syncs every 4h, so this often reflects the ~4h mark.">1h</div>
-			<div class="text-right" title="Price change vs. the nearest history point ≥24h old">24h</div>
-			<div class="text-right" title="Price change vs. the nearest history point ≥7d old">7d</div>
-			<div class="text-right" title="Distinct addresses currently holding this category, per the latest BlockBook enrichment pass.">Holders</div>
+			<div class="text-right">{m.grid_col_price()}</div>
+			<div class="text-right" title={m.grid_col_1h_title()}>1h</div>
+			<div class="text-right" title={m.grid_col_24h_title()}>24h</div>
+			<div class="text-right" title={m.grid_col_7d_title()}>7d</div>
+			<div class="text-right" title={m.grid_col_holders_title()}>{m.grid_col_holders()}</div>
 			<button type="button" class="text-right cursor-pointer hover:text-violet-600 dark:hover:text-violet-400" onclick={() => setSort('tvl')}>
-				TVL {sort === 'tvl' ? '↓' : ''}
+				{m.grid_col_tvl()} {sort === 'tvl' ? '↓' : ''}
 			</button>
 			<button type="button" class="text-right cursor-pointer hover:text-violet-600 dark:hover:text-violet-400" onclick={() => setSort('supply')}>
-				Supply {sort === 'supply' ? '↓' : ''}
+				{m.grid_col_supply()} {sort === 'supply' ? '↓' : ''}
 			</button>
-			<div class="text-right" title="Price over the last 7 days">Last 7d</div>
+			<div class="text-right" title={m.grid_col_last7d_title()}>{m.grid_col_last7d()}</div>
 		</div>
 
 		{#each tokens as token (token.id)}
@@ -238,18 +240,18 @@ onDestroy(() => {
 				<div class="flex items-center gap-2 min-w-0">
 					<StarButton categoryHex={token.id} />
 					<VoteButton categoryHex={token.id} upCount={token.upCount} downCount={token.downCount} />
-					<a href={`/token/${token.id}`} data-sveltekit-preload-data="hover" class="flex items-center gap-3 min-w-0 no-underline group flex-1">
+					<a href={localizeHref(`/token/${token.id}`)} data-sveltekit-preload-data="hover" class="flex items-center gap-3 min-w-0 no-underline group flex-1">
 					<img src={iconHrefFor(token.icon, token.iconClearedHash)} alt="" class="w-8 h-8 rounded-full ts-surface-chip" loading="lazy" />
 					<div class="min-w-0">
 						<div class="font-semibold text-slate-900 dark:text-white truncate group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
 							{stripEmoji(token.name) || stripEmoji(token.crc20Name) || '—'}
-							{#if token.symbol}<span class="ml-2 text-xs text-slate-500 font-mono">{stripEmoji(token.symbol)}</span>{:else if token.crc20Symbol}<span class="ml-2 text-xs text-slate-500 font-mono" title="On-chain CRC-20 symbol (no BCMR symbol published)">{token.crc20Symbol}</span>{/if}
-							<span class="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold ts-text-body ts-surface-chip" title="Token type">{token.tokenType}</span>
+							{#if token.symbol}<span class="ml-2 text-xs text-slate-500 font-mono">{stripEmoji(token.symbol)}</span>{:else if token.crc20Symbol}<span class="ml-2 text-xs text-slate-500 font-mono" title={m.grid_crc20_symbol_title()}>{token.crc20Symbol}</span>{/if}
+							<span class="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold ts-text-body ts-surface-chip" title={m.grid_type_title()}>{token.tokenType}</span>
 							{#if token.firstNRank != null}
 								{@const label = firstNLabel(token.firstNRank)}
 								<span
 									class="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gradient-to-r from-indigo-600 to-violet-600 text-white"
-									title={`Permanent rank: this is the ${label.toLowerCase()} minted on Bitcoin Cash.`}
+									title={m.grid_first_n_title({ label: label.toLowerCase() })}
 								>#{token.firstNRank}</span>
 							{/if}
 							{#if token.isCrc20}
@@ -264,20 +266,20 @@ onDestroy(() => {
 											? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
 											: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'}
 								{@const compact =
-									ab === 'today' ? 'New today' : ab === 'week' ? 'New this week' : 'New this month'}
+									ab === 'today' ? m.grid_new_today() : ab === 'week' ? m.grid_new_week() : m.grid_new_month()}
 								<span
 									class={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold ${tone}`}
-									title={`${ageBadgeLabel(ab)} — brand-new categories are over-represented in scams and abandoned tests; verify before trusting.`}
+									title={m.grid_age_warning({ label: ageBadgeLabel(ab) })}
 								>{compact}</span>
 							{/if}
 							{#if token.cauldronPriceSats != null}
-								<img src="/cauldron-logo.png" alt="Cauldron" title="Listed on Cauldron (AMM)" class="ml-1 inline-block h-4 w-4 align-text-bottom rounded-full bg-white p-0.5" />
+								<img src="/cauldron-logo.png" alt="Cauldron" title={m.grid_listed_cauldron()} class="ml-1 inline-block h-4 w-4 align-text-bottom rounded-full bg-white p-0.5" />
 							{/if}
 							{#if token.tapswapListingCount > 0}
-								<img src="/tapswap-logo.png" alt="Tapswap" title="{token.tapswapListingCount} open listing{token.tapswapListingCount === 1 ? '' : 's'} on Tapswap (P2P)" class="ml-1 inline-block h-4 w-4 align-text-bottom" />
+								<img src="/tapswap-logo.png" alt="Tapswap" title={token.tapswapListingCount === 1 ? m.grid_tapswap_listings_one({ count: token.tapswapListingCount }) : m.grid_tapswap_listings_many({ count: token.tapswapListingCount })} class="ml-1 inline-block h-4 w-4 align-text-bottom" />
 							{/if}
 							{#if token.fexPriceSats != null}
-								<img src="/fex-logo.png" alt="Fex" title="Listed on Fex.cash (AMM)" class="ml-1 inline-block h-4 w-4 align-text-bottom rounded-full" />
+								<img src="/fex-logo.png" alt="Fex" title={m.grid_listed_fex()} class="ml-1 inline-block h-4 w-4 align-text-bottom rounded-full" />
 							{/if}
 						</div>
 						{#if token.description}
@@ -322,7 +324,7 @@ onDestroy(() => {
 					<VoteButton categoryHex={token.id} upCount={token.upCount} downCount={token.downCount} size="md" />
 					<StarButton categoryHex={token.id} size="md" />
 				</div>
-				<a href={`/token/${token.id}`} data-sveltekit-preload-data="hover" class="block no-underline">
+				<a href={localizeHref(`/token/${token.id}`)} data-sveltekit-preload-data="hover" class="block no-underline">
 					<div class="flex items-start justify-between mb-3 pr-8">
 						<div class="flex items-center gap-3 min-w-0">
 							<img src={iconHrefFor(token.icon, token.iconClearedHash)} alt="" class="w-10 h-10 rounded-full ts-surface-chip" />
@@ -338,8 +340,8 @@ onDestroy(() => {
 							{#if token.firstNRank != null}
 								<span
 									class="px-2 py-0.5 rounded bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-xs font-semibold"
-									title={`Permanent rank: this is the ${firstNLabel(token.firstNRank).toLowerCase()} minted on Bitcoin Cash.`}
-								>#{token.firstNRank} ever</span>
+									title={m.grid_first_n_title({ label: firstNLabel(token.firstNRank).toLowerCase() })}
+								>#{token.firstNRank} {m.grid_ever()}</span>
 							{/if}
 							{#if token.isCrc20}
 								<Crc20Badge isCanonical={token.crc20IsCanonical} symbol={token.crc20Symbol} symbolIsHex={token.crc20SymbolIsHex} size="sm" />
@@ -354,13 +356,13 @@ onDestroy(() => {
 											: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'}
 								{@const compactMobile =
 									abMobile === 'today'
-										? 'New today'
+										? m.grid_new_today()
 										: abMobile === 'week'
-											? 'New this week'
-											: 'New this month'}
+											? m.grid_new_week()
+											: m.grid_new_month()}
 								<span
 									class={`px-2 py-0.5 rounded text-xs font-medium ${toneMobile}`}
-									title={`${ageBadgeLabel(abMobile)} — brand-new categories are over-represented in scams and abandoned tests; verify before trusting.`}
+									title={m.grid_age_warning({ label: ageBadgeLabel(abMobile) })}
 								>{compactMobile}</span>
 							{/if}
 						</div>
@@ -368,26 +370,26 @@ onDestroy(() => {
 					{#if token.cauldronPriceSats != null}
 						<div class="grid grid-cols-2 gap-2 text-sm mb-2">
 							<div>
-								<div class="text-xs text-slate-500 mb-1">Price</div>
+								<div class="text-xs text-slate-500 mb-1">{m.grid_col_price()}</div>
 								<div class="font-mono">{formatVenuePriceUSD(token.cauldronPriceSats, token.decimals, $bchPrice.bchPrice)}</div>
 							</div>
 							<div>
-								<div class="text-xs text-slate-500 mb-1">TVL</div>
+								<div class="text-xs text-slate-500 mb-1">{m.grid_col_tvl()}</div>
 								<div class="font-mono">{formatVenueTvlUSD(token.cauldronTvlSatoshis, $bchPrice.bchPrice)}</div>
 							</div>
 						</div>
 					{/if}
 					<div class="grid grid-cols-3 gap-2 text-sm">
 						<div>
-							<div class="text-xs text-slate-500 mb-1">Supply</div>
+							<div class="text-xs text-slate-500 mb-1">{m.grid_col_supply()}</div>
 							<div class="font-mono">{humanizeNumericSupply(token.currentSupply, token.decimals)}</div>
 						</div>
 						<div>
-							<div class="text-xs text-slate-500 mb-1">Holders</div>
+							<div class="text-xs text-slate-500 mb-1">{m.grid_col_holders()}</div>
 							<div>{token.holderCount ?? '-'}</div>
 						</div>
 						<div>
-							<div class="text-xs text-slate-500 mb-1">NFTs</div>
+							<div class="text-xs text-slate-500 mb-1">{m.grid_mobile_nfts()}</div>
 							<div>{token.liveNftCount ?? '-'}</div>
 						</div>
 					</div>
@@ -401,9 +403,9 @@ onDestroy(() => {
 
 	{#if tokens.length === 0}
 		<div class="text-center py-12">
-			<div class="text-lg mb-2 ts-text-faint">No tokens found</div>
+			<div class="text-lg mb-2 ts-text-faint">{m.grid_empty_title()}</div>
 			<div class="text-sm ts-text-muted">
-				Try a different search or filter.
+				{m.grid_empty_body()}
 			</div>
 		</div>
 	{/if}
@@ -411,7 +413,7 @@ onDestroy(() => {
 	{#if total > limit}
 		<div class="flex items-center justify-between text-sm ts-text-muted">
 			<div>
-				Showing {offset + 1}&ndash;{Math.min(offset + limit, total)} of {total}
+				{m.grid_showing({ from: offset + 1, to: Math.min(offset + limit, total), total })}
 			</div>
 			<div class="flex gap-2">
 				<button
@@ -420,7 +422,7 @@ onDestroy(() => {
 					disabled={!hasPrev}
 					onclick={() => setPage(Math.max(0, offset - limit))}
 				>
-					Prev
+					{m.grid_prev()}
 				</button>
 				<button
 					type="button"
@@ -428,7 +430,7 @@ onDestroy(() => {
 					disabled={!hasNext}
 					onclick={() => setPage(offset + limit)}
 				>
-					Next
+					{m.grid_next()}
 				</button>
 			</div>
 		</div>

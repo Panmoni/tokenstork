@@ -1,4 +1,5 @@
 <script lang="ts">
+	import * as m from '$lib/paraglide/messages';
 	interface Props {
 		category: string;
 	}
@@ -26,16 +27,16 @@
 		href={`https://explorer.salemkode.com/token/${category}`}
 		target="_blank"
 		rel="noopener noreferrer"
-		title="View on SalemKode Explorer"
+		title={m.fmtcat_explorer_title()}
 		class="font-mono text-xs text-slate-500 hover:text-violet-600"
 	>
 		{display}
 	</a>
 	<button
 		onclick={copy}
-		title="Copy category"
+		title={m.fmtcat_copy_title()}
 		class="text-primary hover:text-accent text-xs"
-		aria-label="Copy category"
+		aria-label={m.fmtcat_copy_title()}
 	>
 		{#if copied}
 			<span class="text-accent">✓</span>

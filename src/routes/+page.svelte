@@ -5,10 +5,12 @@
 	import { iconHrefFor } from '$lib/icons';
 	import { stripEmoji } from '$lib/format';
 	import { invalidate } from '$app/navigation';
+	import * as m from '$lib/paraglide/messages';
+	import { getLocale, localizeHref } from '$lib/paraglide/runtime';
 
 	let { data } = $props();
 
-	const fmt = (n: number) => n.toLocaleString('en-US');
+	const fmt = (n: number) => n.toLocaleString(getLocale());
 
 	// Skeleton utility classes
 	const sk = 'animate-pulse bg-slate-200 dark:bg-zinc-700 rounded';
@@ -62,7 +64,7 @@
 </script>
 
 <svelte:head>
-	<title>Token Stork: Discover, Track and Analyze BCH Cash Tokens</title>
+	<title>{m.meta_title()}</title>
 </svelte:head>
 
 <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -74,20 +76,20 @@
 		<section class="mb-8">
 			<div class="flex items-baseline justify-between mb-3">
 				<div class="flex items-center gap-1.5">
-					<h2 class="text-xl font-semibold text-slate-900 dark:text-white">Community sentiment</h2>
+					<h2 class="text-xl font-semibold text-slate-900 dark:text-white">{m.home_community_sentiment()}</h2>
 					<InfoTooltip
-						href="/faq#faq-vote-ranking"
-						label="About community sentiment — opens FAQ"
-						text="Ranks weight votes by voter tenure × recency (7-day half-life)."
+						href={localizeHref('/faq#faq-vote-ranking')}
+						label={m.home_sentiment_tip_label()}
+						text={m.home_sentiment_tip_text()}
 					/>
 				</div>
-				<span class="text-xs ts-text-muted">{fmt(data.voteLeaders.totalVotes)} vote{data.voteLeaders.totalVotes === 1 ? '' : 's'} cast</span>
+				<span class="text-xs ts-text-muted">{data.voteLeaders.totalVotes === 1 ? m.home_votes_cast_one({ count: fmt(data.voteLeaders.totalVotes) }) : m.home_votes_cast_many({ count: fmt(data.voteLeaders.totalVotes) })}</span>
 			</div>
 			<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 				{#each [
-					{ label: 'Most upvoted', sub: 'highest net score', sortQuery: '?sort=upvoted', items: data.voteLeaders.mostUpvoted },
-					{ label: 'Most downvoted', sub: 'lowest net score', sortQuery: '?sort=downvoted', items: data.voteLeaders.mostDownvoted },
-					{ label: 'Most controversial', sub: 'big & evenly split', sortQuery: '?sort=controversial', items: data.voteLeaders.mostControversial }
+					{ label: m.home_most_upvoted(), sub: m.home_most_upvoted_sub(), sortQuery: '?sort=upvoted', items: data.voteLeaders.mostUpvoted },
+					{ label: m.home_most_downvoted(), sub: m.home_most_downvoted_sub(), sortQuery: '?sort=downvoted', items: data.voteLeaders.mostDownvoted },
+					{ label: m.home_most_controversial(), sub: m.home_most_controversial_sub(), sortQuery: '?sort=controversial', items: data.voteLeaders.mostControversial }
 				] as col (col.label)}
 					<div class="rounded-xl border overflow-hidden ts-border-subtle ts-surface-panel">
 						<div class="px-4 py-3 border-b flex items-baseline justify-between ts-border-subtle">
@@ -95,15 +97,15 @@
 								<div class="text-sm font-semibold text-slate-900 dark:text-white">{col.label}</div>
 								<div class="text-xs ts-text-muted">{col.sub}</div>
 							</div>
-							<a href={`/${col.sortQuery}`} class="text-xs text-violet-600 dark:text-violet-400 hover:underline">All →</a>
+							<a href={localizeHref(`/${col.sortQuery}`)} class="text-xs text-violet-600 dark:text-violet-400 hover:underline">{m.home_all()} →</a>
 						</div>
 						{#if col.items.length === 0}
-							<div class="px-4 py-6 text-sm text-center ts-text-muted">No votes yet.</div>
+							<div class="px-4 py-6 text-sm text-center ts-text-muted">{m.home_no_votes()}</div>
 						{:else}
 							<ol class="divide-y divide-slate-100 dark:divide-zinc-800">
 								{#each col.items as t, i (t.id)}
 									<li>
-										<a href={`/token/${t.id}`} data-sveltekit-preload-data="hover" class="flex items-center gap-3 px-4 py-2 hover:bg-slate-50 dark:hover:bg-zinc-800/50 transition-colors no-underline">
+										<a href={localizeHref(`/token/${t.id}`)} data-sveltekit-preload-data="hover" class="flex items-center gap-3 px-4 py-2 hover:bg-slate-50 dark:hover:bg-zinc-800/50 transition-colors no-underline">
 											<span class="w-5 text-xs font-mono text-slate-400 tabular-nums">{i + 1}</span>
 											<img src={iconHrefFor(t.icon, t.iconClearedHash)} alt="" class="w-7 h-7 rounded-full ts-surface-chip" loading="lazy" />
 											<span class="flex-1 min-w-0 truncate text-sm text-slate-900 dark:text-white">
@@ -135,7 +137,7 @@
 		{#if grid.error}
 			<div class="text-center py-12">
 				<div class="text-red-500 text-lg mb-2">{grid.error}</div>
-				<div class="ts-text-muted">Please try again in a moment.</div>
+				<div class="ts-text-muted">{m.home_grid_retry()}</div>
 			</div>
 		{:else}
 			<TokenGrid tokens={grid.tokens} total={grid.total} limit={grid.limit} offset={grid.offset} />

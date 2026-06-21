@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
+	import * as m from '$lib/paraglide/messages';
+	import { localizeHref } from '$lib/paraglide/runtime';
 
 	// A star button that toggles a category in the user's wallet-tied
 	// watchlist. Renders an outline star when not watching, a filled
@@ -40,7 +42,7 @@
 		if (!user) {
 			// Stash the current path so we land back here after auth.
 			const path = page.url.pathname + page.url.search;
-			await goto(`/login?return=${encodeURIComponent(path)}`);
+			await goto(localizeHref('/login') + `?return=${encodeURIComponent(path)}`);
 			return;
 		}
 
@@ -61,7 +63,7 @@
 			if (res.status === 401) {
 				optimisticState = null;
 				const path = page.url.pathname + page.url.search;
-				await goto(`/login?return=${encodeURIComponent(path)}`);
+				await goto(localizeHref('/login') + `?return=${encodeURIComponent(path)}`);
 				return;
 			}
 			if (!res.ok) throw new Error(`${res.status}`);
@@ -87,13 +89,13 @@
 	onclick={onClick}
 	disabled={busy}
 	class="inline-flex items-center justify-center p-1 rounded transition-colors {watching ? 'text-emerald-500 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-300' : 'text-slate-400 hover:text-amber-500 dark:text-zinc-400 dark:hover:text-amber-400'} disabled:opacity-50"
-	aria-label={watching ? 'Remove from watchlist' : 'Add to watchlist'}
+	aria-label={watching ? m.star_remove() : m.star_add()}
 	aria-pressed={watching}
 	title={user
 		? watching
-			? 'In your watchlist (click to remove)'
-			: 'Click to add to your watchlist'
-		: 'Sign in to track tokens'}
+			? m.star_title_in()
+			: m.star_title_add()
+		: m.star_title_signin()}
 >
 	{#if watching}
 		<svg

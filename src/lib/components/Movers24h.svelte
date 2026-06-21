@@ -6,6 +6,8 @@
 	import type { MoverDisplay, MoversResult } from '$lib/server/movers';
 	import { stripEmoji } from '$lib/format';
 	import InfoTooltip from '$lib/components/InfoTooltip.svelte';
+	import * as m from '$lib/paraglide/messages';
+	import { getLocale } from '$lib/paraglide/runtime';
 
 	interface Props {
 		movers: MoversResult;
@@ -15,7 +17,7 @@
 
 	function fmtPctSigned(p: number): string {
 		const sign = p > 0 ? '+' : p < 0 ? '' : '';
-		return `${sign}${p.toLocaleString('en-US', {
+		return `${sign}${p.toLocaleString(getLocale(), {
 			minimumFractionDigits: 1,
 			maximumFractionDigits: 1
 		})}%`;
@@ -38,24 +40,24 @@
 
 <section class="mb-8">
 	<div class="flex items-center gap-1.5 mb-3">
-		<h2 class="text-xl font-semibold text-slate-900 dark:text-white">24h movers</h2>
+		<h2 class="text-xl font-semibold text-slate-900 dark:text-white">{m.movers_h2()}</h2>
 		<InfoTooltip
-			label="About 24h movers"
-			text="Biggest 24-hour price + TVL changes among Cauldron-listed tokens. Computed from the oldest price_history point ≥23h ago vs. the newest point within the last 23h. Tokens without two qualifying points (newly listed, or sync gap) are excluded."
+			label={m.movers_tip_label()}
+			text={m.movers_tip_text()}
 		/>
 	</div>
 	<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 		<!-- Top gainers -->
 		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
 			<h3 class="text-sm font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400 mb-3">
-				Top gainers
+				{m.movers_top_gainers()}
 			</h3>
 			{#if movers.topGainers24h.length === 0}
 				<p class="text-xs ts-text-muted">
 					{#if movers.has24hHistory}
-						No tokens up in the last 24h.
+						{m.movers_none_up()}
 					{:else}
-						Building 24h history — refreshes as <code>sync-cauldron</code> ticks accumulate.
+						{m.movers_building_1()} <code>sync-cauldron</code> {m.movers_building_2()}
 					{/if}
 				</p>
 			{:else}
@@ -83,14 +85,14 @@
 		<!-- Top losers -->
 		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
 			<h3 class="text-sm font-semibold uppercase tracking-wide text-rose-700 dark:text-rose-400 mb-3">
-				Top losers
+				{m.movers_top_losers()}
 			</h3>
 			{#if movers.topLosers24h.length === 0}
 				<p class="text-xs ts-text-muted">
 					{#if movers.has24hHistory}
-						No tokens down in the last 24h.
+						{m.movers_none_down()}
 					{:else}
-						Building 24h history — refreshes as <code>sync-cauldron</code> ticks accumulate.
+						{m.movers_building_1()} <code>sync-cauldron</code> {m.movers_building_2()}
 					{/if}
 				</p>
 			{:else}
@@ -118,14 +120,14 @@
 		<!-- TVL movers (signed; biggest absolute % move) -->
 		<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
 			<h3 class="text-sm font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-400 mb-3">
-				TVL movers
+				{m.movers_tvl_movers()}
 			</h3>
 			{#if movers.topTvlMovers24h.length === 0}
 				<p class="text-xs ts-text-muted">
 					{#if movers.has24hHistory}
-						No measurable TVL changes in the last 24h.
+						{m.movers_none_tvl()}
 					{:else}
-						Building 24h history — refreshes as <code>sync-cauldron</code> ticks accumulate.
+						{m.movers_building_1()} <code>sync-cauldron</code> {m.movers_building_2()}
 					{/if}
 				</p>
 			{:else}
