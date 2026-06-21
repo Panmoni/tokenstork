@@ -3,33 +3,33 @@
 	import { iconHrefFor } from '$lib/icons';
 	import { bchPrice } from '$lib/stores/bchPrice';
 	import StarButton from '$lib/components/StarButton.svelte';
+	import * as m from '$lib/paraglide/messages';
+	import { localizeHref } from '$lib/paraglide/runtime';
 
 	let { data } = $props();
 
 	function fmtRelativeTime(unixSec: number): string {
 		const diff = Date.now() / 1000 - unixSec;
-		if (diff < 60) return 'just now';
-		if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-		if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-		if (diff < 86400 * 30) return `${Math.floor(diff / 86400)}d ago`;
+		if (diff < 60) return m.wl_just_now();
+		if (diff < 3600) return m.wl_ago_m({ n: Math.floor(diff / 60) });
+		if (diff < 86400) return m.wl_ago_h({ n: Math.floor(diff / 3600) });
+		if (diff < 86400 * 30) return m.wl_ago_d({ n: Math.floor(diff / 86400) });
 		const months = Math.floor(diff / (86400 * 30));
-		return `${months}mo ago`;
+		return m.wl_ago_mo({ n: months });
 	}
 </script>
 
 <svelte:head>
-	<title>Watchlist — Token Stork</title>
+	<title>{m.wl_meta_title()}</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
 <main class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 	<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent mb-3">
-		Watchlist
+		{m.wl_h1()}
 	</h1>
 	<p class="mb-8 max-w-prose ts-text-muted">
-		Tokens you're tracking, scoped to the BCH wallet you signed in with.
-		Click the star on any token in the directory or detail page to add
-		or remove.
+		{m.wl_intro()}
 	</p>
 
 	{#if data.unauthenticated}
@@ -37,18 +37,16 @@
 		     anonymously. -->
 		<section class="p-8 rounded-xl border border-violet-200 dark:border-violet-900/50 bg-violet-50/40 dark:bg-violet-950/20 text-center">
 			<h2 class="text-xl font-semibold text-slate-900 dark:text-white mb-2">
-				Sign in with your BCH wallet to start tracking
+				{m.wl_signin_h2()}
 			</h2>
 			<p class="mb-6 max-w-md mx-auto ts-text-muted">
-				The watchlist is scoped to the wallet address you sign in with — no email, no password,
-				no recovery phrase to lose. Cross-device by design: sign in from any browser with the
-				same wallet and your watchlist follows.
+				{m.wl_signin_body()}
 			</p>
 			<a
-				href="/login?return=/watchlist"
+				href={localizeHref('/login') + '?return=' + encodeURIComponent(localizeHref('/watchlist'))}
 				class="inline-block px-5 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-medium transition-colors"
 			>
-				Sign in
+				{m.login_sign_in()}
 			</a>
 		</section>
 	{:else if data.rows.length === 0}
@@ -68,28 +66,28 @@
 				/>
 			</svg>
 			<h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-1">
-				Nothing tracked yet
+				{m.wl_empty_h2()}
 			</h2>
 			<p class="text-sm mb-4 max-w-sm mx-auto ts-text-muted">
-				Click the star icon next to any token in the
-				<a href="/" class="text-violet-600 dark:text-violet-400 hover:underline">directory</a>
-				or on a token's detail page to add it here.
+				{m.wl_empty_before()}
+				<a href={localizeHref('/')} class="text-violet-600 dark:text-violet-400 hover:underline">{m.wl_directory()}</a>
+				{m.wl_empty_after()}
 			</p>
 		</section>
 	{:else}
 		<div class="rounded-xl border overflow-hidden ts-border-subtle">
 			<div class="grid grid-cols-[2fr_0.8fr_0.8fr_0.8fr_0.5fr] gap-3 px-4 py-3 bg-slate-50 dark:bg-zinc-900/50 border-b text-xs font-semibold uppercase tracking-wider ts-text-muted ts-border-subtle">
-				<div>Token</div>
-				<div class="text-right">Cauldron</div>
-				<div class="text-right">Fex</div>
-				<div class="text-right">Tapswap</div>
-				<div class="text-right">Added</div>
+				<div>{m.wl_col_token()}</div>
+				<div class="text-right">{m.wl_col_cauldron()}</div>
+				<div class="text-right">{m.wl_col_fex()}</div>
+				<div class="text-right">{m.wl_col_tapswap()}</div>
+				<div class="text-right">{m.wl_col_added()}</div>
 			</div>
 			{#each data.rows as r (r.id)}
 				<div class="grid grid-cols-[2fr_0.8fr_0.8fr_0.8fr_0.5fr] gap-3 px-4 py-3 border-b last:border-b-0 items-center hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors ts-border-subtle">
 					<div class="flex items-center gap-2 min-w-0">
 						<StarButton categoryHex={r.id} />
-						<a href={`/token/${r.id}`} data-sveltekit-preload-data="hover" class="flex items-center gap-3 min-w-0 no-underline group flex-1">
+						<a href={localizeHref(`/token/${r.id}`)} data-sveltekit-preload-data="hover" class="flex items-center gap-3 min-w-0 no-underline group flex-1">
 							<img src={iconHrefFor(r.icon, r.iconClearedHash)} alt="" class="w-8 h-8 rounded-full shrink-0 ts-surface-chip" loading="lazy" />
 							<div class="min-w-0">
 								<div class="font-semibold text-slate-900 dark:text-white truncate group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
@@ -118,7 +116,7 @@
 					</div>
 					<div class="text-right font-mono text-sm ts-text-strong">
 						{#if r.tapswapListingCount > 0}
-							<span title="open Tapswap listings">{r.tapswapListingCount}</span>
+							<span title={m.wl_tapswap_title()}>{r.tapswapListingCount}</span>
 						{:else}
 							<span class="text-slate-400">—</span>
 						{/if}
@@ -130,7 +128,7 @@
 			{/each}
 		</div>
 		<p class="mt-4 text-xs ts-text-muted">
-			Tracking {data.rows.length} {data.rows.length === 1 ? 'token' : 'tokens'}.
+			{data.rows.length === 1 ? m.wl_tracking_one({ count: data.rows.length }) : m.wl_tracking_many({ count: data.rows.length })}
 		</p>
 	{/if}
 </main>

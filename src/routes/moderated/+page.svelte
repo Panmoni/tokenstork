@@ -1,9 +1,11 @@
 <script lang="ts">
 	import { REPORT_REASON_LABELS, type ReportReason } from '$lib/moderation';
+	import * as m from '$lib/paraglide/messages';
+	import { getLocale, localizeHref } from '$lib/paraglide/runtime';
 
 	let { data } = $props();
 
-	const fmt = (n: number) => n.toLocaleString('en-US');
+	const fmt = (n: number) => n.toLocaleString(getLocale());
 	const totalIconBlocked = $derived(
 		data.iconStats
 			? data.iconStats.blockedAdult +
@@ -33,10 +35,10 @@
 </script>
 
 <svelte:head>
-	<title>Moderated tokens — Token Stork</title>
+	<title>{m.mod_meta_title()}</title>
 	<meta
 		name="description"
-		content="Public list of CashTokens hidden from the Token Stork directory, with the reason and date for each."
+		content={m.mod_meta_description()}
 	/>
 	<!-- This page exists for transparency, not discovery. Keep it out of
 	     search results so the moderated category IDs don't get re-promoted
@@ -47,12 +49,10 @@
 <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 	<div class="mb-8">
 		<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent">
-			Moderated tokens
+			{m.mod_h1()}
 		</h1>
 		<p class="mt-2 max-w-3xl ts-text-muted">
-			These categories are hidden from the directory, the public API, and the stats counters.
-			Direct URLs return <span class="font-mono text-xs">410 Gone</span>. We list them here so you
-			can see what we filter and why. To report a token, use the report link on its detail page.
+			{m.mod_intro_1()} <span class="font-mono text-xs">410 Gone</span>. {m.mod_intro_2()}
 		</p>
 	</div>
 
@@ -65,66 +65,59 @@
 			a summary, not a directory of removed content.
 		-->
 		<section id="image-safety" class="mb-8 scroll-mt-20">
-			<h2 class="text-2xl font-bold text-slate-900 dark:text-white">Image safety</h2>
+			<h2 class="text-2xl font-bold text-slate-900 dark:text-white">{m.mod_img_h2()}</h2>
 			<p class="mt-2 mb-4 max-w-3xl text-sm ts-text-muted">
-				Every token icon is fetched, hashed, and scanned before it's served. We block adult
-				content and CSAM (the latter via Cloudflare's edge-resident NCMEC/IWF hash matcher),
-				reject oversize files (&gt; 2 MiB) and non-raster formats (SVG, AVIF, ICO, …), and route
-				borderline scores to an operator review queue. Cleared icons are transcoded to static
-				WebP and served from our origin — never hot-linked from issuer-controlled URLs. See the
-				<a href="/faq#faq-icons" class="text-violet-600 dark:text-violet-400 hover:underline"
-					>FAQ entry</a
-				> for the full pipeline.
+				{m.mod_img_desc_before()}
+				<a href={localizeHref('/faq#faq-icons')} class="text-violet-600 dark:text-violet-400 hover:underline"
+					>{m.mod_img_faq_link()}</a
+				> {m.mod_img_desc_after()}
 			</p>
 			<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
 				<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
-					<div class="text-xs uppercase tracking-wider ts-text-muted">Cleared</div>
+					<div class="text-xs uppercase tracking-wider ts-text-muted">{m.mod_stat_cleared()}</div>
 					<div class="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
 						{fmt(data.iconStats.cleared)}
 					</div>
-					<div class="text-xs mt-1 ts-text-muted">unique images on disk</div>
+					<div class="text-xs mt-1 ts-text-muted">{m.mod_stat_cleared_sub()}</div>
 				</div>
 				<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
-					<div class="text-xs uppercase tracking-wider ts-text-muted">Blocked: adult</div>
+					<div class="text-xs uppercase tracking-wider ts-text-muted">{m.mod_stat_adult()}</div>
 					<div class="text-2xl font-bold text-rose-600 dark:text-rose-400">
 						{fmt(data.iconStats.blockedAdult)}
 					</div>
-					<div class="text-xs mt-1 ts-text-muted">NSFW score &ge; 0.9</div>
+					<div class="text-xs mt-1 ts-text-muted">{m.mod_stat_adult_sub()}</div>
 				</div>
 				<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
-					<div class="text-xs uppercase tracking-wider ts-text-muted">Blocked: CSAM</div>
+					<div class="text-xs uppercase tracking-wider ts-text-muted">{m.mod_stat_csam()}</div>
 					<div class="text-2xl font-bold text-rose-600 dark:text-rose-400">
 						{fmt(data.iconStats.blockedCsam)}
 					</div>
-					<div class="text-xs mt-1 ts-text-muted">edge-detected by Cloudflare</div>
+					<div class="text-xs mt-1 ts-text-muted">{m.mod_stat_csam_sub()}</div>
 				</div>
 				<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
-					<div class="text-xs uppercase tracking-wider ts-text-muted">Blocked: oversize</div>
+					<div class="text-xs uppercase tracking-wider ts-text-muted">{m.mod_stat_oversize()}</div>
 					<div class="text-2xl font-bold text-amber-600 dark:text-amber-400">
 						{fmt(data.iconStats.blockedOversize)}
 					</div>
-					<div class="text-xs mt-1 ts-text-muted">over 2 MiB cap</div>
+					<div class="text-xs mt-1 ts-text-muted">{m.mod_stat_oversize_sub()}</div>
 				</div>
 				<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
-					<div class="text-xs uppercase tracking-wider ts-text-muted">Blocked: format</div>
+					<div class="text-xs uppercase tracking-wider ts-text-muted">{m.mod_stat_format()}</div>
 					<div class="text-2xl font-bold text-amber-600 dark:text-amber-400">
 						{fmt(data.iconStats.blockedUnsupported)}
 					</div>
-					<div class="text-xs mt-1 ts-text-muted">SVG / AVIF / ICO / corrupt</div>
+					<div class="text-xs mt-1 ts-text-muted">{m.mod_stat_format_sub()}</div>
 				</div>
 				<div class="p-4 rounded-xl border ts-border-subtle ts-surface-panel">
-					<div class="text-xs uppercase tracking-wider ts-text-muted">In review</div>
+					<div class="text-xs uppercase tracking-wider ts-text-muted">{m.mod_stat_review()}</div>
 					<div class="text-2xl font-bold text-violet-600 dark:text-violet-400">
 						{fmt(data.iconStats.review)}
 					</div>
-					<div class="text-xs mt-1 ts-text-muted">awaiting operator decision</div>
+					<div class="text-xs mt-1 ts-text-muted">{m.mod_stat_review_sub()}</div>
 				</div>
 			</div>
 			<p class="text-xs mt-3 ts-text-muted">
-				{fmt(data.iconStats.tokensWithClearedIcon)} tokens render a real WebP in the directory
-				today; {fmt(totalIconBlocked)} unique images blocked total ({fmt(
-					data.iconStats.pendingUrls
-				)} URLs still pending fetch / retry).
+				{m.mod_img_footer({ rendered: fmt(data.iconStats.tokensWithClearedIcon), blocked: fmt(totalIconBlocked), pending: fmt(data.iconStats.pendingUrls) })}
 			</p>
 		</section>
 	{/if}
@@ -132,29 +125,29 @@
 	{#if data.error}
 		<div class="text-center py-12">
 			<div class="text-red-500 text-lg mb-2">{data.error}</div>
-			<div class="ts-text-muted">Please try again in a moment.</div>
+			<div class="ts-text-muted">{m.home_grid_retry()}</div>
 		</div>
 	{:else if data.rows.length === 0}
 		<div class="p-8 rounded-xl border text-center ts-border-subtle ts-surface-panel">
-			<div class="text-lg ts-text-strong">No tokens are currently moderated.</div>
+			<div class="text-lg ts-text-strong">{m.mod_none_h()}</div>
 			<div class="mt-1 text-sm ts-text-muted">
-				Spot something that should be? Use the report link on any token detail page.
+				{m.mod_none_body()}
 			</div>
 		</div>
 	{:else}
 		<p class="text-sm mb-3 ts-text-muted">
-			{fmt(data.rows.length)} {data.rows.length === 1 ? 'token' : 'tokens'} hidden, newest first.
+			{data.rows.length === 1 ? m.mod_count_one({ count: fmt(data.rows.length) }) : m.mod_count_many({ count: fmt(data.rows.length) })}
 		</p>
 		<div class="overflow-x-auto rounded-xl border ts-border-subtle ts-surface-panel">
 			<table class="min-w-full text-sm">
 				<thead class="bg-slate-50 dark:bg-zinc-900/60 text-xs uppercase tracking-wider ts-text-muted">
 					<tr>
-						<th class="text-left font-medium px-4 py-3">Name</th>
-						<th class="text-left font-medium px-4 py-3">Symbol</th>
-						<th class="text-left font-medium px-4 py-3">Type</th>
-						<th class="text-left font-medium px-4 py-3">Reason</th>
-						<th class="text-left font-medium px-4 py-3">Hidden</th>
-						<th class="text-left font-medium px-4 py-3">Category ID</th>
+						<th class="text-left font-medium px-4 py-3">{m.mod_col_name()}</th>
+						<th class="text-left font-medium px-4 py-3">{m.mod_col_symbol()}</th>
+						<th class="text-left font-medium px-4 py-3">{m.mod_col_type()}</th>
+						<th class="text-left font-medium px-4 py-3">{m.mod_col_reason()}</th>
+						<th class="text-left font-medium px-4 py-3">{m.mod_col_hidden()}</th>
+						<th class="text-left font-medium px-4 py-3">{m.mod_col_category()}</th>
 					</tr>
 				</thead>
 				<tbody class="divide-y divide-slate-200 dark:divide-zinc-800">

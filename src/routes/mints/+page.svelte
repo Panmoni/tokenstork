@@ -1,4 +1,8 @@
 <script lang="ts">
+	// Aliased to `msg` — this file already uses `m` as the per-mint loop/param var.
+	import * as msg from '$lib/paraglide/messages';
+	import { localizeHref } from '$lib/paraglide/runtime';
+
 	let { data } = $props();
 
 	function tone(state: string): string {
@@ -15,10 +19,10 @@
 	// failed/abandoned have no destination.
 	function rowHref(m: typeof data.mints[number]): string | null {
 		if ((m.state === 'confirmed' || m.state === 'broadcast') && m.categoryHex) {
-			return `/token/${m.categoryHex}`;
+			return localizeHref(`/token/${m.categoryHex}`);
 		}
 		if (m.state === 'drafting' || m.state === 'signed') {
-			return `/mint?session=${m.id}`;
+			return localizeHref(`/mint?session=${m.id}`);
 		}
 		return null;
 	}
@@ -42,38 +46,38 @@
 </script>
 
 <svelte:head>
-	<title>Your mints — Token Stork</title>
+	<title>{msg.mints_meta_title()}</title>
 </svelte:head>
 
 <div class="max-w-4xl mx-auto px-4 py-8">
 	<div class="flex items-center justify-between mb-6">
-		<h1 class="text-3xl font-bold ts-text-strong">Your mints</h1>
+		<h1 class="text-3xl font-bold ts-text-strong">{msg.mints_h1()}</h1>
 		<a
-			href="/mint"
+			href={localizeHref('/mint')}
 			class="px-3 py-2 rounded bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold"
 		>
-			New mint →
+			{msg.mints_new()} →
 		</a>
 	</div>
 
 	{#if data.mints.length === 0}
 		<div class="rounded-xl border ts-border-subtle p-8 text-center ts-surface-panel">
-			<p class="ts-text-muted">You haven't minted any tokens yet.</p>
+			<p class="ts-text-muted">{msg.mints_empty()}</p>
 			<a
-				href="/mint"
+				href={localizeHref('/mint')}
 				class="inline-block mt-4 text-violet-600 dark:text-violet-400 hover:underline"
-			>Mint a CashToken →</a>
+			>{msg.mints_empty_cta()} →</a>
 		</div>
 	{:else}
 		<div class="rounded-xl border ts-border-subtle overflow-hidden ts-surface-panel">
 			<table class="w-full text-sm">
 				<thead class="text-xs font-semibold uppercase tracking-wider ts-text-muted border-b ts-border-subtle bg-slate-50 dark:bg-zinc-900/50">
 					<tr>
-						<th class="text-left px-4 py-3">When</th>
-						<th class="text-left px-4 py-3">Token</th>
-						<th class="text-left px-4 py-3">Type</th>
-						<th class="text-right px-4 py-3">Supply</th>
-						<th class="text-right px-4 py-3">State</th>
+						<th class="text-left px-4 py-3">{msg.mints_col_when()}</th>
+						<th class="text-left px-4 py-3">{msg.mints_col_token()}</th>
+						<th class="text-left px-4 py-3">{msg.mints_col_type()}</th>
+						<th class="text-right px-4 py-3">{msg.mints_col_supply()}</th>
+						<th class="text-right px-4 py-3">{msg.mints_col_state()}</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -96,7 +100,7 @@
 									<div class="font-semibold ts-text-strong">{m.ticker ?? '—'}</div>
 									<div class="text-xs ts-text-muted truncate max-w-[24ch]">{m.name ?? ''}</div>
 								{:else}
-									<span class="ts-text-faint italic">unnamed draft</span>
+									<span class="ts-text-faint italic">{msg.mints_unnamed()}</span>
 								{/if}
 							</td>
 							<td class="px-4 py-3 font-mono text-xs">{m.tokenType ?? '—'}</td>
@@ -119,17 +123,17 @@
 		<div class="mt-6 flex justify-between text-sm">
 			{#if data.offset > 0}
 				<a
-					href={`/mints?offset=${Math.max(0, data.offset - data.pageSize)}`}
+					href={localizeHref(`/mints?offset=${Math.max(0, data.offset - data.pageSize)}`)}
 					class="text-violet-600 dark:text-violet-400 hover:underline"
-				>← Newer</a>
+				>← {msg.ui_newer()}</a>
 			{:else}
 				<span></span>
 			{/if}
 			{#if data.hasMore}
 				<a
-					href={`/mints?offset=${data.offset + data.pageSize}`}
+					href={localizeHref(`/mints?offset=${data.offset + data.pageSize}`)}
 					class="text-violet-600 dark:text-violet-400 hover:underline"
-				>Older →</a>
+				>{msg.ui_older()} →</a>
 			{/if}
 		</div>
 	{/if}

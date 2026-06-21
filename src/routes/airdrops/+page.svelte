@@ -1,4 +1,7 @@
 <script lang="ts">
+	import * as m from '$lib/paraglide/messages';
+	import { localizeHref } from '$lib/paraglide/runtime';
+
 	let { data } = $props();
 
 	function tone(state: string): string {
@@ -12,45 +15,45 @@
 </script>
 
 <svelte:head>
-	<title>Your airdrops — Token Stork</title>
+	<title>{m.adl_meta_title()}</title>
 </svelte:head>
 
 <div class="max-w-4xl mx-auto px-4 py-8">
 	<div class="flex items-center justify-between mb-6">
-		<h1 class="text-3xl font-bold ts-text-strong">Your airdrops</h1>
+		<h1 class="text-3xl font-bold ts-text-strong">{m.adl_h1()}</h1>
 		<a
-			href="/airdrops/new"
+			href={localizeHref('/airdrops/new')}
 			class="px-3 py-2 rounded bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold"
 		>
-			New airdrop →
+			{m.adl_new()} →
 		</a>
 	</div>
 
 	{#if data.airdrops.length === 0}
 		<div class="rounded-xl border ts-border-subtle p-8 text-center ts-surface-panel">
-			<p class="ts-text-muted">You haven't started any airdrops yet.</p>
+			<p class="ts-text-muted">{m.adl_empty()}</p>
 			<a
-				href="/"
+				href={localizeHref('/')}
 				class="inline-block mt-4 text-violet-600 dark:text-violet-400 hover:underline"
-			>Browse the directory to find a token you hold →</a>
+			>{m.adl_empty_cta()} →</a>
 		</div>
 	{:else}
 		<div class="rounded-xl border ts-border-subtle overflow-hidden ts-surface-panel">
 			<table class="w-full text-sm">
 				<thead class="text-xs font-semibold uppercase tracking-wider ts-text-muted border-b ts-border-subtle bg-slate-50 dark:bg-zinc-900/50">
 					<tr>
-						<th class="text-left px-4 py-3">When</th>
-						<th class="text-left px-4 py-3">From → To holders of</th>
-						<th class="text-right px-4 py-3">Recipients</th>
-						<th class="text-left px-4 py-3">Mode</th>
-						<th class="text-right px-4 py-3">State</th>
+						<th class="text-left px-4 py-3">{m.adl_col_when()}</th>
+						<th class="text-left px-4 py-3">{m.adl_col_from_to()}</th>
+						<th class="text-right px-4 py-3">{m.adl_col_recipients()}</th>
+						<th class="text-left px-4 py-3">{m.adl_col_mode()}</th>
+						<th class="text-right px-4 py-3">{m.adl_col_state()}</th>
 					</tr>
 				</thead>
 				<tbody>
 					{#each data.airdrops as a (a.id)}
 						<tr class="border-b border-slate-100 dark:border-zinc-800/50 last:border-0 hover:bg-slate-50 dark:hover:bg-zinc-900/40">
 							<td class="px-4 py-3">
-								<a href={`/airdrops/${a.id}`} class="block">
+								<a href={localizeHref(`/airdrops/${a.id}`)} class="block">
 									<div class="text-xs ts-text-muted">{new Date(a.createdAt).toLocaleString()}</div>
 									<div class="font-mono text-[10px] truncate max-w-[10ch] ts-text-muted">{a.id.slice(0, 8)}</div>
 								</a>
@@ -74,17 +77,17 @@
 		<div class="mt-6 flex justify-between text-sm">
 			{#if data.offset > 0}
 				<a
-					href={`/airdrops?offset=${Math.max(0, data.offset - data.pageSize)}`}
+					href={localizeHref(`/airdrops?offset=${Math.max(0, data.offset - data.pageSize)}`)}
 					class="text-violet-600 dark:text-violet-400 hover:underline"
-				>← Newer</a>
+				>← {m.ui_newer()}</a>
 			{:else}
 				<span></span>
 			{/if}
 			{#if data.hasMore}
 				<a
-					href={`/airdrops?offset=${data.offset + data.pageSize}`}
+					href={localizeHref(`/airdrops?offset=${data.offset + data.pageSize}`)}
 					class="text-violet-600 dark:text-violet-400 hover:underline"
-				>Older →</a>
+				>{m.ui_older()} →</a>
 			{/if}
 		</div>
 	{/if}
