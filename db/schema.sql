@@ -1295,3 +1295,175 @@ CREATE INDEX IF NOT EXISTS bcmr_tokenstork_submissions_category_idx
 -- Filled rows get `bcmr_source='otr'`; their icon URIs are seeded into the
 -- icon pipeline exactly like on-chain ones.
 ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_otr_run_at TIMESTAMPTZ;
+
+-- ============================================================================
+-- BCMR Watchdog (docs/bcmr-watchdog-plan.md) — turn the per-hop history archive
+-- into an immutable, diffable, scorable, alertable record of every BCMR version.
+--
+-- M1 (this block): capture the resolved body + flat fields + authority address
+-- per version, at first observation, KEEP-ONCE (a later re-walk whose fetch now
+-- fails must never null a previously-captured snapshot — that immutability IS the
+-- product). The walker already fetches + sha256-verifies every locator-bearing
+-- hop's body; it simply discarded all but the latest. We now persist each.
+-- ============================================================================
+
+-- Verified/canonical body — populated ONLY when sha256(body) == content_hash AND
+-- the body is <= INLINE_BODY_CAP (256 KiB; see bcmr-onchain.rs). Larger verified
+-- bodies set body_oversize=true and leave body NULL — content_hash + the
+-- publisher URI / our /bcmr/<hash>.json mirror remain the durable pointer, so an
+-- attacker who rotates the head indefinitely can't amplify our storage by 8 MiB
+-- per dust hop.
+ALTER TABLE token_metadata_history ADD COLUMN IF NOT EXISTS body JSONB;
+-- Untrusted body for a sha256-MISMATCH hop (a publication whose body did NOT match
+-- its on-chain hash — the rug signature). Kept separate from `body` so readers can
+-- never confuse it for canonical; body_verified=false flags it. Also capped.
+ALTER TABLE token_metadata_history ADD COLUMN IF NOT EXISTS unverified_body JSONB;
+-- Flat fields parsed from whichever body we have (verified or unverified). Readers
+-- MUST gate trust on body_verified; these exist so the version-history timeline and
+-- change-event diffs render claimed identity per version without re-parsing JSON.
+ALTER TABLE token_metadata_history ADD COLUMN IF NOT EXISTS name        TEXT;
+ALTER TABLE token_metadata_history ADD COLUMN IF NOT EXISTS symbol      TEXT;
+ALTER TABLE token_metadata_history ADD COLUMN IF NOT EXISTS decimals    SMALLINT;
+ALTER TABLE token_metadata_history ADD COLUMN IF NOT EXISTS icon_uri    TEXT;
+ALTER TABLE token_metadata_history ADD COLUMN IF NOT EXISTS description TEXT;
+-- vout[0] controlling address of the carrying tx (authority key for this hop).
+-- Powers authority-key-movement detection in the trust score. NULL when BlockBook
+-- doesn't render it (degrades gracefully — see bcmr-onchain.rs risk note).
+ALTER TABLE token_metadata_history ADD COLUMN IF NOT EXISTS head_controller_addr TEXT;
+-- true = a verified body existed but exceeded INLINE_BODY_CAP, so `body` is NULL
+-- by design (not by failure). Lets readers distinguish "too big to archive inline"
+-- from "never captured".
+ALTER TABLE token_metadata_history
+  ADD COLUMN IF NOT EXISTS body_oversize BOOLEAN NOT NULL DEFAULT false;
+-- Live counter (NOT keep-once): consecutive re-walks whose fetch failed/mismatched
+-- since the last successful verify. Drives the wall-clock `version_pulled`
+-- hysteresis in M2 so a transient gateway blip doesn't cry "rug".
+ALTER TABLE token_metadata_history
+  ADD COLUMN IF NOT EXISTS consecutive_fetch_failures INTEGER NOT NULL DEFAULT 0;
+-- Wall-clock anchor for the pull threshold: when this hop's body last verified.
+ALTER TABLE token_metadata_history ADD COLUMN IF NOT EXISTS last_verified_at TIMESTAMPTZ;
+-- R5 audited escape hatch: keep-once is permanent EXCEPT a content-hash-validated,
+-- operator-initiated correction (admin path only — the walker NEVER writes these).
+-- A correction is only accepted when sha256(new_body) == content_hash, so it can
+-- never introduce a body that didn't match the on-chain commitment.
+ALTER TABLE token_metadata_history ADD COLUMN IF NOT EXISTS body_corrected_at TIMESTAMPTZ;
+ALTER TABLE token_metadata_history ADD COLUMN IF NOT EXISTS correction_reason TEXT;
+-- R3 idempotency anchor for pull/restore alert crossings (M2). Incremented each
+-- time a pulled head is restored, so a SUBSEQUENT genuine pull is a fresh crossing
+-- rather than a duplicate swallowed by the unique index. Lives on the head hop row.
+ALTER TABLE token_metadata_history
+  ADD COLUMN IF NOT EXISTS pull_epoch INTEGER NOT NULL DEFAULT 0;
+
+-- ============================================================================
+-- BCMR Watchdog M2 — append-only change-event log.
+--
+-- The walker detects and records every metadata mutation as a durable,
+-- queryable event; an M3 drainer dispatches undelivered rows to the operator
+-- webhook. Append-only + idempotent: a re-walk that re-observes the same hop
+-- emits nothing new (the partial unique indexes below absorb the duplicate via
+-- ON CONFLICT DO NOTHING).
+--
+-- Severity:  info  = a normal new publication;
+--            warning = needs an eyeball (authority key moved, max-hops hit);
+--            critical = rug signature (a publication whose body never matched
+--                       its on-chain hash, or the current head's body pulled).
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS bcmr_change_events (
+  id                BIGSERIAL   PRIMARY KEY,
+  category          BYTEA       NOT NULL REFERENCES tokens(category) ON DELETE CASCADE,
+  -- The carrying authchain tx. For max_hops_hit (a per-category walk outcome,
+  -- not a specific publication) this is the genesis txid sentinel.
+  authchain_tx      BYTEA       NOT NULL,
+  event_type        TEXT        NOT NULL
+                    CHECK (event_type IN ('new_version','version_mismatch',
+                                          'version_pulled','version_restored',
+                                          'authority_moved','max_hops_hit')),
+  severity          TEXT        NOT NULL CHECK (severity IN ('info','warning','critical')),
+  prev_content_hash BYTEA,                                  -- prior verified version's hash (NULL = first version)
+  new_content_hash  BYTEA,                                  -- this version's locator hash
+  prev_addr         TEXT,                                   -- prior authority controller address
+  new_addr          TEXT,                                   -- this hop's authority controller address
+  detail            JSONB,                                  -- field-level diff / context
+  block_height      INTEGER,
+  block_time        TIMESTAMPTZ,
+  -- R3: epoch of the pull/restore crossing (NULL for non-pull events). Part of
+  -- the pull/restore idempotency key so a restore→re-pull is a fresh alert.
+  pull_epoch        INTEGER,
+  detected_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  delivered_at      TIMESTAMPTZ,                            -- set by the M3 drainer on successful dispatch
+  delivery_attempts INTEGER     NOT NULL DEFAULT 0
+);
+
+-- Drainer queue: undelivered rows, oldest first.
+CREATE INDEX IF NOT EXISTS bcmr_change_events_undelivered_idx
+  ON bcmr_change_events (detected_at)
+  WHERE delivered_at IS NULL;
+
+-- Per-token audit / UI timeline.
+CREATE INDEX IF NOT EXISTS bcmr_change_events_category_idx
+  ON bcmr_change_events (category, detected_at DESC);
+
+-- Idempotency (the hard part). Version + authority events are one-per-hop:
+-- a re-walk re-observing the same authchain_tx must not re-alert.
+CREATE UNIQUE INDEX IF NOT EXISTS bcmr_change_events_hop_uniq_idx
+  ON bcmr_change_events (category, authchain_tx, event_type)
+  WHERE event_type IN ('new_version','version_mismatch','authority_moved');
+
+-- Pull/restore events are one-per-crossing: keyed by pull_epoch so a genuine
+-- restore→re-pull (epoch incremented) is a fresh, non-swallowed alert.
+CREATE UNIQUE INDEX IF NOT EXISTS bcmr_change_events_pull_uniq_idx
+  ON bcmr_change_events (category, authchain_tx, event_type, pull_epoch)
+  WHERE event_type IN ('version_pulled','version_restored');
+
+-- max_hops_hit is one-per-category-ever (a standing "investigate this chain"
+-- flag), so it doesn't re-fire every hourly walk.
+CREATE UNIQUE INDEX IF NOT EXISTS bcmr_change_events_maxhops_uniq_idx
+  ON bcmr_change_events (category)
+  WHERE event_type = 'max_hops_hit';
+
+-- ============================================================================
+-- BCMR Watchdog M3 — subscriptions + delivery.
+--
+-- Delivery is by a Rust drainer (workers/src/bin/bcmr-events-drain.rs) that
+-- POSTs undelivered bcmr_change_events to ONE operator-configured webhook
+-- (BCMR_WEBHOOK_URL, mirrors reportAlert.ts: HMAC-signed, journald-durable).
+-- bcmr_watch records per-holder subscriptions for a FUTURE per-channel fan-out
+-- (Telegram/email); in this phase they're recorded but not yet routed — the
+-- operator webhook is the sole live sink.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS bcmr_watch (
+  cashaddr   TEXT        NOT NULL REFERENCES users(cashaddr) ON DELETE CASCADE,
+  category   BYTEA       NOT NULL REFERENCES tokens(category) ON DELETE CASCADE,
+  -- Delivery channel the holder wants. 'operator' = counts toward the operator
+  -- feed only (today's behavior); 'telegram'/'email' reserved for the future
+  -- per-holder fan-out.
+  channel    TEXT        NOT NULL DEFAULT 'operator'
+                         CHECK (channel IN ('operator','telegram','email')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (cashaddr, category, channel)
+);
+
+CREATE INDEX IF NOT EXISTS bcmr_watch_category_idx ON bcmr_watch (category);
+
+-- Drainer heartbeat — operators alert on staleness like the other sync workers.
+ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS last_bcmr_events_drain_at TIMESTAMPTZ;
+
+-- ============================================================================
+-- BCMR Watchdog M4 — trust/stability profile (O(1) read surface).
+--
+-- A per-category summary the walker recomputes each walk from
+-- token_metadata_history + bcmr_change_events. The directory + detail page read
+-- a single row instead of aggregating history at list scale; the TS-side
+-- mapper (src/lib/server/bcmrTrust.ts) turns it into a tier/label/reasons badge.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS token_bcmr_profile (
+  category           BYTEA       PRIMARY KEY REFERENCES tokens(category) ON DELETE CASCADE,
+  version_count      INTEGER     NOT NULL DEFAULT 0,   -- distinct content_hash ever published
+  verified_count     INTEGER     NOT NULL DEFAULT 0,   -- verified history rows
+  total_count        INTEGER     NOT NULL DEFAULT 0,   -- all locator-bearing history rows
+  first_published_at TIMESTAMPTZ,                       -- earliest verified version
+  last_change_at     TIMESTAMPTZ,                       -- most recent verified version
+  authority_moved_at TIMESTAMPTZ,                       -- most recent authority_moved event
+  ever_pulled        BOOLEAN     NOT NULL DEFAULT false,-- a version_pulled ever fired
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);

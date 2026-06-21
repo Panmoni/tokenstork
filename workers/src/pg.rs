@@ -781,6 +781,13 @@ pub struct OnchainBcmrTarget {
 
 /// Pick up to `limit` categories for the on-chain walker. Priority:
 ///
+/// 0. **Fast lane (watchdog R1).** Categories whose latest verified version's
+///    head is CURRENTLY failing to re-fetch — a possible `version_pulled` (rug)
+///    in progress. Re-walked on a tight 1h gate regardless of the 72h
+///    metadata-staleness gate, so a pull is confirmed within hours, not the
+///    ~9 days a 72h cadence × 3-strike threshold would take. Bounded by a
+///    failure ceiling so a permanently-dead head (already alerted) eventually
+///    drops back to the normal cadence rather than being hammered forever.
 /// 1. Categories with NO `token_metadata` row at all (brand-new — never
 ///    walked).
 /// 2. Categories with `bcmr_source != 'onchain'` AND `fetched_at < now() -
@@ -816,6 +823,24 @@ pub async fn pick_bcmr_onchain_batch(
             m.fetched_at,
             m.bcmr_source,
             CASE
+              -- Priority 0: latest verified head currently failing to re-fetch.
+              -- Was verified before (last_verified_at not null) but now isn't,
+              -- and is due for a re-check (>1h since last attempt). Bounded by a
+              -- failure ceiling so a permanent pull stops being re-walked once
+              -- it has clearly been alerted.
+              WHEN EXISTS (
+                     SELECT 1 FROM token_metadata_history h
+                      WHERE h.category = t.category
+                        AND h.body_verified = false
+                        AND h.last_verified_at IS NOT NULL
+                        AND h.consecutive_fetch_failures BETWEEN 1 AND 48
+                        AND (h.fetched_at IS NULL
+                             OR h.fetched_at < now() - interval '1 hour')
+                        AND h.block_height = (
+                              SELECT MAX(h2.block_height)
+                                FROM token_metadata_history h2
+                               WHERE h2.category = t.category)
+                   ) THEN 0
               WHEN m.category IS NULL                         THEN 1
               WHEN m.bcmr_source IS DISTINCT FROM 'onchain'
                 AND (m.fetched_at IS NULL
@@ -916,6 +941,11 @@ pub async fn upsert_token_metadata_onchain(
 /// per locator-bearing hop; mismatched/unfetched bodies still get rows so
 /// operators can see "a publication was attempted at height X but body
 /// didn't verify".
+///
+/// The `body` / `unverified_body` / flat-field / `head_controller_addr`
+/// columns are captured at FIRST observation and KEPT-ONCE (a later re-walk
+/// whose fetch now fails never overwrites them — that immutability is the
+/// BCMR-watchdog product promise; see [`upsert_token_metadata_history`]).
 #[derive(Debug, Clone)]
 pub struct TokenMetadataHistoryWrite {
     pub category: Vec<u8>,
@@ -927,22 +957,98 @@ pub struct TokenMetadataHistoryWrite {
     pub body_verified: bool,
     pub body_size_bytes: Option<i32>,
     pub fetched_at: Option<chrono::DateTime<chrono::Utc>>,
+    // ── M1 watchdog: per-version snapshot (keep-once) ──────────────────────
+    /// Verified canonical body — `Some` only when sha256 matched AND the body
+    /// fit under the inline cap (else `body_oversize` is set and this is None).
+    pub body: Option<serde_json::Value>,
+    /// Untrusted body of a sha256-MISMATCH hop — kept separate so readers can
+    /// never mistake it for canonical (the rug-signature payload).
+    pub unverified_body: Option<serde_json::Value>,
+    pub name: Option<String>,
+    pub symbol: Option<String>,
+    pub decimals: Option<i16>,
+    pub icon_uri: Option<String>,
+    pub description: Option<String>,
+    /// vout[0] controlling authority address at this hop (normalized cashaddr).
+    pub head_controller_addr: Option<String>,
+    /// true = a verified body existed but exceeded the inline cap, so `body`
+    /// is deliberately None (distinguish "too big to archive" from "lost").
+    pub body_oversize: bool,
+}
+
+/// Result of an [`upsert_token_metadata_history`] write. Carries the state
+/// M2's change-event detection needs but that Postgres `RETURNING` cannot
+/// expose on its own (there is no `OLD` qualifier in a RETURNING clause): the
+/// prior `body_verified`, captured under the same `FOR UPDATE` row lock that
+/// serializes concurrent walker runs.
+#[derive(Debug, Clone)]
+pub struct HistoryUpsertOutcome {
+    /// true = this `(category, authchain_tx)` row did not exist before the write.
+    pub inserted: bool,
+    /// `body_verified` of the row BEFORE this write (None when newly inserted).
+    pub prev_body_verified: Option<bool>,
+    /// `consecutive_fetch_failures` AFTER this write (0 on a verify).
+    pub consecutive_fetch_failures: i32,
+    /// `pull_epoch` AFTER this write (M2 increments it on a restore).
+    pub pull_epoch: i32,
+    /// `last_verified_at` AFTER this write (the wall-clock anchor for the
+    /// `version_pulled` hysteresis). None if this version never verified.
+    pub last_verified_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 /// Upsert into `token_metadata_history` keyed on `(category, authchain_tx)`.
-/// On conflict, refresh the verification result + size + fetched_at — useful
-/// for "the body was unfetchable last time, now it works" transitions.
+///
+/// **Keep-once.** The captured snapshot columns (`body`, `unverified_body`,
+/// flat fields, `head_controller_addr`) use `COALESCE(existing, EXCLUDED)` so
+/// the FIRST non-null observation is permanent. A later re-walk whose fetch
+/// now fails passes NULLs and leaves the archived snapshot intact — the whole
+/// point of the watchdog. The only sanctioned overwrite is the audited,
+/// content-hash-validated operator correction path (admin-only; never here).
+///
+/// **Concurrency + transition detection.** A `SELECT … FOR UPDATE` reads and
+/// locks the prior row inside the same transaction as the upsert. This (a)
+/// serializes overlapping walker runs so the `consecutive_fetch_failures`
+/// read-modify-write can't double-count into a false `version_pulled`, and (b)
+/// hands M2 the prior `body_verified` (RETURNING can't, as it only exposes the
+/// post-update row).
 pub async fn upsert_token_metadata_history(
     pool: &PgPool,
     w: &TokenMetadataHistoryWrite,
-) -> Result<()> {
-    sqlx::query(
+) -> Result<HistoryUpsertOutcome> {
+    let mut tx: Transaction<'_, Postgres> = pool
+        .begin()
+        .await
+        .context("begin token_metadata_history tx")?;
+
+    // Lock + read the prior row (if any). Holds the row lock for the upsert.
+    let prev: Option<(bool, i32, i32)> = sqlx::query_as(
+        "SELECT body_verified, consecutive_fetch_failures, pull_epoch
+           FROM token_metadata_history
+          WHERE category = $1 AND authchain_tx = $2
+          FOR UPDATE",
+    )
+    .bind(&w.category)
+    .bind(&w.authchain_tx)
+    .fetch_optional(&mut *tx)
+    .await
+    .context("lock prior token_metadata_history row")?;
+
+    let inserted = prev.is_none();
+    let prev_body_verified = prev.as_ref().map(|p| p.0);
+
+    let post: (i32, i32, Option<chrono::DateTime<chrono::Utc>>) = sqlx::query_as(
         r#"
         INSERT INTO token_metadata_history
             (category, authchain_tx, block_height, block_time,
              content_hash, publication_uri,
-             body_verified, body_size_bytes, fetched_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+             body_verified, body_size_bytes, fetched_at,
+             body, unverified_body, name, symbol, decimals, icon_uri,
+             description, head_controller_addr, body_oversize,
+             consecutive_fetch_failures, last_verified_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+                $15, $16, $17, $18,
+                CASE WHEN $7 THEN 0 ELSE 1 END,
+                CASE WHEN $7 THEN now() ELSE NULL END)
         ON CONFLICT (category, authchain_tx) DO UPDATE SET
             block_height    = EXCLUDED.block_height,
             block_time      = EXCLUDED.block_time,
@@ -950,19 +1056,46 @@ pub async fn upsert_token_metadata_history(
             publication_uri = EXCLUDED.publication_uri,
             body_verified   = EXCLUDED.body_verified,
             body_size_bytes = EXCLUDED.body_size_bytes,
-            fetched_at      = EXCLUDED.fetched_at
+            fetched_at      = EXCLUDED.fetched_at,
+            -- keep-once: first non-null capture is permanent (immutability).
+            body                 = COALESCE(token_metadata_history.body, EXCLUDED.body),
+            unverified_body      = COALESCE(token_metadata_history.unverified_body, EXCLUDED.unverified_body),
+            name                 = COALESCE(token_metadata_history.name, EXCLUDED.name),
+            symbol               = COALESCE(token_metadata_history.symbol, EXCLUDED.symbol),
+            decimals             = COALESCE(token_metadata_history.decimals, EXCLUDED.decimals),
+            icon_uri             = COALESCE(token_metadata_history.icon_uri, EXCLUDED.icon_uri),
+            description          = COALESCE(token_metadata_history.description, EXCLUDED.description),
+            head_controller_addr = COALESCE(token_metadata_history.head_controller_addr, EXCLUDED.head_controller_addr),
+            -- latch: once a verified-but-oversize body was seen, stay flagged.
+            body_oversize        = token_metadata_history.body_oversize OR EXCLUDED.body_oversize,
+            -- live counter: reset on verify, else +1 (drives M2 pull hysteresis).
+            consecutive_fetch_failures = CASE WHEN EXCLUDED.body_verified THEN 0
+                ELSE token_metadata_history.consecutive_fetch_failures + 1 END,
+            -- wall-clock anchor: bump on verify, never null it otherwise.
+            last_verified_at = CASE WHEN EXCLUDED.body_verified THEN now()
+                ELSE token_metadata_history.last_verified_at END
+        RETURNING consecutive_fetch_failures, pull_epoch, last_verified_at
         "#,
     )
-    .bind(&w.category)
-    .bind(&w.authchain_tx)
-    .bind(w.block_height)
-    .bind(w.block_time)
-    .bind(&w.content_hash)
-    .bind(&w.publication_uri)
-    .bind(w.body_verified)
-    .bind(w.body_size_bytes)
-    .bind(w.fetched_at)
-    .execute(pool)
+    .bind(&w.category)              // $1
+    .bind(&w.authchain_tx)         // $2
+    .bind(w.block_height)          // $3
+    .bind(w.block_time)            // $4
+    .bind(&w.content_hash)         // $5
+    .bind(&w.publication_uri)      // $6
+    .bind(w.body_verified)         // $7
+    .bind(w.body_size_bytes)       // $8
+    .bind(w.fetched_at)            // $9
+    .bind(&w.body)                 // $10
+    .bind(&w.unverified_body)      // $11
+    .bind(&w.name)                 // $12
+    .bind(&w.symbol)               // $13
+    .bind(w.decimals)              // $14
+    .bind(&w.icon_uri)             // $15
+    .bind(&w.description)          // $16
+    .bind(&w.head_controller_addr) // $17
+    .bind(w.body_oversize)         // $18
+    .fetch_one(&mut *tx)
     .await
     .with_context(|| {
         format!(
@@ -971,6 +1104,336 @@ pub async fn upsert_token_metadata_history(
             bytes_to_hex(&w.authchain_tx)
         )
     })?;
+
+    tx.commit()
+        .await
+        .context("commit token_metadata_history tx")?;
+
+    Ok(HistoryUpsertOutcome {
+        inserted,
+        prev_body_verified,
+        consecutive_fetch_failures: post.0,
+        pull_epoch: post.1,
+        last_verified_at: post.2,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// BCMR Watchdog M2 — change-event detection helpers.
+// ---------------------------------------------------------------------------
+
+/// The prior latest verified version of a category, for diffing a new
+/// publication against. `content_hash` + the flat fields + the authority
+/// controller address as they were one version ago.
+#[derive(Debug, Clone)]
+pub struct PriorVersion {
+    pub content_hash: Vec<u8>,
+    pub fields: crate::bcmr_events::VersionFields,
+    pub controller_addr: Option<String>,
+}
+
+/// Fetch the most recent VERIFIED version of `category`, excluding the hop
+/// `exclude_tx` (the one we just wrote). Returns `None` when this is the first
+/// verified version. Ordered by block height (NULL/mempool last) then
+/// observation time so the "previous" version is well-defined even for
+/// same-block or mempool hops.
+pub async fn get_prior_verified_version(
+    pool: &PgPool,
+    category: &[u8],
+    exclude_tx: &[u8],
+) -> Result<Option<PriorVersion>> {
+    #[allow(clippy::type_complexity)]
+    let row: Option<(
+        Vec<u8>,
+        Option<String>,
+        Option<String>,
+        Option<i16>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    )> = sqlx::query_as(
+        r#"
+        SELECT content_hash, name, symbol, decimals, icon_uri, description,
+               head_controller_addr
+          FROM token_metadata_history
+         WHERE category = $1 AND body_verified AND authchain_tx <> $2
+         ORDER BY block_height DESC NULLS LAST, observed_at DESC
+         LIMIT 1
+        "#,
+    )
+    .bind(category)
+    .bind(exclude_tx)
+    .fetch_optional(pool)
+    .await
+    .context("get_prior_verified_version")?;
+
+    Ok(row.map(
+        |(content_hash, name, symbol, decimals, icon_uri, description, controller_addr)| {
+            PriorVersion {
+                content_hash,
+                fields: crate::bcmr_events::VersionFields {
+                    name,
+                    symbol,
+                    decimals,
+                    icon_uri,
+                    description,
+                },
+                controller_addr,
+            }
+        },
+    ))
+}
+
+/// One change-event row to append. `event_type` / `severity` are the
+/// `as_str()` forms from [`crate::bcmr_events`].
+#[derive(Debug, Clone)]
+pub struct BcmrChangeEventWrite {
+    pub category: Vec<u8>,
+    pub authchain_tx: Vec<u8>,
+    pub event_type: &'static str,
+    pub severity: &'static str,
+    pub prev_content_hash: Option<Vec<u8>>,
+    pub new_content_hash: Option<Vec<u8>>,
+    pub prev_addr: Option<String>,
+    pub new_addr: Option<String>,
+    pub detail: Option<serde_json::Value>,
+    pub block_height: Option<i32>,
+    pub block_time: Option<chrono::DateTime<chrono::Utc>>,
+    pub pull_epoch: Option<i32>,
+}
+
+/// Append a change event, idempotently. Returns `true` if a new row was
+/// inserted, `false` if a matching event already existed (the partial unique
+/// indexes deduplicate re-walks; `ON CONFLICT DO NOTHING` swallows the dup).
+pub async fn insert_bcmr_change_event(pool: &PgPool, e: &BcmrChangeEventWrite) -> Result<bool> {
+    let inserted: Option<(i64,)> = sqlx::query_as(
+        r#"
+        INSERT INTO bcmr_change_events
+            (category, authchain_tx, event_type, severity,
+             prev_content_hash, new_content_hash, prev_addr, new_addr,
+             detail, block_height, block_time, pull_epoch)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        ON CONFLICT DO NOTHING
+        RETURNING id
+        "#,
+    )
+    .bind(&e.category)
+    .bind(&e.authchain_tx)
+    .bind(e.event_type)
+    .bind(e.severity)
+    .bind(&e.prev_content_hash)
+    .bind(&e.new_content_hash)
+    .bind(&e.prev_addr)
+    .bind(&e.new_addr)
+    .bind(&e.detail)
+    .bind(e.block_height)
+    .bind(e.block_time)
+    .bind(e.pull_epoch)
+    .fetch_optional(pool)
+    .await
+    .with_context(|| {
+        format!(
+            "insert_bcmr_change_event {} for {}",
+            e.event_type,
+            bytes_to_hex(&e.category)
+        )
+    })?;
+    Ok(inserted.is_some())
+}
+
+/// Whether a `version_pulled` event already exists for this head + pull epoch.
+/// Used to decide whether a re-verify is a genuine restore (a pull was alerted)
+/// versus a routine verify after a sub-threshold blip (no alert was sent, so no
+/// restore should be either).
+pub async fn pulled_event_exists(
+    pool: &PgPool,
+    category: &[u8],
+    authchain_tx: &[u8],
+    pull_epoch: i32,
+) -> Result<bool> {
+    let row: Option<(i64,)> = sqlx::query_as(
+        r#"
+        SELECT id FROM bcmr_change_events
+         WHERE category = $1 AND authchain_tx = $2
+           AND event_type = 'version_pulled' AND pull_epoch = $3
+         LIMIT 1
+        "#,
+    )
+    .bind(category)
+    .bind(authchain_tx)
+    .bind(pull_epoch)
+    .fetch_optional(pool)
+    .await
+    .context("pulled_event_exists")?;
+    Ok(row.is_some())
+}
+
+/// Increment a head hop's `pull_epoch` after a restore so the NEXT genuine pull
+/// is a fresh crossing (a new, non-swallowed alert).
+pub async fn bump_pull_epoch(pool: &PgPool, category: &[u8], authchain_tx: &[u8]) -> Result<()> {
+    sqlx::query(
+        "UPDATE token_metadata_history
+            SET pull_epoch = pull_epoch + 1
+          WHERE category = $1 AND authchain_tx = $2",
+    )
+    .bind(category)
+    .bind(authchain_tx)
+    .execute(pool)
+    .await
+    .context("bump_pull_epoch")?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// BCMR Watchdog M3 — event delivery (drainer) helpers.
+// ---------------------------------------------------------------------------
+
+/// One undelivered change event, for the drainer to dispatch. Column names
+/// match the table so `FromRow` maps them directly.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct UndeliveredEvent {
+    pub id: i64,
+    pub category: Vec<u8>,
+    pub authchain_tx: Vec<u8>,
+    pub event_type: String,
+    pub severity: String,
+    pub prev_content_hash: Option<Vec<u8>>,
+    pub new_content_hash: Option<Vec<u8>>,
+    pub prev_addr: Option<String>,
+    pub new_addr: Option<String>,
+    pub detail: Option<serde_json::Value>,
+    pub block_height: Option<i32>,
+    pub block_time: Option<chrono::DateTime<chrono::Utc>>,
+    pub pull_epoch: Option<i32>,
+    pub detected_at: chrono::DateTime<chrono::Utc>,
+    pub delivery_attempts: i32,
+}
+
+/// Pick undelivered events for dispatch, oldest first, skipping those that have
+/// already exhausted `max_attempts` retries (a dead webhook is given up on
+/// rather than retried forever).
+pub async fn pick_undelivered_events(
+    pool: &PgPool,
+    max_attempts: i32,
+    limit: i32,
+) -> Result<Vec<UndeliveredEvent>> {
+    let rows = sqlx::query_as::<_, UndeliveredEvent>(
+        r#"
+        SELECT id, category, authchain_tx, event_type, severity,
+               prev_content_hash, new_content_hash, prev_addr, new_addr,
+               detail, block_height, block_time, pull_epoch, detected_at,
+               delivery_attempts
+          FROM bcmr_change_events
+         WHERE delivered_at IS NULL AND delivery_attempts < $1
+         ORDER BY detected_at ASC
+         LIMIT $2
+        "#,
+    )
+    .bind(max_attempts)
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+    .context("pick_undelivered_events")?;
+    Ok(rows)
+}
+
+/// Mark an event delivered (idempotent: the `delivered_at IS NULL` guard makes
+/// a double-mark a no-op).
+pub async fn mark_event_delivered(pool: &PgPool, id: i64) -> Result<()> {
+    sqlx::query(
+        "UPDATE bcmr_change_events SET delivered_at = now()
+          WHERE id = $1 AND delivered_at IS NULL",
+    )
+    .bind(id)
+    .execute(pool)
+    .await
+    .context("mark_event_delivered")?;
+    Ok(())
+}
+
+/// Record a failed delivery attempt (bumps the retry counter / backoff gate).
+pub async fn mark_event_delivery_failed(pool: &PgPool, id: i64) -> Result<()> {
+    sqlx::query(
+        "UPDATE bcmr_change_events SET delivery_attempts = delivery_attempts + 1
+          WHERE id = $1",
+    )
+    .bind(id)
+    .execute(pool)
+    .await
+    .context("mark_event_delivery_failed")?;
+    Ok(())
+}
+
+/// Run-level mutex for the event drainer (so a manual run can't double-deliver
+/// alongside the timer). Distinct key from the walker / icons locks.
+pub async fn try_acquire_bcmr_events_lock(pool: &PgPool) -> Result<bool> {
+    let row: (bool,) = sqlx::query_as("SELECT pg_try_advisory_lock($1)")
+        .bind(BCMR_EVENTS_LOCK_KEY)
+        .fetch_one(pool)
+        .await
+        .context("acquiring bcmr-events-drain advisory lock")?;
+    Ok(row.0)
+}
+
+const BCMR_EVENTS_LOCK_KEY: i64 = 0x0042_434D_5244_524E; // ~"BCMRDRN"
+
+/// Touch the drainer heartbeat. Operators alert on staleness of this column.
+pub async fn mark_bcmr_events_drain_run(pool: &PgPool) -> Result<()> {
+    sqlx::query(
+        "UPDATE sync_state
+            SET last_bcmr_events_drain_at = now(), updated_at = now()
+          WHERE id = 1",
+    )
+    .execute(pool)
+    .await
+    .context("mark_bcmr_events_drain_run")?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// BCMR Watchdog M4 — trust/stability profile recompute.
+// ---------------------------------------------------------------------------
+
+/// Recompute and upsert a category's `token_bcmr_profile` summary from its
+/// history + change events. Called by the walker after processing a category
+/// with at least one locator-bearing hop, so the directory + detail page read
+/// one row instead of aggregating history at list scale. Idempotent.
+pub async fn recompute_token_bcmr_profile(pool: &PgPool, category: &[u8]) -> Result<()> {
+    sqlx::query(
+        r#"
+        INSERT INTO token_bcmr_profile
+            (category, version_count, verified_count, total_count,
+             first_published_at, last_change_at, authority_moved_at,
+             ever_pulled, updated_at)
+        SELECT
+            $1,
+            COUNT(DISTINCT content_hash),
+            COUNT(*) FILTER (WHERE body_verified),
+            COUNT(*),
+            MIN(COALESCE(block_time, observed_at)) FILTER (WHERE body_verified),
+            MAX(COALESCE(block_time, observed_at)) FILTER (WHERE body_verified),
+            (SELECT MAX(detected_at) FROM bcmr_change_events e
+              WHERE e.category = $1 AND e.event_type = 'authority_moved'),
+            EXISTS (SELECT 1 FROM bcmr_change_events e
+                     WHERE e.category = $1 AND e.event_type = 'version_pulled'),
+            now()
+          FROM token_metadata_history
+         WHERE category = $1
+        ON CONFLICT (category) DO UPDATE SET
+            version_count      = EXCLUDED.version_count,
+            verified_count     = EXCLUDED.verified_count,
+            total_count        = EXCLUDED.total_count,
+            first_published_at = EXCLUDED.first_published_at,
+            last_change_at     = EXCLUDED.last_change_at,
+            authority_moved_at = EXCLUDED.authority_moved_at,
+            ever_pulled        = EXCLUDED.ever_pulled,
+            updated_at         = EXCLUDED.updated_at
+        "#,
+    )
+    .bind(category)
+    .execute(pool)
+    .await
+    .with_context(|| format!("recompute_token_bcmr_profile for {}", bytes_to_hex(category)))?;
     Ok(())
 }
 
@@ -2722,6 +3185,27 @@ pub async fn try_acquire_icons_lock(pool: &PgPool) -> Result<bool> {
 /// hash of "tokenstork-sync-icons" so it doesn't collide with any other
 /// advisory-lock user in this DB.
 const SYNC_ICONS_LOCK_KEY: i64 = 0x547F_69C0_4373_4F4B; // ~"TstorkSI"
+
+/// Try to acquire the exclusive run-level advisory lock for the on-chain BCMR
+/// walker. Returns `Ok(true)` if acquired, `Ok(false)` if another run already
+/// holds it. Released automatically on session disconnect (pool shutdown at
+/// end of run). Without this, a manual `bcmr-onchain` run overlapping the
+/// systemd timer would let two walks do the `consecutive_fetch_failures`
+/// read-modify-write concurrently and double-count into a false
+/// `version_pulled` alert (watchdog R4). Distinct key from the per-call
+/// BlockBook pacing lock (987654321) — that one is a different concern.
+pub async fn try_acquire_bcmr_onchain_lock(pool: &PgPool) -> Result<bool> {
+    let row: (bool,) = sqlx::query_as("SELECT pg_try_advisory_lock($1)")
+        .bind(BCMR_ONCHAIN_LOCK_KEY)
+        .fetch_one(pool)
+        .await
+        .context("acquiring bcmr-onchain advisory lock")?;
+    Ok(row.0)
+}
+
+/// Stable lock key for `try_acquire_bcmr_onchain_lock`. Hand-picked so it
+/// doesn't collide with `SYNC_ICONS_LOCK_KEY` or the BlockBook pacing lock.
+const BCMR_ONCHAIN_LOCK_KEY: i64 = 0x42_434D_524F_4E31; // ~"BCMRON1"
 
 /// Touch the `sync_state.last_icons_run_at` heartbeat. Operator alerts off
 /// staleness of this column the way they do for `last_tail_run_at`.

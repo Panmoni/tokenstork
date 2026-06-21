@@ -23,6 +23,8 @@ import { error } from '@sveltejs/kit';
 import { query, hexFromBytes, bytesFromHex } from '$lib/server/db';
 import { firstNRankFor } from '$lib/server/firstN';
 import { bcmrFromBody, fetchCauldron } from '$lib/server/external';
+import { scoreBcmrTrust, type BcmrProfileRow } from '$lib/server/bcmrTrust';
+import { getBcmrVersions } from '$lib/server/bcmrVersions';
 import { fetchCrc20Detail } from '$lib/server/crc20';
 import { computeMcapTvlThresholdSats } from '$lib/server/mcapThreshold';
 import { getVoteCounts, getLeaderboardStandings } from '$lib/server/votes';
@@ -69,6 +71,14 @@ interface TokenRow {
 	gini_coefficient: number | null;
 	verified_at: Date | null;
 	is_moderated: boolean;
+	// BCMR trust/stability profile (watchdog M4).
+	bcmr_version_count: number | null;
+	bcmr_verified_count: number | null;
+	bcmr_total_count: number | null;
+	bcmr_first_published_at: Date | null;
+	bcmr_last_change_at: Date | null;
+	bcmr_authority_moved_at: Date | null;
+	bcmr_ever_pulled: boolean | null;
 }
 
 interface HolderRow {
@@ -267,11 +277,19 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 				s.is_fully_burned,
 				s.gini_coefficient,
 				s.verified_at,
-				(mod.category IS NOT NULL) AS is_moderated
+				(mod.category IS NOT NULL) AS is_moderated,
+				bp.version_count      AS bcmr_version_count,
+				bp.verified_count     AS bcmr_verified_count,
+				bp.total_count        AS bcmr_total_count,
+				bp.first_published_at AS bcmr_first_published_at,
+				bp.last_change_at     AS bcmr_last_change_at,
+				bp.authority_moved_at AS bcmr_authority_moved_at,
+				bp.ever_pulled        AS bcmr_ever_pulled
 			   FROM tokens t
 			   LEFT JOIN token_metadata  m   ON m.category  = t.category
 			   LEFT JOIN token_state     s   ON s.category  = t.category
 			   LEFT JOIN token_moderation mod ON mod.category = t.category
+			   LEFT JOIN token_bcmr_profile bp ON bp.category = t.category
 			   LEFT JOIN icon_url_scan ius ON ius.icon_uri = m.icon_uri
 			   LEFT JOIN icon_moderation imo_clear
 			     ON imo_clear.content_hash = ius.content_hash AND imo_clear.state = 'cleared'
@@ -299,6 +317,24 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 	// BCMR rich-card data — read from the cached `bcmr_body` column.
 	// Synchronous + zero I/O.
 	const bcmr = bcmrFromBody(row.bcmr_body, category);
+
+	// BCMR trust/stability badge (watchdog M4). Pure mapping over the
+	// walker-maintained profile summary; zero I/O.
+	const toSec = (d: Date | null): number | null =>
+		d ? Math.floor(d.getTime() / 1000) : null;
+	const bcmrProfile: BcmrProfileRow | null =
+		row.bcmr_total_count != null
+			? {
+					versionCount: row.bcmr_version_count ?? 0,
+					verifiedCount: row.bcmr_verified_count ?? 0,
+					totalCount: row.bcmr_total_count ?? 0,
+					firstPublishedAt: toSec(row.bcmr_first_published_at),
+					lastChangeAt: toSec(row.bcmr_last_change_at),
+					authorityMovedAt: toSec(row.bcmr_authority_moved_at),
+					everPulled: row.bcmr_ever_pulled ?? false
+				}
+			: null;
+	const bcmrTrust = scoreBcmrTrust(bcmrProfile, Math.floor(Date.now() / 1000));
 
 	// Resolve decimals (metadata → BCMR → 0) before the main batch so
 	// fetchCauldron (which needs decimals) can fire concurrently.
@@ -907,9 +943,18 @@ export const load: PageServerLoad = async ({ params, fetch, url, locals }) => {
 	// raw Promises — SvelteKit's data_serializer.js detects thenables
 	// automatically and serializes them as deferred IDs, streaming their
 	// resolved values as chunks to the client.
+	// BCMR version-history timeline (watchdog M5) — deferred; a small history
+	// query streamed in after the initial HTML, like tvlRank/holdersRank.
+	const bcmrVersionsPromise = getBcmrVersions(categoryBytes).catch((err) => {
+		console.error('[token detail] bcmr versions query failed:', err);
+		return [];
+	});
+
 	return {
 		token,
 		bcmr: bcmrData,
+		bcmrTrust,
+		bcmrVersions: bcmrVersionsPromise,
 		bchPriceUSD,
 		tier1: tier1Promise,
 		tier2: tier2Promise,

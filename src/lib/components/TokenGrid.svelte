@@ -247,6 +247,10 @@ onDestroy(() => {
 							{stripEmoji(token.name) || stripEmoji(token.crc20Name) || '—'}
 							{#if token.symbol}<span class="ml-2 text-xs text-slate-500 font-mono">{stripEmoji(token.symbol)}</span>{:else if token.crc20Symbol}<span class="ml-2 text-xs text-slate-500 font-mono" title={m.grid_crc20_symbol_title()}>{token.crc20Symbol}</span>{/if}
 							<span class="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold ts-text-body ts-surface-chip" title={m.grid_type_title()}>{token.tokenType}</span>
+							<!-- BCMR watchdog (M4): warn on rug-adjacent metadata. -->
+							{#if token.bcmrSuspect}
+								<span class="ml-2 text-[10px] font-semibold text-red-600 dark:text-red-400" title={m.grid_bcmr_suspect_title()}>⚠ BCMR</span>
+							{/if}
 							{#if token.firstNRank != null}
 								{@const label = firstNLabel(token.firstNRank)}
 								<span
@@ -337,6 +341,10 @@ onDestroy(() => {
 							<span class="px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-xs font-medium">
 								{token.tokenType}
 							</span>
+							<!-- BCMR watchdog (M4): warn on rug-adjacent metadata. -->
+							{#if token.bcmrSuspect}
+								<span class="ml-2 text-[10px] font-semibold text-red-600 dark:text-red-400" title={m.grid_bcmr_suspect_title()}>⚠ BCMR</span>
+							{/if}
 							{#if token.firstNRank != null}
 								<span
 									class="px-2 py-0.5 rounded bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-xs font-semibold"

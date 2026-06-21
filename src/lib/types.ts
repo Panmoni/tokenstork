@@ -94,6 +94,14 @@ export interface TokenApiRow {
 	/// has nothing — without this, CRC-20 tokens with no BCMR show as
 	/// "—" in the directory despite the chain carrying a real name.
 	crc20Name: string | null;
+
+	// BCMR watchdog (M4): true when this token's metadata-stability profile
+	// scores as `suspicious` (current metadata pulled, a publication that never
+	// verified, or a recent authority-key move). Optional — set by the SSR
+	// directory load; the /api/tokens pagination path leaves it undefined
+	// (treated as not-suspect). Drives a compact ⚠ flag on the directory card;
+	// the full tier badge lives on the token detail page.
+	bcmrSuspect?: boolean;
 }
 
 export interface TokensResponse {

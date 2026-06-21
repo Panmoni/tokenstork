@@ -7,6 +7,8 @@
 
 pub mod bchn;
 pub mod bcmr;
+pub mod bcmr_dispatch;
+pub mod bcmr_events;
 pub mod bcmr_onchain;
 pub mod blockbook;
 pub mod blocks;

@@ -468,6 +468,13 @@ pub struct BlockbookTxVout {
     pub spent_index: Option<u32>,
     #[serde(default)]
     pub value: Option<String>,
+    /// Decoded address(es) controlling this output, as BlockBook renders them.
+    /// The BCMR walker reads `vout[0].addresses[0]` as the authchain hop's
+    /// controlling authority key, for key-movement detection (M1 watchdog).
+    /// `None` when BlockBook can't decode the script (e.g. an exotic
+    /// token-prefixed output) — capture then degrades gracefully to NULL.
+    #[serde(default)]
+    pub addresses: Option<Vec<String>>,
     #[serde(rename = "tokenData", default)]
     pub token_data: Option<TokenData>,
 }

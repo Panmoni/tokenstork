@@ -30,7 +30,7 @@ use anyhow::{Context, Result, anyhow};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
-use crate::blockbook::{BlockbookClient, BlockbookTx};
+use crate::blockbook::{BlockbookClient, BlockbookTx, normalize_address};
 use crate::icons::resolve_icon_url;
 use crate::safe_http::{read_body_capped, validate_url_scheme};
 
@@ -180,6 +180,12 @@ pub struct AuthchainHop {
     pub locator: Option<BcmrLocator>,
     /// True iff this is the current authchain head (vout[0] is unspent).
     pub is_head: bool,
+    /// vout[0] controlling address (the authority key holding the identity
+    /// output at this hop), normalized to bare cashaddr. `None` when BlockBook
+    /// didn't render a usable address (exotic/token-prefixed script or an
+    /// OP_RETURN disassembly) — authority-key-movement scoring degrades
+    /// gracefully to "unknown" rather than failing the walk.
+    pub controller_addr: Option<String>,
 }
 
 /// Result of a successful (non-error) authchain walk.
@@ -236,12 +242,21 @@ pub async fn walk_authchain(
             .ok_or_else(|| anyhow!("tx {} has no vout[0]", &tx.txid[..16]))?;
         let is_head = v0.spent_tx_id.is_none();
 
+        // Controlling authority key for this hop = the address holding vout[0].
+        // BlockBook may render multiple (multisig) or none (undecodable token
+        // script); take the first decodable cashaddr, else None.
+        let controller_addr = v0
+            .addresses
+            .as_ref()
+            .and_then(|a| a.iter().find_map(|s| normalize_address(s)));
+
         hops.push(AuthchainHop {
             txid: txid_bytes,
             block_height: tx.block_height,
             block_time: tx.block_time,
             locator,
             is_head,
+            controller_addr,
         });
 
         if is_head {
@@ -347,12 +362,64 @@ pub async fn fetch_and_verify_bcmr(
 }
 
 // ---------------------------------------------------------------------------
+// Body-archival routing (watchdog M1)
+// ---------------------------------------------------------------------------
+
+/// Where a fetched BCMR body is archived in `token_metadata_history`, given its
+/// verification result and byte size. Pure so it's unit-tested; the walker
+/// applies it after a successful JSON parse to decide which column (if any)
+/// receives the body.
+///
+/// The inline cap (R8) bounds per-hop storage: an attacker controlling the
+/// authchain can rotate the head indefinitely, so an uncapped per-version body
+/// is a write-amplifier. Verified-but-oversize is recorded as a flag (the
+/// content_hash + URI remain the durable pointer); mismatch-oversize stores
+/// nothing inline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BodyArchive {
+    /// Verified body ≤ cap → store inline in `body`.
+    VerifiedInline,
+    /// Verified body > cap → `body_oversize=true`, `body` left NULL.
+    VerifiedOversize,
+    /// Mismatch body ≤ cap → store inline in `unverified_body`.
+    UnverifiedInline,
+    /// Mismatch body > cap → store nothing inline.
+    UnverifiedTooLarge,
+}
+
+/// Decide archival routing for a parsed body of `size` bytes.
+pub fn body_archive(verified: bool, size: usize, cap: usize) -> BodyArchive {
+    match (verified, size <= cap) {
+        (true, true) => BodyArchive::VerifiedInline,
+        (true, false) => BodyArchive::VerifiedOversize,
+        (false, true) => BodyArchive::UnverifiedInline,
+        (false, false) => BodyArchive::UnverifiedTooLarge,
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn body_archive_routes_by_verification_and_size() {
+        let cap = 256 * 1024;
+        // Verified, under/at/over the cap.
+        assert_eq!(body_archive(true, 0, cap), BodyArchive::VerifiedInline);
+        assert_eq!(body_archive(true, cap, cap), BodyArchive::VerifiedInline);
+        assert_eq!(body_archive(true, cap + 1, cap), BodyArchive::VerifiedOversize);
+        // Mismatch, under/at/over the cap → never lands in the canonical `body`.
+        assert_eq!(body_archive(false, 0, cap), BodyArchive::UnverifiedInline);
+        assert_eq!(body_archive(false, cap, cap), BodyArchive::UnverifiedInline);
+        assert_eq!(
+            body_archive(false, cap + 1, cap),
+            BodyArchive::UnverifiedTooLarge
+        );
+    }
 
     /// Helper: assemble a valid BCMR locator script with a direct-push URI.
     fn make_script(uri: &[u8], hash: &[u8; 32]) -> Vec<u8> {

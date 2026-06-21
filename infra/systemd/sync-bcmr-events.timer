@@ -1,0 +1,18 @@
+[Unit]
+Description=Drain tokenstork BCMR-watchdog change events to the operator webhook
+
+[Timer]
+# First run 5 min after boot, every 3 min thereafter. Change events are rare
+# (a metadata mutation is an occasional, notable on-chain act), so a tight
+# cadence costs almost nothing and keeps alert latency low — a fresh
+# version_pulled / version_mismatch reaches the operator within minutes of the
+# walker recording it. A dead webhook is retried up to BCMR_EVENTS_MAX_ATTEMPTS
+# times across runs, then given up on (the event stays in the table for audit).
+OnBootSec=5min
+OnUnitActiveSec=3min
+Persistent=true
+RandomizedDelaySec=30s
+Unit=sync-bcmr-events.service
+
+[Install]
+WantedBy=timers.target
