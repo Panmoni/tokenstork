@@ -3,7 +3,6 @@
 - Test minting page again, all 3 modes
 - Test airdrops
 - Operational hardening
-- Harden icon decode against allocation bombs (subprocess isolation)
 - Token claim / management
 - One-click "submit to TokenStork BCMR registry"
 - BCMR support workflow for existing-but-unregistered tokens
@@ -14,6 +13,7 @@
 - social features like viibclub, short updates, hivemind voting
 - add ticketing functionality https://github.com/Panmoni/ticket
 - Commenting and discussions?
+- fully review Spanish translations
 - add more languages
 
 ## Marketing
@@ -22,4 +22,4 @@
 - unique and interesting distribution tools to get more holders
 - Guidance on where to buy BCH and what wallet to use
 - SEO pass
-- do some research to create an SEO and marketing strategy for the site
+- do some research to create an SEO and marketing strategy for the site, see claude
