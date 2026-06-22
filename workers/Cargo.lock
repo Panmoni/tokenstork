@@ -3569,6 +3569,7 @@ dependencies = [
  "hickory-resolver",
  "hmac",
  "image",
+ "libc",
  "num-bigint",
  "num-traits",
  "percent-encoding",

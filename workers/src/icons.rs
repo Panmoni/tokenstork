@@ -520,6 +520,273 @@ pub fn transcode_to_webp(bytes: &[u8]) -> Result<Vec<u8>> {
 }
 
 // ---------------------------------------------------------------------------
+// Subprocess decode isolation
+// ---------------------------------------------------------------------------
+
+/// Result of a subprocessed decode + encode. Serialised as JSON and piped
+/// between the forked child and the parent process.
+///
+/// `vision_bytes` is `None` for raster inputs (original bytes fed to Vision
+/// by the caller), `Some` for SVG inputs (the rasterized PNG that Vision
+/// needs instead of the raw SVG).
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct SubprocessDecodeResult {
+    pub webp_bytes: Vec<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vision_bytes: Option<Vec<u8>>,
+    pub source_format: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Maximum address space (RSS + swap) the decode subprocess may consume.
+/// 512 MiB is 8× the 64 MiB pixel-buffer cap — enough headroom for libpng
+/// + libjpeg temporary allocations on a legitimately large but safe icon,
+/// too small to accommodate a decompression bomb that survived the header
+/// probe and 64 MiB pixel cap.
+const SUBPROCESS_RLIMIT_AS_BYTES: u64 = 512 * 1024 * 1024;
+
+/// Error returned when the decode subprocess is killed by the OOM killer
+/// (SIGKILL with no clean pipe write). Distinct from decode/encode errors
+/// that write a structured error message through the pipe.
+#[derive(Debug, Clone)]
+pub struct SubprocessOom;
+
+impl std::fmt::Display for SubprocessOom {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "decode subprocess OOM-killed")
+    }
+}
+
+impl std::error::Error for SubprocessOom {}
+
+/// Run [`decode_image`] + [`encode_to_webp`] inside a memory-capped
+/// subprocess. If the subprocess is killed by the Linux OOM killer the
+/// parent receives `Err(SubprocessOom)` instead of crashing — the worker
+/// continues and the URL is left pending for the normal backoff retry.
+///
+/// The subprocess is capped with `prlimit(RLIMIT_AS, 512 MiB)` before any
+/// decode work starts. This bounds all allocations (heap, mmap, stack)
+/// in the child address space, so a pathological input that slips past
+/// the header probe and 64 MiB pixel cap triggers an OOM *in the child*
+/// rather than an uncatchable SIGABRT in the parent.
+///
+/// Only available on Unix; panics on non-Unix platforms.
+#[cfg(unix)]
+pub fn decode_via_subprocess(bytes: &[u8]) -> Result<SubprocessDecodeResult, SubprocessOom> {
+    use std::io::Write;
+
+    // Pipe pair: [0] = read end (parent), [1] = write end (child)
+    let mut pipefd = [0i32, 0i32];
+    // Safety: pipe(2) is async-signal-safe; we call it in a fresh process
+    // with no threads, so there are no signal handlers that could interfere.
+    unsafe {
+        if libc::pipe(pipefd.as_mut_ptr()) != 0 {
+            return Err(std::io::Error::last_os_error())
+                .context("pipe(2) for subprocess decode")
+                .map_err(|_| SubprocessOom);
+        }
+    }
+
+    let read_fd = pipefd[0];
+    let write_fd = pipefd[1];
+
+    // Fork the subprocess. This is async-signal-safe per POSIX.
+    let pid = unsafe { libc::fork() };
+    if pid < 0 {
+        // Fork failed — close pipes and bail.
+        unsafe {
+            libc::close(read_fd);
+            libc::close(write_fd);
+        }
+        return Err(std::io::Error::last_os_error())
+            .context("fork(2) for subprocess decode")
+            .map_err(|_| SubprocessOom);
+    }
+
+    if pid == 0 {
+        // === CHILD PROCESS ===
+        // Close the read end — we only write.
+        unsafe { libc::close(read_fd) };
+
+        // Drop all fds except the write end of the pipe. We dup2 the pipe
+        // write end onto stdout (fd 1), then close the original pipe write
+        // end, so the parent's `cat` on the read side gets clean output.
+        // We also close any inherited fd > 2 (log files, etc.) to prevent
+        // fd leaks into the child — the subprocess is a pure compute task.
+        for fd in 3..=255 {
+            if fd != write_fd {
+                // closeignore — not all fds are open; ESRCH is harmless.
+                let _ = unsafe { libc::close(fd) };
+            }
+        }
+
+        // Dup pipe write end onto stdout (1) and stderr (2) so errors go
+        // through the same pipe and any stderr noise is captured by parent.
+        unsafe {
+            libc::dup2(write_fd, 1);
+            libc::dup2(write_fd, 2);
+            libc::close(write_fd);
+        }
+
+        // Cap address space. RLIMIT_AS covers all virtual memory (heap,
+        // mmap, stack, thread stacks). Setting this before any decode
+        // guarantees the OOM killer, not SIGABRT, is the hard abort path.
+        let rlim = libc::rlimit {
+            rlim_cur: SUBPROCESS_RLIMIT_AS_BYTES as libc::rlim_t,
+            rlim_max: SUBPROCESS_RLIMIT_AS_BYTES as libc::rlim_t,
+        };
+        // EPERM is possible in some container configs — treat as fatal.
+        let prlimit_res = unsafe {
+            libc::prlimit(
+                0,             // affect calling process (the child)
+                libc::RLIMIT_AS,
+                &rlim,
+                std::ptr::null_mut(),
+            )
+        };
+        if prlimit_res != 0 {
+            let err = std::io::Error::last_os_error();
+            let msg = format!("prlimit(RLIMIT_AS): {}", err);
+            // Write to stdout before _exit (stdout is now the pipe).
+            let _ = std::io::stdout().write_all(msg.as_bytes());
+            let _ = std::io::stdout().write_all(b"\n");
+            unsafe { libc::_exit(1) }
+        }
+
+        // --- Do the actual work ---
+        let decode_result: Result<SubprocessDecodeResult, String> = (|| {
+            let decoded = decode_image(bytes)
+                .map_err(|e| format!("decode: {:#}", e))?;
+            let webp = encode_to_webp(&decoded.image)
+                .map_err(|e| format!("encode: {:#}", e))?;
+            Ok(SubprocessDecodeResult {
+                webp_bytes: webp,
+                vision_bytes: decoded.vision_bytes,
+                source_format: decoded.source_format.to_string(),
+                width: decoded.image.width(),
+                height: decoded.image.height(),
+            })
+        })();
+
+        // Serialise result through the pipe (stdout = pipe).
+        let mut stdout = std::io::stdout();
+        match decode_result {
+            Ok(result) => {
+                // Status byte 0x01 = success.
+                let _ = stdout.write_all(&[0x01]);
+                let _ = serde_json::to_writer(&mut stdout, &result)
+                    .map_err(|e| format!("json serialize: {}", e));
+                // Flush to ensure parent receives all bytes before we exit.
+                let _ = stdout.flush();
+            }
+            Err(err_msg) => {
+                // Status byte 0x00 = error, followed by error string.
+                let _ = stdout.write_all(&[0x00]);
+                let _ = stdout.write_all(err_msg.as_bytes());
+                let _ = stdout.write_all(b"\n");
+                let _ = stdout.flush();
+            }
+        }
+
+        // _exit, never return — do NOT call destructors / at_exit hooks.
+        unsafe { libc::_exit(0) }
+        // (compiler infers noreturn; no code can follow)
+    }
+
+    // === PARENT PROCESS ===
+    // Close the write end — we only read.
+    unsafe {
+        libc::close(write_fd);
+    }
+
+    // Read all of the subprocess output from the pipe.
+    let mut child_output = Vec::new();
+    // Use raw read(2) on the fd directly for minimal overhead.
+    let mut buf = [0u8; 8192];
+    loop {
+        let n = unsafe {
+            libc::read(
+                read_fd,
+                buf.as_mut_ptr() as *mut libc::c_void,
+                buf.len() as libc::size_t,
+            )
+        };
+        if n < 0 {
+            let err = std::io::Error::last_os_error();
+            // EINTR = interrupted, retry; anything else is fatal.
+            if err.kind() == std::io::ErrorKind::Interrupted {
+                continue;
+            }
+            unsafe { libc::close(read_fd) };
+            let _ = unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
+            // EPIPE = child died without writing = OOM killed.
+            if err.kind() == std::io::ErrorKind::BrokenPipe {
+                return Err(SubprocessOom);
+            }
+            return Err(err)
+                .context("read from decode subprocess")
+                .map_err(|_| SubprocessOom);
+        }
+        if n == 0 {
+            break; // EOF — clean exit.
+        }
+        child_output.extend_from_slice(&buf[..n as usize]);
+    }
+    unsafe { libc::close(read_fd) };
+
+    // Wait for the child to exit and reap the zombie.
+    let mut status = 0;
+    unsafe { libc::waitpid(pid, &mut status, 0) };
+
+    // WIFEXITED = true means child called exit(); WEXITSTATUS = exit code.
+    let exited_normally = libc::WIFEXITED(status);
+    let exit_code = libc::WEXITSTATUS(status);
+
+    if exited_normally && exit_code == 0 && !child_output.is_empty() {
+        // Strip trailing newline if present.
+        let output = child_output.strip_suffix(b"\n").unwrap_or(&child_output);
+        if output.first() == Some(&0x01) {
+            // Success.
+            let json = &output[1..];
+            return serde_json::from_slice(json)
+                .context("deserialize subprocess decode result")
+                .map_err(|_| SubprocessOom);
+        }
+        if output.first() == Some(&0x00) {
+            // Structured error from the child.
+            let msg = String::from_utf8_lossy(&output[1..]);
+            return Err(anyhow!("decode subprocess error: {}", msg))
+                .map_err(|_| SubprocessOom);
+        }
+    }
+
+    // Any non-zero exit or signal death → treat as OOM (SIGKILL from OOM
+    // killer is indistinguishable from other signals without WTERMSIG).
+    if exited_normally && exit_code != 0 {
+        // Non-zero exit — could be the error path from the child
+        // (e.g. prlimit EPERM, JSON serialise failure). Parse what we got.
+        if !child_output.is_empty() {
+            if child_output.first() == Some(&0x00) {
+                let msg = String::from_utf8_lossy(&child_output[1..]);
+                return Err(anyhow!("decode subprocess error: {}", msg))
+                    .map_err(|_| SubprocessOom);
+            }
+        }
+    }
+
+    // Killed by signal (SIGKILL / OOM) or unknown status → OOM.
+    Err(SubprocessOom)
+}
+
+/// Subprocess decode for non-Unix platforms. Always returns an error
+/// directing the caller to use the in-process version.
+#[cfg(not(unix))]
+pub fn decode_via_subprocess(_bytes: &[u8]) -> Result<SubprocessDecodeResult, SubprocessOom> {
+    Err(anyhow!("subprocess decode only available on Unix").into())
+}
+
+// ---------------------------------------------------------------------------
 // Tests — `cargo test --release --lib icons`
 // ---------------------------------------------------------------------------
 

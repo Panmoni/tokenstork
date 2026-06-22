@@ -111,3 +111,7 @@ futures-util = { version = "0.3", default-features = false }
 # pin the resolved IP for the actual connection, and re-validate on
 # every redirect target.
 hickory-resolver = { version = "0.26", default-features = false, features = ["tokio", "system-config"] }
+
+# For prlimit(2) / RLIMIT_AS to memory-cap the icon decode subprocess.
+# Pure-Rust on top of the raw syscall — no other libc usage.
+libc = "0.2"

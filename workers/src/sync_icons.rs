@@ -15,7 +15,7 @@ use tracing::{debug, warn};
 
 use crate::google_vision::safe_search;
 use crate::icons::{
-    FetchOutcome, NsfwOutcome, classify_nsfw, decode_image, encode_to_webp, fetch_and_hash,
+    decode_via_subprocess, fetch_and_hash, classify_nsfw, FetchOutcome, NsfwOutcome,
 };
 use crate::pg::{
     IconModerationWrite, PgPool, find_icon_moderation_state, link_url_to_hash,
@@ -111,64 +111,40 @@ pub async fn process_url(
         return Ok(Outcome::Deduped);
     }
 
-    // 3. Decode FIRST, before spending a Vision API call. Failure here is
-    // a property of the bytes (corrupt, AVIF/ICO/etc., un-parseable SVG,
-    // image-bomb over the alloc cap) — re-trying won't help. Earlier
-    // versions ran Vision before decode, which meant unsupported icons
-    // looped through fetch + Vision ("Bad image data") forever paying
-    // $0.0015 per retry.
-    //
-    // CPU-bound + sync (image-crate decode, plus resvg parse+rasterize
-    // on the SVG branch — a 1024×1024 render is hundreds of ms).
-    // `spawn_blocking` keeps the tokio runtime free for I/O; the closure
-    // returns `bytes` back so the outer scope can still use it for
-    // size-tracking on the failure paths and as a Vision fallback when
-    // `vision_bytes` is None.
+    // 3. Decode + encode inside a memory-capped subprocess. The subprocess
+    // is forked with prlimit(RLIMIT_AS, 512 MiB) so a pathological input
+    // that survives the header probe triggers OOM *in the child* (SIGKILL
+    // from the OOM killer) rather than an uncatchable SIGABRT in the
+    // parent worker. Subprocess isolation means the decode + encode are
+    // both done in the child; the parent receives WebP bytes + vision PNG
+    // bytes + dimensions through a pipe, or an OOM signal if the child
+    // was killed without writing.
     //
     // SVG note: `decode_image` rasterizes parseable SVG to PNG and
     // returns it via `vision_bytes`, so the Vision call below can use
     // the raster — Vision rejects the SVG XML directly.
-    let (decode_result, bytes) =
-        match tokio::task::spawn_blocking(move || (decode_image(&bytes), bytes)).await {
-            Ok(t) => t,
-            Err(e) => {
-                warn!(uri = %uri, error = %e, "decode task panicked; URL stays pending");
+    let sub_result = decode_via_subprocess(&bytes);
+    let (webp_bytes, vision_bytes, source_format, source_width, source_height) =
+        match sub_result {
+            Ok(r) => {
+                (r.webp_bytes, r.vision_bytes, r.source_format, r.width as i32, r.height as i32)
+            }
+            // SubprocessOom is a zero-sized unit struct. In practice the Err
+            // variant of decode_via_subprocess is always SubprocessOom
+            // (OOM kill → pipe break; decode error → status byte 0x00 path
+            // exits cleanly). The Err arm handles any error from the
+            // subprocess gracefully: leave the URL pending so retry backoff
+            // applies rather than permanently blocking the icon.
+            Err(_) => {
+                warn!(uri = %uri, "decode subprocess failed; URL stays pending for retry");
                 return Ok(Outcome::TranscodeError);
             }
         };
-    let (img, vision_bytes, source_format) = match decode_result {
-        Ok(d) => (d.image, d.vision_bytes, d.source_format),
-        Err(e) => {
-            warn!(uri = %uri, error = %e, "decode failed; marking unsupported (no Vision call made)");
-            upsert_icon_moderation(
-                pool,
-                &IconModerationWrite {
-                    content_hash: &hash,
-                    source_url: uri,
-                    state: "blocked",
-                    nsfw_score: None,
-                    block_reason: Some("unsupported_format"),
-                    bytes_size: bytes.len() as i32,
-                    source_format: None,
-                    source_width: None,
-                    source_height: None,
-                },
-            )
-            .await?;
-            link_url_to_hash(pool, uri, &hash).await?;
-            return Ok(Outcome::BlockedUnsupported);
-        }
-    };
-    // Source-icon provenance for the token page's "adjusted" disclosure:
-    // native decoded dimensions (pre-downscale) + detected source format.
-    // `encode_to_webp` downscales anything whose longest side exceeds
-    // WEBP_MAX_DIM, so these capture what the publisher actually published.
-    let (source_width, source_height) = (img.width() as i32, img.height() as i32);
 
     // 4. NSFW gate (or manual-review bypass when Vision is disabled).
     // For raster inputs we send the original bytes (saves a re-encode
-    // round-trip); for SVG we send the rasterized PNG that
-    // `decode_image` produced.
+    // round-trip); for SVG we send the rasterized PNG that the subprocess
+    // produced.
     let (outcome, score) = match api_key {
         Some(key) => {
             let vision_input: &[u8] = vision_bytes.as_deref().unwrap_or(&bytes);
@@ -188,6 +164,7 @@ pub async fn process_url(
 
     match outcome {
         NsfwOutcome::Block => {
+            // No WebP on disk — blocked icons are never served.
             upsert_icon_moderation(
                 pool,
                 &IconModerationWrite {
@@ -197,7 +174,7 @@ pub async fn process_url(
                     nsfw_score: score,
                     block_reason: Some("adult"),
                     bytes_size: bytes.len() as i32,
-                    source_format: Some(source_format),
+                    source_format: Some(&source_format),
                     source_width: Some(source_width),
                     source_height: Some(source_height),
                 },
@@ -206,32 +183,17 @@ pub async fn process_url(
             link_url_to_hash(pool, uri, &hash).await?;
             Ok(Outcome::BlockedAdult)
         }
-        // Review and Clear share the encode + write path so the WebP is
-        // on disk in both cases — the operator can inspect a review-
-        // state file before flipping it to `cleared`. Default-deny
-        // still holds: `iconHrefFor` only serves `state='cleared'`.
+        // Review and Clear share the write path so the WebP is on disk in
+        // both cases — the operator can inspect a review-state file before
+        // flipping it to `cleared`. Default-deny still holds:
+        // `iconHrefFor` only serves `state='cleared'`.
+        //
+        // The WebP bytes are already transcoded from the decode subprocess,
+        // so no additional spawn_blocking is needed here.
         NsfwOutcome::Review | NsfwOutcome::Clear => {
-            // CPU-bound + sync (the `image` crate has no async API), so
-            // wrap in spawn_blocking to keep the tokio runtime free for
-            // I/O. Encode failure is almost always a transient `image`
-            // crate bug; we leave the URL pending so a future library
-            // version can retry — NEVER write a `state='blocked'` row
-            // in this branch.
-            let webp = match tokio::task::spawn_blocking(move || encode_to_webp(&img)).await {
-                Ok(Ok(b)) => b,
-                Ok(Err(e)) => {
-                    warn!(uri = %uri, error = %e, "encode failed; URL stays pending for retry");
-                    return Ok(Outcome::TranscodeError);
-                }
-                Err(e) => {
-                    warn!(uri = %uri, error = %e, "encode task panicked; URL stays pending");
-                    return Ok(Outcome::TranscodeError);
-                }
-            };
-
             let hex = hex::encode(hash);
             let path = output_dir.join(format!("{}.webp", hex));
-            if let Err(e) = std::fs::write(&path, &webp) {
+            if let Err(e) = std::fs::write(&path, &webp_bytes) {
                 warn!(uri = %uri, path = %path.display(), error = %e, "write failed");
                 return Ok(Outcome::WriteError);
             }
@@ -246,7 +208,7 @@ pub async fn process_url(
                     nsfw_score: score,
                     block_reason: None,
                     bytes_size: bytes.len() as i32,
-                    source_format: Some(source_format),
+                    source_format: Some(&source_format),
                     source_width: Some(source_width),
                     source_height: Some(source_height),
                 },
@@ -295,22 +257,18 @@ pub async fn backfill_provenance(
         };
 
         // Decode (header-guarded) to read source format + native dimensions.
-        let decoded = match tokio::task::spawn_blocking(move || decode_image(&bytes)).await {
-            Ok(Ok(d)) => d,
-            Ok(Err(e)) => {
-                warn!(uri = %uri, error = %e, "reflag: decode failed; skipping");
-                skipped += 1;
-                continue;
-            }
-            Err(e) => {
-                warn!(uri = %uri, error = %e, "reflag: decode task panicked; skipping");
+        // Use subprocess isolation — backfill processes potentially hostile
+        // icons from the legacy corpus; an OOM kill should skip, not crash.
+        let decoded = match decode_via_subprocess(&bytes) {
+            Ok(r) => r,
+            Err(_) => {
+                warn!(uri = %uri, "reflag: decode subprocess failed; skipping");
                 skipped += 1;
                 continue;
             }
         };
 
-        let (w, h) = (decoded.image.width() as i32, decoded.image.height() as i32);
-        if set_icon_provenance(pool, hash, decoded.source_format, w, h).await? {
+        if set_icon_provenance(pool, hash, &decoded.source_format, decoded.width as i32, decoded.height as i32).await? {
             updated += 1;
         } else {
             skipped += 1;
