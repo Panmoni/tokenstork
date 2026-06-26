@@ -141,6 +141,18 @@ CREATE INDEX IF NOT EXISTS live_token_utxo_category_idx ON live_token_utxo (cate
 CREATE INDEX IF NOT EXISTS live_token_utxo_height_idx ON live_token_utxo (created_height);
 
 -- ============================================================================
+-- Authchain frontier: forward spend pointer for vout[0] of authchain members.
+-- Maintained by sync-tail; replaces BlockBook's vout[0].spent_tx_id for the
+-- bcmr-onchain walk. Reorg-unwound by spent_height like live_token_utxo.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS authchain_edge (
+  parent_txid  BYTEA   PRIMARY KEY,   -- 32-byte txid whose vout[0] was spent
+  child_txid   BYTEA   NOT NULL,      -- 32-byte txid that spent it
+  spent_height INTEGER NOT NULL       -- block height of the spend (for reorg unwind)
+);
+CREATE INDEX IF NOT EXISTS authchain_edge_height_idx ON authchain_edge (spent_height);
+
+-- ============================================================================
 -- Per-venue listings: which DEXs / indexers currently list each token and
 -- what price / TVL they report. Populated by `sync-cauldron` (and future
 -- `sync-fex`, `sync-tapswap`, ...). Raw values from the venue — BCH / USD
