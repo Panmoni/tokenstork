@@ -134,7 +134,7 @@ async fn enrich_one(
         nfts: agg.nfts,
     };
 
-    write_token_state(pool, &w).await?;
+    write_token_state(pool, &w, "blockbook").await?;
     Ok(w.live_utxo_count as usize)
 }
 

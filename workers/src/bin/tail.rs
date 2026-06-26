@@ -29,7 +29,7 @@
 //! the forked height and `token_crc20` at the height, then re-process. This
 //! keeps enrichment correct across 1-2 block reorgs (occasional on BCH).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
@@ -42,15 +42,18 @@ use tracing_subscriber::EnvFilter;
 use workers::bchn::{BchnClient, Block, HashBlockSubscriber, zmq_url_from_env};
 use workers::blocks::{ACTIVATION_HEIGHT, summarize_block};
 use workers::crc20::detect_in_tx;
-use workers::enrich_core::aggregate;
+use workers::enrich_core::{aggregate, compute_gini};
 use workers::enrich_walker::derive_block_deltas;
 use workers::pg::{
-    self, BlockWrite, FoundCategory, OfferWrite, TokenType,
+    self, BlockWrite, FoundCategory, HolderWrite, OfferWrite, TokenStateWrite, TokenType,
     apply_live_utxo_deltas, crc20_canonical_resolve, delete_crc20_at_height,
     load_block_hash, load_live_utxos_for_category,
-    load_sync_state, mark_blocks_run, mark_crc20_run, mark_tail_run, mark_tapswap_run,
-    pool_from_env, read_token_state_summary, save_tail_last_block, unwind_live_utxo,
+    load_sync_state, mark_blocks_run, mark_crc20_run, mark_enrich_run,
+    mark_tail_run, mark_tapswap_run,
+    pool_from_env, read_token_state_summary, record_authchain_edges,
+    save_tail_last_block, unwind_authchain_edges, unwind_live_utxo,
     upsert_block, upsert_tapswap_offers_batch, upsert_tokens, write_crc20_detection,
+    write_token_state, load_authchain_members,
 };
 use workers::tapswap::try_decode_tx;
 use workers::tapswap_walker::process_block_spends;
@@ -79,9 +82,12 @@ struct BlockStats {
     blocks_written: usize,
     /// Count of CRC-20 reveals detected and upserted in this block.
     crc20_written: usize,
-    /// Categories whose event-driven aggregate was checked this block (shadow
-    /// mode only; 0 when ENRICH_SHADOW is unset).
-    enrich_shadow_checked: usize,
+    /// Categories whose event-driven enrichment was processed this block.
+    /// In shadow mode (ENRICH_SHADOW=1) this is compare-only; in authoritative
+    /// mode this is a full write of token_state/holders/nfts.
+    enrich_touched: usize,
+    /// Count of new authchain edges recorded this block.
+    authchain_edges: usize,
 }
 
 /// Walk one block's transactions:
@@ -108,6 +114,7 @@ async fn process_block(
     pool: &pg::PgPool,
     bchn: &BchnClient,
     block: &Block,
+    members: &mut HashSet<[u8; 32]>,
 ) -> Result<BlockStats> {
     let height: i32 = block
         .height
@@ -139,13 +146,20 @@ async fn process_block(
     } else {
         let mut rows: Vec<FoundCategory> = Vec::with_capacity(found.len());
         for (cat_hex, (token_type, txid_hex)) in found {
+            let genesis_bytes = pg::hex_to_bytes(&txid_hex)?;
             rows.push(FoundCategory {
                 category: pg::hex_to_bytes(&cat_hex)?,
                 token_type,
-                genesis_txid: pg::hex_to_bytes(&txid_hex)?,
+                genesis_txid: genesis_bytes.clone(),
                 genesis_block: height,
                 genesis_time: time,
             });
+            // Seed the authchain member set so vout[0] spends of this
+            // genesis tx are recorded in Pass 7, even before the next
+            // tail restart.
+            if let Ok(arr) = <[u8; 32]>::try_from(genesis_bytes.as_slice()) {
+                members.insert(arr);
+            }
         }
         upsert_tokens(pool, &rows).await?
     };
@@ -284,22 +298,16 @@ async fn process_block(
         }
     }
 
-    // --- Pass 6: event-driven enrichment (SHADOW, gated by ENRICH_SHADOW) ---
+    // --- Pass 6: event-driven enrichment ---
     //
-    // Maintains `live_token_utxo` from this block's token-UTXO deltas and, for
-    // each touched category, re-aggregates and compares against the current
-    // `token_state` (written by the legacy `enrich` path) WITHOUT writing
-    // token_state/holders/nfts — validating the event-driven model before
-    // cutover (docs/enrich-event-driven-design.md).
-    //
-    // SOFT-failed: this is experimental observability. A bug here must never
-    // pin the tail checkpoint or drop a block. (At cutover this becomes the
-    // authoritative writer and flips to hard-fail, like Pass 5.)
-    //
-    // NOTE: comparison only means anything once `live_token_utxo` is seeded by
-    // the one-shot bootstrap — until then a touched category's historical
-    // UTXOs are absent and a mismatch is expected, not a bug.
-    let enrich_shadow_checked = if std::env::var("ENRICH_SHADOW").is_ok() {
+    // ENRICH_SHADOW enables shadow mode (compare-only, no write).
+    // Unset, "0", or "false" → authoritative write (production path).
+    // Any other value → shadow-comparison mode (bake/validation).
+    let enrich_shadow = std::env::var("ENRICH_SHADOW")
+        .map(|v| v != "0" && v != "false")
+        .unwrap_or(false);
+
+    let enrich_touched = if enrich_shadow {
         match run_enrich_shadow(pool, block).await {
             Ok(n) => n,
             Err(e) => {
@@ -308,7 +316,38 @@ async fn process_block(
             }
         }
     } else {
+        match run_enrich_authoritative(pool, block).await {
+            Ok(n) => n,
+            Err(e) => {
+                return Err(e.context(format!("enrich authoritative write at height {height}")));
+            }
+        }
+    };
+
+    // --- Pass 7: authchain frontier ---
+    //
+    // Filter the block's vout[0] spends to txs known to be authchain
+    // members, record new edges, and extend the member set for future
+    // blocks. Hard-fail: a write error here means a gap in the spend
+    // index that bcmr-onchain can't recover from without a re-seed.
+    let deltas = derive_block_deltas(block)?;
+    let mut new_edges: Vec<(Vec<u8>, Vec<u8>, i32)> = Vec::new();
+    for sp in &deltas.vout0_spends {
+        if members.contains(&sp.prev_txid) {
+            new_edges.push((
+                sp.prev_txid.to_vec(),
+                sp.spending_txid.to_vec(),
+                sp.height,
+            ));
+            members.insert(sp.spending_txid);
+        }
+    }
+    let authchain_edges = if new_edges.is_empty() {
         0
+    } else {
+        record_authchain_edges(pool, &new_edges)
+            .await
+            .with_context(|| format!("record authchain edges at height {height}"))?
     };
 
     Ok(BlockStats {
@@ -317,7 +356,8 @@ async fn process_block(
         tapswap_closed,
         blocks_written,
         crc20_written,
-        enrich_shadow_checked,
+        enrich_touched,
+        authchain_edges,
     })
 }
 
@@ -367,6 +407,57 @@ async fn run_enrich_shadow(pool: &pg::PgPool, block: &Block) -> Result<usize> {
     Ok(touched.len())
 }
 
+/// Authoritative event-driven enrichment for one block: apply the token-UTXO
+/// deltas to `live_token_utxo`, then for each touched category re-aggregate
+/// from the live set and write `token_state` / `token_holders` / `nft_instances`.
+/// Hard-fails like Pass 5 so a write error pins the checkpoint.
+async fn run_enrich_authoritative(pool: &pg::PgPool, block: &Block) -> Result<usize> {
+    let deltas = derive_block_deltas(block)?;
+    let touched = apply_live_utxo_deltas(pool, &deltas).await?;
+
+    for category in &touched {
+        let inputs = load_live_utxos_for_category(pool, category).await?;
+        let agg = aggregate(&inputs);
+        let gini = compute_gini(&agg.holders);
+        let is_fully_burned = agg.live_utxo_count == 0;
+
+        let holders: Vec<HolderWrite> = agg
+            .holders
+            .iter()
+            .map(|(addr, h)| HolderWrite {
+                address: addr.clone(),
+                balance: h.balance.to_string(),
+                nft_count: h.nft_count,
+            })
+            .collect();
+
+        let holder_count = holders.len() as i32;
+        let w = TokenStateWrite {
+            category: category.to_vec(),
+            current_supply: agg.current_supply.to_string(),
+            live_utxo_count: agg.live_utxo_count,
+            live_nft_count: agg.live_nft_count,
+            holder_count,
+            has_active_minting: agg.has_active_minting,
+            is_fully_burned,
+            gini_coefficient: gini,
+            holders,
+            nfts: agg.nfts,
+        };
+
+        write_token_state(pool, &w, "bchn")
+            .await
+            .with_context(|| format!("enrich write for {}", pg::bytes_to_hex(category)))?;
+    }
+
+    // Mark enrich run for observability.
+    if let Err(e) = mark_enrich_run(pool).await {
+        warn!(error = %e, "mark_enrich_run failed; observability only");
+    }
+
+    Ok(touched.len())
+}
+
 fn merge_into_found(
     acc: &mut HashMap<String, (TokenType, String)>,
     per_tx: &HashMap<String, (bool, bool)>,
@@ -383,9 +474,16 @@ fn merge_into_found(
 /// Catch up from `from` through `to` inclusive, one block at a time, with a
 /// DB checkpoint after each. Before processing each block, compares BCHN's
 /// `getblockhash(height)` against the hash stored in `blocks`; on mismatch
-/// (reorg), unwinds `live_token_utxo` and `token_crc20` at the forked height
-/// before re-processing. Logs per block.
-async fn catch_up(pool: &pg::PgPool, bchn: &BchnClient, from: i32, to: i32) -> Result<()> {
+/// (reorg), unwinds `live_token_utxo`, `token_crc20`, and `authchain_edge` at
+/// the forked height, then reloads the authchain member set before
+/// re-processing. Logs per block.
+async fn catch_up(
+    pool: &pg::PgPool,
+    bchn: &BchnClient,
+    from: i32,
+    to: i32,
+    members: &mut HashSet<[u8; 32]>,
+) -> Result<()> {
     for h in from..=to {
         // Reorg detection: if a block hash is already stored for this height
         // and BCHN now serves a different one, a fork occurred. Unwind the
@@ -404,14 +502,20 @@ async fn catch_up(pool: &pg::PgPool, bchn: &BchnClient, from: i32, to: i32) -> R
                     height = h,
                     stored = %hex::encode(&stored),
                     bchn = %bchn_hash_hex,
-                    "reorg detected — unwinding live_token_utxo and CRC-20 at this height"
+                    "reorg detected — unwinding live_token_utxo, CRC-20, and authchain_edge at this height"
                 );
                 let utxo_deleted = unwind_live_utxo(pool, h).await?;
                 let crc20_deleted = delete_crc20_at_height(pool, h).await?;
+                let authchain_deleted = unwind_authchain_edges(pool, h).await?;
+                // Reload the member set after unwind — reorgs are rare and
+                // the set is tiny, so a full reload is acceptable.
+                *members = load_authchain_members(pool).await?;
                 info!(
                     height = h,
                     utxo_deleted,
                     crc20_deleted,
+                    authchain_deleted,
+                    members = members.len(),
                     "reorg unwind complete; re-processing from height"
                 );
             }
@@ -421,13 +525,14 @@ async fn catch_up(pool: &pg::PgPool, bchn: &BchnClient, from: i32, to: i32) -> R
             .get_block_by_height(h as u64)
             .await
             .with_context(|| format!("fetching block {h}"))?;
-        let stats = process_block(pool, bchn, &block).await?;
+        let stats = process_block(pool, bchn, &block, members).await?;
         save_tail_last_block(pool, h).await?;
         if stats.tokens_touched > 0
             || stats.tapswap_written > 0
             || stats.tapswap_closed > 0
             || stats.crc20_written > 0
-            || stats.enrich_shadow_checked > 0
+            || stats.enrich_touched > 0
+            || stats.authchain_edges > 0
         {
             info!(
                 height = h,
@@ -436,7 +541,8 @@ async fn catch_up(pool: &pg::PgPool, bchn: &BchnClient, from: i32, to: i32) -> R
                 tapswap_closed = stats.tapswap_closed,
                 crc20_written = stats.crc20_written,
                 blocks_written = stats.blocks_written,
-                enrich_shadow_checked = stats.enrich_shadow_checked,
+                enrich_touched = stats.enrich_touched,
+                authchain_edges = stats.authchain_edges,
                 "block processed"
             );
         } else {
@@ -457,6 +563,7 @@ async fn catch_up_to_tip(
     pool: &pg::PgPool,
     bchn: &BchnClient,
     last_seen: i32,
+    members: &mut HashSet<[u8; 32]>,
 ) -> i32 {
     // Touch last_tail_run_at regardless of outcome so a staleness watchdog
     // sees the tail is alive even during a long quiet stretch on BCH.
@@ -482,7 +589,7 @@ async fn catch_up_to_tip(
         return last_seen;
     }
     info!(from = last_seen + 1, to = tip_i, "delta detected");
-    match catch_up(pool, bchn, last_seen + 1, tip_i).await {
+    match catch_up(pool, bchn, last_seen + 1, tip_i, members).await {
         Ok(()) => tip_i,
         Err(e) => {
             error!(error = %e, "catch-up error; will retry on next signal");
@@ -587,6 +694,12 @@ async fn main() -> Result<()> {
         bail!("neither tail_last_block nor backfill_through is set in sync_state");
     }
 
+    // Load the authchain member set at startup — genesis_txids plus all
+    // child_txids already recorded in authchain_edge. The set is ~100k
+    // elements (a few MB) and self-extends as new edges are recorded.
+    let mut members = load_authchain_members(&pool).await?;
+    info!(members = members.len(), "authchain member set loaded");
+
     // Initial catch-up in case we were offline.
     let tip_now: i32 = bchn
         .get_block_count()
@@ -595,7 +708,7 @@ async fn main() -> Result<()> {
         .context("tip does not fit in i32")?;
     if tip_now > last_seen {
         info!(from = last_seen + 1, to = tip_now, "initial catch-up");
-        catch_up(&pool, &bchn, last_seen + 1, tip_now).await?;
+        catch_up(&pool, &bchn, last_seen + 1, tip_now, &mut members).await?;
         last_seen = tip_now;
     } else {
         info!(height = last_seen, "at tip; waiting for new blocks");
@@ -636,7 +749,7 @@ async fn main() -> Result<()> {
             res = async { zmq.sub.as_mut().unwrap().next_hash().await }, if zmq.sub.is_some() => {
                 match res {
                     Ok(Some(_hash)) => {
-                        last_seen = catch_up_to_tip(&pool, &bchn, last_seen).await;
+                        last_seen = catch_up_to_tip(&pool, &bchn, last_seen, &mut members).await;
                     }
                     Ok(None) => {
                         warn!("ZMQ stream ended; scheduling reconnect");
@@ -652,7 +765,7 @@ async fn main() -> Result<()> {
                 // Poll fires regardless of ZMQ state. Try reconnect first
                 // (cheap if already connected or not yet due), then catch up.
                 zmq.maybe_reconnect().await;
-                last_seen = catch_up_to_tip(&pool, &bchn, last_seen).await;
+                last_seen = catch_up_to_tip(&pool, &bchn, last_seen, &mut members).await;
             }
             _ = watchdog_tick.tick(), if watchdog_enabled => {
                 let _ = sd_notify::notify(false, &[NotifyState::Watchdog]);
