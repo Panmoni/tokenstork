@@ -8,6 +8,7 @@
 //!   `tokens` that mirrors the `ON CONFLICT` logic of
 //!   `scripts/backfill-from-bchn.ts`.
 
+use std::collections::HashSet;
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow};
@@ -431,7 +432,7 @@ pub struct NftWrite {
 
 /// Rebuild `token_state` + `token_holders` + `nft_instances` for one category
 /// in a single transaction. Mirrors `scripts/enrich-from-blockbook.ts#writeState`.
-pub async fn write_token_state(pool: &PgPool, w: &TokenStateWrite) -> Result<()> {
+pub async fn write_token_state(pool: &PgPool, w: &TokenStateWrite, verified_source: &str) -> Result<()> {
     let mut tx: Transaction<'_, Postgres> = pool.begin().await.context("begin tx")?;
 
     sqlx::query(
@@ -441,7 +442,7 @@ pub async fn write_token_state(pool: &PgPool, w: &TokenStateWrite) -> Result<()>
              holder_count, has_active_minting, is_fully_burned,
              gini_coefficient,
              verified_source, verified_at)
-        VALUES ($1, $2::numeric, $3, $4, $5, $6, $7, $8, 'blockbook', now())
+        VALUES ($1, $2::numeric, $3, $4, $5, $6, $7, $8, $9, now())
         ON CONFLICT (category) DO UPDATE SET
             current_supply      = EXCLUDED.current_supply,
             live_utxo_count     = EXCLUDED.live_utxo_count,
@@ -462,6 +463,7 @@ pub async fn write_token_state(pool: &PgPool, w: &TokenStateWrite) -> Result<()>
     .bind(w.has_active_minting)
     .bind(w.is_fully_burned)
     .bind(w.gini_coefficient)
+    .bind(verified_source)
     .execute(&mut *tx)
     .await
     .with_context(|| format!("upsert token_state for {}", bytes_to_hex(&w.category)))?;
@@ -678,6 +680,101 @@ pub async fn pick_categories_after(
     .await
     .context("pick_categories_after")?;
     Ok(rows.into_iter().map(|(c,)| c).collect())
+}
+
+// ---------------------------------------------------------------------------
+// Authchain frontier — replaces BlockBook's vout[0].spent_tx_id for the
+// bcmr-onchain walk. See docs/decommission-blockbook-plan.md §3B.
+// ---------------------------------------------------------------------------
+
+/// Record authchain edges from sync-tail's per-block vout[0] spend data.
+/// Each edge records that `parent_txid`'s vout[0] was spent by `child_txid`
+/// at `spent_height`. ON CONFLICT DO NOTHING — a parent's vout[0] can only
+/// be spent once. Returns the number of new rows inserted.
+pub async fn record_authchain_edges(
+    pool: &PgPool,
+    edges: &[(Vec<u8>, Vec<u8>, i32)],
+) -> Result<usize> {
+    let mut inserted = 0usize;
+    for (parent, child, height) in edges {
+        let result = sqlx::query(
+            r#"
+            INSERT INTO authchain_edge (parent_txid, child_txid, spent_height)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (parent_txid) DO NOTHING
+            "#,
+        )
+        .bind(parent.as_slice())
+        .bind(child.as_slice())
+        .bind(*height)
+        .execute(pool)
+        .await
+        .with_context(|| {
+            format!(
+                "record authchain_edge {} -> {}",
+                bytes_to_hex(parent),
+                bytes_to_hex(child)
+            )
+        })?;
+        if result.rows_affected() > 0 {
+            inserted += 1;
+        }
+    }
+    Ok(inserted)
+}
+
+/// Delete authchain edges at or above `height` during reorg unwind.
+/// Mirror of [`unwind_live_utxo`] — the replacement block(s) on the new
+/// branch re-populate the table via the normal per-block delta apply.
+pub async fn unwind_authchain_edges(pool: &PgPool, height: i32) -> Result<u64> {
+    let result = sqlx::query("DELETE FROM authchain_edge WHERE spent_height >= $1")
+        .bind(height)
+        .execute(pool)
+        .await
+        .context("unwind_authchain_edges")?;
+    Ok(result.rows_affected())
+}
+
+/// Look up the child txid that spent `parent_txid`'s vout[0].
+/// Returns `None` if the outpoint hasn't been spent yet (or the index
+/// hasn't seen the spend).
+pub async fn lookup_authchain_child(
+    pool: &PgPool,
+    parent_txid: &[u8],
+) -> Result<Option<Vec<u8>>> {
+    let row: Option<(Vec<u8>,)> =
+        sqlx::query_as("SELECT child_txid FROM authchain_edge WHERE parent_txid = $1")
+            .bind(parent_txid)
+            .fetch_optional(pool)
+            .await
+            .with_context(|| format!("lookup_authchain_child {}", bytes_to_hex(parent_txid)))?;
+    Ok(row.map(|(c,)| c))
+}
+
+/// Load the set of txs known to be on an authchain — every genesis_txid
+/// plus every child_txid already recorded as a vout[0] spend of a member.
+/// Used by sync-tail at startup to know which vout[0] spends to record.
+pub async fn load_authchain_members(pool: &PgPool) -> Result<HashSet<[u8; 32]>> {
+    let rows: Vec<(Vec<u8>,)> = sqlx::query_as(
+        r#"
+        SELECT genesis_txid FROM tokens
+        UNION
+        SELECT child_txid FROM authchain_edge
+        "#,
+    )
+    .fetch_all(pool)
+    .await
+    .context("load_authchain_members")?;
+
+    let mut set = HashSet::new();
+    for (txid, ) in rows {
+        let len = txid.len();
+        let arr: [u8; 32] = txid
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("authchain member txid wrong length: {}", len))?;
+        set.insert(arr);
+    }
+    Ok(set)
 }
 
 /// Current `token_state` headline fields, for shadow-comparing the

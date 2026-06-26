@@ -292,6 +292,46 @@ impl BchnClient {
         )
         .await
     }
+
+    /// `getrawtransaction <txid> 2` — full decoded tx with tokenData on vouts
+    /// and block-level metadata (blockhash, time). Requires `txindex=1`.
+    pub async fn get_raw_transaction_verbose(&self, txid: &str) -> Result<VerboseTx> {
+        self.rpc(
+            "getrawtransaction",
+            Value::Array(vec![Value::String(txid.to_string()), Value::from(2)]),
+        )
+        .await
+    }
+
+    /// `gettxout <txid> <n> true` — returns the unspent output if it exists in
+    /// the UTXO set (including mempool). Returns `true` if unspent, `false` if
+    /// spent or unknown. Used as the safety-net head-confirm in authchain walks:
+    /// if the spend index says a vout[0] is unspent but BCHN says spent,
+    /// the index is lagging and we fail loud.
+    pub async fn gettxout(&self, txid: &str, n: u32) -> Result<bool> {
+        let result: Option<GetTxOutResult> = self
+            .rpc(
+                "gettxout",
+                Value::Array(vec![
+                    Value::String(txid.to_string()),
+                    Value::Number(serde_json::Number::from(n)),
+                    Value::Bool(true),
+                ]),
+            )
+            .await?;
+        Ok(result.is_some())
+    }
+
+    /// Resolve a blockhash to its height via `getblockheader <hash>`.
+    pub async fn block_header_height(&self, blockhash: &str) -> Result<i32> {
+        let header: BlockHeader = self
+            .rpc(
+                "getblockheader",
+                Value::Array(vec![Value::String(blockhash.to_string()), Value::from(true)]),
+            )
+            .await?;
+        i32::try_from(header.height).context("block height overflows i32")
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -383,6 +423,24 @@ pub struct Tx {
     /// only read `vout` ignore this field, so it's additive.
     #[serde(default)]
     pub vin: Vec<Vin>,
+}
+
+/// Verbose transaction from `getrawtransaction <txid> 2`. Same vin/vout
+/// shape as [`Tx`] with block-level metadata added.
+#[derive(Debug, Deserialize)]
+pub struct VerboseTx {
+    pub txid: String,
+    #[serde(default)]
+    pub vout: Vec<Vout>,
+    #[serde(default)]
+    pub vin: Vec<Vin>,
+    /// Present iff confirmed; None for mempool txs.
+    pub blockhash: Option<String>,
+    /// Block time in Unix seconds; None for mempool txs.
+    pub time: Option<i64>,
+    /// Block height; BCHN may omit this in some modes.
+    #[serde(default)]
+    pub blockheight: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -498,6 +556,17 @@ pub struct RawTransactionVerbose {
 #[derive(Debug, Deserialize)]
 pub struct BlockHeader {
     pub height: u64,
+}
+
+/// Subset of `gettxout <txid> <n>`. BCHN returns the full output JSON if
+/// unspent, or `null` if spent/unknown. We only care about the existence.
+#[derive(Debug, Deserialize)]
+pub struct GetTxOutResult {
+    // We don't actually read any fields — the presence of the object means
+    // the outpoint is unspent. Keep the struct non-empty for deserialization.
+    #[serde(default)]
+    #[allow(dead_code)]
+    bestblock: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -42,10 +42,23 @@ pub struct OutPoint {
     pub vout: i32,
 }
 
+/// A vout[0] spend recorded to feed the authchain frontier index (§3B in
+/// docs/decommission-blockbook-plan.md). Populated for every non-coinbase
+/// input whose prevout index is 0, regardless of whether the prevout carried
+/// a token — the BCMR authchain follows vout[0] unconditionally.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Vout0Spend {
+    pub prev_txid: [u8; 32],
+    pub spending_txid: [u8; 32],
+    pub height: i32,
+}
+
 #[derive(Debug, Default)]
 pub struct BlockDeltas {
     pub creates: Vec<LiveUtxo>,
     pub spends: Vec<OutPoint>,
+    /// vout[0] spends for the authchain frontier; see [`Vout0Spend`].
+    pub vout0_spends: Vec<Vout0Spend>,
     /// Categories touched by *created* outputs. Categories touched only by a
     /// spend are unknowable from block data alone (the input carries no token
     /// data), so the DB apply unions them in via `DELETE ... RETURNING category`.
@@ -113,10 +126,18 @@ pub fn derive_block_deltas(block: &Block) -> Result<BlockDeltas> {
             };
             let prev_txid =
                 decode_id32(prev_hex).with_context(|| format!("prevout txid in {}", &tx.txid))?;
+            let vout_i32 = i32::try_from(prev_vout).context("prevout index overflows i32")?;
             deltas.spends.push(OutPoint {
                 txid: prev_txid,
-                vout: i32::try_from(prev_vout).context("prevout index overflows i32")?,
+                vout: vout_i32,
             });
+            if vout_i32 == 0 {
+                deltas.vout0_spends.push(Vout0Spend {
+                    prev_txid,
+                    spending_txid: tx_txid,
+                    height,
+                });
+            }
         }
 
         // Creates: every output carrying tokenData becomes a live row.
