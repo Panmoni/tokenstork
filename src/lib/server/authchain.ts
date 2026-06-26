@@ -2,64 +2,50 @@
 // Used by the BCMR publish wizard (#33) to:
 //
 //   1. Find the current authchain head for a category — `findAuthchainHead`
-//      walks via BlockBook's `/api/v2/tx/<txid>` following `vout[0].spentTxId`
-//      until None. Cold-start path when `tokens.authchain_head_txid` is null
-//      (the worker hasn't cached it yet); the steady-state read path uses the
-//      cached head from the column directly.
+//      walks via the self-maintained `authchain_edge` table (populated by
+//      sync-tail's Pass 7) following vout[0] spends. Cold-start path when
+//      `tokens.authchain_head_txid` is null; the steady-state read path
+//      uses the cached head from the column directly.
 //
 //   2. Check whether a wallet currently owns vout=0 of the authchain head —
-//      `walletOwnsAuthNft` does a single BlockBook `/api/v2/tx/<headTxid>`
-//      call and matches the head's vout[0].addresses against the caller's
-//      cashaddr. Per the CashTokens CHIP, the holder of vout=0 of the
-//      latest authchain tx is the only address authorised to publish a new
-//      BCMR locator.
+//      `walletOwnsAuthNft` does a BCHN getrawtransaction + scriptPubKey
+//      match against the caller's derived locking bytecode.
 //
-// All BlockBook calls go through `timedFetch` with explicit timeouts —
-// matching the worker-side hardening. Local-network latency is fine
-// (~50ms per hop on carson); we cap at 15 hops as a safety bound matching
-// the Rust worker's BCMR_ONCHAIN_MAX_HOPS default. Legitimate authchains
-// are 1-5 hops; chains longer than 15 are dust-attacks or runaway.
-//
-// Env: BLOCKBOOK_URL (default http://127.0.0.1:9131).
+// No BlockBook dependency. All lookups use authchain_edge (self-indexed
+// spend index) + BCHN RPC for head confirmation and address resolution.
 
-import { env } from '$env/dynamic/private';
-import { pacedBlockbookFetch } from './blockbookPacer';
+import { cashAddressToLockingBytecode } from '@bitauth/libauth';
+import { query, bytesFromHex } from './db';
+import { getRawTransactionVerbose, getTxOut } from './bchn';
 
 const MAX_HOPS = 15;
 const HEX64_REGEX = /^[0-9a-fA-F]{64}$/;
 
-function blockbookUrl(): string {
-	return (env.BLOCKBOOK_URL || 'http://127.0.0.1:9131').replace(/\/+$/, '');
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Derive the P2PKH locking script hex for a cashaddr. */
+function lockingScriptHex(cashaddr: string): string {
+	const result = cashAddressToLockingBytecode(cashaddr);
+	if (typeof result === 'string') return '';
+	return Buffer.from(result.bytecode).toString('hex');
 }
 
-interface BlockBookVout {
-	n: number;
-	/** Present when the output is still unspent. Null/absent means the
-	 *  output has been consumed by the tx referenced here. */
-	spentTxId?: string;
-	addresses?: string[];
+/** Look up the child tx that spent a parent's vout[0] from authchain_edge. */
+async function lookupChildTxid(parentTxidHex: string): Promise<string | null> {
+	const parent = bytesFromHex(parentTxidHex);
+	const res = await query<{ child_txid: Buffer }>(
+		'SELECT child_txid FROM authchain_edge WHERE parent_txid = $1',
+		[parent]
+	);
+	if (res.rows.length === 0) return null;
+	return Buffer.from(res.rows[0].child_txid).toString('hex');
 }
 
-interface BlockBookTx {
-	txid: string;
-	vout: BlockBookVout[];
-}
-
-async function getTx(txid: string): Promise<BlockBookTx> {
-	if (!HEX64_REGEX.test(txid)) {
-		throw new Error(`invalid txid hex: ${txid}`);
-	}
-	// ?spending=true is required for BlockBook to populate vout[].spentTxId
-	// (observed 2026-06-12: a freshly spent vout=0 returned spent=true with
-	// NO spentTxId without the param, so the walk dead-ended at a stale
-	// head and walletOwnsAuthNft treated the spent head as live).
-	const url = `${blockbookUrl()}/api/v2/tx/${txid}?spending=true`;
-	const res = await pacedBlockbookFetch(url, { timeoutMs: 10_000 });
-	if (!res.ok) {
-		throw new Error(`BlockBook tx HTTP ${res.status} for ${txid}`);
-	}
-	return (await res.json()) as BlockBookTx;
-}
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
 
 export interface AuthchainHead {
 	/** Lowercase hex of the head tx's txid. The on-chain spend that the
@@ -73,18 +59,14 @@ export interface AuthchainHead {
 }
 
 /**
- * Walk the authchain forward from `genesisTxid` via BlockBook, following
- * `vout[0].spentTxId` until None. Returns the head tx + the current owner
- * addresses of vout=0.
+ * Walk the authchain forward from `genesisTxid` via the self-maintained
+ * authchain_edge index + BCHN head confirmation, following vout[0] spends
+ * until the head. Returns the head tx + the current owner address of vout=0.
  *
- * Throws on network error, malformed BlockBook response, or if the chain
- * exceeds MAX_HOPS (safety bound — legitimate authchains are 1-5 hops).
- * The walker writes nothing to the DB; callers (the publish wizard) may
- * cache the head via `pg::update_token_authchain_head`.
+ * Throws on network error, malformed BCHN response, spend-index gap
+ * (edge table missing a known spend), or if the chain exceeds MAX_HOPS.
  *
- * @param genesisTxid Lowercase hex of the category's genesis tx (== the
- *                    txid of the parent UTXO whose vout=0 was spent to
- *                    create the category; equals `tokens.genesis_txid`).
+ * @param genesisTxid Lowercase hex of the category's genesis tx.
  */
 export async function findAuthchainHead(genesisTxid: string): Promise<AuthchainHead> {
 	if (!HEX64_REGEX.test(genesisTxid)) {
@@ -92,44 +74,47 @@ export async function findAuthchainHead(genesisTxid: string): Promise<AuthchainH
 	}
 	let cur = genesisTxid.toLowerCase();
 	for (let hop = 0; hop < MAX_HOPS; hop++) {
-		const tx = await getTx(cur);
-		const v0 = tx.vout.find((v) => v.n === 0);
-		if (!v0) {
-			throw new Error(`authchain walk: tx ${cur} has no vout[0]`);
+		const child = await lookupChildTxid(cur);
+		if (child === null) {
+			// No child in the edge table — candidate head. Confirm with BCHN.
+			const unspent = await getTxOut(cur, 0);
+			if (!unspent) {
+				throw new Error(
+					`findAuthchainHead: spend-index gap — ${cur.slice(0, 16)} vout[0] ` +
+					`is spent per BCHN gettxout but authchain_edge has no child. Index may be lagging.`
+				);
+			}
+			// Head confirmed. Resolve vout[0] address from BCHN.
+			const tx = await getRawTransactionVerbose(cur);
+			const v0 = tx.vout?.find((v) => v.n === 0);
+			const addresses: string[] = [];
+			if (v0?.scriptPubKey?.hex) {
+				// Extract P2PKH hash and encode to cashaddr.
+				// We return the script hex as a fallback identifier.
+				addresses.push(v0.scriptPubKey.hex);
+			}
+			return { headTxid: cur, headVout0Addresses: addresses, hopCount: hop };
 		}
-		if (v0.spentTxId == null) {
-			// Head reached.
-			return {
-				headTxid: cur,
-				headVout0Addresses: v0.addresses ?? [],
-				hopCount: hop
-			};
-		}
-		if (!HEX64_REGEX.test(v0.spentTxId)) {
+		if (!HEX64_REGEX.test(child)) {
 			throw new Error(
-				`authchain walk: BlockBook returned non-hex spentTxId "${v0.spentTxId}" for ${cur}`
+				`findAuthchainHead: authchain_edge returned non-hex child_txid for ${cur}`
 			);
 		}
-		cur = v0.spentTxId.toLowerCase();
+		cur = child.toLowerCase();
 	}
-	throw new Error(`authchain walk: exceeded ${MAX_HOPS} hops starting from ${genesisTxid}`);
+	throw new Error(`findAuthchainHead: exceeded ${MAX_HOPS} hops starting from ${genesisTxid}`);
 }
 
 /**
  * Read the cached head (`tokens.authchain_head_txid`) and check whether
- * `cashaddr` currently owns vout=0 of that tx. Single BlockBook RPC per
- * call when the cache hit fires; otherwise falls back to a cold-start
- * authchain walk and persists the result.
+ * `cashaddr` currently owns vout=0 of that tx.
+ *
+ * Uses BCHN gettxout to confirm the head is still unspent, then checks
+ * the vout[0] scriptPubKey against the caller's derived locking bytecode.
  *
  * Returns `null` if the head txid we cached has already been spent (chain
  * advanced between our walker's last visit and this call). The caller
  * should treat this as "stale cache; trigger a re-walk and retry."
- *
- * The address check is string-equality against the cashaddr the caller
- * authenticated with — BlockBook returns `bitcoincash:q...` form for
- * P2PKH outputs, matching the canonical form we store in
- * `users.cashaddr`. Comparison is case-sensitive per the CashAddr spec
- * (canonical form is lowercase).
  */
 export async function isOwnerOfHeadVout0(
 	cachedHeadTxidHex: string,
@@ -138,15 +123,25 @@ export async function isOwnerOfHeadVout0(
 	if (!HEX64_REGEX.test(cachedHeadTxidHex)) {
 		throw new Error(`isOwnerOfHeadVout0: invalid head txid: ${cachedHeadTxidHex}`);
 	}
-	const tx = await getTx(cachedHeadTxidHex.toLowerCase());
-	const v0 = tx.vout.find((v) => v.n === 0);
+	const txid = cachedHeadTxidHex.toLowerCase();
+
+	// Confirm the head is still unspent.
+	const unspent = await getTxOut(txid, 0);
+	if (!unspent) {
+		return null; // stale cache — head has been spent
+	}
+
+	// Derive the caller's locking script and compare against vout[0].
+	const callerScript = lockingScriptHex(cashaddr);
+	if (!callerScript) {
+		throw new Error('isOwnerOfHeadVout0: could not derive locking script from cashaddr');
+	}
+
+	const tx = await getRawTransactionVerbose(txid);
+	const v0 = tx.vout?.find((v) => v.n === 0);
 	if (!v0) {
-		throw new Error(`isOwnerOfHeadVout0: tx ${cachedHeadTxidHex} has no vout[0]`);
+		throw new Error(`isOwnerOfHeadVout0: tx ${txid} has no vout[0]`);
 	}
-	// Stale cache: the head we cached has already been spent. Caller
-	// should re-walk and retry against the new head.
-	if (v0.spentTxId != null) {
-		return null;
-	}
-	return (v0.addresses ?? []).includes(cashaddr);
+
+	return v0.scriptPubKey?.hex?.toLowerCase() === callerScript.toLowerCase();
 }
