@@ -118,3 +118,48 @@ export async function sendRawTransaction(rawHex: string): Promise<string> {
 	}
 	return txid;
 }
+
+// ---------------------------------------------------------------------------
+// Raw transaction + mempool reads (BlockBook replacement)
+// ---------------------------------------------------------------------------
+
+/** Verbose transaction output from `getrawtransaction <txid> 2`. */
+export interface VerboseTxVout {
+	n: number;
+	value: number;
+	scriptPubKey: { hex: string };
+	tokenData?: {
+		category: string;
+		amount: string;
+		nft?: { capability: 'none' | 'mutable' | 'minting'; commitment: string };
+	};
+}
+
+/**
+ * Fetch the full decoded transaction with tokenData on vouts.
+ * Requires txindex=1 on BCHN.
+ */
+export async function getRawTransactionVerbose(txid: string): Promise<{
+	txid: string;
+	vout: VerboseTxVout[];
+	blockhash?: string;
+	time?: number;
+}> {
+	return rpcCall('getrawtransaction', [txid, 2]);
+}
+
+/**
+ * Return every txid in the mempool as a hex-string array.
+ */
+export async function getRawMempool(): Promise<string[]> {
+	return rpcCall('getrawmempool', []);
+}
+
+/**
+ * Check whether an outpoint is unspent (UTXO set + mempool).
+ * Returns true if unspent, false if spent or unknown.
+ */
+export async function getTxOut(txid: string, n: number): Promise<boolean> {
+	const result = await rpcCall<object | null>('gettxout', [txid, n, true]);
+	return result !== null;
+}

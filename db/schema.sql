@@ -139,6 +139,8 @@ CREATE TABLE IF NOT EXISTS live_token_utxo (
 CREATE INDEX IF NOT EXISTS live_token_utxo_category_idx ON live_token_utxo (category);
 -- Reorg unwind deletes/repairs everything created at/above the forked height.
 CREATE INDEX IF NOT EXISTS live_token_utxo_height_idx ON live_token_utxo (created_height);
+-- Per-address lookup for money-path wallet UTXO reads (airdrop/mint/publish).
+CREATE INDEX IF NOT EXISTS live_token_utxo_address_idx ON live_token_utxo (address, category);
 
 -- ============================================================================
 -- Authchain frontier: forward spend pointer for vout[0] of authchain members.
