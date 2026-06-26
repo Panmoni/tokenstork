@@ -30,8 +30,9 @@ use anyhow::{Context, Result, anyhow};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
-use crate::blockbook::{BlockbookClient, BlockbookTx, normalize_address};
+use crate::bchn::BchnClient;
 use crate::icons::resolve_icon_url;
+use crate::pg;
 use crate::safe_http::{read_body_capped, validate_url_scheme};
 
 // ---------------------------------------------------------------------------
@@ -144,15 +145,11 @@ fn read_push<'a>(bytes: &'a [u8], cur: &mut usize) -> Option<&'a [u8]> {
     Some(data)
 }
 
-/// Find the first BCMR locator across a transaction's outputs.
-///
-/// Per the CHIP, only one locator per tx is meaningful (the head update); if
-/// a publisher includes more than one, the spec is silent on precedence.
-/// We pick the first by output index — predictable, easy to reason about.
-pub fn find_locator_in_tx(tx: &BlockbookTx) -> Option<BcmrLocator> {
+/// Find the first BCMR locator across a BCHN verbose transaction's outputs.
+pub fn find_locator_in_bchn_tx(tx: &crate::bchn::VerboseTx) -> Option<BcmrLocator> {
     for vout in &tx.vout {
-        if let Some(hex_script) = vout.hex.as_deref()
-            && let Some(loc) = parse_bcmr_locator(hex_script)
+        if !vout.script_pub_key.hex.is_empty()
+            && let Some(loc) = parse_bcmr_locator(&vout.script_pub_key.hex)
         {
             return Some(loc);
         }
@@ -203,15 +200,23 @@ pub struct WalkOutcome {
     pub hit_max_hops: bool,
 }
 
-/// Walk the authchain forward from `genesis_txid` via BlockBook, following
-/// `vout[0].spent_tx_id` until None.
+/// Walk the authchain forward from `genesis_txid` via BCHN + the self-maintained
+/// spend index, following `vout[0]` through `authchain_edge` until the head.
+///
+/// Per-hop:
+/// 1. Fetch the verbose tx from BCHN (`getrawtransaction <txid> 2`).
+/// 2. Parse any BCMR locator from the vout scripts.
+/// 3. Look up the forward spend pointer in `authchain_edge`.
+/// 4. If the edge table says unspent, confirm with BCHN `gettxout` — if BCHN
+///    disagrees (outpoint spent but index missed it), fail loud.
 ///
 /// Returns the full ordered hop list (oldest first) plus a flag indicating
 /// whether `max_hops` was hit. Legitimate authchains are very short (1-5
 /// hops); the bound is a safety against runaway chains and dust-attacks
 /// trying to push the head past the indexer's reach.
 pub async fn walk_authchain(
-    bb: &BlockbookClient,
+    bchn: &BchnClient,
+    pool: &pg::PgPool,
     genesis_txid: &[u8; 32],
     max_hops: usize,
 ) -> Result<WalkOutcome> {
@@ -219,41 +224,82 @@ pub async fn walk_authchain(
     let mut cur_txid = hex::encode(genesis_txid);
 
     for hop_index in 0..max_hops {
-        let tx = bb
-            .get_tx(&cur_txid)
+        let tx = bchn
+            .get_raw_transaction_verbose(&cur_txid)
             .await
             .with_context(|| format!("walk hop {} txid {}", hop_index, &cur_txid[..16]))?;
 
         let mut txid_bytes = [0u8; 32];
-        let raw = hex::decode(&tx.txid).with_context(|| format!("decode txid {}", &tx.txid[..16]))?;
+        let raw = hex::decode(&tx.txid)
+            .with_context(|| format!("decode txid {}", &tx.txid[..16]))?;
         if raw.len() != 32 {
-            return Err(anyhow!("BlockBook returned non-32-byte txid: {}", tx.txid));
+            return Err(anyhow!("BCHN returned non-32-byte txid: {}", tx.txid));
         }
         txid_bytes.copy_from_slice(&raw);
 
-        let locator = find_locator_in_tx(&tx);
+        let locator = find_locator_in_bchn_tx(&tx);
 
         // The identity output is at vout[0] per the CashTokens BCMR CHIP.
         // If the tx has no vout[0] at all (corrupt response), bail.
         let v0 = tx
             .vout
-            .iter()
-            .find(|v| v.n == 0)
+            .first()
             .ok_or_else(|| anyhow!("tx {} has no vout[0]", &tx.txid[..16]))?;
-        let is_head = v0.spent_tx_id.is_none();
+
+        // Resolve block height from blockhash if confirmed.
+        let block_height: Option<i64> = match &tx.blockhash {
+            Some(bh) => match bchn.block_header_height(bh).await {
+                Ok(h) => Some(h as i64),
+                Err(e) => {
+                    tracing::warn!(
+                        txid = %cur_txid[..16].to_string(),
+                        blockhash = %bh[..16].to_string(),
+                        error = %e,
+                        "block_header_height failed; hop will lack block_height provenance"
+                    );
+                    None
+                }
+            },
+            None => None,
+        };
+
+        // Forward spend pointer from self-maintained index.
+        let child = pg::lookup_authchain_child(pool, &txid_bytes).await?;
+        let is_head = child.is_none();
+
+        // Safety-net: if the index says unspent, confirm with BCHN gettxout.
+        if is_head {
+            let bchn_says_unspent = bchn.gettxout(&cur_txid, 0).await.unwrap_or(false);
+            if !bchn_says_unspent {
+                return Err(anyhow!(
+                    "spend-index gap: {} vout[0] is spent per BCHN gettxout but \
+                     authchain_edge has no child; index may be lagging",
+                    &cur_txid[..16]
+                ));
+            }
+        }
 
         // Controlling authority key for this hop = the address holding vout[0].
-        // BlockBook may render multiple (multisig) or none (undecodable token
-        // script); take the first decodable cashaddr, else None.
-        let controller_addr = v0
-            .addresses
-            .as_ref()
-            .and_then(|a| a.iter().find_map(|s| normalize_address(s)));
+        // Decode from the raw scriptPubKey; None for nonstandard scripts.
+        let controller_addr = {
+            let script = match hex::decode(&v0.script_pub_key.hex) {
+                Ok(s) => s,
+                Err(e) => {
+                    tracing::warn!(
+                        txid = %cur_txid[..16].to_string(),
+                        error = %e,
+                        "scriptPubKey hex decode failed; controller_addr will be None"
+                    );
+                    Vec::new()
+                }
+            };
+            crate::cashaddr::script_to_cashaddr_body(&script)
+        };
 
         hops.push(AuthchainHop {
             txid: txid_bytes,
-            block_height: tx.block_height,
-            block_time: tx.block_time,
+            block_height,
+            block_time: tx.time,
             locator,
             is_head,
             controller_addr,
@@ -263,11 +309,9 @@ pub async fn walk_authchain(
             return Ok(WalkOutcome { hops, hit_max_hops: false });
         }
 
-        // v0.spent_tx_id is Some at this point.
-        cur_txid = v0
-            .spent_tx_id
-            .clone()
-            .ok_or_else(|| anyhow!("unreachable: spent_tx_id None after is_head check"))?;
+        // child is guaranteed Some here — is_head was false, and is_head
+        // is derived from child.is_none().
+        cur_txid = hex::encode(child.unwrap());
     }
 
     tracing::warn!(

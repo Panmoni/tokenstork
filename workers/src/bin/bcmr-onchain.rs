@@ -47,7 +47,7 @@ use workers::bcmr_events::{
 use workers::bcmr_onchain::{
     AuthchainHop, BodyArchive, FetchedBody, body_archive, fetch_and_verify_bcmr, walk_authchain,
 };
-use workers::blockbook::BlockbookClient;
+use workers::bchn::BchnClient;
 use workers::env::parse_or_default;
 use workers::pg::{
     self, BcmrChangeEventWrite, HistoryUpsertOutcome, OnchainBcmrTarget, PgPool,
@@ -153,8 +153,7 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    let bb = BlockbookClient::from_env().context("building BlockBook client")?;
-    let bb = bb.with_slot(pool.clone());
+    let bchn = BchnClient::from_env().context("building BCHN client")?;
 
     let batch_size: i32 = parse_or_default("BCMR_ONCHAIN_BATCH", DEFAULT_BATCH);
     let stale_hours: i32 = parse_or_default("BCMR_ONCHAIN_STALE_HOURS", DEFAULT_STALE_HOURS);
@@ -182,10 +181,6 @@ async fn main() -> Result<()> {
 
     let batch = pick_bcmr_onchain_batch(&pool, stale_hours, batch_size).await?;
 
-    // Absorb the first-HTTP-after-sqlx truncation bug before the
-    // walk loop (walk_authchain calls get_tx, which has no internal
-    // warm-up unlike walk_category_utxos).
-    bb.warm_up().await.context("BlockBook warm-up")?;
     if batch.is_empty() {
         info!("nothing to walk; exiting");
         mark_bcmr_onchain_run(&pool).await?;
@@ -203,7 +198,7 @@ async fn main() -> Result<()> {
     for target in &batch {
         match walk_one(
             &pool,
-            &bb,
+            &bchn,
             &http,
             target,
             max_hops,
@@ -284,7 +279,7 @@ struct CategoryStats {
 /// Walk one category's authchain and persist results.
 async fn walk_one(
     pool: &pg::PgPool,
-    bb: &BlockbookClient,
+    bchn: &BchnClient,
     http: &reqwest::Client,
     target: &OnchainBcmrTarget,
     max_hops: usize,
@@ -305,7 +300,7 @@ async fn walk_one(
             )
         })?;
 
-    let outcome = walk_authchain(bb, &genesis_arr, max_hops).await?;
+    let outcome = walk_authchain(bchn, pool, &genesis_arr, max_hops).await?;
     let hops = outcome.hops;
     stats.hops_total = hops.len();
     stats.hit_max_hops = outcome.hit_max_hops;
