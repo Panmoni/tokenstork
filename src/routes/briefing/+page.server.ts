@@ -5,14 +5,16 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { PageServerLoad } from './$types';
+import type { Briefing } from '$lib/server/briefing/types';
 
 const BRIEFINGS_DIR = 'briefings';
 
 export const load: PageServerLoad = async () => {
 	try {
-		const html = await readFile(join(process.cwd(), BRIEFINGS_DIR, 'index.html'), 'utf-8');
-		return { html, hasBriefing: true };
+		const raw = await readFile(join(process.cwd(), BRIEFINGS_DIR, 'briefing.json'), 'utf-8');
+		const briefing: Briefing = JSON.parse(raw);
+		return { briefing, hasBriefing: true as const };
 	} catch {
-		return { html: null, hasBriefing: false };
+		return { briefing: null, hasBriefing: false as const };
 	}
 };

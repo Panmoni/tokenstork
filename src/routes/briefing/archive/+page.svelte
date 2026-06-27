@@ -1,93 +1,31 @@
 <script lang="ts">
-	export let data: {
-		entries: Array<{ date: string; time: string; path: string }>;
-	};
+	let { data } = $props();
 </script>
 
 <svelte:head>
 	<title>Stork Sightings Archive — TokenStork</title>
 </svelte:head>
 
-<div class="archive">
-	<h1>⬢ Stork Sightings — Archive</h1>
-	<p class="sub">Past editions of the daily BCH token briefing.</p>
+<div class="max-w-2xl mx-auto py-10 px-4 sm:px-6">
+	<div class="mb-8 pb-4 border-b ts-border-subtle">
+		<h1 class="font-serif text-2xl font-bold text-emerald-700 dark:text-emerald-400">⬢ Stork Sightings — Archive</h1>
+		<p class="mt-1 text-sm ts-text-muted">Past editions of the daily BCH token briefing.</p>
+	</div>
 
 	{#if data.entries.length > 0}
-		<ul class="entries">
+		<div class="space-y-1">
 			{#each data.entries as entry}
-				<li>
-					<a href="/briefing/archive/{entry.path}">
-						<span class="date">{entry.date}</span>
-						<span class="time">{entry.time} UTC</span>
-					</a>
-				</li>
+				<a href="/briefing/archive/{entry.slug}" class="flex items-center justify-between px-4 py-3 rounded-lg no-underline hover:bg-slate-50 dark:hover:bg-zinc-800/50 transition-colors border-b ts-border-subtle last:border-b-0">
+					<span class="text-sm font-semibold text-slate-900 dark:text-white">{entry.date}</span>
+					<span class="text-xs ts-text-muted">{entry.time} UTC</span>
+				</a>
 			{/each}
-		</ul>
+		</div>
 	{:else}
-		<p class="empty">No archived editions yet. The first daily briefing runs at 11:00 UTC.</p>
+		<p class="text-sm ts-text-muted py-8 text-center">No archived editions yet. The first daily briefing runs at 11:00 UTC.</p>
 	{/if}
 
-	<p class="back">
-		<a href="/briefing">← Back to today's briefing</a>
+	<p class="mt-8">
+		<a href="/briefing" class="text-sm text-emerald-600 hover:underline">← Back to today's briefing</a>
 	</p>
 </div>
-
-<style>
-	.archive {
-		max-width: 620px;
-		margin: 60px auto;
-		padding: 20px;
-	}
-	.archive h1 {
-		font-family: Georgia, 'Times New Roman', serif;
-		font-size: 24px;
-		color: #0f766e;
-		margin: 0 0 8px;
-	}
-	.sub {
-		font-size: 14px;
-		color: #64748b;
-		margin: 0 0 32px;
-	}
-	.entries {
-		list-style: none;
-		padding: 0;
-	}
-	.entries li {
-		padding: 10px 0;
-		border-bottom: 1px solid #f1f5f9;
-	}
-	.entries a {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		text-decoration: none;
-		color: #1e293b;
-		font-size: 15px;
-	}
-	.entries a:hover {
-		color: #0f766e;
-	}
-	.date {
-		font-weight: 600;
-	}
-	.time {
-		font-size: 13px;
-		color: #94a3b8;
-	}
-	.empty {
-		font-size: 14px;
-		color: #94a3b8;
-	}
-	.back {
-		margin-top: 32px;
-		font-size: 13px;
-	}
-	.back a {
-		color: #0f766e;
-		text-decoration: none;
-	}
-	.back a:hover {
-		text-decoration: underline;
-	}
-</style>

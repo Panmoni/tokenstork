@@ -26,6 +26,7 @@ export async function renderAll(
 
 	const files: Record<string, string> = {
 		[join(dir, 'index.html')]: renderBriefingHtml(briefing),
+		[join(dir, 'briefing.json')]: JSON.stringify(briefing, null, 2),
 		[join(dir, 'briefing.html')]: renderEmailHtml(briefing),
 		[join(dir, 'briefing.md')]: renderSubstackMd(briefing),
 		[join(dir, 'briefing.substack.html')]: renderSubstackHtml(briefing),
@@ -34,6 +35,7 @@ export async function renderAll(
 		[join(dir, 'social.json')]: JSON.stringify(renderSocial(briefing), null, 2),
 		[join(dir, 'briefing.svg')]: renderOgImageSvg(briefing),
 		// Dated archive copies — immutable, cache-forever permalinks.
+		[join(dir, 'archive', `briefing-${stamp}.json`)]: JSON.stringify(briefing, null, 2),
 		[join(dir, 'archive', `briefing-${stamp}.html`)]: renderBriefingHtml(briefing),
 		[join(dir, 'archive', `briefing-${stamp}.substack.html`)]: renderSubstackHtml(briefing),
 		[join(dir, 'archive', `briefing-${stamp}.md`)]: renderSubstackMd(briefing)

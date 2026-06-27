@@ -2,7 +2,8 @@
 // Pooled Postgres client. One Pool per process.
 // Requires DATABASE_URL in the environment.
 
-import { Pool, PoolClient, QueryResult, QueryResultRow } from "pg";
+import { Pool } from "pg";
+import type { PoolClient, QueryResult, QueryResultRow } from "pg";
 
 let _pool: Pool | null = null;
 
