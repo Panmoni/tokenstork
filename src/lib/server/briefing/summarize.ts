@@ -94,7 +94,10 @@ function buildPrompt(d: DataBundle): string {
 		`Then give 2-4 trend bullets (one-line each, prefix with "•").\n` +
 		`Respond as JSON: {"summary": "...", "trends": ["• ...", "• ..."]}\n` +
 		`The summary should sound like a sharp, opinionated observer — not a robot.\n` +
-		`Mention specific token names from the data. Do NOT invent any numbers or names not in the input.`;
+		`Mention specific token names from the data.\n` +
+		`NEVER invent any number not in the input data. Use ONLY the exact numbers provided above.\n` +
+		`If a number is "none", "0", or "0.00", do NOT invent alternatives.\n` +
+		`Do NOT invent percentages, dollar amounts, BCH amounts, or holder counts not provided.`;
 }
 
 function parseSummaryResponse(text: string): { summary: string; trends: TrendBullet[] } {

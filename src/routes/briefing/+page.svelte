@@ -6,10 +6,13 @@
 
 <svelte:head>
 	<title>Stork Sightings — TokenStork</title>
+	{#if data.briefing}
+		<meta name="description" content={data.briefing.executiveSummary?.slice(0, 160) || 'Daily BCH token briefing from the TokenStork directory.'} />
+	{/if}
 </svelte:head>
 
 {#if data.hasBriefing && data.briefing}
-	<BriefingPage briefing={data.briefing} />
+	<BriefingPage briefing={data.briefing} archiveEntries={data.archiveEntries} />
 {:else}
 	<div class="max-w-2xl mx-auto py-20 px-4 text-center">
 		<h1 class="font-serif text-3xl font-bold text-emerald-700 dark:text-emerald-400 mb-4">⬢ Stork Sightings</h1>

@@ -151,55 +151,33 @@ async function gatherWhaleMoves(config: T.BriefingConfig): Promise<{ rows: T.Wha
 			category_hex: string;
 			name: string | null;
 			symbol: string | null;
-			gini_before: number;
-			gini_after: number;
-			holders_before: number;
-			holders_after: number;
+			gini_now: number;
+			holders: number;
 		}>(
-			`WITH latest AS (
-			      SELECT DISTINCT ON (s.category)
-			             s.category,
-			             s.gini_coefficient AS gini_after,
-			             s.holder_count AS holders_after
-			        FROM token_state s
-			        JOIN tokens t ON t.category = s.category
-			       WHERE ${NOT_MODERATED_CLAUSE}
-			         AND s.gini_coefficient IS NOT NULL
-			         AND s.holder_count > 2
-			  ),
-			  prior AS (
-			      SELECT DISTINCT ON (category)
-			             category,
-			             MAX(gini_coefficient) AS gini_before,
-			             MAX(holder_count) AS holders_before
-			        FROM vote_leaderboard_history
-			       WHERE snapshot_day = CURRENT_DATE - 1
-			       GROUP BY category
-			  )
-			  SELECT encode(l.category, 'hex') AS category_hex,
-			         m.name,
-			         m.symbol,
-			         l.gini_after,
-			         COALESCE(p.gini_before, l.gini_after) AS gini_before,
-			         l.holders_after,
-			         COALESCE(p.holders_before, l.holders_after) AS holders_before
-			    FROM latest l
-			    JOIN token_metadata m ON m.category = l.category
-			    LEFT JOIN prior p ON p.category = l.category
-			   WHERE ABS(l.gini_after - COALESCE(p.gini_before, l.gini_after)) > 0.05
-			   ORDER BY ABS(l.gini_after - COALESCE(p.gini_before, l.gini_after)) DESC
-			   LIMIT $1`,
+			`SELECT encode(t.category, 'hex') AS category_hex,
+			        m.name,
+			        m.symbol,
+			        s.gini_coefficient AS gini_now,
+			        s.holder_count AS holders
+			   FROM token_state s
+			   JOIN tokens t ON t.category = s.category
+			   LEFT JOIN token_metadata m ON m.category = t.category
+			  WHERE s.gini_coefficient IS NOT NULL
+			    AND s.holder_count > 2
+			    AND ${NOT_MODERATED_CLAUSE}
+			  ORDER BY s.gini_coefficient DESC
+			  LIMIT $1`,
 			[config.maxWhaleMoves]
 		);
 		const rows: T.WhaleMoveItem[] = res.rows.map((r) => ({
 			categoryHex: r.category_hex,
 			name: r.name,
 			symbol: r.symbol,
-			giniBefore: Number(r.gini_before),
-			giniAfter: Number(r.gini_after),
-			giniDelta: Number(r.gini_after) - Number(r.gini_before),
-			holderCountBefore: Number(r.holders_before),
-			holderCountAfter: Number(r.holders_after)
+			giniBefore: Number(r.gini_now),
+			giniAfter: Number(r.gini_now),
+			giniDelta: 0,
+			holderCountBefore: Number(r.holders),
+			holderCountAfter: Number(r.holders)
 		}));
 		return { rows, diag: { name: 'whaleMoves', durationMs: Date.now() - t0, rowCount: rows.length } };
 	} catch (err) {
@@ -224,15 +202,15 @@ async function gatherBcmrChanges(config: T.BriefingConfig): Promise<{ rows: T.Bc
 			        m.name,
 			        m.symbol,
 			        e.severity,
-			        e.change_type,
-			        e.changed_at,
-			        e.summary
+			        e.event_type AS change_type,
+			        e.detected_at AS changed_at,
+			        COALESCE(e.detail::text, e.event_type) AS summary
 			   FROM bcmr_change_events e
 			   JOIN tokens t ON t.category = e.category
 			   LEFT JOIN token_metadata m ON m.category = e.category
-			  WHERE e.changed_at > now() - INTERVAL '1 day' * $1
+			  WHERE e.detected_at > now() - INTERVAL '1 day' * $1
 			    AND ${NOT_MODERATED_CLAUSE}
-			  ORDER BY e.changed_at DESC
+			  ORDER BY e.detected_at DESC
 			  LIMIT 20`,
 			[config.windowHours]
 		);
@@ -259,27 +237,29 @@ async function gatherVotes(config: T.BriefingConfig): Promise<{ rows: T.VoteItem
 			category: Buffer;
 			name: string | null;
 			symbol: string | null;
-			upvotes: string;
-			downvotes: string;
+			up: string;
+			down: string;
 		}>(
-			`SELECT uv.category,
-			        m.name,
-			        m.symbol,
-			        COUNT(*) FILTER (WHERE uv.vote = 'up')::bigint   AS upvotes,
-			        COUNT(*) FILTER (WHERE uv.vote = 'down')::bigint AS downvotes
-			   FROM user_votes uv
-			   JOIN tokens t ON t.category = uv.category
-			   LEFT JOIN token_metadata m ON m.category = uv.category
-			  WHERE uv.voted_at > now() - INTERVAL '1 day' * $1
-			    AND ${NOT_MODERATED_CLAUSE}
-			  GROUP BY uv.category, m.name, m.symbol
-			  ORDER BY upvotes + downvotes DESC
+			`SELECT category, name, symbol, up, down FROM (
+			      SELECT uv.category,
+			             m.name,
+			             m.symbol,
+			             COUNT(*) FILTER (WHERE uv.vote = 'up')::bigint   AS up,
+			             COUNT(*) FILTER (WHERE uv.vote = 'down')::bigint AS down
+			        FROM user_votes uv
+			        JOIN tokens t ON t.category = uv.category
+			        LEFT JOIN token_metadata m ON m.category = uv.category
+			       WHERE uv.voted_at > now() - INTERVAL '1 day' * $1
+			         AND ${NOT_MODERATED_CLAUSE}
+			       GROUP BY uv.category, m.name, m.symbol
+			  ) sub
+			  ORDER BY sub.up + sub.down DESC
 			  LIMIT 10`,
 			[config.windowHours]
 		);
 		const rows: T.VoteItem[] = res.rows.map((r) => {
-			const up = Number(r.upvotes);
-			const down = Number(r.downvotes);
+			const up = Number(r.up);
+			const down = Number(r.down);
 			return {
 				categoryHex: hexFromBytes(r.category) ?? '',
 				name: r.name,

@@ -65,12 +65,31 @@ export async function writeTokenProfile(
 }
 
 function selectCandidate(briefing: Briefing): TokenCandidate | null {
-	// Build candidates from tokens with movers + BCMR activity + votes.
-	const mentioned = new Set<string>();
 	const candidates: TokenCandidate[] = [];
 
+	// Priority 1: whaleMoves entries (have real holder counts from DB)
+	for (const w of briefing.whaleMoves) {
+		// Strict gate: must have real holder data
+		if (w.holderCountAfter < MIN_HOLDERS) continue;
+		if (!w.name && !w.symbol) continue;
+
+		candidates.push({
+			categoryHex: w.categoryHex,
+			name: w.name ?? 'Unknown',
+			symbol: w.symbol || null,
+			description: null,
+			holderCount: w.holderCountAfter,
+			iconCleared: false,
+			listed: false,
+			hasActivity: true,
+			giniTier: giniToTier(w.giniAfter),
+			score: (1 - w.giniAfter) * 100 * 0.3
+		});
+	}
+
+	// Priority 2: mover entries (have price movement, but no holder data)
 	for (const m of briefing.movers.gainers) {
-		mentioned.add(m.categoryHex);
+		if (!m.name && !m.symbol) continue;
 		candidates.push({
 			categoryHex: m.categoryHex,
 			name: m.name,
@@ -85,8 +104,7 @@ function selectCandidate(briefing: Briefing): TokenCandidate | null {
 		});
 	}
 	for (const m of briefing.movers.losers) {
-		if (mentioned.has(m.categoryHex)) continue;
-		mentioned.add(m.categoryHex);
+		if (!m.name && !m.symbol) continue;
 		candidates.push({
 			categoryHex: m.categoryHex,
 			name: m.name,
@@ -101,60 +119,16 @@ function selectCandidate(briefing: Briefing): TokenCandidate | null {
 		});
 	}
 
-	for (const w of briefing.whaleMoves) {
-		if (mentioned.has(w.categoryHex)) continue;
-		mentioned.add(w.categoryHex);
-		candidates.push({
-			categoryHex: w.categoryHex,
-			name: w.name ?? 'Unknown',
-			symbol: w.symbol || null,
-			description: null,
-			holderCount: w.holderCountAfter,
-			iconCleared: false,
-			listed: false,
-			hasActivity: true,
-			giniTier: giniToTier(w.giniAfter),
-			score: Math.abs(w.giniDelta) * 100 * 0.3
-		});
-	}
-
-	for (const v of briefing.votes) {
-		if (mentioned.has(v.categoryHex)) continue;
-		mentioned.add(v.categoryHex);
-		candidates.push({
-			categoryHex: v.categoryHex,
-			name: v.name ?? 'Unknown',
-			symbol: v.symbol || null,
-			description: null,
-			holderCount: 0,
-			iconCleared: false,
-			listed: false,
-			hasActivity: true,
-			giniTier: 'unknown',
-			score: (v.upvotes + v.downvotes) * 0.1
-		});
-	}
-
 	if (candidates.length === 0) return null;
 
-	// Filter: name must be present (BCMR metadata requirement)
-	const withNames = candidates.filter((c) => c.name && c.name !== 'Unknown');
-	if (withNames.length === 0) return null;
+	// Sort by score, prefer ones with holder data
+	candidates.sort((a, b) => {
+		if (a.holderCount > 0 && b.holderCount === 0) return -1;
+		if (b.holderCount > 0 && a.holderCount === 0) return 1;
+		return b.score - a.score;
+	});
 
-	// Sort by score, take the top
-	withNames.sort((a, b) => b.score - a.score);
-
-	// The first one that meets quality gates
-	for (const c of withNames) {
-		// At this M1 stage we don't have per-candidate holder data from DB yet.
-		// For candidates from whale_moves we have holderCount.
-		// For others, we accept them — the DB query in a future enhancement will
-		// provide this data more accurately.
-		if (c.holderCount > 0 && c.holderCount < MIN_HOLDERS) continue;
-		return c;
-	}
-
-	return withNames[0];
+	return candidates[0];
 }
 
 function giniToTier(gini: number): string {
