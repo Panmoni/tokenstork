@@ -13,6 +13,6 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["./**/*.ts", "../lib/**/*.ts"],
+  "include": ["./**/*.ts", "../lib/**/*.ts", "../src/lib/server/briefing/**/*.ts"],
   "exclude": ["../node_modules", "../.next"]
 }
