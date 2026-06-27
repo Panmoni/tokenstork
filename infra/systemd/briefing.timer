@@ -1,0 +1,11 @@
+[Unit]
+Description=Stork Sightings daily brief timer (11:00 UTC)
+Documentation=https://github.com/Panmoni/tokenstork
+
+[Timer]
+OnCalendar=*-*-* 11:00:00 UTC
+Persistent=true
+OnUnitActiveSec=23h
+
+[Install]
+WantedBy=timers.target

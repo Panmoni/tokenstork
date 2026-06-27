@@ -1,0 +1,37 @@
+[Unit]
+Description=Stork Sightings daily BCH token briefing generator
+Documentation=https://github.com/Panmoni/tokenstork
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=oneshot
+User=tokenstork
+Group=tokenstork
+WorkingDirectory=/opt/tokenstork
+ExecStart=/usr/bin/tsx /opt/tokenstork/scripts/briefing.ts
+EnvironmentFile=-/etc/tokenstork/env
+Environment="BRIEFING_OUTPUT_DIR=briefings"
+Environment="BRIEFING_PUBLIC_URL=https://tokenstork.com"
+
+# ReadWritePaths lets the service write briefing files to the persistent
+# briefings/ directory (at /opt/tokenstork/briefings). The SvelteKit app
+# serves them from the same path.
+ReadWritePaths=/opt/tokenstork/briefings
+
+# Hardening — readonly for everything except the output dir.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
