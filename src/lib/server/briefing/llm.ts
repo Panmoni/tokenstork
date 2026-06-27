@@ -37,7 +37,8 @@ export async function llmChat(
 	systemPrompt: string,
 	userPrompt: string,
 	config: BriefingConfig,
-	model?: string
+	model?: string,
+	maxTokens?: number
 ): Promise<LlmResult> {
 	const m = model ?? config.llm.model;
 	const url = `${config.llm.baseUrl}/chat/completions`;
@@ -56,7 +57,7 @@ export async function llmChat(
 					{ role: 'user', content: userPrompt }
 				],
 				temperature: 0.7,
-				max_tokens: 2048
+				max_tokens: maxTokens ?? 2048
 			}),
 			signal: AbortSignal.timeout(30_000)
 		});
@@ -86,17 +87,18 @@ export async function llmChat(
 // ---- Anti-hallucination: validate LLM output against input data ----
 export function validateNumbers(text: string, knownNumbers: number[]): string[] {
 	const found: string[] = [];
-	const numRegex = /\b\d+(?:\.\d+)?%?\b/g;
-	const words = text.toLowerCase();
+	const numRegex = /\b[\d,]+(?:\.\d+)?%?\b/g;
 
 	for (const match of text.matchAll(numRegex)) {
-		const n = parseFloat(match[0]);
-		if (!isNaN(n) && !knownNumbers.some((k) => Math.abs(k - n) < 0.01)) {
-			// Check if this number appears in context of percentages that match
-			const pctMatch = match[0].endsWith('%');
-			if (pctMatch && knownNumbers.some((k) => Math.abs(k - n) < 0.02)) continue;
-			found.push(match[0]);
-		}
+		const rawStr = match[0];
+		const n = parseFloat(rawStr.replace(/,/g, ''));
+		if (isNaN(n)) continue;
+		if (knownNumbers.some((k) => Math.abs(k - n) < 0.01)) continue;
+		// Numbers < 100 are likely counts/ordinals — allow without checking
+		if (n < 100) continue;
+		// Higher tolerance for percentages (rounding differences)
+		if (rawStr.endsWith('%') && knownNumbers.some((k) => Math.abs(k - n) < 0.02)) continue;
+		found.push(rawStr);
 	}
 	return found;
 }
@@ -144,10 +146,11 @@ export async function llmCall(
 	systemPrompt: string,
 	userPrompt: string,
 	config: BriefingConfig,
-	model?: string
+	model?: string,
+	maxTokens?: number
 ): Promise<{ text: string; ok: boolean }> {
 	llmCallsMade++;
-	const res = await llmChat(systemPrompt, userPrompt, config, model);
+	const res = await llmChat(systemPrompt, userPrompt, config, model, maxTokens);
 	if (isError(res)) {
 		llmCallsFailed++;
 		return { text: '', ok: false };

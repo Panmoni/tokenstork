@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Briefing } from '$lib/server/briefing/types';
+	import type { Briefing, BcmrChangeItem } from '$lib/server/briefing/types';
 
 	interface Props { briefing: Briefing; archiveEntries?: Array<{ slug: string; date: string; time: string }>; }
 	let { briefing: b, archiveEntries = [] }: Props = $props();
@@ -14,32 +14,58 @@
 
 	const fmtNum = (n: number) => n.toLocaleString();
 	function fmtPct(n: number) { return `${n > 0 ? '+' : ''}${n.toFixed(1)}%`; }
+
 	function giniLabel(g: number) {
-		return g < 0.4 ? 'Excellent' : g < 0.6 ? 'Good' : g < 0.75 ? 'Fair' : g < 0.9 ? 'Poor' : 'Whale-controlled';
+		return g < 0.4 ? 'Well-distributed' : g < 0.6 ? 'Good' : g < 0.75 ? 'Fair' : g < 0.9 ? 'Poor' : 'Whale-controlled';
 	}
 	function giniColorClass(g: number) {
 		return g < 0.4 ? 'text-emerald-600' : g < 0.6 ? 'text-blue-600' : g < 0.75 ? 'text-amber-600' : g < 0.9 ? 'text-red-600' : 'text-red-800';
 	}
 
-	// Filter out truly unnamed tokens (no name, no symbol)
 	const namedNewTokens = $derived(b.newTokens.filter(t => t.name || t.symbol));
 	const unnamedCount = $derived(b.newTokens.length - namedNewTokens.length);
+
+	const extremeWhaleMoves = $derived(
+		[...b.whaleMoves].sort((a, b) => Math.abs(b.giniAfter - 0.5) - Math.abs(a.giniAfter - 0.5))
+	);
+
+	function fmtBcmrSummary(c: BcmrChangeItem): string {
+		try {
+			const detail = JSON.parse(c.summary);
+			if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+				if (detail.changed && Array.isArray(detail.changed) && detail.changed.length > 0) {
+					const changes = detail.changed.map((field: string) => {
+						if (detail.fields && detail.fields[field]) {
+							const { old: ov, new: nv } = detail.fields[field];
+							if (ov != null && nv != null && nv !== ov) return `${field} → "${nv}"`;
+							if (ov == null && nv != null) return `added ${field}`;
+							if (ov != null && nv == null) return `removed ${field}`;
+						}
+						return `changed ${field}`;
+					});
+					return changes.join(', ');
+				}
+			}
+		} catch {}
+		return c.summary;
+	}
 </script>
 
 <div class="max-w-3xl mx-auto py-10 px-4 sm:px-6">
-	<!-- Page title and description -->
-	<h1 class="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
-		⬢ Stork Sightings
+
+	<!-- Page header -->
+	<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent">
+		Stork Sightings
 	</h1>
-	<p class="mt-2 text-sm ts-text-muted italic leading-relaxed">
+	<p class="mt-2 ts-text-muted text-sm leading-relaxed">
 		Daily BCH token briefing — {date} {time} UTC · last {b.windowHours}h window.
-		{b.ecosystem.totalTokens > 0 ? `${fmtNum(b.ecosystem.totalTokens)} tokens tracked across ${fmtNum(b.ecosystem.holderCount)} holders.` : ''}
+		{#if b.ecosystem.totalTokens > 0}{fmtNum(b.ecosystem.totalTokens)} tokens tracked across {fmtNum(b.ecosystem.holderCount)} holders.{/if}
 		<a href="#archive" class="text-emerald-600 hover:underline ml-2">Archive ↓</a>
 	</p>
 
 	<!-- Executive Summary -->
 	{#if b.executiveSummary}
-		<p class="mt-6 text-base text-slate-700 dark:text-slate-300 leading-relaxed">
+		<p class="mt-6 text-base leading-relaxed text-slate-700 dark:text-slate-300">
 			{b.executiveSummary}
 		</p>
 	{/if}
@@ -48,176 +74,170 @@
 	{#if b.trends.length > 0}
 		<div class="mt-5 space-y-1.5">
 			{#each b.trends as t}
-				<p class="text-sm text-slate-600 dark:text-slate-400">• {t.text}</p>
+				<p class="text-sm text-slate-600 dark:text-slate-400">{t.text.replace(/^[•\-]\s*/, '')}</p>
 			{/each}
 		</div>
 	{/if}
 
-	<!-- Ecosystem at a glance -->
-	<div class="mt-8 text-sm text-slate-600 dark:text-slate-400 space-y-1 border-t ts-border-subtle pt-5">
-		<p>
-			<b class="text-slate-900 dark:text-white">{fmtNum(b.ecosystem.totalTokens)}</b> tokens tracked ·
-			<b class="text-slate-900 dark:text-white">{b.ecosystem.tokensNew24h}</b> new in 24h ·
-			<b class="text-slate-900 dark:text-white">{fmtNum(b.ecosystem.activity24hTokenTxs)}</b> token txs 24h ·
-			<b class="text-slate-900 dark:text-white">{b.ecosystem.activity24hMints}</b> mints ·
-			<b class="text-slate-900 dark:text-white">{fmtNum(b.ecosystem.holderCount)}</b> holders ·
-			<b class="text-slate-900 dark:text-white">{fmtNum(b.ecosystem.listingsCauldron)}</b> on Cauldron
-			{#if b.ecosystem.medianGini !== null} · median Gini <b class="text-slate-900 dark:text-white">{b.ecosystem.medianGini.toFixed(2)}</b>{/if}
-			{#if b.ecosystem.bchGini !== null} · BCH Gini <b class="text-slate-900 dark:text-white">{b.ecosystem.bchGini.toFixed(2)}</b>{/if}
-		</p>
-	</div>
+	<!-- Ecosystem snapshot -->
+	<p class="mt-8 text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+		<b class="text-slate-900 dark:text-white">{fmtNum(b.ecosystem.totalTokens)}</b> tokens tracked ·
+		<b class="text-slate-900 dark:text-white">{b.ecosystem.tokensNew24h}</b> new in 24h ·
+		<b class="text-slate-900 dark:text-white">{fmtNum(b.ecosystem.activity24hTokenTxs)}</b> token txs 24h ·
+		<b class="text-slate-900 dark:text-white">{b.ecosystem.activity24hMints}</b> mints ·
+		<b class="text-slate-900 dark:text-white">{fmtNum(b.ecosystem.holderCount)}</b> holders ·
+		<b class="text-slate-900 dark:text-white">{fmtNum(b.ecosystem.listingsCauldron)}</b> on Cauldron
+		{#if b.ecosystem.medianGini !== null} · median Gini <b class="text-slate-900 dark:text-white">{b.ecosystem.medianGini.toFixed(2)}</b>{/if}
+		{#if b.ecosystem.bchGini !== null} · BCH Gini <b class="text-slate-900 dark:text-white">{b.ecosystem.bchGini.toFixed(2)}</b>{/if}
+		.
+	</p>
 
 	<!-- Token of the Day -->
 	{#if b.tokenProfile}
-		<div class="mt-8 border-t ts-border-subtle pt-5">
-			<h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-2">
-				Token of the Day: <a href="/token/{b.tokenProfile.categoryHex}" class="text-emerald-600 hover:underline">{b.tokenProfile.symbol || b.tokenProfile.name}</a>
-			</h2>
-			<p class="text-xs ts-text-muted mb-2">{fmtNum(b.tokenProfile.holderCount)} holders · Gini: {b.tokenProfile.giniTier}</p>
-			<p class="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{b.tokenProfile.narrative}</p>
-		</div>
+		<h2 class="mt-10 text-lg font-semibold text-slate-900 dark:text-white mb-1">
+			Token of the Day: <a href="/token/{b.tokenProfile.categoryHex}" class="text-emerald-600 hover:underline">{b.tokenProfile.symbol || b.tokenProfile.name}</a>
+		</h2>
+		<p class="text-sm ts-text-muted mb-2">{fmtNum(b.tokenProfile.holderCount)} holders · Gini: {b.tokenProfile.giniTier}</p>
+		<p class="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{b.tokenProfile.narrative}</p>
 	{/if}
 
 	<!-- Market Movers -->
 	{#if b.movers.gainers.length > 0 || b.movers.losers.length > 0}
-		<div class="mt-8 border-t ts-border-subtle pt-5">
-			<h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-3">Market Movers <span class="text-sm font-normal text-slate-400">(Cauldron, 24h)</span></h2>
-			<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-				{#if b.movers.gainers.length > 0}
-					<div>
-						<h3 class="text-sm font-semibold text-emerald-600 mb-2">Gainers</h3>
-						<div class="space-y-1.5">
-							{#each b.movers.gainers as m}
-								<a href="/token/{m.categoryHex}" class="flex items-center justify-between no-underline hover:opacity-80 text-sm">
-									<span class="font-semibold text-slate-900 dark:text-white">{m.symbol || m.name}</span>
-									<span class="font-mono text-emerald-600">↑ {fmtPct(m.pricePct)}</span>
-								</a>
-							{/each}
-						</div>
-					</div>
-				{/if}
-				{#if b.movers.losers.length > 0}
-					<div>
-						<h3 class="text-sm font-semibold text-red-600 mb-2">Losers</h3>
-						<div class="space-y-1.5">
-							{#each b.movers.losers as m}
-								<a href="/token/{m.categoryHex}" class="flex items-center justify-between no-underline hover:opacity-80 text-sm">
-									<span class="font-semibold text-slate-900 dark:text-white">{m.symbol || m.name}</span>
-									<span class="font-mono text-red-600">↓ {fmtPct(m.pricePct)}</span>
-								</a>
-							{/each}
-						</div>
-					</div>
-				{/if}
+		<h2 class="mt-10 text-lg font-semibold text-slate-900 dark:text-white mb-3">
+			Market Movers <span class="text-sm font-normal text-slate-400">(Cauldron, 24h)</span>
+		</h2>
+
+		{#if b.movers.gainers.length > 0}
+			<h3 class="text-sm font-semibold text-emerald-600 mb-1.5">Gainers</h3>
+			<div class="space-y-1">
+				{#each b.movers.gainers as m}
+					<a href="/token/{m.categoryHex}" class="flex items-center justify-between no-underline hover:opacity-80 text-sm">
+						<span class="font-semibold text-slate-900 dark:text-white">{m.symbol || m.name}</span>
+						<span class="font-mono text-emerald-600">↑ {fmtPct(m.pricePct)}</span>
+					</a>
+				{/each}
 			</div>
-			{#if b.movers.tvlMovers.length > 0}
-				<div class="mt-3">
-					<h3 class="text-sm font-semibold text-slate-500 mb-1.5">TVL Swings</h3>
-					<div class="space-y-1">
-						{#each b.movers.tvlMovers.slice(0, 5) as m}
-							<a href="/token/{m.categoryHex}" class="flex items-center justify-between no-underline hover:opacity-80 text-sm">
-								<span class="font-semibold text-slate-900 dark:text-white">{m.symbol || m.name}</span>
-								<span class="font-mono {m.tvlPct && m.tvlPct >= 0 ? 'text-emerald-600' : 'text-red-600'}">
-									{m.tvlPct && m.tvlPct >= 0 ? '↑' : '↓'} {m.tvlPct ? fmtPct(m.tvlPct) : '—'} TVL
-								</span>
-							</a>
-						{/each}
-					</div>
-				</div>
-			{/if}
-		</div>
+		{/if}
+
+		{#if b.movers.losers.length > 0}
+			<h3 class="text-sm font-semibold text-red-600 mt-4 mb-1.5">Losers</h3>
+			<div class="space-y-1">
+				{#each b.movers.losers as m}
+					<a href="/token/{m.categoryHex}" class="flex items-center justify-between no-underline hover:opacity-80 text-sm">
+						<span class="font-semibold text-slate-900 dark:text-white">{m.symbol || m.name}</span>
+						<span class="font-mono text-red-600">↓ {fmtPct(m.pricePct)}</span>
+					</a>
+				{/each}
+			</div>
+		{/if}
+
+		{#if b.movers.tvlMovers.length > 0}
+			<h3 class="text-sm font-semibold text-slate-500 mt-4 mb-1.5">TVL Swings</h3>
+			<div class="space-y-1">
+				{#each b.movers.tvlMovers.slice(0, 5) as m}
+					<a href="/token/{m.categoryHex}" class="flex items-center justify-between no-underline hover:opacity-80 text-sm">
+						<span class="font-semibold text-slate-900 dark:text-white">{m.symbol || m.name}</span>
+						<span class="font-mono {m.tvlPct && m.tvlPct >= 0 ? 'text-emerald-600' : 'text-red-600'}">
+							{m.tvlPct && m.tvlPct >= 0 ? '↑' : '↓'} {m.tvlPct ? fmtPct(m.tvlPct) : '—'} TVL
+						</span>
+					</a>
+				{/each}
+			</div>
+		{/if}
 	{/if}
 
 	<!-- New Tokens -->
-	<div class="mt-8 border-t ts-border-subtle pt-5">
-		<h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-2">New Tokens <span class="text-sm font-normal text-slate-400">(last {b.windowHours}h)</span></h2>
-		{#if namedNewTokens.length > 0}
-			<div class="space-y-1.5">
-				{#each namedNewTokens as t}
-					<a href="/token/{t.categoryHex}" class="flex items-center justify-between no-underline hover:opacity-80 text-sm">
-						<span>
-							<span class="font-semibold text-slate-900 dark:text-white">{t.symbol || t.name}</span>
-							{#if t.name && t.symbol !== t.name}<span class="text-slate-500 ml-1.5">{t.name}</span>{/if}
-						</span>
-						<span class="text-xs ts-text-muted">{fmtNum(t.holderCount)} holders</span>
-					</a>
-				{/each}
-			</div>
-		{/if}
-		{#if unnamedCount > 0}
-			<p class="text-sm ts-text-muted mt-1">{unnamedCount} additional token{unnamedCount === 1 ? '' : 's'} minted without BCMR metadata (no name or symbol yet).</p>
-		{/if}
-		{#if b.newTokens.length === 0}
-			<p class="text-sm ts-text-muted">No new tokens in the window.</p>
-		{/if}
-	</div>
+	<h2 class="mt-10 text-lg font-semibold text-slate-900 dark:text-white mb-2">New Tokens <span class="text-sm font-normal text-slate-400">(last {b.windowHours}h)</span></h2>
+	{#if namedNewTokens.length > 0}
+		<p class="text-sm text-slate-700 dark:text-slate-300">
+			{#each namedNewTokens as t, i}
+				<a href="/token/{t.categoryHex}" class="font-medium text-slate-900 dark:text-white hover:text-emerald-600">
+					{t.symbol || t.name}
+				</a>
+				{#if t.name && t.symbol && t.symbol !== t.name}
+					<span class="text-slate-500 dark:text-slate-400 ml-1">{t.name}</span>
+				{/if}
+				{@const nextIsLast = i === namedNewTokens.length - 2 && unnamedCount === 0}
+				{@const isLast = i === namedNewTokens.length - 1}
+				{#if !isLast && !nextIsLast && i < namedNewTokens.length - 1}, {/if}
+				{#if nextIsLast} and {/if}
+				{#if isLast && unnamedCount > 0} and {/if}
+			{/each}
+			{#if unnamedCount > 0}
+				{unnamedCount} unnamed token{unnamedCount === 1 ? '' : 's'}
+			{/if}
+			 minted.
+		</p>
+	{:else if b.newTokens.length === 0}
+		<p class="text-sm ts-text-muted">No new tokens in the window.</p>
+	{/if}
 
-	<!-- Holder Concentration Watch (formerly whale moves) -->
-	{#if b.whaleMoves.length > 0}
-		<div class="mt-8 border-t ts-border-subtle pt-5">
-			<h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-3">Concentration Watch</h2>
-			<p class="text-sm ts-text-muted mb-3">Tokens with the highest Gini coefficients — most concentrated holder distribution.</p>
-			<div class="space-y-2">
-				{#each b.whaleMoves as w}
-					<a href="/token/{w.categoryHex}" class="flex items-center justify-between no-underline hover:opacity-80 text-sm">
-						<div>
-							<span class="font-semibold text-slate-900 dark:text-white">{w.symbol || w.name}</span>
-							<span class="text-xs ts-text-muted ml-2">{fmtNum(w.holderCountAfter)} holders</span>
+	<!-- Concentration Watch -->
+	{#if extremeWhaleMoves.length > 0}
+		<h2 class="mt-10 text-lg font-semibold text-slate-900 dark:text-white mb-3">Concentration Watch</h2>
+		<p class="text-sm ts-text-muted mb-3">Tokens ranked by holder distribution — from well-distributed to whale-controlled.</p>
+		<div class="space-y-2">
+			{#each extremeWhaleMoves as w}
+				<a href="/token/{w.categoryHex}" class="flex items-center justify-between no-underline hover:opacity-80 text-sm">
+					<div>
+						<span class="font-semibold text-slate-900 dark:text-white">{w.symbol || w.name}</span>
+						<span class="text-xs ts-text-muted ml-2">{fmtNum(w.holderCountAfter)} holders</span>
+					</div>
+					<div class="flex items-center gap-2">
+						<div class="w-16 h-1.5 bg-slate-200 dark:bg-zinc-700 rounded-full overflow-hidden">
+							<div class="h-full rounded-full {giniColorClass(w.giniAfter).replace('text-', 'bg-')}" style="width:{Math.min(100, Math.round(w.giniAfter * 100))}%"></div>
 						</div>
-						<div class="flex items-center gap-2">
-							<div class="w-16 h-1.5 bg-slate-200 dark:bg-zinc-700 rounded-full overflow-hidden">
-								<div class="h-full rounded-full {giniColorClass(w.giniAfter).replace('text-', 'bg-')}" style="width:{Math.min(100, Math.round(w.giniAfter * 100))}%"></div>
-							</div>
-							<span class="text-xs font-mono {giniColorClass(w.giniAfter)}">{w.giniAfter.toFixed(2)} — {giniLabel(w.giniAfter)}</span>
-						</div>
-					</a>
-				{/each}
-			</div>
+						<span class="text-xs font-mono {giniColorClass(w.giniAfter)}">{w.giniAfter.toFixed(2)} — {giniLabel(w.giniAfter)}</span>
+					</div>
+				</a>
+			{/each}
 		</div>
 	{/if}
 
 	<!-- BCMR Changes -->
 	{#if b.bcmrChanges.length > 0}
-		<div class="mt-8 border-t ts-border-subtle pt-5">
-			<h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-3">BCMR Activity</h2>
-			<div class="space-y-1.5">
-				{#each b.bcmrChanges as c}
-					<p class="text-sm">
-						<span class="font-semibold {c.severity === 'critical' ? 'text-red-600' : c.severity === 'warning' ? 'text-amber-600' : 'text-slate-500'}">[{c.severity}]</span>
-						<span class="font-medium text-slate-900 dark:text-white">{c.symbol || c.name}</span>
-						<span class="text-slate-500">— {c.summary}</span>
-					</p>
-				{/each}
-			</div>
+		<h2 class="mt-10 text-lg font-semibold text-slate-900 dark:text-white mb-3">BCMR Activity</h2>
+		<div class="space-y-1.5">
+			{#each b.bcmrChanges as c}
+				<p class="text-sm">
+					<span class="font-medium {c.severity === 'critical' ? 'text-red-600' : c.severity === 'warning' ? 'text-amber-600' : 'text-slate-500'}">
+						{c.severity}
+					</span>
+					<span class="font-semibold text-slate-900 dark:text-white ml-1">{c.symbol || c.name}</span>
+					{#if c.summary !== c.changeType}
+						<span class="text-slate-500 dark:text-slate-400"> — {fmtBcmrSummary(c)}</span>
+					{:else}
+						<span class="text-slate-500 dark:text-slate-400"> — {c.changeType}</span>
+					{/if}
+				</p>
+			{/each}
 		</div>
 	{/if}
 
 	<!-- Community Pulse -->
 	{#if b.votes.length > 0}
-		<div class="mt-8 border-t ts-border-subtle pt-5">
-			<h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-3">Community Pulse</h2>
-			<div class="space-y-1.5">
-				{#each b.votes as v}
-					<a href="/token/{v.categoryHex}" class="flex items-center justify-between no-underline hover:opacity-80 text-sm">
-						<span class="font-semibold text-slate-900 dark:text-white">{v.symbol || v.name}</span>
-						<span class="text-xs">
-							<span class="text-emerald-600">▲{v.upvotes}</span>
-							<span class="text-red-600 ml-2">▼{v.downvotes}</span>
-							{#if v.controversial}<span class="text-amber-600 ml-1 font-medium">⚡</span>{/if}
-						</span>
-					</a>
-				{/each}
-			</div>
+		<h2 class="mt-10 text-lg font-semibold text-slate-900 dark:text-white mb-3">Community Pulse</h2>
+		<div class="space-y-1.5">
+			{#each b.votes as v}
+				<a href="/token/{v.categoryHex}" class="flex items-center justify-between no-underline hover:opacity-80 text-sm">
+					<span class="font-semibold text-slate-900 dark:text-white">{v.symbol || v.name}</span>
+					<span class="text-xs">
+						<span class="text-emerald-600">▲{v.upvotes}</span>
+						<span class="text-red-600 ml-2">▼{v.downvotes}</span>
+						{#if v.controversial}<span class="text-amber-600 ml-1 font-medium">⚡</span>{/if}
+					</span>
+				</a>
+			{/each}
 		</div>
 	{/if}
 
 	<!-- Spark -->
 	{#if b.spark}
-		<p class="mt-8 text-sm text-slate-600 dark:text-slate-400 italic border-t ts-border-subtle pt-5">💡 {b.spark}</p>
+		<p class="mt-10 text-sm text-slate-600 dark:text-slate-400 italic">{b.spark}</p>
 	{/if}
 
 	<!-- Share + Links -->
-	<div class="mt-10 border-t ts-border-subtle pt-5">
+	<div class="mt-10">
 		<div class="flex flex-wrap items-center gap-3 mb-3">
 			<span class="text-xs font-semibold uppercase tracking-wider ts-text-muted">Share</span>
 			<a href="https://x.com/intent/tweet?text={encodeURIComponent(shareText)}&url={encodeURIComponent(shareUrl)}" target="_blank" rel="noopener" class="text-xs text-slate-500 hover:text-slate-900 dark:hover:text-white">X</a>
@@ -236,8 +256,8 @@
 		</div>
 	</div>
 
-	<!-- Archive section (on same page) -->
-	<div id="archive" class="mt-12 border-t ts-border-subtle pt-6">
+	<!-- Archive -->
+	<div id="archive" class="mt-12">
 		<h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-3">Archive</h2>
 		{#if archiveEntries.length > 0}
 			<div class="space-y-1">
@@ -257,4 +277,5 @@
 		⬢ Stork Sightings — automated daily briefing from the <a href="/" class="text-emerald-600 hover:underline">TokenStork</a> directory.
 		<a href="https://tokenstork.substack.com" target="_blank" rel="noopener" class="text-emerald-600 hover:underline">Subscribe on Substack</a>.
 	</p>
+
 </div>

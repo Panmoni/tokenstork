@@ -15,7 +15,8 @@ export async function writeExecutiveSummary(
 		'You are the executive editor of Stork Sightings. Write a concise, punchy briefing.',
 		prompt,
 		config,
-		config.llm.model
+		config.llm.model,
+		4096
 	);
 
 	if (!ok || !text.trim()) {
@@ -97,7 +98,8 @@ function buildPrompt(d: DataBundle): string {
 		`Mention specific token names from the data.\n` +
 		`NEVER invent any number not in the input data. Use ONLY the exact numbers provided above.\n` +
 		`If a number is "none", "0", or "0.00", do NOT invent alternatives.\n` +
-		`Do NOT invent percentages, dollar amounts, BCH amounts, or holder counts not provided.`;
+		`Do NOT invent percentages, dollar amounts, BCH amounts, or holder counts not provided.\n` +
+		`Do NOT perform any arithmetic on the input numbers. Do NOT compute differences, spreads, sums, or averages. Only mention numbers that appear verbatim in the input data above. If you need to describe a relationship between two numbers, use words like 'wide' or 'narrow', not computed values.`;
 }
 
 function parseSummaryResponse(text: string): { summary: string; trends: TrendBullet[] } {

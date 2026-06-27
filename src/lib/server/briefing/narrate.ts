@@ -99,7 +99,7 @@ function selectCandidate(briefing: Briefing): TokenCandidate | null {
 			iconCleared: false,
 			listed: true,
 			hasActivity: true,
-			giniTier: 'unknown',
+			giniTier: '',
 			score: Math.abs(m.pricePct) * 0.4
 		});
 	}
@@ -114,7 +114,7 @@ function selectCandidate(briefing: Briefing): TokenCandidate | null {
 			iconCleared: false,
 			listed: true,
 			hasActivity: true,
-			giniTier: 'unknown',
+			giniTier: '',
 			score: Math.abs(m.pricePct) * 0.4
 		});
 	}

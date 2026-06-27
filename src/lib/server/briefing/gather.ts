@@ -163,9 +163,9 @@ async function gatherWhaleMoves(config: T.BriefingConfig): Promise<{ rows: T.Wha
 			   JOIN tokens t ON t.category = s.category
 			   LEFT JOIN token_metadata m ON m.category = t.category
 			  WHERE s.gini_coefficient IS NOT NULL
-			    AND s.holder_count > 2
+			    AND s.holder_count > 0
 			    AND ${NOT_MODERATED_CLAUSE}
-			  ORDER BY s.gini_coefficient DESC
+			  ORDER BY ABS(s.gini_coefficient - 0.5) DESC
 			  LIMIT $1`,
 			[config.maxWhaleMoves]
 		);
