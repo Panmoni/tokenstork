@@ -239,7 +239,7 @@ export const POST: RequestHandler = async ({ locals, request, params }) => {
 			try {
 				walletUtxos = await fetchWalletUtxos(senderCashaddr);
 			} catch (err) {
-				console.warn('[api/airdrops/broadcast] BlockBook UTXO fetch failed', {
+				console.warn('[api/airdrops/broadcast] UTXO fetch failed', {
 					airdropId,
 					nextIdx,
 					error: (err as Error).message

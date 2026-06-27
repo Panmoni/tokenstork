@@ -24,7 +24,7 @@ export interface BcmrVersionEntry {
 	decimals: number | null;
 	iconUri: string | null;
 	publicationUri: string;
-	/** Authority controller address at this hop, if BlockBook rendered one. */
+	/** Authority controller address at this hop, if decodable. */
 	controllerAddr: string | null;
 	/** Identity fields that differ from the previous (older) version. */
 	changedFields: string[];

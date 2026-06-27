@@ -3,7 +3,7 @@
 // Returns a transaction-readiness report for the BCMR publish wizard's
 // step 5 diagnostic card. Server-side — walks the authchain and fetches
 // the wallet's full UTXO set so the client can render ✅/❌ requirements
-// without needing to interpret raw BlockBook data.
+// without needing to interpret raw on-chain data.
 //
 // This is a read-only endpoint (no writes, no tx building). Designed to
 // be called on every mount of step 5 and on every "Check wallet" click.

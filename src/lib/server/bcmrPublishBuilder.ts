@@ -12,7 +12,7 @@
 //   4. (Optional) Emits a BCH change output at vout=2 if a BCH-funding
 //      input was needed to cover fees on top of the authNFT UTXO's dust.
 //
-// Pure TS + libauth + the local BlockBook UTXO fetcher; no external
+// Pure TS + libauth + our on-chain UTXO fetcher; no external
 // services. Returns the unsigned hex + a sourceOutputs payload the
 // wallet can use to verify each input pre-signing (WC2
 // bch_signTransaction shape).

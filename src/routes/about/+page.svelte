@@ -108,13 +108,6 @@
 					{m.about_ack_tapswap()}
 				</li>
 				<li>
-					<a href="https://github.com/mainnet-pat/blockbook" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">BlockBook (cashtokens fork)</a>
-					{m.about_by()}
-					<a href="https://x.com/mainnet_pat" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">mainnet_pat</a>
-					{m.about_ack_blockbook()}
-					<a href="https://github.com/trezor/blockbook" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">Trezor's BlockBook</a>
-				</li>
-				<li>
 					<a href="https://www.coingecko.com/en" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">CoinGecko</a>
 					{m.about_ack_coingecko()}
 				</li>
@@ -128,6 +121,10 @@
 				<li>
 					<a href="https://bchworks.com/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline">BCHWorks</a>
 					{m.about_ack_bchworks()}
+				</li>
+				<li class="mt-4 pt-4 border-t ts-border-subtle">
+					<span class="font-semibold text-slate-900 dark:text-white">{m.about_techstack_label()}</span>
+					{m.about_techstack()}
 				</li>
 			</ul>
 		</section>

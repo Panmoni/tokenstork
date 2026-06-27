@@ -13,7 +13,7 @@
 //      cache is stale (head already spent), trigger a fresh walk; if
 //      ownership doesn't match, reject (the authchain advanced out from
 //      under the user — they need to refresh and restart).
-//   3. Fetch the wallet's UTXOs from BlockBook.
+//   3. Fetch the wallet's UTXOs from our on-chain index.
 //   4. Find the authNFT UTXO: matches the head txid at vout=0.
 //   5. Call bcmrPublishBuilder to assemble the unsigned tx.
 //   6. Persist unsigned_tx_hex + authchain_head_txid_at_session.
@@ -153,19 +153,19 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 	// Fetch wallet UTXOs. The authNFT UTXO must be among these — if not,
 	// the wallet doesn't actually hold the authority NFT (despite the
 	// ownership check above saying it does), which would mean a TOCTOU
-	// race between BlockBook's address lookup and its UTXO endpoint.
+	// race between the address index and the UTXO set.
 	// Surface as 409 so the user can retry.
 	let walletUtxos: Awaited<ReturnType<typeof fetchWalletUtxos>>;
 	try {
 		walletUtxos = await fetchWalletUtxos(cashaddr);
-		// BlockBook's utxo endpoint can report wrong tokenData (observed
+		// BCHN's utxo endpoint can report wrong tokenData (observed
 		// smearing one output's token across sibling UTXOs); cross-check
 		// against the per-tx endpoint so the builder's token math matches
 		// consensus. See verifyUtxoTokenData docs.
 		walletUtxos = await verifyUtxoTokenData(walletUtxos);
 	} catch (err) {
 		console.error('[api/bcmr/build-tx] fetchWalletUtxos error:', err);
-		error(502, `BlockBook UTXO fetch failed: ${(err as Error).message}`);
+		error(502, `UTXO fetch failed: ${(err as Error).message}`);
 	}
 
 	const authNftUtxo = walletUtxos.find(

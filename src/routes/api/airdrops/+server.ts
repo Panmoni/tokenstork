@@ -3,7 +3,7 @@
 // Auth-gated, rate-limited (1 airdrop / 15 min / cashaddr). Validates
 // eligibility (sender holds source token), fetches the recipient list
 // from token_holders, computes per-recipient amounts (equal or
-// weighted), pulls the sender's UTXOs from local BlockBook, builds N
+// weighted), pulls the sender's UTXOs from our BCHN-sourced index, builds N
 // unsigned chunks via libauth, persists airdrops + airdrop_txs +
 // airdrop_outputs, returns the unsigned hex blobs to the wizard.
 //
@@ -198,14 +198,14 @@ export const POST: RequestHandler = async ({ locals, request, getClientAddress }
 	try {
 		walletUtxos = await fetchWalletUtxos(senderCashaddr);
 	} catch (err) {
-		console.error('[api/airdrops] BlockBook fetch failed:', (err as Error).message);
+		console.error('[api/airdrops] UTXO fetch failed:', (err as Error).message);
 		error(503, 'UTXO fetch failed; try again in a moment');
 	}
 
 	// Build all chunks UP FRONT against the same UTXO snapshot. The
 	// chunk-K builder pretends chunk K-1's outputs already exist (we
 	// chain change-UTXOs in memory) — but actually a simpler approach
-	// is to just rebuild chunk K against the BlockBook snapshot AT
+	// is to just rebuild chunk K against the UTXO snapshot AT
 	// CHUNK K's BROADCAST TIME (in /broadcast endpoint). For draft
 	// time, we build chunk 0 only and the wizard re-fetches per chunk.
 	//

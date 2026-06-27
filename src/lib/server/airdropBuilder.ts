@@ -2,7 +2,7 @@
 //
 // Generalises src/lib/mint/genesis.ts from "1 genesis output + 1 change"
 // to "1 OP_RETURN audit prefix + N recipient outputs + 1 change" against
-// a sender's own UTXO set. Pure TS + libauth + the local BlockBook UTXO
+// a sender's own UTXO set. Pure TS + libauth + our BCHN-sourced UTXO
 // fetcher; no third-party services touched.
 //
 // Architectural pattern (chunk-then-sign loop, OP_RETURN audit prefix,

@@ -368,7 +368,7 @@
 					</a>
 				{/await}
 				{#await data.canPublishBcmr}
-					<!-- BCMR publish CTA — own deferred (BlockBook authchain walk) -->
+					<!-- BCMR publish CTA — own deferred (authchain walk) -->
 				{:then canPublish}
 					{#if canPublish}
 						<a

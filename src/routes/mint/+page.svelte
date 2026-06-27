@@ -558,7 +558,7 @@
 				}
 			}
 			// Create BCMR publish session so user can publish metadata
-			// immediately, without waiting for BlockBook indexing.
+			// immediately, without waiting for on-chain indexing.
 			if (mintedCategoryHex) {
 				try {
 					const sRes = await fetch('/api/bcmr/sessions', {

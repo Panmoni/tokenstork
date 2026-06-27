@@ -154,7 +154,7 @@
 				{
 					kind: 'lead',
 					label: 'Possible failure modes you accept.',
-					text: `By using these tools, you acknowledge and accept that bugs in the construction code, in the underlying libauth library, in our local Bitcoin Cash node, in our local BlockBook indexer, in the relay network, in your wallet's signing implementation, or in your own input could result in any of the following: loss of all or part of the tokens or BCH you intended to send; broadcast of transactions to recipients you did not intend; partial completion of multi-transaction airdrops with no automatic recovery; revelation of your sender wallet to every recipient via the on-chain transaction inputs; permanent inability to spend any token UTXO created by these tools.`
+					text: `By using these tools, you acknowledge and accept that bugs in the construction code, in the underlying libauth library, in our local Bitcoin Cash node, in the relay network, in your wallet's signing implementation, or in your own input could result in any of the following: loss of all or part of the tokens or BCH you intended to send; broadcast of transactions to recipients you did not intend; partial completion of multi-transaction airdrops with no automatic recovery; revelation of your sender wallet to every recipient via the on-chain transaction inputs; permanent inability to spend any token UTXO created by these tools.`
 				},
 				{
 					kind: 'p',

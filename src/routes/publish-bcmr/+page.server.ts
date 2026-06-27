@@ -1,7 +1,7 @@
 // /publish-bcmr — wallet-gated landing route for the BCMR publish wizard (#33).
 //
 // Lists every category where the authenticated wallet holds the authNFT:
-//   1. Fetch all UTXOs the wallet currently owns via BlockBook.
+//   1. Fetch all UTXOs the wallet currently owns via our on-chain index.
 //   2. Filter to (vout = 0 AND tokenData != null) — those are authNFT-shape
 //      outputs. (A wallet might also hold non-authority token outputs at
 //      vout=0 — e.g. someone sent them an NFT — but only authNFT-shape
@@ -11,7 +11,7 @@
 //      categories the walker hasn't visited yet). The matched tokens are
 //      the eligible categories.
 //
-// Single BlockBook call + single DB query, regardless of how many tokens
+// Single on-chain lookup + single DB query, regardless of how many tokens
 // exist in the directory. Performance scales with the wallet's UTXO count,
 // not the directory size.
 
@@ -54,7 +54,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const cashaddr = locals.user.cashaddr;
 
 	// 1. Pull wallet UTXOs. Token-bearing outputs at vout=0 are the
-	//    candidate authNFTs. If BlockBook is unreachable we surface an
+	//    candidate authNFTs. If the node is unreachable we surface an
 	//    empty list with a flag rather than 500-ing — the user sees a
 	//    "couldn't reach the indexer; retry shortly" message.
 	let walletUtxos: Awaited<ReturnType<typeof fetchWalletUtxos>> | null = null;
