@@ -128,6 +128,22 @@
 		</section>
 	{/if}
 
+	<!-- Stork Sightings — daily BCH token briefing CTA -->
+	<section class="mb-8">
+		<a href="/briefing" class="block rounded-xl border border-emerald-200 dark:border-emerald-800 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950 dark:to-teal-950 p-5 hover:shadow-md transition-shadow no-underline">
+			<div class="flex items-center gap-3">
+				<span class="text-2xl">⬢</span>
+				<div class="flex-1">
+					<h2 class="text-base font-semibold text-emerald-800 dark:text-emerald-200">Stork Sightings</h2>
+					<p class="text-sm text-emerald-700 dark:text-emerald-300 mt-0.5">Daily BCH token briefing — what the stork spotted today. Market movers, new tokens, holder shifts, ecosystem health.</p>
+				</div>
+				<div class="hidden sm:flex items-center gap-1 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+					Read today's briefing <span class="text-lg">→</span>
+				</div>
+			</div>
+		</a>
+	</section>
+
 	<!--
 		Token grid — deferred (heavy CTE query). Skeleton: a 3-column card
 		grid matching TokenGrid's responsive layout, with icon circles + text

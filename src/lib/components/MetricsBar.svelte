@@ -217,6 +217,18 @@
 					<span class="w-12 h-4 bg-slate-200 dark:bg-zinc-700 rounded animate-pulse"></span>
 				{/if}
 			</div>
+				<a
+					href="/briefing"
+					class="flex items-center gap-2 hover:opacity-80 transition-opacity"
+					title="Stork Sightings — daily BCH token briefing"
+				>
+					<span class="text-xs font-medium uppercase tracking-wider ts-text-muted">
+						Briefing
+					</span>
+					<span class="font-semibold text-emerald-600 dark:text-emerald-400 text-sm underline-offset-4 hover:underline">
+						Daily
+					</span>
+				</a>
+			</div>
 		</div>
-	</div>
 </div>

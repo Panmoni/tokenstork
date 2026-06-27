@@ -98,6 +98,7 @@
 				</h3>
 				<ul class="mt-4 space-y-2 text-sm">
 					<li><a href={localizeHref('/stats')} class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">{m.nav_stats()}</a></li>
+					<li><a href={localizeHref('/briefing')} class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">Stork Sightings</a></li>
 					<li><a href={localizeHref('/mining')} class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">{m.nav_mining()}</a></li>
 					<li><a href={localizeHref('/blocks')} class="hover:text-violet-600 dark:hover:text-violet-400 ts-text-body">{m.nav_blocks()}</a></li>
 				</ul>
