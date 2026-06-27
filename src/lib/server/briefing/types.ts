@@ -94,6 +94,18 @@ export interface EcosystemSnapshot {
 	activity24hMints: number;
 	bchPriceUsd: number;
 	bchGini: number | null;
+	bchChain: BchChainStats | null;
+}
+
+export interface BchChainStats {
+	blocks24h: number;
+	avgBlockTimeSec: number;
+	txCount24h: number;
+	avgTxCount7d: number;
+	feesSats24h: number;
+	outputSats24h: number;
+	tokenTxCount24h: number;
+	mints24h: number;
 }
 
 export interface TrendBullet {
@@ -150,6 +162,7 @@ export interface Briefing {
 	bcmrChanges: BcmrChangeItem[];
 	votes: VoteItem[];
 	ecosystem: EcosystemSnapshot;
+	bchChain: BchChainStats | null;
 	tokenProfile: TokenProfile | null;
 	tokenOfTheDayOmitted: boolean;
 	tokenOfTheDayOmitReason: string;

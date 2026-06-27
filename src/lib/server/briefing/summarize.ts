@@ -55,6 +55,11 @@ interface DataBundle {
 	bchGini: number | null;
 	mints24h: number;
 	tokenTxs24h: number;
+	bchBlocks24h: number;
+	bchTxCount24h: number;
+	bchAvgTx7d: number;
+	bchFeesBch: string;
+	bchOutputBch: string;
 }
 
 function buildDataBundle(b: Briefing): DataBundle {
@@ -81,7 +86,12 @@ function buildDataBundle(b: Briefing): DataBundle {
 		controversial: b.votes.filter((v) => v.controversial).map((v) => v.symbol || v.name).join(', ') || 'none',
 		bchGini: b.ecosystem.bchGini,
 		mints24h: b.ecosystem.activity24hMints,
-		tokenTxs24h: b.ecosystem.activity24hTokenTxs
+		tokenTxs24h: b.ecosystem.activity24hTokenTxs,
+		bchBlocks24h: b.bchChain?.blocks24h ?? 0,
+		bchTxCount24h: b.bchChain?.txCount24h ?? 0,
+		bchAvgTx7d: b.bchChain?.avgTxCount7d ?? 0,
+		bchFeesBch: b.bchChain ? (b.bchChain.feesSats24h / 1e8).toFixed(2) : '0',
+		bchOutputBch: b.bchChain ? (b.bchChain.outputSats24h / 1e8).toFixed(2) : '0'
 	};
 }
 

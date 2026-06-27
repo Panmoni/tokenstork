@@ -74,6 +74,7 @@ export async function generateBriefing(
 		bcmrChanges: analyzed.bcmrChanges,
 		votes: analyzed.votes,
 		ecosystem: analyzed.ecosystem,
+		bchChain: analyzed.bchChain,
 		tokenProfile: profileResult.profile,
 		tokenOfTheDayOmitted: profileResult.omitted,
 		tokenOfTheDayOmitReason: profileResult.reason,

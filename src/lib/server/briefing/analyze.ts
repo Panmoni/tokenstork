@@ -13,6 +13,7 @@ export interface AnalyzedSignals {
 	bcmrChanges: T.BcmrChangeItem[];
 	votes: T.VoteItem[];
 	ecosystem: T.EcosystemSnapshot;
+	bchChain: T.BchChainStats | null;
 }
 
 export function analyzeSignals(raw: RawSignals): AnalyzedSignals {
@@ -37,6 +38,7 @@ export function analyzeSignals(raw: RawSignals): AnalyzedSignals {
 		whaleMoves: raw.whaleMoves,
 		bcmrChanges: raw.bcmrChanges,
 		votes: raw.votes,
-		ecosystem: raw.ecosystem
+		ecosystem: raw.ecosystem,
+		bchChain: raw.bchChain
 	};
 }

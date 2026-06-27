@@ -19,6 +19,7 @@ export interface RawSignals {
 	bcmrChanges: T.BcmrChangeItem[];
 	votes: T.VoteItem[];
 	ecosystem: T.EcosystemSnapshot;
+	bchChain: T.BchChainStats | null;
 	diagnostics: T.QueryDiagnostic[];
 }
 
@@ -323,7 +324,8 @@ async function gatherEcosystem(config: T.BriefingConfig): Promise<{ rows: T.Ecos
 				activity24hTokenTxs: Number(activityRes.rows[0]?.token_24h ?? 0),
 				activity24hMints: Number(activityRes.rows[0]?.mints_24h ?? 0),
 				bchPriceUsd,
-				bchGini: null
+				bchGini: null,
+				bchChain: null
 			},
 			diag: { name: 'ecosystem', durationMs: Date.now() - t0, rowCount: 1 }
 		};
@@ -341,7 +343,7 @@ function emptyEcosystem(): T.EcosystemSnapshot {
 		tvlSats: 0, tvlUsd: 0, volume24hSats: 0, volume24hUsd: 0,
 		holderCount: 0, listingsCauldron: 0, listingsTapswap: 0, listingsFex: 0,
 		medianGini: null, activity24hTokenTxs: 0, activity24hMints: 0,
-		bchPriceUsd: 0, bchGini: null
+		bchPriceUsd: 0, bchGini: null, bchChain: null
 	};
 }
 
@@ -379,10 +381,111 @@ async function gatherBchGini(_config: T.BriefingConfig): Promise<{ gini: number 
 	}
 }
 
+// ---- BCH chain stats from blocks table ----
+async function gatherBchChain(_config: T.BriefingConfig): Promise<{ rows: T.BchChainStats; diag: T.QueryDiagnostic }> {
+	const t0 = Date.now();
+	try {
+		const [res24, res7d] = await Promise.all([
+			query<{
+				blocks: string; avg_block_s: string; txs: string; fees: string;
+				output: string; token_txs: string; mints: string;
+			}>(
+				`SELECT COUNT(*)::bigint::text AS blocks,
+				        COALESCE(ROUND(1440.0 / NULLIF(COUNT(*), 0))::bigint, 0)::text AS avg_block_s,
+				        COALESCE(SUM(tx_count), 0)::bigint::text AS txs,
+				        COALESCE(SUM(fees_sats), 0)::bigint::text AS fees,
+				        COALESCE(SUM(total_output_sats), 0)::text AS output,
+				        COALESCE(SUM(token_tx_count), 0)::bigint::text AS token_txs,
+				        COALESCE(SUM(genesis_tx_count), 0)::bigint::text AS mints
+				   FROM blocks
+				  WHERE time > now() - INTERVAL '24 hours'`
+			),
+			query<{ avg_tx : string }>(
+				`SELECT COALESCE(ROUND(SUM(tx_count) / 7.0), 0)::bigint::text AS avg_tx
+				   FROM blocks
+				  WHERE time > now() - INTERVAL '7 days'`
+			)
+		]);
+
+		const r = res24.rows[0];
+		const rows: T.BchChainStats = {
+			blocks24h: Number(r?.blocks ?? 0),
+			avgBlockTimeSec: Number(r?.avg_block_s ?? 0),
+			txCount24h: Number(r?.txs ?? 0),
+			avgTxCount7d: Number(res7d.rows[0]?.avg_tx ?? 0),
+			feesSats24h: Number(r?.fees ?? 0),
+			outputSats24h: Number(r?.output ?? 0),
+			tokenTxCount24h: Number(r?.token_txs ?? 0),
+			mints24h: Number(r?.mints ?? 0)
+		};
+		return { rows, diag: { name: 'bchChain', durationMs: Date.now() - t0, rowCount: 1 } };
+	} catch (err) {
+		return {
+			rows: { blocks24h: 0, avgBlockTimeSec: 0, txCount24h: 0, avgTxCount7d: 0, feesSats24h: 0, outputSats24h: 0, tokenTxCount24h: 0, mints24h: 0 },
+			diag: { name: 'bchChain', durationMs: Date.now() - t0, rowCount: 0, error: String(err) }
+		};
+	}
+}
+
+// ---- BCMR deduplication ----
+export function deduplicateBcmrChanges(items: T.BcmrChangeItem[]): T.BcmrChangeItem[] {
+	if (items.length === 0) return items;
+
+	const deduped: T.BcmrChangeItem[] = [];
+	let prev = items[0];
+	let count = 1;
+
+	// First pass: collapse consecutive identical entries
+	for (let i = 1; i < items.length; i++) {
+		const curr = items[i];
+		if (curr.categoryHex === prev.categoryHex && curr.severity === prev.severity && curr.summary === prev.summary) {
+			count++;
+		} else {
+			deduped.push(count > 1 ? { ...prev, changeType: `${prev.changeType} (×${count})` } : prev);
+			prev = curr;
+			count = 1;
+		}
+	}
+	deduped.push(count > 1 ? { ...prev, changeType: `${prev.changeType} (×${count})` } : prev);
+
+	// Second pass: hide entries with empty detail and no symbol
+	const filtered = deduped.filter((c) => {
+		if (!c.symbol && !c.name) {
+			try {
+				const d = JSON.parse(c.summary);
+				if (d && typeof d === 'object' && !Array.isArray(d)) {
+					const changed = d.changed || [];
+					const fields = d.fields || {};
+					const hasChanges = changed.length > 0 && changed.some((f: string) => {
+						const fv = fields[f];
+						return fv && (fv.old !== fv.new);
+					});
+					return hasChanges;
+				}
+			} catch { return c.summary !== c.changeType && c.summary !== '{"fields":[],"changed":[]}'; }
+			return false;
+		}
+		return true;
+	});
+
+	// Third pass: prefer most severe per category
+	const byCat = new Map<string, T.BcmrChangeItem>();
+	const sev = { critical: 3, warning: 2, info: 1 };
+	for (const c of filtered) {
+		const key = c.categoryHex || c.symbol || c.name || 'unknown';
+		const existing = byCat.get(key);
+		if (!existing || (sev[c.severity as keyof typeof sev] || 0) > (sev[existing.severity as keyof typeof sev] || 0)) {
+			byCat.set(key, c);
+		}
+	}
+
+	return [...byCat.values()].sort((a, b) => b.changedAt.localeCompare(a.changedAt));
+}
+
 // ---- Top-level gather ----
 export async function gatherSignals(config: T.BriefingConfig): Promise<RawSignals> {
 	const [
-		moversP, newTokensP, whaleMovesP, bcmrChangesP, votesP, ecosystemP, bchGiniP
+		moversP, newTokensP, whaleMovesP, bcmrChangesP, votesP, ecosystemP, bchGiniP, bchChainP
 	] = await Promise.allSettled([
 		gatherMovers(config),
 		gatherNewTokens(config),
@@ -390,7 +493,8 @@ export async function gatherSignals(config: T.BriefingConfig): Promise<RawSignal
 		gatherBcmrChanges(config),
 		gatherVotes(config),
 		gatherEcosystem(config),
-		gatherBchGini(config)
+		gatherBchGini(config),
+		gatherBchChain(config)
 	]);
 
 	const movers = moversP.status === 'fulfilled' ? moversP.value : { rows: [] as T.MoverItem[], diag: { name: 'movers', durationMs: 0, rowCount: 0, error: String(moversP.reason) } };
@@ -400,21 +504,29 @@ export async function gatherSignals(config: T.BriefingConfig): Promise<RawSignal
 	const votes = votesP.status === 'fulfilled' ? votesP.value : { rows: [] as T.VoteItem[], diag: { name: 'votes', durationMs: 0, rowCount: 0, error: String(votesP.reason) } };
 	const ecosystem = ecosystemP.status === 'fulfilled' ? ecosystemP.value : { rows: emptyEcosystem(), diag: { name: 'ecosystem', durationMs: 0, rowCount: 0, error: String(ecosystemP.reason) } };
 	const bchGini = bchGiniP.status === 'fulfilled' ? bchGiniP.value : { gini: null, diag: { name: 'bchGini', durationMs: 0, rowCount: 0, error: String(bchGiniP.reason) } };
+	const bchChain = bchChainP.status === 'fulfilled' ? bchChainP.value : { rows: null as T.BchChainStats | null, diag: { name: 'bchChain', durationMs: 0, rowCount: 0, error: String(bchChainP.reason) } };
 
 	if (bchGini.gini !== null) {
 		ecosystem.rows.bchGini = bchGini.gini;
 	}
+	if (bchChain.rows) {
+		ecosystem.rows.bchChain = bchChain.rows;
+	}
+
+	// Deduplicate BCMR changes
+	const dedupedBcmr = deduplicateBcmrChanges(bcmrChanges.rows);
 
 	return {
 		movers: movers.rows,
 		newTokens: newTokens.rows,
 		whaleMoves: whaleMoves.rows,
-		bcmrChanges: bcmrChanges.rows,
+		bcmrChanges: dedupedBcmr,
 		votes: votes.rows,
 		ecosystem: ecosystem.rows,
+		bchChain: bchChain.rows,
 		diagnostics: [
 			movers.diag, newTokens.diag, whaleMoves.diag, bcmrChanges.diag,
-			votes.diag, ecosystem.diag, bchGini.diag
+			votes.diag, ecosystem.diag, bchGini.diag, bchChain.diag
 		]
 	};
 }
