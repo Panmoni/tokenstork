@@ -6,15 +6,15 @@ Live at <https://tokenstork.com>.
 
 TokenStork indexes every fungible (FT) and non-fungible (NFT) CashToken category created since activation at block **792,772** (May 2023) and keeps the list continuously up to date as new tokens are minted and existing ones are (partially or fully) burned. For each category it serves supply, holders, NFT instances, BCMR metadata, and market data across the AMMs (Cauldron + Fex) and the P2P marketplace (Tapswap).
 
-The entire pipeline runs on a single VPS. There is no dependency on Chaingraph, third-party BlockBook, or any other external blockchain indexer — TokenStork runs its own archival BCHN, its own BlockBook instance, and its own Postgres. The BCH ecosystem already has several token explorers; this is one open-source take, hosted directly by the team that publishes it.
+The entire pipeline runs on a single VPS. There is no dependency on any external blockchain indexer — TokenStork runs its own archival BCHN and its own Postgres, self-indexing everything directly from the node via the event-driven `sync-tail` daemon. The BCH ecosystem already has several token explorers; this is one open-source take, hosted directly by the team that publishes it.
 
 ---
 
 ## Status
 
-**v0.1.1**, in production. SvelteKit app, Postgres schema, HTTP API, and all ten Rust sync workers are live and feeding the directory, including the BlockBook-dependent enrichment pass — per-category holders, live UTXO counts, and fully-burned detection are populated from a paginated tx-history walk (the fork's `/api/v2/utxo/<category>` endpoint returns empty, so we reconstruct the live UTXO set from token-bearing vouts whose `spent` flag is not set). Holder counts surface on the directory grid; the per-category detail page shows a top-holders table with %-of-supply plus a **Gini distribution score** (5-tier badge from Excellent to Whale-controlled), and `/stats` aggregates a directory-wide median Gini + per-tier histogram.
+**v0.1.4**, in production. SvelteKit app, Postgres schema, HTTP API, and all Rust sync workers are live and feeding the directory. Per-category holders, live UTXO counts, supply, and fully-burned detection are maintained by `sync-tail` Pass 6 (event-driven enrichment from BCHN blocks) and stored in `token_state` / `token_holders` / `nft_instances` with `verified_source='bchn'`. Holder counts surface on the directory grid; the per-category detail page shows a top-holders table with %-of-supply plus a **Gini distribution score** (5-tier badge from Excellent to Whale-controlled), and `/stats` aggregates a directory-wide median Gini + per-tier histogram.
 
-See [docs/cashtoken-index-plan.md](docs/cashtoken-index-plan.md) (gitignored — local copy) for the full rollout plan and progress log.
+**2026-06-27:** BlockBook (`blockbook-bcash`) was decommissioned after a full self-index migration. See [docs/blockbook-decommission.md](docs/blockbook-decommission.md) for the implementation record and [docs/decommission-blockbook-plan.md](docs/decommission-blockbook-plan.md) for the architecture plan.
 
 ---
 
@@ -24,17 +24,16 @@ Everything runs on one Netcup RS 2000 G12 VPS (8 EPYC cores, 16 GB ECC, 512 GB N
 
 | Component | Role | Listens on |
 |---|---|---|
-| Archival **BCHN** v29 (`prune=0`, `txindex=1`) | Source of truth on-chain. Feeds BlockBook; wakes the tail worker via ZMQ; serves `scantxoutset` to the venue scanners. | `127.0.0.1:8332` (RPC) + `127.0.0.1:28332` (ZMQ) |
-| **BlockBook** (mainnet-pat fork, `cashtokens` branch) | Category-indexed rich-data API: holders, NFTs per category, transfers, BCMR. | `127.0.0.1:9131` |
+| Archival **BCHN** v29 (`prune=0`, `txindex=1`) | Source of truth on-chain. Feeds `sync-tail` via ZMQ; serves `getblock` / `getrawtransaction` / `scantxoutset` to every worker. | `127.0.0.1:8332` (RPC) + `127.0.0.1:28332` (ZMQ) |
 | **Postgres 17** | Cached directory and UI backend state. | `127.0.0.1:5432` (Unix socket, peer auth) |
 | **SvelteKit app** (Node adapter, Svelte 5 runes) | UI + JSON API, SSR. | `127.0.0.1:3000` behind Caddy |
-| **Sync workers** (Rust crate) | Populate Postgres from BCHN + BlockBook + venue scans. | systemd services + timers |
+| **Sync workers** (Rust crate) | Populate Postgres from BCHN + venue scans. | systemd services + timers |
 | **Caddy** | TLS termination, HSTS/CSP/XFO, reverse proxy. | `0.0.0.0:443` |
 
-**External data sources** are confined to two narrow surfaces:
-
-- **BCMR metadata** (names, symbols, icons, full rich card) is read directly from the on-chain CashTokens authchain — `sync-bcmr-onchain` walks each category's authchain forward via local BlockBook every 1 h, parses the on-chain `OP_RETURN BCMR` locator, sha256-verifies the publisher's JSON body against the on-chain commit, and caches the body in `token_metadata.bcmr_body`. The detail page reads the rich card from Postgres without any per-request HTTP call. No third-party indexer dependency.
+**Data sources:**
+- **BCMR metadata** (names, symbols, icons, full rich card) is read directly from the on-chain CashTokens authchain — `sync-bcmr-onchain` walks each category's authchain forward via our BCHN node every 1 h, parses the on-chain `OP_RETURN BCMR` locator, sha256-verifies the publisher's JSON body against the on-chain commit, and caches the body in `token_metadata.bcmr_body`. The detail page reads the rich card from Postgres without any per-request HTTP call. No third-party indexer dependency.
 - **Cauldron price / TVL** from [`indexer.cauldron.quest`](https://indexer.cauldron.quest), polled every 4 h (full discovery) + every 10 min (fast price refresh) and cached in `token_venue_listings`.
+- **CryptoCompare** — live BCH/USD spot price, cached at the process level for 60 s.
 
 **Tapswap** (P2P fixed-price listings via the MPSW OP_RETURN protocol) and **Fex.cash** (UniswapV2-style AMM via the AssetCovenant P2SH) are detected on-chain from our own BCHN — no external API.
 
@@ -62,19 +61,19 @@ src/                       SvelteKit app (Svelte 5 + Node adapter).
     server/external.ts     BCMR + Cauldron clients (timed, hex-validated).
     server/airdrops.ts     Airdrop persistence + eligibility helpers.
     server/airdropBuilder.ts  Server-side libauth-direct multi-output token tx builder.
-    server/walletUtxos.ts  Sender UTXO fetcher (BlockBook-backed, mempool-inclusive).
+    server/walletUtxos.ts  Sender UTXO fetcher (BCHN-sourced, mempool-inclusive).
     venues.ts              Single source of truth for the {cauldron, tapswap, fex} venues.
     moderation.ts          NOT_MODERATED_CLAUSE shared across every read path.
     types.ts               TokenApiRow + venue listing shapes.
 workers/                   Rust crate. cargo build --release produces 10 binaries.
-  src/{bchn,bcmr,bcmr_onchain,blockbook,cauldron,fex,pg,tapswap,tapswap_walker}.rs   Library modules.
-  src/bin/{backfill,bcmr-onchain,cauldron,cauldron-stats,enrich,fex,
-           tail,tapswap-backfill,tapswap-spend-backfill,verify}.rs   Binaries.
+  src/{bchn,bcmr,bcmr_onchain,cauldron,fex,pg,tapswap,tapswap_walker
+       enrich_core,enrich_walker}.rs   Library modules.
+  src/bin/{backfill,bcmr-onchain,cauldron,cauldron-stats,fex,
+           tail,tapswap-backfill,tapswap-spend-backfill}.rs   Binaries.
 infra/
   Caddyfile                Reverse proxy + CSP/HSTS/XFO.
   redeploy.sh              One-shot deploy: git pull → pnpm + cargo build → schema → systemd.
   systemd/                 Service + timer units for tokenstork.service + every worker.
-  blockbook-resetinconsistentstate.patch   Local patch for mainnet-pat/blockbook recovery.
 public/.well-known/bitcoin-cash-metadata-registry.json   Self-hosted BCMR.
 scripts/                   Legacy TypeScript sync prototypes — superseded by workers/.
 ```
@@ -88,26 +87,28 @@ Schema is idempotent and lives in [db/schema.sql](db/schema.sql). Every `CREATE 
 Core tables:
 
 - **`tokens`** — canonical category record keyed by `category BYTEA` (32-byte raw).
-- **`token_metadata`** — BCMR-derived name / symbol / decimals / description / icon, written by the on-chain walker after sha256-verifying the publisher's JSON body. `bcmr_source IN ('onchain', …)` records the provenance (legacy `'paytaca' / 'paytaca-missing'` rows from the retired Paytaca worker may remain on long-running deployments and are upgraded to `'onchain'` as the walker visits them); `bcmr_publication_uri` carries the publisher's raw on-chain URI; `bcmr_body JSONB` caches the verified JSON body so the detail-page rich card renders without a live HTTP call. `pg_trgm` GIN index on `name` for cheap ILIKE search.
-- **`token_metadata_history`** — append-only record of every BCMR publication observed on the authchain. One row per `(category, authchain_tx)` carrying the locator's `content_hash`, the `publication_uri`, and a `body_verified` flag. Powers a future revision-diff UI (a token's BCMR was updated 3 times…); today the table just accumulates.
-- **`token_state`** — current supply (`NUMERIC(78,0)`), live UTXO count, NFT count, holder count, minting flag, burn flag, `gini_coefficient REAL` (holder-distribution score, 0=equal / 1=whale, NULL when fewer than 10 holders).
+- **`token_metadata`** — BCMR-derived name / symbol / decimals / description / icon, written by the on-chain walker after sha256-verifying the publisher's JSON body. `bcmr_source IN ('onchain', …)` records the provenance; `bcmr_publication_uri` carries the publisher's raw on-chain URI; `bcmr_body JSONB` caches the verified JSON body so the detail-page rich card renders without a live HTTP call. `pg_trgm` GIN index on `name` for cheap ILIKE search.
+- **`token_metadata_history`** — append-only record of every BCMR publication observed on the authchain. One row per `(category, authchain_tx)` carrying the locator's `content_hash`, the `publication_uri`, and a `body_verified` flag. Powers a future revision-diff UI.
+- **`token_state`** — current supply (`NUMERIC(78,0)`), live UTXO count, NFT count, holder count, minting flag, burn flag, `gini_coefficient REAL` (holder-distribution score, 0=equal / 1=whale, NULL when fewer than 10 holders). `verified_source IN ('blockbook','bchn')` tracks provenance.
 - **`token_holders`** — `(category, address)` with balance and NFT count.
 - **`nft_instances`** — `(category, commitment)` with capability and owner.
-- **`sync_state`** — singleton row tracking backfill / tail / enrich / verify / bcmr_onchain / cauldron / tapswap / fex run timestamps. (`last_bcmr_run_at` from the retired Paytaca worker is left in place but no longer written.)
+- **`live_token_utxo`** — source of truth for event-driven enrichment. Maintained by `sync-tail` Pass 6: per block, token-bearing outputs are upserted and spent outpoints deleted. Indexed by `(txid, vout)` PK, by `category`, by `created_height` (for reorg unwind), and by `(address, category)` (for wallet UTXO lookups).
+- **`authchain_edge`** — self-maintained spend index replacing BlockBook's `vout[0].spent_tx_id`. Records every vout[0] spend of a known authchain member with the spending txid and block height. Maintained by `sync-tail` Pass 7; reorg-safe via `DELETE WHERE spent_height >= N`.
+- **`sync_state`** — singleton row tracking backfill / tail / enrich / bcmr_onchain / cauldron / tapswap / fex run timestamps.
 
 Venue + market tables:
 
 - **`token_venue_listings`** — keyed by `(venue, category)`; `price_sats DOUBLE PRECISION`, `tvl_satoshis NUMERIC(30,0)`. **Unit convention**: `tvl_satoshis` is single-side BCH-reserve sats for AMM venues; the UI applies `× 2` at render to reflect both halves of a constant-product pool. One unambiguous unit across `cauldron` + `fex`.
 - **`token_price_history`** — `(category, venue, ts, price_sats, tvl_satoshis)`. One row per successful Cauldron / Fex fetch. Drives the directory's 1h / 24h / 7d % change columns + the 7-day sparkline column.
-- **`tapswap_offers`** — one row per on-chain MPSW listing. `has_*` columns describe what the maker offers, `want_*` columns describe what they want. `status IN ('open','taken','cancelled')`; day-one ships open offers only.
-- **`token_moderation`** — keyed by `category`; `reason` (public) + `moderator_note` (operator-private) + `hidden_at`. Categories present in this table 410 from `/token/[hex]` and are filtered from every read path via `NOT_MODERATED_CLAUSE` in `src/lib/moderation.ts`.
+- **`tapswap_offers`** — one row per on-chain MPSW listing. `status IN ('open','taken','cancelled')`.
+- **`token_moderation`** — keyed by `category`; `reason` (public) + `moderator_note` (operator-private) + `hidden_at`. Categories present in this table 410 from `/token/[hex]` and are filtered from every read path via `NOT_MODERATED_CLAUSE`.
 - **`token_reports`** — incoming user reports against problematic tokens. Triaged by hand into `token_moderation` decisions.
 
 Airdrop tables (sender = authenticated wallet; one row per draft, per chunked tx, per recipient):
 
-- **`airdrops`** — `id UUID PK`, `sender_cashaddr` (FK → `users`), source + recipient `BYTEA` categories, `mode IN ('equal','weighted')`, `total_amount NUMERIC(78,0)`, `output_value_sats` (per-recipient BCH dust, 546-2000 with default 800), `holders_snapshot_at` (the `MAX(token_holders.snapshot_at)` for the recipient category at draft time — re-checked at every broadcast and halts remaining chunks if `sync-enrich` advanced mid-airdrop), `state IN ('drafting','signing','broadcasting','complete','failed','partial')`, `tx_count`. Partial unique index `airdrops_one_drafting_per_sender_idx` on `(sender_cashaddr) WHERE state IN ('drafting','signing')` blocks double-drafts from the same wallet.
-- **`airdrop_txs`** — one row per chunk (≤ 600 recipients); `(airdrop_id, tx_index)` PK, `txid BYTEA` populated after broadcast, `state IN ('pending','signed','broadcast','failed')`, `fail_reason TEXT` for BCHN error echoes.
-- **`airdrop_outputs`** — one row per recipient; `(airdrop_id, recipient_cashaddr)` PK, `amount NUMERIC(78,0)` in source-token base units, `tx_index` (which chunk pays this recipient), `vout_index` (which output of that tx). Bare-form cashaddrs to match `token_holders.address`.
+- **`airdrops`** — `id UUID PK`, `sender_cashaddr` (FK → `users`), source + recipient `BYTEA` categories, `mode IN ('equal','weighted')`, `total_amount NUMERIC(78,0)`, `output_value_sats` (per-recipient BCH dust, 546-2000 with default 800), `holders_snapshot_at`, `state IN ('drafting','signing','broadcasting','complete','failed','partial')`, `tx_count`.
+- **`airdrop_txs`** — one row per chunk (≤ 600 recipients); `(airdrop_id, tx_index)` PK, `txid BYTEA`, `state IN ('pending','signed','broadcast','failed')`, `fail_reason TEXT`.
+- **`airdrop_outputs`** — one row per recipient; `(airdrop_id, recipient_cashaddr)` PK, `amount NUMERIC(78,0)`, `tx_index`, `vout_index`.
 
 Two design decisions worth calling out:
 
@@ -136,7 +137,7 @@ All endpoints return JSON by default. Response shapes are stable.
 | `GET /api/tokens/[category]/eligibility` | Auth-gated. Returns the authenticated cashaddr's holding of this category (FT balance + NFT count + BCMR display fields), or 410 if they don't hold any. Drives the airdrop wizard's source-token preview. |
 | `GET /api/tokens/[category]/recipientPreview` | Public. Returns holder count + display name + latest `token_holders.snapshot_at` for a category. Drives the airdrop wizard's recipient-token preview. |
 | `POST /api/airdrops` | Auth-gated, rate-limited (1 draft / 15 min / cashaddr). Creates an airdrop draft and returns the first chunk's unsigned hex. Body: `{sourceCategory, recipientCategory, mode: 'equal'\|'weighted', totalAmount, outputValueSats?}`. |
-| `POST /api/airdrops/[id]/broadcast` | Auth-gated, ownership-checked. Body: `{txIndex, signedHex}`. Forwards to BCHN's `sendrawtransaction`, updates per-tx + per-recipient state, re-checks holder snapshot freshness, and rebuilds the next chunk's unsigned hex against fresh BlockBook UTXOs. |
+| `POST /api/airdrops/[id]/broadcast` | Auth-gated, ownership-checked. Body: `{txIndex, signedHex}`. Forwards to BCHN's `sendrawtransaction`, updates per-tx + per-recipient state, re-checks holder snapshot freshness, and rebuilds the next chunk's unsigned hex against fresh on-chain UTXOs. |
 | `GET /api/airdrops/[id]` | Auth-gated, ownership-checked. Receipt payload: parent airdrop record + per-chunk tx state + per-recipient outputs. |
 | `GET /api/bchPrice` | BCH spot price (CryptoCompare, cached). |
 
@@ -166,7 +167,7 @@ The app runs fine against an empty schema — every loader handles the no-data c
 
 ```
 cd workers && cargo build --release
-# Binaries land in workers/target/release/{backfill,bcmr-onchain,cauldron,fex,tail,tapswap-backfill,verify}
+# Binaries land in workers/target/release/{backfill,bcmr-onchain,cauldron,fex,tail,tapswap-backfill}
 ```
 
 **Environment variables** (only `DATABASE_URL` is required by the app):
@@ -175,9 +176,9 @@ cd workers && cargo build --release
 |---|---|---|
 | `DATABASE_URL` | yes | Postgres connection string. Unix-socket form works: `postgres:///tokenstork`. |
 | `CRYPTO_COMPARE_KEY` | no | Unlocks `/api/bchPrice`; returns `null` when absent. |
-| `BCHN_RPC_URL`, `BCHN_RPC_AUTH` | required for mint + airdrop broadcast | The app forwards signed txs to BCHN's `sendrawtransaction`. Default URL `http://127.0.0.1:8332`. Without these, `/mint` and `/airdrops/new` still load but signed-tx broadcast 503's. |
+| `BCHN_RPC_URL`, `BCHN_RPC_AUTH` | required for mint + airdrop broadcast | The app forwards signed txs to BCHN's `sendrawtransaction` and reads UTXOs / mempool / authchain data. Default URL `http://127.0.0.1:8332`. Without these, `/mint` and `/airdrops/new` still load but signed-tx broadcast 503's. |
 | `BCHN_ZMQ_URL` | worker-only | Needed by `workers/sync-tail`; not by the app. |
-| `BLOCKBOOK_URL` | required for airdrop wizard + worker | The airdrop builder fetches the sender's UTXOs from BlockBook (mempool-inclusive — chunk-chaining needs unconfirmed UTXOs visible). Also used by `sync-enrich` + `sync-verify` workers. Default `http://127.0.0.1:9131`. |
+| `WALLET_MEMPOOL_CACHE_MS` | optional | Mempool UTXO cache TTL for `walletUtxos.ts` (default 5000 ms). |
 | `PUBLIC_WALLETCONNECT_PROJECT_ID` | optional | WalletConnect v2 project id for the wallet-login + (future) airdrop direct-sign flows. The paste-signed-hex fallback works without it. |
 | `CAULDRON_URL`, `CAULDRON_MAX_RPS`, `CAULDRON_MODE` | worker-only | Cauldron client knobs; `CAULDRON_MODE=fast` selects the 10-min listed-set refresh path. |
 | `TOKENSTORK_REPORT_WEBHOOK` | optional | Operator webhook hit on each `/api/tokens/[category]/report` POST. |
@@ -201,11 +202,11 @@ The legacy `pnpm run sync:*` commands run the [scripts/](scripts/) TypeScript pr
 All of the moving parts are checked in:
 
 - [infra/Caddyfile](infra/Caddyfile) — reverse proxy, caching rules, full CSP/HSTS/XFO header chain. Assumes Cloudflare proxy in front with SSL/TLS **Full (strict)** and a Cloudflare Origin Certificate on disk at `/etc/caddy/tls/`. Comments at the top explain how to swap in Let's Encrypt for a non-CF deploy.
-- [infra/systemd/](infra/systemd/) — hardened unit files for `tokenstork.service`, `bchn.service`, `blockbook-bcash.service`, `sync-tail.service` (always-on with `Type=notify` + `WatchdogSec=120s`), `sync-bcmr-onchain.{service,timer}`, `sync-cauldron{,-fast}.{service,timer}`, `sync-fex.{service,timer}`, `sync-enrich.{service,timer}`, `sync-verify.{service,timer}`, `sync-tapswap-backfill.service`. Same hardening profile across the board: `ProtectSystem=strict`, `CapabilityBoundingSet=`, filtered syscalls, `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`.
+- [infra/systemd/](infra/systemd/) — hardened unit files for `tokenstork.service`, `bchn.service`, `sync-tail.service` (always-on with `Type=notify` + `WatchdogSec=120s`), `sync-bcmr-onchain.{service,timer}`, `sync-cauldron{,-fast}.{service,timer}`, `sync-fex.{service,timer}`, `sync-tapswap-backfill.service`. Same hardening profile across the board: `ProtectSystem=strict`, `CapabilityBoundingSet=`, filtered syscalls, `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`.
 - [infra/redeploy.sh](infra/redeploy.sh) — one-shot deploy script: `git pull`, `pnpm install --frozen-lockfile && pnpm run build`, `cargo build --release`, schema apply, systemd unit refresh + `daemon-reload`, Caddyfile validate + sync, restart `tokenstork.service` + always-on workers.
 - Secrets load from `/etc/tokenstork/env` (chmod 600, owner `tokenstork`).
 
-The step-by-step VPS runbook — BCHN install, Postgres tuning, UFW, fail2ban, Caddy + Cloudflare Origin Cert, systemd, smoke tests — lives in [docs/cashtoken-index-plan.md](docs/cashtoken-index-plan.md) under Phase 2a. The BlockBook install runbook (including the `-resetinconsistentstate` recovery patch and the memory-cap rationale) is at [docs/blockbook-install.md](docs/blockbook-install.md).
+The step-by-step VPS runbook — BCHN install, Postgres tuning, UFW, fail2ban, Caddy + Cloudflare Origin Cert, systemd, smoke tests — lives in [docs/vps-setup.md](docs/vps-setup.md).
 
 ---
 
@@ -216,16 +217,14 @@ Ten cooperating workers, all in the Rust [workers/](workers/) crate. Each is ide
 | Worker | Trigger | Job |
 |---|---|---|
 | **backfill** | one-shot (~25 min after BCHN IBD) | Walk blocks 792,772 → tip via BCHN RPC. Insert every new CashToken category into `tokens`. |
-| **tail** | always-on, ZMQ-driven | Subscribe to `hashblock`; on each new block, run three walkers — token discovery, Tapswap MPSW listing detection, and Tapswap close detection (open → taken/cancelled). Sub-second latency from block arrival to DB row. `Type=notify` + `WatchdogSec=120s` for liveness. |
-| **bcmr-onchain** | every 1 h | **Sole BCMR source.** Walk each category's authchain forward via local BlockBook (`/api/v2/tx/<txid>` → `vout[0].spentTxId` until None), parse the on-chain `OP_RETURN BCMR <hash> <URI>` locator at every hop, fetch + sha256-verify the JSON body, and write the latest verified publication into `token_metadata` with `bcmr_source='onchain'` (including the full body in `bcmr_body JSONB` for the detail-page rich card). Records every locator-bearing hop in `token_metadata_history` for a future revision-diff UI. |
+| **tail** | always-on, ZMQ-driven | Subscribe to `hashblock`; on each new block, run seven passes — token discovery, Tapswap MPSW listing detection, Tapswap close detection, per-block economics, CRC-20 covenant detection, event-driven enrichment (`live_token_utxo` → `token_state`/`token_holders`/`nft_instances`), and authchain frontier (`vout[0]` spend index → `authchain_edge`). Sub-second latency from block arrival to DB row. `Type=notify` + `WatchdogSec=120s` for liveness. |
+| **bcmr-onchain** | every 1 h | **Sole BCMR source.** Walk each category's authchain forward via BCHN RPC + the self-maintained `authchain_edge` spend index, parse the on-chain `OP_RETURN BCMR <hash> <URI>` locator at every hop, fetch + sha256-verify the JSON body, and write the latest verified publication into `token_metadata` with `bcmr_source='onchain'` (including the full body in `bcmr_body JSONB` for the detail-page rich card). Records every locator-bearing hop in `token_metadata_history` for a future revision-diff UI. |
 | **cauldron** (full mode) | every 4 h | Walk every FT category, fetch price + TVL from `indexer.cauldron.quest`, upsert `token_venue_listings`, prune stale rows, append a `token_price_history` point per success. |
 | **cauldron** (fast mode) | every 10 min | Refresh price + TVL only for already-listed categories. Skips pruning — the listed-set view can't confirm delistings of unlisted categories. |
-| **cauldron-stats** | every 30 min | Pull ecosystem aggregates (total TVL, 24h/7d/30d swap volume, pool counts, unique-addresses-by-month) from Cauldron's global endpoints; cache in `cauldron_global_stats` for `/stats` SSR. Read-modify-write: per-endpoint failure preserves the prior value rather than overwriting with zero. |
+| **cauldron-stats** | every 30 min | Pull ecosystem aggregates (total TVL, 24h/7d/30d swap volume, pool counts, unique-addresses-by-month) from Cauldron's global endpoints; cache in `cauldron_global_stats` for `/stats` SSR. |
 | **fex** | every 4 h | One `scantxoutset raw(<asset_covenant_p2sh>)` against BCHN; decode each Fex pool UTXO; upsert with `venue='fex'`; prune; append history. |
-| **tapswap-backfill** | one-shot | Cold-walk blocks 794,520 → tip looking for MPSW OP_RETURN listings. Resumable via `sync_state.last_tapswap_backfill_through`; each block range checkpointed. |
-| **tapswap-spend-backfill** | one-shot | Cold-walk 794,520 → tip looking for spend events to retroactively close listings populated by the listing-backfill before the lifecycle walker shipped. Reuses `tapswap_walker::process_block_spends` — the same code the live tail walker uses, so historical and live processing are guaranteed to agree. |
-| **enrich** | every 6 h | For each known category, walk BlockBook's address history (`/api/v2/address/<category>?details=txs`, paginated, double-fetched to dodge truncated responses) and reconstruct the live token-bearing UTXO set. Refresh `token_state.holder_count`, `live_utxo_count`, `live_nft_count`, `is_fully_burned`, `gini_coefficient` (sorted-balances form, BigInt-safe), plus `token_holders` and `nft_instances`. OP_RETURN-locked vouts are skipped during holder aggregation. |
-| **verify** | weekly | Sample reconciliation between BCHN and BlockBook (using the same tx-history walk path as enrich). Flags drift. |
+| **tapswap-backfill** | one-shot | Cold-walk blocks 794,520 → tip looking for MPSW OP_RETURN listings. Resumable via `sync_state.last_tapswap_backfill_through`. |
+| **tapswap-spend-backfill** | one-shot | Cold-walk 794,520 → tip looking for spend events to retroactively close listings populated by the listing-backfill before the lifecycle walker shipped. Reuses `tapswap_walker::process_block_spends`. |
 
 Current Postgres-resident state is tracked in the `sync_state` singleton row — every worker writes a `last_<phase>_run_at` timestamp at the end of each run, so a staleness watchdog can spot a silently-stuck worker independently of block cadence.
 
@@ -238,20 +237,20 @@ How quickly each kind of data on the site reflects on-chain reality. Same inform
 | What you see on the site | Source worker | Typical lag | Notes |
 |---|---|---|---|
 | **New token category appears in the directory** | `sync-tail` (ZMQ-driven) | sub-second | A `hashblock` notification from BCHN wakes the tail worker; the new row is in Postgres before the next block arrives. |
-| **Token name / symbol / icon (BCMR metadata)** | `sync-bcmr-onchain` (1 h timer) | 0-1 h once the publisher's on-chain authchain is observed; otherwise never (no third-party fallback) | The walker reads the publisher's own copy by walking the CashTokens authchain via BlockBook and sha256-verifying the JSON body against the on-chain locator. The detail page links out to the publisher's URI directly. Tokens whose issuers have not put a BCMR locator on their authchain show the bare category hex. |
-| **Cauldron per-token price + TVL** | `sync-cauldron` (4 h full + 10 min fast) | 0-10 min for already-listed; 0-4 h for newly-listed | `fast` mode re-queries the ~317-token already-listed set every 10 min; `full` mode re-discovers every 4 h. |
+| **Token name / symbol / icon (BCMR metadata)** | `sync-bcmr-onchain` (1 h timer) | 0-1 h once the publisher's on-chain authchain is observed; otherwise never (no third-party fallback) | The walker reads the publisher's own copy by walking the CashTokens authchain via our BCHN node + the `authchain_edge` spend index, sha256-verifying the JSON body against the on-chain locator. The detail page links out to the publisher's URI directly. Tokens whose issuers have not put a BCMR locator on their authchain show the bare category hex. |
+| **Cauldron per-token price + TVL** | `sync-cauldron` (4 h full + 10 min fast) | 0-10 min for already-listed; 0-4 h for newly-listed | `fast` mode re-queries the already-listed set every 10 min; `full` mode re-discovers every 4 h. |
 | **Cauldron ecosystem aggregates on `/stats`** (total TVL, 24h/7d/30d volume, pool counts, unique addresses by month) | `sync-cauldron-stats` (30 min timer) | 0-30 min | Cached in `cauldron_global_stats` so the SSR loader doesn't pay a network round-trip per page hit. |
 | **Fex per-pool price + TVL** | `sync-fex` (4 h timer) | 0-4 h | One `scantxoutset` per tick walks all Fex pools at once. |
 | **Tapswap new open listing appears** | `sync-tail` (ZMQ-driven, Pass 2) | sub-second | The MPSW OP_RETURN at `outputs[1]` is detected on the same block-fetch the tokens walker uses. |
 | **Tapswap listing transitions `open → taken / cancelled`** | `sync-tail` (ZMQ-driven, Pass 3) | sub-second | Detects the spending transaction's contract input + classifies by inspecting `vout[0]`'s recipient PKH. |
 | **Cross-venue spreads on `/arbitrage`** | derived from the above on every page render | matches whichever underlying source is freshest | Pure SQL CTE; no separate worker. |
 | **Sparkline + 1h / 24h / 7d % change columns** | `token_price_history` (one row per `sync-cauldron` fetch) | accumulates 6 points / day / token | Sparklines need ~7 days of history to fully populate; first hours after deploy show partial data. |
-| **Holders / NFT instances / fully-burned flag / Gini distribution score** | `sync-enrich` (6 h timer) | 0-6 h | Holder counts surface on the directory grid; the per-category detail page renders a top-holders table sorted numerically with a %-of-supply column, plus a Gini coefficient + 5-tier badge (Excellent / Good / Fair / Poor / Whale-controlled). `/stats` shows the directory-wide median Gini + a per-tier histogram. The airdrop wizard's recipient-set preview reads from the same data. |
-| **Airdrop draft + per-chunk broadcast** | wizard at `/airdrops/new` (built on demand, no worker) | sub-second per chunk | Each chunk's unsigned tx is built server-side via libauth-direct (no third-party tx libraries) against a freshly-fetched BlockBook UTXO snapshot. Sender pastes the signed hex back; broadcast forwards to local BCHN's `sendrawtransaction`. Holder freshness is re-checked at every chunk — if `sync-enrich` advances mid-airdrop the wizard halts remaining chunks and surfaces a "redraft" prompt. |
+| **Holders / NFT instances / fully-burned flag / Gini distribution score** | `sync-tail` Pass 6 (event-driven) | sub-second per block | Maintained continuously from BCHN blocks via `live_token_utxo` → `token_state`/`token_holders`/`nft_instances`. Holder counts surface on the directory grid; the per-category detail page renders a top-holders table sorted numerically with a %-of-supply column, plus a Gini coefficient + 5-tier badge. `/stats` shows the directory-wide median Gini + a per-tier histogram. |
+| **Airdrop draft + per-chunk broadcast** | wizard at `/airdrops/new` (built on demand, no worker) | sub-second per chunk | Each chunk's unsigned tx is built server-side via libauth-direct against freshly-fetched on-chain UTXOs (`live_token_utxo` + BCHN mempool cache). Sender pastes the signed hex back; broadcast forwards to local BCHN's `sendrawtransaction`. |
 
 **BCH spot price** (the `$X.XX` in the header) is fetched from CryptoCompare on each request, cached at the SvelteKit-app process level for ~60 seconds. Independent of the indexer pipeline.
 
-**The general rule**: anything blockchain-ZMQ-driven (token discovery, Tapswap listings + closes) is sub-second. Anything timer-driven runs at the cadence in the table above.
+**The general rule**: anything blockchain-ZMQ-driven (token discovery, Tapswap listings + closes, enrichment, authchain) is sub-second. Anything timer-driven runs at the cadence in the table above.
 
 ---
 
@@ -267,7 +266,7 @@ The file lives in the repo at [public/.well-known/bitcoin-cash-metadata-registry
 
 ## Contributing
 
-Issues and PRs welcome at <https://github.com/Panmoni/tokenstork>. The architectural plan and progress log live in [docs/cashtoken-index-plan.md](docs/cashtoken-index-plan.md) (gitignored locally — ask if you need a current snapshot). Public-roadmap framing of the same lives at [/roadmap](https://tokenstork.com/roadmap).
+Issues and PRs welcome at <https://github.com/Panmoni/tokenstork>. See [docs/blockbook-decommission.md](docs/blockbook-decommission.md) for the implementation record of the self-index migration.
 
 Before opening a PR, please run:
 
@@ -277,17 +276,14 @@ pnpm run build                         # adapter-node output
 cd workers && cargo test --release --lib && cargo clippy --all-targets --release
 ```
 
-If your change touches a worker, the heavy-duty 3-pass review skill in `.claude/skills/heavy-duty-review/` is a good way to self-review the diff before opening a PR — it catches financial-correctness issues, race conditions, and TVL-unit-style cross-file invariants that are easy to miss.
-
 ---
 
 ## Credits
 
-- [@mainnet_pat](https://github.com/mainnet-pat) — the `cashtokens` BlockBook fork that every CashToken-aware explorer depends on, and the Tapswap MPSW protocol whose on-chain reference implementation we reverse-engineered against.
+- [@mainnet_pat](https://github.com/mainnet-pat) — the Tapswap MPSW protocol whose on-chain reference implementation we reverse-engineered against, and the BlockBook CashTokens fork that carried the enrichment pipeline through its first two years of operation.
 - [CHIP-BCMR](https://github.com/bitjson/chip-bcmr) — the on-chain metadata-registry standard our authchain walker reads directly from each token's authchain, no third-party indexer in the path.
 - [Cauldron](https://cauldron.quest) — the public AMM indexer that drives our price + TVL columns.
 - [Fex.cash](https://docs.fex.cash/) — open-source UniswapV2-style AMM with parameter-free covenants that let us index the full ecosystem in a single `scantxoutset` call.
-- [@mr-zwets](https://github.com/mr-zwets) — early encouragement and technical guidance.
 
 Original release announcement: <https://twitter.com/BitcoinCashSite/status/1687565837169819648>
 
