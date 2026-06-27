@@ -3,7 +3,7 @@
 # carson, run as a normal sudoer after `git push` on warren.
 #
 # Sequence:
-#   1. git pull in /opt/tokenstork as the tokenstork user
+#   1. git fetch + git reset --hard origin/main in /opt/tokenstork
 #   2. pnpm install --frozen-lockfile + pnpm run build (SvelteKit app)
 #   3. cargo build --release (Rust workers)
 #   4. psql -f db/schema.sql (idempotent; ALTERs + CREATE INDEX IF NOT EXISTS)
@@ -54,7 +54,7 @@ SELF="$(readlink -f "$0")"
 SELF_HASH="$(sha256sum "${SELF}" | cut -d' ' -f1)"
 
 echo "==> [1/7] git pull in ${REPO_DIR}"
-run_as_tokenstork "cd ${REPO_DIR} && git pull --ff-only"
+run_as_tokenstork "cd ${REPO_DIR} && git fetch origin && git reset --hard origin/main"
 
 # Bash reads this script into memory at launch, so if the git pull above
 # just updated redeploy.sh on disk, we're still running the old copy in
