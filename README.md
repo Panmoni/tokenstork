@@ -280,7 +280,7 @@ cd workers && cargo test --release --lib && cargo clippy --all-targets --release
 
 ## Credits
 
-- [@mainnet_pat](https://github.com/mainnet-pat) — the Tapswap MPSW protocol whose on-chain reference implementation we reverse-engineered against, and the BlockBook CashTokens fork that carried the enrichment pipeline through its first two years of operation.
+- [@mainnet_pat](https://github.com/mainnet-pat) — the Tapswap MPSW protocol whose on-chain reference implementation we reverse-engineered against, and the BlockBook CashTokens fork that carried the enrichment pipeline through its first three months of operation.
 - [CHIP-BCMR](https://github.com/bitjson/chip-bcmr) — the on-chain metadata-registry standard our authchain walker reads directly from each token's authchain, no third-party indexer in the path.
 - [Cauldron](https://cauldron.quest) — the public AMM indexer that drives our price + TVL columns.
 - [Fex.cash](https://docs.fex.cash/) — open-source UniswapV2-style AMM with parameter-free covenants that let us index the full ecosystem in a single `scantxoutset` call.
