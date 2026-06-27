@@ -23,3 +23,5 @@
 - Guidance on where to buy BCH and what wallet to use
 - SEO pass
 - do some research to create an SEO and marketing strategy for the site, see claude
+
+## 
