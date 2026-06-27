@@ -360,7 +360,7 @@
 				rel="noopener noreferrer"
 				class="text-xs text-violet-600 dark:text-violet-400 hover:underline"
 			>
-				{m.st_view_on_cauldron()}
+				{@html m.st_view_on_cauldron()}
 			</a>
 		</div>
 		<p class="text-sm mb-3 ts-text-muted">
