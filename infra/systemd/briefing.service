@@ -9,7 +9,9 @@ Type=oneshot
 User=tokenstork
 Group=tokenstork
 WorkingDirectory=/opt/tokenstork
-ExecStart=/usr/bin/tsx /opt/tokenstork/scripts/briefing.ts
+# Absolute path to tsx in node_modules, matching the sync-leaderboards
+# pattern. No PATH dependency on the tokenstork user's shell profile.
+ExecStart=/opt/tokenstork/node_modules/.bin/tsx /opt/tokenstork/scripts/briefing.ts
 EnvironmentFile=-/etc/tokenstork/env
 Environment="BRIEFING_OUTPUT_DIR=briefings"
 Environment="BRIEFING_PUBLIC_URL=https://tokenstork.com"
@@ -19,15 +21,27 @@ Environment="BRIEFING_PUBLIC_URL=https://tokenstork.com"
 # serves them from the same path.
 ReadWritePaths=/opt/tokenstork/briefings
 
-# Hardening — readonly for everything except the output dir.
+# Hardening — same profile as sync-leaderboards / sync-cauldron-stats.
 NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true
 ProtectSystem=strict
 ProtectHome=true
+ProtectProc=invisible
+ProcSubset=pid
 ProtectKernelTunables=true
 ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
 SystemCallFilter=@system-service
 SystemCallFilter=~@privileged @resources
 SystemCallArchitectures=native
