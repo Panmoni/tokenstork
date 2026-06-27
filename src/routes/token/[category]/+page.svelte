@@ -488,7 +488,7 @@
 						{/if}
 					{/await}
 					<div class="mt-1 text-xs ts-text-muted">
-						{m.td_per()} {heroSymbol || m.td_token()} · 						{m.td_via()} <a href="https://app.cauldron.quest/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline"><img src="/cauldron-logo.png" alt="" class="h-3.5 w-3.5 inline-block align-text-bottom rounded-full bg-white p-0.5" /> {heroSource}</a>
+						{m.td_per()} {heroSymbol || m.td_token()} · 						{m.td_via()} <a href="https://app.cauldron.quest/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline"><img src="/cauldron-logo.png" alt="" class="h-7 w-7 inline-block align-text-bottom rounded-full bg-white p-1" /> {heroSource}</a>
 					</div>
 				</div>
 			{/if}
