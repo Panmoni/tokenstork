@@ -7,7 +7,6 @@
 - One-click "submit to TokenStork BCMR registry"
 - BCMR support workflow for existing-but-unregistered tokens
 - Activate BCMR watchdog alerts: set BCMR_WEBHOOK_URL (+ optional BCMR_WEBHOOK_SECRET) in /etc/tokenstork/env → point at Telegram/Discord/ntfy; enable sync-bcmr-events.timer. Until set, change events just queue in bcmr_change_events (no push notifications)
-- ~~cc: replace blockbook, review plan first~~ **DONE 2026-06-27** — see `docs/blockbook-decommission.md`
 - warrant canary tool
 - form a DAO from token holders, proposals, votes, profiles, etc
 - social features like viibclub, short updates, hivemind voting
@@ -15,6 +14,7 @@
 - Commenting and discussions?
 - fully review Spanish translations
 - add more languages
+- ability to create your own groups, leaderboards, token portfolios for sharing and discussion
 
 ## Marketing
 - marketing machine
