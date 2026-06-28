@@ -26,7 +26,7 @@ function truncate(s: string, max: number): string {
 export function renderSocial(b: Briefing): SocialOutput {
 	const date = new Date(b.generatedAt).toISOString().slice(0, 10);
 
-	const header = `⬢ Stork Sightings — ${date}`;
+	const header = b.headline ? `⬢ Stork Sightings — ${b.headline}` : `⬢ Stork Sightings — ${date}`;
 
 	const posts: string[] = [];
 	posts.push(header);

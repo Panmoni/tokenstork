@@ -4,15 +4,22 @@
 import type { Briefing, BriefingConfig, TrendBullet } from './types.js';
 import { llmCall, validateNumbers } from './llm.js';
 
+export interface SummaryResult {
+	headline: string;
+	dek: string;
+	summary: string;
+	trends: TrendBullet[];
+}
+
 export async function writeExecutiveSummary(
 	briefing: Briefing,
 	config: BriefingConfig
-): Promise<{ summary: string; trends: TrendBullet[] }> {
+): Promise<SummaryResult> {
 	const dataBundle = buildDataBundle(briefing);
 	const prompt = buildPrompt(dataBundle);
 
 	const { text, ok } = await llmCall(
-		'You are the executive editor of Stork Sightings. Write a concise, punchy briefing.',
+		EDITOR_SYSTEM,
 		prompt,
 		config,
 		config.llm.model,
@@ -34,6 +41,16 @@ export async function writeExecutiveSummary(
 
 	return parsed;
 }
+
+const EDITOR_SYSTEM = [
+	'You are the lead writer of Stork Sightings, a daily newsletter about the Bitcoin Cash (BCH) CashToken ecosystem.',
+	'You write like a veteran financial-newsletter columnist: a cynical, jaded trader who has watched a thousand tokens pump and dump.',
+	'Your prose is sharp, confident, and readable — full sentences, real paragraphs, a point of view.',
+	'You are NOT a spreadsheet. You tell the story of the day. You connect the dots between the numbers.',
+	'When the day is boring, you say so with dry wit. When something genuinely good happens, you acknowledge it — grudgingly, understated.',
+	'You write a punchy newspaper-style HEADLINE that captures the single biggest story of the day.',
+	'Hard rule: every number you cite must appear verbatim in the data provided. Never invent or compute new numbers. But you do not need to cram numbers in — write naturally and cite a figure only when it sharpens the point.'
+].join('\n');
 
 interface DataBundle {
 	totalTokens: number;
@@ -100,25 +117,30 @@ function formatBch(sats: number): string {
 }
 
 function buildPrompt(d: DataBundle): string {
-	return JSON.stringify(d, null, 2) + `\n\n` +
-		`Write a 3-5 sentence executive summary. Start with the most notable thing that happened.\n` +
-		`Then give 2-4 trend bullets (one-line each, prefix with "•").\n` +
-		`Respond as JSON: {"summary": "...", "trends": ["• ...", "• ..."]}\n` +
-		`The summary should sound like a sharp, opinionated observer — not a robot.\n` +
-		`Mention specific token names from the data.\n` +
-		`NEVER invent any number not in the input data. Use ONLY the exact numbers provided above.\n` +
-		`If a number is "none", "0", or "0.00", do NOT invent alternatives.\n` +
-		`Do NOT invent percentages, dollar amounts, BCH amounts, or holder counts not provided.\n` +
-		`Do NOT perform any arithmetic on the input numbers. Do NOT compute differences, spreads, sums, or averages. Only mention numbers that appear verbatim in the input data above. If you need to describe a relationship between two numbers, use words like 'wide' or 'narrow', not computed values.`;
+	return `Here is today's data for the BCH CashToken ecosystem:\n\n` +
+		JSON.stringify(d, null, 2) + `\n\n` +
+		`Write today's edition. Respond as JSON with these fields:\n` +
+		`{\n` +
+		`  "headline": "A punchy newspaper-style headline, 4-9 words, capturing the day's biggest story",\n` +
+		`  "dek": "A single sentence (the standfirst) that expands on the headline",\n` +
+		`  "summary": "Three to five flowing sentences telling the story of the day. Real narrative — connect the dots, give your jaded take. Lead with whatever actually matters, not a list of stats.",\n` +
+		`  "trends": ["2 to 4 short observations, each a single line"]\n` +
+		`}\n\n` +
+		`Voice: cynical, jaded trader. Dry wit. Understated when there's good news.\n` +
+		`Cite specific token names from the data. Cite a number only when it lands a point — every number must appear verbatim above; never invent or compute new ones.\n` +
+		`Do not start the summary with "Today we saw". Do not use the words "exciting" or "in the world of".\n` +
+		`If the day is quiet, lean into it — that's a story too.`;
 }
 
-function parseSummaryResponse(text: string): { summary: string; trends: TrendBullet[] } {
+function parseSummaryResponse(text: string): SummaryResult {
 	try {
 		const json = JSON.parse(extractJson(text));
 		return {
-			summary: String(json.summary ?? ''),
+			headline: String(json.headline ?? '').trim(),
+			dek: String(json.dek ?? '').trim(),
+			summary: String(json.summary ?? '').trim(),
 			trends: Array.isArray(json.trends)
-				? json.trends.map((t: unknown) => ({ text: String(t) }))
+				? json.trends.map((t: unknown) => ({ text: String(t).replace(/^[•\-*]\s*/, '') }))
 				: []
 		};
 	} catch {
@@ -133,7 +155,7 @@ function parseSummaryResponse(text: string): { summary: string; trends: TrendBul
 				summary += (summary ? ' ' : '') + trimmed;
 			}
 		}
-		return { summary, trends };
+		return { headline: '', dek: '', summary, trends };
 	}
 }
 
@@ -153,13 +175,13 @@ function extractKnownNumbers(d: DataBundle): number[] {
 	].filter((n) => !isNaN(n) && n !== null);
 }
 
-function fallbackSummary(b: Briefing): { summary: string; trends: TrendBullet[] } {
+function fallbackSummary(b: Briefing): SummaryResult {
 	const e = b.ecosystem;
 	const parts: string[] = [];
 	if (e.tokensNew24h > 0) parts.push(`${e.tokensNew24h} new token${e.tokensNew24h === 1 ? '' : 's'} minted in the last 24h.`);
-	if (e.activity24hTokenTxs > 0) parts.push(`${e.activity24hTokenTxs} token-bearing transactions.`);
-	if (b.movers.gainers.length > 0 || b.movers.losers.length > 0) parts.push(`${b.movers.gainers.length} gainers, ${b.movers.losers.length} losers on Cauldron.`);
-	if (b.whaleMoves.length > 0) parts.push(`${b.whaleMoves.length} token${b.whaleMoves.length === 1 ? '' : 's'} with significant holder redistribution.`);
+	if (e.activity24hTokenTxs > 0) parts.push(`${e.activity24hTokenTxs} token-bearing transactions cleared.`);
+	if (b.movers.gainers.length > 0 || b.movers.losers.length > 0) parts.push(`${b.movers.gainers.length} gainers and ${b.movers.losers.length} losers on Cauldron.`);
+	if (b.whaleMoves.length > 0) parts.push(`${b.whaleMoves.length} token${b.whaleMoves.length === 1 ? '' : 's'} flagged for concentrated holdings.`);
 
 	const summary = parts.length > 0
 		? parts.join(' ')
@@ -170,5 +192,10 @@ function fallbackSummary(b: Briefing): { summary: string; trends: TrendBullet[] 
 	if (e.medianGini !== null) trends.push({ text: `Median Gini coefficient: ${e.medianGini.toFixed(2)}` });
 	if (e.bchGini !== null) trends.push({ text: `BCH coin Gini: ${e.bchGini.toFixed(2)}` });
 
-	return { summary, trends };
+	return {
+		headline: e.tokensNew24h > 0 ? `${e.tokensNew24h} New Tokens, Little Else` : 'A Quiet Day on the Motherchain',
+		dek: 'The automated rundown, no editor on duty.',
+		summary,
+		trends
+	};
 }

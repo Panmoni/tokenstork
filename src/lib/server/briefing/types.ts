@@ -154,6 +154,8 @@ export interface Briefing {
 	generatedAt: string;
 	windowHours: number;
 	masthead: string;
+	headline: string;
+	dek: string;
 	executiveSummary: string;
 	trends: TrendBullet[];
 	movers: { gainers: MoverItem[]; losers: MoverItem[]; tvlMovers: MoverItem[] };

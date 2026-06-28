@@ -38,7 +38,8 @@ export async function renderAll(
 		[join(dir, 'archive', `briefing-${stamp}.json`)]: JSON.stringify(briefing, null, 2),
 		[join(dir, 'archive', `briefing-${stamp}.html`)]: renderBriefingHtml(briefing),
 		[join(dir, 'archive', `briefing-${stamp}.substack.html`)]: renderSubstackHtml(briefing),
-		[join(dir, 'archive', `briefing-${stamp}.md`)]: renderSubstackMd(briefing)
+		[join(dir, 'archive', `briefing-${stamp}.md`)]: renderSubstackMd(briefing),
+		[join(dir, 'archive', `briefing-${stamp}.txt`)]: renderText(briefing)
 	};
 
 	if (briefing.stats.reviewFindings) {

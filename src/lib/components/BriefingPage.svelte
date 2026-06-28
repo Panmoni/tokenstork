@@ -1,12 +1,15 @@
 <script lang="ts">
 	import type { Briefing, BcmrChangeItem } from '$lib/server/briefing/types';
 
-	interface Props { briefing: Briefing; archiveEntries?: Array<{ slug: string; date: string; time: string }>; }
-	let { briefing: b, archiveEntries = [] }: Props = $props();
+	interface Props { briefing: Briefing; archiveEntries?: Array<{ slug: string; date: string; time: string }>; slug?: string; }
+	let { briefing: b, archiveEntries = [], slug = '' }: Props = $props();
 
 	const date = $derived(new Date(b.generatedAt).toISOString().slice(0, 10));
 	const time = $derived(new Date(b.generatedAt).toISOString().slice(11, 16));
-	const shareUrl = $derived('https://tokenstork.com/briefing');
+	// Download file-name prefix: current edition is "briefing", an archived
+	// edition is "briefing-<slug>" (matching the dated snapshot file names).
+	const filePrefix = $derived(slug ? `briefing-${slug}` : 'briefing');
+	const shareUrl = $derived(slug ? `https://tokenstork.com/briefing/archive/${slug}` : 'https://tokenstork.com/briefing');
 	const shareText = $derived(`Stork Sightings — ${date}`);
 
 	let copied = $state(false);
@@ -57,23 +60,34 @@
 	}
 </script>
 
-<main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-	<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent mb-2">
-		Stork Sightings
-	</h1>
-	<p class="ts-text-body mb-8">
-		Daily BCH token briefing — {date} {time} UTC · last {b.windowHours}h window.
-		{fmtNum(b.ecosystem.totalTokens)} tokens tracked across {fmtNum(b.ecosystem.holderCount)} holders.
-		<a href="#archive" class="text-violet-600 dark:text-violet-400 hover:underline">Archive ↓</a>
-	</p>
+<main class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+	<!-- Newsletter masthead -->
+	<header class="mb-10">
+		<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent mb-2">
+			Stork Sightings
+		</h1>
+		<p class="ts-text-body">
+			The daily newsletter of the Bitcoin Cash CashToken ecosystem. What moved, what minted, what
+			matters — read by a jaded eye so you don't have to squint.
+			<a href="#archive" class="text-violet-600 dark:text-violet-400 hover:underline">Past editions ↓</a>
+		</p>
+	</header>
+
+	<!-- Latest edition -->
+	<article>
+		<h2 class="text-3xl font-bold text-slate-900 dark:text-white leading-tight mb-2">
+			{b.headline || 'Daily Briefing'}
+		</h2>
+		<p class="text-sm ts-text-muted mb-1">{date} · {time} UTC · last {b.windowHours}h</p>
+		{#if b.dek}
+			<p class="text-lg text-slate-600 dark:text-slate-300 mb-6">{b.dek}</p>
+		{/if}
 
 	<div class="prose prose-slate dark:prose-invert max-w-none">
 
 		<!-- Executive Summary -->
 		{#if b.executiveSummary}
-			<h2 id="summary">Summary</h2>
-			<p class="text-xs ts-text-muted">What happened in the BCH token ecosystem over the last {b.windowHours} hours.</p>
-			<p>{b.executiveSummary}</p>
+			<p class="text-lg leading-relaxed">{b.executiveSummary}</p>
 		{/if}
 
 		<!-- Trends -->
@@ -251,23 +265,24 @@
 
 	</div>
 
-	<!-- Share + Data -->
-	<div class="mt-12 text-sm space-y-2">
-		<div class="flex flex-wrap gap-3">
-			<span class="font-semibold text-slate-900 dark:text-white">Share:</span>
-			<a href="https://x.com/intent/tweet?text={encodeURIComponent(shareText)}&url={encodeURIComponent(shareUrl)}" target="_blank" rel="noopener" class="text-violet-600 dark:text-violet-400 hover:underline">X</a>
-			<a href="https://bsky.app/intent/compose?text={encodeURIComponent(shareText + ' ' + shareUrl)}" target="_blank" rel="noopener" class="text-violet-600 dark:text-violet-400 hover:underline">Bluesky</a>
-			<a href="https://www.reddit.com/r/BCHCashTokens/submit?url={encodeURIComponent(shareUrl)}&title={encodeURIComponent(shareText)}" target="_blank" rel="noopener" class="text-violet-600 dark:text-violet-400 hover:underline">Reddit</a>
-			<button onclick={copyLink} class="bg-transparent border-0 p-0 cursor-pointer text-violet-600 dark:text-violet-400 hover:underline">{copied ? 'Copied!' : 'Copy link'}</button>
+		<!-- Share + Data (this edition) -->
+		<div class="mt-12 pt-6 border-t ts-border-subtle text-sm space-y-2">
+			<div class="flex flex-wrap gap-3">
+				<span class="font-semibold text-slate-900 dark:text-white">Share:</span>
+				<a href="https://x.com/intent/tweet?text={encodeURIComponent(shareText)}&url={encodeURIComponent(shareUrl)}" target="_blank" rel="noopener" class="text-violet-600 dark:text-violet-400 hover:underline">X</a>
+				<a href="https://bsky.app/intent/compose?text={encodeURIComponent(shareText + ' ' + shareUrl)}" target="_blank" rel="noopener" class="text-violet-600 dark:text-violet-400 hover:underline">Bluesky</a>
+				<a href="https://www.reddit.com/r/BCHCashTokens/submit?url={encodeURIComponent(shareUrl)}&title={encodeURIComponent(shareText)}" target="_blank" rel="noopener" class="text-violet-600 dark:text-violet-400 hover:underline">Reddit</a>
+				<button onclick={copyLink} class="bg-transparent border-0 p-0 cursor-pointer text-violet-600 dark:text-violet-400 hover:underline">{copied ? 'Copied!' : 'Copy link'}</button>
+			</div>
+			<div class="flex flex-wrap gap-3">
+				<span class="font-semibold text-slate-900 dark:text-white">Data:</span>
+				<a href="/briefing/dl/{filePrefix}.json" class="text-violet-600 dark:text-violet-400 hover:underline">JSON</a>
+				<a href="/briefing/dl/{filePrefix}.txt" class="text-violet-600 dark:text-violet-400 hover:underline">Text</a>
+				<a href="/briefing/dl/{filePrefix}.md" class="text-violet-600 dark:text-violet-400 hover:underline">Markdown</a>
+				<a href="/briefing/dl/{filePrefix}.substack.html" class="text-violet-600 dark:text-violet-400 hover:underline">Substack HTML</a>
+			</div>
 		</div>
-		<div class="flex flex-wrap gap-3">
-			<span class="font-semibold text-slate-900 dark:text-white">Data:</span>
-			<a href="/briefing/briefing.json" class="text-violet-600 dark:text-violet-400 hover:underline">JSON</a>
-			<a href="/briefing/briefing.txt" class="text-violet-600 dark:text-violet-400 hover:underline">Text</a>
-			<a href="/briefing/briefing.md" class="text-violet-600 dark:text-violet-400 hover:underline">Markdown</a>
-			<a href="/briefing/briefing.substack.html" class="text-violet-600 dark:text-violet-400 hover:underline">Substack HTML</a>
-		</div>
-	</div>
+	</article>
 
 	<!-- Archive -->
 	<div id="archive" class="mt-12">

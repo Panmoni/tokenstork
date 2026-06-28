@@ -8,8 +8,10 @@ export function renderText(b: Briefing): string {
 	const time = new Date(b.generatedAt).toISOString().slice(11, 16);
 
 	const lines: string[] = [];
-	lines.push(`⬢ Stork Sightings — ${date}`);
-	lines.push(`Daily BCH token briefing · ${date} ${time} UTC · last ${b.windowHours}h`);
+	lines.push(`⬢ STORK SIGHTINGS`);
+	lines.push(b.headline || 'Daily Briefing');
+	if (b.dek) lines.push(b.dek);
+	lines.push(`${date} ${time} UTC · last ${b.windowHours}h`);
 	lines.push('─'.repeat(60));
 
 	if (b.executiveSummary) {

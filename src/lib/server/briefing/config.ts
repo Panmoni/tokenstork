@@ -30,8 +30,8 @@ export function loadConfig(): BriefingConfig {
 		llm: {
 			baseUrl: env('BRIEFING_LLM_BASE_URL', 'https://api.deepinfra.com/v1/openai'),
 			apiKey,
-			model: env('BRIEFING_LLM_MODEL', 'zai-org/GLM-5.2'),
-			reviewModel: env('BRIEFING_LLM_REVIEW_MODEL', 'deepseek-ai/DeepSeek-V4-Pro')
+			model: env('BRIEFING_LLM_MODEL', 'deepseek-ai/DeepSeek-V4-Pro'),
+			reviewModel: env('BRIEFING_LLM_REVIEW_MODEL', 'moonshotai/Kimi-K2.7-Code')
 		},
 		email: {
 			resendApiKey: env('RESEND_API_KEY', ''),

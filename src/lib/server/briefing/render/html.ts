@@ -132,6 +132,9 @@ export function renderBriefingHtml(b: Briefing): string {
     <p>Daily BCH token briefing — ${date} ${time} UTC · last ${b.windowHours}h</p>
   </div>
 
+  <h2 style="font-size:24px;font-weight:700;color:#0f172a;margin:0 0 6px;line-height:1.2;">${esc(b.headline || 'Daily Briefing')}</h2>
+  ${b.dek ? `<p style="font-size:16px;color:#475569;margin:0 0 16px;">${esc(b.dek)}</p>` : ''}
+
   ${buildStatbar(b)}
 
   ${b.executiveSummary ? `<div class="summary">${esc(b.executiveSummary)}</div>` : ''}

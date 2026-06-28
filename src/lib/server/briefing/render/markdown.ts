@@ -18,9 +18,10 @@ export function renderSubstackMd(b: Briefing): string {
 	const time = new Date(b.generatedAt).toISOString().slice(11, 16);
 
 	const lines: string[] = [];
-	lines.push(`# ⬢ Stork Sightings — ${date}`);
+	lines.push(`# ${b.headline || 'Stork Sightings'}`);
 	lines.push('');
-	lines.push(`*Daily BCH token briefing — ${date} ${time} UTC · last ${b.windowHours}h*`);
+	if (b.dek) { lines.push(`### ${b.dek}`); lines.push(''); }
+	lines.push(`*Stork Sightings · ${date} ${time} UTC · last ${b.windowHours}h*`);
 	lines.push('');
 
 	if (b.executiveSummary) {
@@ -116,11 +117,11 @@ export function renderSubstackHtml(b: Briefing): string {
 	const date = new Date(b.generatedAt).toISOString().slice(0, 10);
 	const time = new Date(b.generatedAt).toISOString().slice(11, 16);
 
-	return `<!doctype html><html><head><meta charset="utf-8"><title>Stork Sightings — ${date}</title></head>
+	return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(b.headline || 'Stork Sightings')} — ${date}</title></head>
 <body>
-<h1>⬢ Stork Sightings — ${date}</h1>
-<p><strong>Daily BCH token briefing</strong></p>
-<p>${date} ${time} UTC · last ${b.windowHours}h</p>
+<h1>${esc(b.headline || 'Stork Sightings')}</h1>
+${b.dek ? `<h3>${esc(b.dek)}</h3>` : ''}
+<p><em>Stork Sightings · ${date} ${time} UTC · last ${b.windowHours}h</em></p>
 
 ${b.executiveSummary ? `<p>${esc(b.executiveSummary)}</p>` : ''}
 

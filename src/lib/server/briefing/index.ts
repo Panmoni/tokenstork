@@ -7,7 +7,7 @@ import { loadConfig } from './config.js';
 import { gatherSignals } from './gather.js';
 import { analyzeSignals } from './analyze.js';
 import { resetLlmStats, getLlmStats } from './llm.js';
-import { writeExecutiveSummary } from './summarize.js';
+import { writeExecutiveSummary, type SummaryResult } from './summarize.js';
 import { classifyNewTokens } from './classify.js';
 import { writeTokenProfile } from './narrate.js';
 import { reviewBriefing } from './review.js';
@@ -34,7 +34,7 @@ export async function generateBriefing(
 	const hasLlm = cfg.llm.apiKey.length > 0;
 
 	// LLM passes (non-blocking via allSettled)
-	let summary = { summary: '', trends: [] as T.TrendBullet[] };
+	let summary: SummaryResult = { headline: '', dek: '', summary: '', trends: [] as T.TrendBullet[] };
 	let classifiedTokens: T.NewTokenItem[] = [];
 	let profileResult: { profile: T.TokenProfile | null; omitted: boolean; reason: string } = { profile: null, omitted: true, reason: 'No token passed quality gates' };
 	let reviewFindings: T.ReviewFindings | null = null;
@@ -52,7 +52,7 @@ export async function generateBriefing(
 			})()
 		]);
 
-		summary = sumP.status === 'fulfilled' ? sumP.value : { summary: '', trends: [] };
+		summary = sumP.status === 'fulfilled' ? sumP.value : { headline: '', dek: '', summary: '', trends: [] };
 		classifiedTokens = classP.status === 'fulfilled' ? classP.value : analyzed.newTokens.map((t) => ({ ...t, classification: 'other' as const }));
 		profileResult = profP.status === 'fulfilled' ? profP.value : { profile: null, omitted: true, reason: 'LLM pass failed' };
 	} else {
@@ -66,6 +66,8 @@ export async function generateBriefing(
 		generatedAt: genAt,
 		windowHours: cfg.windowHours,
 		masthead: 'Stork Sightings',
+		headline: summary.headline || defaultHeadline(analyzed),
+		dek: summary.dek,
 		executiveSummary: summary.summary,
 		trends: summary.trends,
 		movers: analyzed.movers,
@@ -125,7 +127,7 @@ function emptyBriefing(cfg: T.BriefingConfig, genAt: string, totalSigSets: numbe
 	};
 }
 
-function fallbackBasic(analyzed: ReturnType<typeof analyzeSignals>): { summary: string; trends: T.TrendBullet[] } {
+function fallbackBasic(analyzed: ReturnType<typeof analyzeSignals>): SummaryResult {
 	const e = analyzed.ecosystem;
 	const parts: string[] = [];
 	if (e.tokensNew24h > 0) parts.push(`${e.tokensNew24h} new token${e.tokensNew24h === 1 ? '' : 's'} minted in the last 24h`);
@@ -134,7 +136,16 @@ function fallbackBasic(analyzed: ReturnType<typeof analyzeSignals>): { summary: 
 	const trends: T.TrendBullet[] = [];
 	if (e.medianGini !== null) trends.push({ text: `Median Gini: ${e.medianGini.toFixed(2)}` });
 	if (e.bchGini !== null) trends.push({ text: `BCH Gini: ${e.bchGini.toFixed(2)}` });
-	return { summary, trends };
+	return { headline: defaultHeadline(analyzed), dek: '', summary, trends };
+}
+
+function defaultHeadline(analyzed: ReturnType<typeof analyzeSignals>): string {
+	const g = analyzed.movers.gainers[0];
+	const l = analyzed.movers.losers[0];
+	if (g && g.pricePct >= 20) return `${g.symbol || g.name} Leads The Pumps`;
+	if (l && l.pricePct <= -20) return `${l.symbol || l.name} Takes A Beating`;
+	if (analyzed.ecosystem.tokensNew24h > 0) return `${analyzed.ecosystem.tokensNew24h} New Tokens Hit The Chain`;
+	return 'Another Quiet Day on the Motherchain';
 }
 
 function generateSpark(analyzed: ReturnType<typeof analyzeSignals>): string {
