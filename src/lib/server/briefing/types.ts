@@ -156,6 +156,7 @@ export interface Briefing {
 	masthead: string;
 	headline: string;
 	dek: string;
+	tags: string[];
 	executiveSummary: string;
 	trends: TrendBullet[];
 	movers: { gainers: MoverItem[]; losers: MoverItem[]; tvlMovers: MoverItem[] };

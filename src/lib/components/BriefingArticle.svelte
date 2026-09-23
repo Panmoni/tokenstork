@@ -1,16 +1,36 @@
 <script lang="ts">
 	import type { Briefing, BcmrChangeItem } from '$lib/server/briefing/types';
 
-	interface Props { briefing: Briefing; archiveEntries?: Array<{ slug: string; date: string; time: string }>; slug?: string; }
-	let { briefing: b, archiveEntries = [], slug = '' }: Props = $props();
+	// `lead` = this article is the lead post under a page masthead (the /briefing
+	// index), so its title renders as <h2> to sit below the masthead's <h1>. On a
+	// standalone permalink it is the page's primary heading (<h1>).
+	interface Props { briefing: Briefing; slug?: string; lead?: boolean; }
+	let { briefing: b, slug = '', lead = false }: Props = $props();
 
-	const date = $derived(new Date(b.generatedAt).toISOString().slice(0, 10));
+	const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+	function fmtDate(iso: string): string {
+		const d = new Date(iso);
+		return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+	}
+
+	const longDate = $derived(fmtDate(b.generatedAt));
 	const time = $derived(new Date(b.generatedAt).toISOString().slice(11, 16));
-	// Download file-name prefix: current edition is "briefing", an archived
+	// Download file-name prefix: the current edition is "briefing", an archived
 	// edition is "briefing-<slug>" (matching the dated snapshot file names).
 	const filePrefix = $derived(slug ? `briefing-${slug}` : 'briefing');
 	const shareUrl = $derived(slug ? `https://tokenstork.com/briefing/archive/${slug}` : 'https://tokenstork.com/briefing');
-	const shareText = $derived(`Stork Sightings — ${date}`);
+	const shareText = $derived(`Stork Sightings — ${b.headline || longDate}`);
+
+	// Open-format set offered for every issue. Each resolves through
+	// /briefing/dl/<name> against the persisted snapshot files.
+	const formats = $derived([
+		{ label: 'JSON', ext: 'json' },
+		{ label: 'Markdown', ext: 'md' },
+		{ label: 'Plain text', ext: 'txt' },
+		{ label: 'HTML', ext: 'html' },
+		{ label: 'Substack', ext: 'substack.html' },
+		{ label: 'Card (SVG)', ext: 'svg' }
+	]);
 
 	let copied = $state(false);
 	function copyLink() { navigator.clipboard.writeText(shareUrl).then(() => { copied = true; setTimeout(() => copied = false, 2000); }); }
@@ -60,28 +80,29 @@
 	}
 </script>
 
-<main class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-	<!-- Newsletter masthead -->
-	<header class="mb-10">
-		<h1 class="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent mb-2">
-			Stork Sightings
-		</h1>
-		<p class="ts-text-body">
-			The daily newsletter of the Bitcoin Cash CashToken ecosystem. What moved, what minted, what
-			matters — read by a jaded eye so you don't have to squint.
-			<a href="#archive" class="text-violet-600 dark:text-violet-400 hover:underline">Past editions ↓</a>
-		</p>
-	</header>
-
-	<!-- Latest edition -->
-	<article>
-		<h2 class="text-3xl font-bold text-slate-900 dark:text-white leading-tight mb-2">
+<article>
+	<!-- Post header -->
+	<header class="mb-8 pb-6 border-b ts-border-subtle">
+		<svelte:element this={lead ? 'h2' : 'h1'} class="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white leading-tight mb-3">
 			{b.headline || 'Daily Briefing'}
-		</h2>
-		<p class="text-sm ts-text-muted mb-1">{date} · {time} UTC · last {b.windowHours}h</p>
-		{#if b.dek}
-			<p class="text-lg text-slate-600 dark:text-slate-300 mb-6">{b.dek}</p>
+		</svelte:element>
+		<p class="text-sm ts-text-muted">
+			<time datetime={b.generatedAt}>{longDate}</time> · {time} UTC · last {b.windowHours}h
+		</p>
+		{#if b.tags && b.tags.length > 0}
+			<div class="mt-3 flex flex-wrap gap-2">
+				{#each b.tags as tag}
+					<a
+						href="/briefing/archive?tag={encodeURIComponent(tag)}"
+						class="no-underline inline-flex items-center rounded-full bg-violet-50 dark:bg-violet-950/50 px-2.5 py-0.5 text-xs font-medium text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-900/50 transition-colors"
+					>#{tag}</a>
+				{/each}
+			</div>
 		{/if}
+		{#if b.dek}
+			<p class="mt-4 text-lg text-slate-600 dark:text-slate-300">{b.dek}</p>
+		{/if}
+	</header>
 
 	<div class="prose prose-slate dark:prose-invert max-w-none">
 
@@ -265,47 +286,23 @@
 
 	</div>
 
-		<!-- Share + Data (this edition) -->
-		<div class="mt-12 pt-6 border-t ts-border-subtle text-sm space-y-2">
-			<div class="flex flex-wrap gap-3">
-				<span class="font-semibold text-slate-900 dark:text-white">Share:</span>
-				<a href="https://x.com/intent/tweet?text={encodeURIComponent(shareText)}&url={encodeURIComponent(shareUrl)}" target="_blank" rel="noopener" class="text-violet-600 dark:text-violet-400 hover:underline">X</a>
-				<a href="https://bsky.app/intent/compose?text={encodeURIComponent(shareText + ' ' + shareUrl)}" target="_blank" rel="noopener" class="text-violet-600 dark:text-violet-400 hover:underline">Bluesky</a>
-				<a href="https://www.reddit.com/r/BCHCashTokens/submit?url={encodeURIComponent(shareUrl)}&title={encodeURIComponent(shareText)}" target="_blank" rel="noopener" class="text-violet-600 dark:text-violet-400 hover:underline">Reddit</a>
-				<button onclick={copyLink} class="bg-transparent border-0 p-0 cursor-pointer text-violet-600 dark:text-violet-400 hover:underline">{copied ? 'Copied!' : 'Copy link'}</button>
-			</div>
-			<div class="flex flex-wrap gap-3">
-				<span class="font-semibold text-slate-900 dark:text-white">Data:</span>
-				<a href="/briefing/dl/{filePrefix}.json" class="text-violet-600 dark:text-violet-400 hover:underline">JSON</a>
-				<a href="/briefing/dl/{filePrefix}.txt" class="text-violet-600 dark:text-violet-400 hover:underline">Text</a>
-				<a href="/briefing/dl/{filePrefix}.md" class="text-violet-600 dark:text-violet-400 hover:underline">Markdown</a>
-				<a href="/briefing/dl/{filePrefix}.substack.html" class="text-violet-600 dark:text-violet-400 hover:underline">Substack HTML</a>
-			</div>
+	<!-- Share + open formats (this edition) -->
+	<div class="mt-12 pt-6 border-t ts-border-subtle text-sm space-y-3">
+		<div class="flex flex-wrap items-center gap-3">
+			<span class="font-semibold text-slate-900 dark:text-white">Share:</span>
+			<a href="https://x.com/intent/tweet?text={encodeURIComponent(shareText)}&url={encodeURIComponent(shareUrl)}" target="_blank" rel="noopener" class="text-violet-600 dark:text-violet-400 hover:underline">X</a>
+			<a href="https://bsky.app/intent/compose?text={encodeURIComponent(shareText + ' ' + shareUrl)}" target="_blank" rel="noopener" class="text-violet-600 dark:text-violet-400 hover:underline">Bluesky</a>
+			<a href="https://www.reddit.com/r/BCHCashTokens/submit?url={encodeURIComponent(shareUrl)}&title={encodeURIComponent(shareText)}" target="_blank" rel="noopener" class="text-violet-600 dark:text-violet-400 hover:underline">Reddit</a>
+			<button onclick={copyLink} class="bg-transparent border-0 p-0 cursor-pointer text-violet-600 dark:text-violet-400 hover:underline">{copied ? 'Copied!' : 'Copy link'}</button>
 		</div>
-	</article>
-
-	<!-- Archive -->
-	<div id="archive" class="mt-12">
-		<h2 class="text-xl font-semibold text-slate-900 dark:text-white mb-3">Archive</h2>
-		{#if archiveEntries.length > 0}
-			<div class="space-y-1">
-				{#each archiveEntries as entry}
-					<a href="/briefing/archive/{entry.slug}" class="flex items-center justify-between no-underline hover:opacity-80 text-sm py-1.5 border-b ts-border-subtle last:border-b-0">
-						<span class="font-semibold text-slate-900 dark:text-white">{entry.date}</span>
-						<span class="text-xs ts-text-muted">{entry.time} UTC</span>
-					</a>
-				{/each}
-			</div>
-		{:else}
-			<p class="text-sm ts-text-muted">No past editions yet. The first briefing runs at 11:00 UTC daily.</p>
-		{/if}
+		<div class="flex flex-wrap items-center gap-3">
+			<span class="font-semibold text-slate-900 dark:text-white">Open formats:</span>
+			{#each formats as f}
+				<a href="/briefing/dl/{filePrefix}.{f.ext}" class="text-violet-600 dark:text-violet-400 hover:underline">{f.label}</a>
+			{/each}
+		</div>
 	</div>
-
-	<p class="mt-8 text-xs ts-text-muted">
-		⬢ Stork Sightings — automated daily briefing from the <a href="/" class="text-violet-600 dark:text-violet-400 hover:underline">TokenStork</a> directory.
-		<a href="https://tokenstork.substack.com" target="_blank" rel="noopener" class="text-violet-600 dark:text-violet-400 hover:underline">Subscribe on Substack</a>.
-	</p>
-</main>
+</article>
 
 <style>
 	:global(.prose h2) { margin-top: 2.5rem; }

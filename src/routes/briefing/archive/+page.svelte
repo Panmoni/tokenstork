@@ -1,31 +1,35 @@
 <script lang="ts">
+	import BriefingArchiveList from '$lib/components/BriefingArchiveList.svelte';
+
 	let { data } = $props();
 </script>
 
 <svelte:head>
-	<title>Stork Sightings Archive — TokenStork</title>
+	<title>{data.tag ? `Stork Sightings — #${data.tag}` : 'Stork Sightings — Archive'} — TokenStork</title>
+	<link rel="alternate" type="application/rss+xml" title="Stork Sightings" href="/briefing/feed.xml" />
 </svelte:head>
 
-<div class="max-w-2xl mx-auto py-10 px-4 sm:px-6">
-	<div class="mb-8 pb-4 border-b ts-border-subtle">
-		<h1 class="font-serif text-2xl font-bold text-emerald-700 dark:text-emerald-400">⬢ Stork Sightings — Archive</h1>
-		<p class="mt-1 text-sm ts-text-muted">Past editions of the daily BCH token briefing.</p>
-	</div>
+<main class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+	<header class="mb-8 pb-6 border-b ts-border-subtle">
+		<h1 class="text-3xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-transparent">
+			Stork Sightings — Archive
+		</h1>
+		{#if data.tag}
+			<p class="mt-2 text-sm ts-text-body">
+				Filtered by <span class="font-medium text-violet-700 dark:text-violet-300">#{data.tag}</span>
+				· <a href="/briefing/archive" class="text-violet-600 dark:text-violet-400 hover:underline">clear filter</a>
+			</p>
+		{:else}
+			<p class="mt-1 text-sm ts-text-muted">Every edition of the daily BCH token briefing.</p>
+		{/if}
+	</header>
 
-	{#if data.entries.length > 0}
-		<div class="space-y-1">
-			{#each data.entries as entry}
-				<a href="/briefing/archive/{entry.slug}" class="flex items-center justify-between px-4 py-3 rounded-lg no-underline hover:bg-slate-50 dark:hover:bg-zinc-800/50 transition-colors border-b ts-border-subtle last:border-b-0">
-					<span class="text-sm font-semibold text-slate-900 dark:text-white">{entry.date}</span>
-					<span class="text-xs ts-text-muted">{entry.time} UTC</span>
-				</a>
-			{/each}
-		</div>
-	{:else}
-		<p class="text-sm ts-text-muted py-8 text-center">No archived editions yet. The first daily briefing runs at 11:00 UTC.</p>
-	{/if}
+	<BriefingArchiveList
+		entries={data.entries}
+		emptyText={data.tag ? `No editions tagged #${data.tag}.` : 'No archived editions yet. The first daily briefing runs at 11:00 UTC.'}
+	/>
 
-	<p class="mt-8">
-		<a href="/briefing" class="text-sm text-emerald-600 hover:underline">← Back to today's briefing</a>
+	<p class="mt-10 text-sm">
+		<a href="/briefing" class="text-violet-600 dark:text-violet-400 hover:underline">← Back to the latest edition</a>
 	</p>
-</div>
+</main>

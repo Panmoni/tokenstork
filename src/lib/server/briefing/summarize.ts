@@ -194,7 +194,7 @@ function fallbackSummary(b: Briefing): SummaryResult {
 
 	return {
 		headline: e.tokensNew24h > 0 ? `${e.tokensNew24h} New Tokens, Little Else` : 'A Quiet Day on the Motherchain',
-		dek: 'The automated rundown, no editor on duty.',
+		dek: 'The numbers from the last 24 hours on the BCH CashToken chain.',
 		summary,
 		trends
 	};

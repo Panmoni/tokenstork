@@ -68,6 +68,7 @@ export async function generateBriefing(
 		masthead: 'Stork Sightings',
 		headline: summary.headline || defaultHeadline(analyzed),
 		dek: summary.dek,
+		tags: buildTags(analyzed),
 		executiveSummary: summary.summary,
 		trends: summary.trends,
 		movers: analyzed.movers,
@@ -146,6 +147,31 @@ function defaultHeadline(analyzed: ReturnType<typeof analyzeSignals>): string {
 	if (l && l.pricePct <= -20) return `${l.symbol || l.name} Takes A Beating`;
 	if (analyzed.ecosystem.tokensNew24h > 0) return `${analyzed.ecosystem.tokensNew24h} New Tokens Hit The Chain`;
 	return 'Another Quiet Day on the Motherchain';
+}
+
+// Deterministic topical tags for the day's issue — derived purely from the
+// signals so they never depend on the LLM. Used as blog post tags and as the
+// facets the archive can be filtered by (/briefing/archive?tag=…).
+function buildTags(analyzed: ReturnType<typeof analyzeSignals>): string[] {
+	const tags: string[] = [];
+	const a = analyzed;
+	const moverCount = a.movers.gainers.length + a.movers.losers.length;
+
+	if (moverCount > 0) tags.push('market-movers');
+	if (a.newTokens.length > 0) tags.push('new-tokens');
+	if (a.whaleMoves.length > 0) tags.push('concentration');
+	if (a.bcmrChanges.length > 0) tags.push('bcmr');
+	if (a.votes.length > 0) tags.push('community');
+	if (a.bchChain) tags.push('chain-stats');
+
+	// A "quiet day" is its own story — flag it when almost nothing moved.
+	const quiet = moverCount === 0 && a.newTokens.length <= 2 && a.whaleMoves.length === 0;
+	if (quiet) tags.push('quiet-day');
+
+	// Always carry the section banner so every issue has at least one tag.
+	if (tags.length === 0) tags.push('ecosystem');
+
+	return tags;
 }
 
 function generateSpark(analyzed: ReturnType<typeof analyzeSignals>): string {
