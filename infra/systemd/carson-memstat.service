@@ -1,6 +1,9 @@
 [Unit]
 Description=carson memory-headroom sampler (free / PSI / swap) for the BCH Live baseline
 Documentation=https://github.com/Panmoni/tokenstork
+# sample.sh writes this file when the 7-day window completes; from then on
+# every timer tick is skipped without starting a process.
+ConditionPathExists=!/var/lib/tokenstork/memstat/done
 
 [Service]
 Type=oneshot
@@ -12,6 +15,7 @@ ExecStart=/opt/tokenstork/infra/memstat/sample.sh
 # ~1.5 MB for the 7-day window). The script stops itself after 7 days.
 StateDirectory=tokenstork/memstat
 Environment="MEMSTAT_LOG=/var/lib/tokenstork/memstat/memstat.tsv"
+Environment="MEMSTAT_DONE=/var/lib/tokenstork/memstat/done"
 Environment="MEMSTAT_DAYS=7"
 
 # Hard caps: this must never add to the pressure it measures.
