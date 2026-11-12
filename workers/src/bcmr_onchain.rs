@@ -44,6 +44,7 @@ const OP_PUSHDATA1: u8 = 0x4c;
 const OP_PUSHDATA2: u8 = 0x4d;
 const OP_PUSHDATA4: u8 = 0x4e;
 const BCMR_MAGIC: [u8; 4] = *b"BCMR";
+const BCMR_WELL_KNOWN_PATH: &str = "/.well-known/bitcoin-cash-metadata-registry.json";
 
 /// A parsed `OP_RETURN BCMR <hash> <uri>` locator.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -342,6 +343,31 @@ pub enum FetchedBody {
     Error(String),
 }
 
+/// Resolve a BCMR publication URI using BCMR-specific HTTPS semantics.
+///
+/// Publication URIs without a protocol are HTTPS. For HTTPS publications,
+/// a hostname without an explicit file path resolves to the registry's
+/// Well-Known URI. A trailing slash is significant: it explicitly selects
+/// the domain root and must not be rewritten.
+fn resolve_bcmr_uri(uri: &str) -> Option<String> {
+    let trimmed = uri.trim();
+    let resolved = resolve_icon_url(trimmed)?;
+
+    let no_explicit_path = if let Some(rest) = trimmed.strip_prefix("https://") {
+        !rest.contains('/')
+    } else {
+        !trimmed.contains("://") && !trimmed.contains('/')
+    };
+
+    if !no_explicit_path {
+        return Some(resolved);
+    }
+
+    let mut url = reqwest::Url::parse(&resolved).ok()?;
+    url.set_path(BCMR_WELL_KNOWN_PATH);
+    Some(url.to_string())
+}
+
 /// Fetch the BCMR JSON pointed at by `uri` and verify its sha256 matches
 /// `expected_hash` (natural byte order).
 ///
@@ -360,7 +386,7 @@ pub async fn fetch_and_verify_bcmr(
     expected_hash: &[u8; 32],
     max_body_bytes: usize,
 ) -> FetchedBody {
-    let url = match resolve_icon_url(uri) {
+    let url = match resolve_bcmr_uri(uri) {
         Some(u) => u,
         None => return FetchedBody::Error(format!("unresolvable URI scheme: {}", uri)),
     };
@@ -448,6 +474,39 @@ pub fn body_archive(verified: bool, size: usize, cap: usize) -> BodyArchive {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resolves_bcmr_publication_uris() {
+        let well_known = "https://example.com/.well-known/bitcoin-cash-metadata-registry.json";
+
+        assert_eq!(resolve_bcmr_uri("example.com").as_deref(), Some(well_known));
+        assert_eq!(
+            resolve_bcmr_uri("https://example.com").as_deref(),
+            Some(well_known)
+        );
+
+        assert_eq!(
+            resolve_bcmr_uri("example.com/").as_deref(),
+            Some("https://example.com/")
+        );
+        assert_eq!(
+            resolve_bcmr_uri("https://example.com/").as_deref(),
+            Some("https://example.com/")
+        );
+
+        assert_eq!(
+            resolve_bcmr_uri("example.com/registry.json").as_deref(),
+            Some("https://example.com/registry.json")
+        );
+        assert_eq!(
+            resolve_bcmr_uri("https://example.com/registry.json").as_deref(),
+            Some("https://example.com/registry.json")
+        );
+
+        for uri in ["ipfs://bafytest", "http://example.com/registry.json"] {
+            assert_eq!(resolve_bcmr_uri(uri), resolve_icon_url(uri));
+        }
+    }
 
     #[test]
     fn body_archive_routes_by_verification_and_size() {
