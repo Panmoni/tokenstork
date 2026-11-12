@@ -1,0 +1,15 @@
+[Unit]
+Description=Sample carson memory headroom every minute for 7 days (PAN-182)
+Documentation=https://github.com/Panmoni/tokenstork
+
+[Timer]
+# 1-min cadence: ~10k rows over the week, enough for a stable p95.
+# Each run reads three /proc files and appends one line. The service
+# stops writing after 7 days; disable the timer once the summary is in.
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=5s
+Unit=carson-memstat.service
+
+[Install]
+WantedBy=timers.target

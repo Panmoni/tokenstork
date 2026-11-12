@@ -1,0 +1,53 @@
+[Unit]
+Description=carson memory-headroom sampler (free / PSI / swap) for the BCH Live baseline
+Documentation=https://github.com/Panmoni/tokenstork
+
+[Service]
+Type=oneshot
+User=tokenstork
+Group=tokenstork
+ExecStart=/opt/tokenstork/infra/memstat/sample.sh
+
+# Log lands in /var/lib/tokenstork/memstat/memstat.tsv (~150 B/row,
+# ~1.5 MB for the 7-day window). The script stops itself after 7 days.
+StateDirectory=tokenstork/memstat
+Environment="MEMSTAT_LOG=/var/lib/tokenstork/memstat/memstat.tsv"
+Environment="MEMSTAT_DAYS=7"
+
+# Hard caps: this must never add to the pressure it measures.
+MemoryMax=32M
+MemorySwapMax=0
+CPUQuota=5%
+TasksMax=16
+Nice=10
+IOSchedulingClass=idle
+
+# Reads /proc/meminfo, /proc/pressure/memory and /proc/vmstat — all
+# system-wide files, so ProtectProc=invisible (which only hides other
+# PIDs) is safe here.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+PrivateNetwork=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectProc=invisible
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallArchitectures=native
+UMask=0077
+
+TimeoutStartSec=20s
