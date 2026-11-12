@@ -1,9 +1,22 @@
 # BCHN configuration for tokenstork.com on a 16 GB single-VPS deployment.
 #
+# Pinned against carson (PAN-180, 2026-11-12). Every flag below matches the
+# live /var/lib/bchn/.bitcoin/bitcoin.conf; only the secret values differ.
+# The unit that starts it is infra/systemd/bchn.service (also matches).
+#
+#   $ bitcoind --version
+#   Bitcoin Cash Node Daemon version v29.0.0-89a591f7c
+#   (getnetworkinfo: version 29000000, "/Bitcoin Cash Node:29.0.0(EB32.0)/")
+#
+# Re-check for drift (secret values stripped before the diff):
+#   ssh carson "sudo grep -vE '^(rpcpassword|rpcauth|rpcuser)=' \
+#     /var/lib/bchn/.bitcoin/bitcoin.conf"
+#   ssh carson systemctl cat bchn
+#
 # Drop this in /var/lib/bchn/.bitcoin/bitcoin.conf with mode 0600 owned by
 # the bchn:bchn service user (or whatever your install runbook uses), and
-# fill in real values for `rpcuser` / `rpcpassword`. Secrets are NOT in
-# this file — generate them with `openssl rand -hex 32` at install time
+# fill in real values for `rpcuser` / `rpcpassword` / `rpcauth`. Secrets are
+# NOT in this file — generate them with `openssl rand -hex 32` at install time
 # and write them to the live config only.
 #
 # This config is tuned for the constrained-memory case where BCHN shares
@@ -80,9 +93,40 @@ rpcpassword=REPLACE_AT_INSTALL_TIME
 rpcbind=127.0.0.1
 rpcallowip=127.0.0.1
 
+# Second RPC user, for bitcoincashsite-www's CI refresh-data job. It reaches
+# this node through the Cloudflare Tunnel, so it still arrives from
+# 127.0.0.1. Hashed credential (`<user>:<salt>$<hash>`), generated with
+# BCHN's share/rpcauth/rpcauth.py; the plaintext password lives only in that
+# repo's CI secrets. Live on carson since the 2026-11-11 BCHN restart.
+# Replace the placeholder before starting: a malformed rpcauth line stops
+# the RPC server from starting at all.
+rpcauth=ci_utxo:REPLACE_AT_INSTALL_TIME
+
 # ---------------------------------------------------------------------------
 # ZMQ feeds — drives the sync-tail worker's hashblock subscription.
 # ---------------------------------------------------------------------------
 
 zmqpubhashblock=tcp://127.0.0.1:28332
 zmqpubhashtx=tcp://127.0.0.1:28332
+
+# ---------------------------------------------------------------------------
+# Pending flags — NOT live yet. Kept commented so this file still mirrors
+# carson. Each lands with a planned BCHN restart, never ad hoc.
+# ---------------------------------------------------------------------------
+#
+# BCH Live, Phase 2 restart (DSProof, raw ZMQ topics, REST):
+#zmqpubhashds=tcp://127.0.0.1:28332
+#zmqpubrawds=tcp://127.0.0.1:28332
+#zmqpubrawtx=tcp://127.0.0.1:28332
+#zmqpubrawblock=tcp://127.0.0.1:28332
+#rest=1
+#
+# BCH Live, Phase 4 — UTXO-set stats (gettxoutsetinfo per height):
+#coinstatsindex=1
+#
+# coinstatsindex needs BCHN 29+. carson runs v29.0.0, so no upgrade is
+# needed. The index is shared: the BCH Works UTXO Machine project needs
+# this same node (unpruned, coinstatsindex=1) behind BCH_RPC_URL. Enable
+# it once, at the Phase 4 restart, for both projects. It builds in the
+# background from genesis after the restart; budget the extra disk and the
+# build-time CPU/IO against BlockBook on this box before scheduling it.
