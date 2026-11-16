@@ -37,8 +37,8 @@
   },
   "devDependencies": {
     "@inlang/paraglide-js": "^2.25.4",
-    "@sveltejs/adapter-node": "^5.5.7",
-    "@sveltejs/kit": "^2.70.3",
+    "@sveltejs/adapter-node": "^5.5.8",
+    "@sveltejs/kit": "^2.70.4",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.9.8",
@@ -47,7 +47,7 @@
     "svelte-check": "^4.7.6",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
-    "vite": "^8.3.0",
+    "vite": "^8.3.8",
     "zeromq": "^6.8.0"
   },
   "pnpm": {
