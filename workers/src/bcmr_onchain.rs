@@ -268,7 +268,11 @@ pub async fn walk_authchain(
         let is_head = child.is_none();
 
         // Safety-net: if the index says unspent, confirm with BCHN gettxout.
-        if is_head {
+        // Skip it for an OP_RETURN vout[0]: it is unspendable, so it is never
+        // in the UTXO set and gettxout's null would read as "spent" — a false
+        // spend-index gap. Such a tx is a legitimate (burned) authchain head.
+        let unspendable = v0.script_pub_key.hex.starts_with("6a");
+        if is_head && !unspendable {
             let bchn_says_unspent = bchn.gettxout(&cur_txid, 0).await.unwrap_or(false);
             if !bchn_says_unspent {
                 return Err(anyhow!(
