@@ -16,7 +16,7 @@ use std::collections::HashSet;
 use anyhow::{Context, Result};
 use num_bigint::BigInt;
 
-use crate::bchn::{Block, NftCapability, TokenAmount};
+use crate::bchn::{Block, NftCapability, TokenAmount, Vout};
 use crate::cashaddr::script_to_cashaddr_body;
 
 /// A token-bearing output created in this block → one `live_token_utxo` row.
@@ -106,6 +106,41 @@ pub fn nft_capability_from_str(s: &str) -> Result<NftCapability> {
     }
 }
 
+/// Map one output to a `live_token_utxo` row; `None` if it carries no token.
+/// Shared by the per-block walker and the tail's reorg restore, which rebuilds
+/// outputs an orphaned block had spent from their creating tx.
+pub fn live_utxo_from_vout(
+    txid: [u8; 32],
+    n: usize,
+    vout: &Vout,
+    created_height: i32,
+) -> Result<Option<LiveUtxo>> {
+    let Some(td) = &vout.token_data else { return Ok(None) };
+    let category = decode_id32(&td.category).context("tokenData category")?;
+    let amount = match &td.amount {
+        Some(a) => parse_amount(a)?,
+        None => BigInt::from(0),
+    };
+    let (nft_commitment, nft_capability) = match &td.nft {
+        Some(nft) => (
+            Some(hex::decode(&nft.commitment).unwrap_or_default()),
+            Some(nft.capability),
+        ),
+        None => (None, None),
+    };
+    let script = hex::decode(&vout.script_pub_key.hex).unwrap_or_default();
+    Ok(Some(LiveUtxo {
+        txid,
+        vout: i32::try_from(n).context("vout index overflows i32")?,
+        category,
+        address: script_to_cashaddr_body(&script),
+        amount,
+        nft_commitment,
+        nft_capability,
+        created_height,
+    }))
+}
+
 /// Derive the token-UTXO creates/spends for one block. Pure; no I/O.
 pub fn derive_block_deltas(block: &Block) -> Result<BlockDeltas> {
     let height: i32 = block
@@ -142,34 +177,12 @@ pub fn derive_block_deltas(block: &Block) -> Result<BlockDeltas> {
 
         // Creates: every output carrying tokenData becomes a live row.
         for (n, vout) in tx.vout.iter().enumerate() {
-            let Some(td) = &vout.token_data else { continue };
-            let category = decode_id32(&td.category)
-                .with_context(|| format!("category in tx {}", &tx.txid))?;
-            let amount = match &td.amount {
-                Some(a) => parse_amount(a)?,
-                None => BigInt::from(0),
-            };
-            let (nft_commitment, nft_capability) = match &td.nft {
-                Some(nft) => (
-                    Some(hex::decode(&nft.commitment).unwrap_or_default()),
-                    Some(nft.capability),
-                ),
-                None => (None, None),
-            };
-            let script = hex::decode(&vout.script_pub_key.hex).unwrap_or_default();
-            let address = script_to_cashaddr_body(&script);
-
-            deltas.creates.push(LiveUtxo {
-                txid: tx_txid,
-                vout: i32::try_from(n).context("vout index overflows i32")?,
-                category,
-                address,
-                amount,
-                nft_commitment,
-                nft_capability,
-                created_height: height,
-            });
-            deltas.touched_by_creates.insert(category);
+            if let Some(u) = live_utxo_from_vout(tx_txid, n, vout, height)
+                .with_context(|| format!("tx {}", &tx.txid))?
+            {
+                deltas.touched_by_creates.insert(u.category);
+                deltas.creates.push(u);
+            }
         }
     }
 

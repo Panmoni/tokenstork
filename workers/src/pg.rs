@@ -1798,16 +1798,19 @@ pub async fn load_block_hash(pool: &PgPool, height: i32) -> Result<Option<Vec<u8
 /// branch don't persist and drift enrichment. The replacement block(s) on the
 /// new branch re-populate the table via the normal per-block delta apply.
 ///
-/// Rows with `created_height = 0` (bootstrap sentinel — seeded by enrich-seed
-/// from BlockBook history) are never deleted because no real fork reaches
-/// height 0. Returns the number of rows deleted.
-pub async fn unwind_live_utxo(pool: &PgPool, height: i32) -> Result<u64> {
-    let result = sqlx::query("DELETE FROM live_token_utxo WHERE created_height >= $1")
-        .bind(height)
-        .execute(pool)
-        .await
-        .context("unwind_live_utxo")?;
-    Ok(result.rows_affected())
+/// Outputs the orphaned blocks *spent* are restored separately by the caller.
+/// Returns the categories of the deleted rows.
+pub async fn unwind_live_utxo(pool: &PgPool, height: i32) -> Result<HashSet<[u8; 32]>> {
+    let rows: Vec<(Vec<u8>,)> =
+        sqlx::query_as("DELETE FROM live_token_utxo WHERE created_height >= $1 RETURNING category")
+            .bind(height)
+            .fetch_all(pool)
+            .await
+            .context("unwind_live_utxo")?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|(c,)| <[u8; 32]>::try_from(c.as_slice()).ok())
+        .collect())
 }
 
 /// Recompute `is_canonical` per symbol bucket. Picks the row with the

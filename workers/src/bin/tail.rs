@@ -23,11 +23,12 @@
 //! - DATABASE_URL                  — Postgres (Unix socket peer auth)
 //! - RUST_LOG
 //!
-//! Reorg detection (Phase 4):
-//! Before processing each block, compare BCHN's `getblockhash(height)` against
-//! the hash stored in `blocks`. On mismatch, unwind `live_token_utxo` at/above
-//! the forked height and `token_crc20` at the height, then re-process. This
-//! keeps enrichment correct across 1-2 block reorgs (occasional on BCH).
+//! Reorg detection:
+//! Before each catch-up, compare the stored hashes of the blocks already
+//! processed against BCHN's best chain (`find_fork`). On mismatch, unwind the
+//! orphaned heights (`unwind_reorg`: delete their created token outputs,
+//! restore the ones they spent, unwind CRC-20 + authchain edges, re-aggregate
+//! touched `token_state`), then re-process from the fork.
 
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
@@ -43,7 +44,7 @@ use workers::bchn::{BchnClient, Block, HashBlockSubscriber, zmq_url_from_env};
 use workers::blocks::{ACTIVATION_HEIGHT, summarize_block};
 use workers::crc20::detect_in_tx;
 use workers::enrich_core::aggregate;
-use workers::enrich_walker::{derive_block_deltas, extend_authchain};
+use workers::enrich_walker::{BlockDeltas, derive_block_deltas, extend_authchain, live_utxo_from_vout};
 use workers::pg::{
     self, BlockWrite, FoundCategory, OfferWrite, TokenType, rewrite_token_state_from_live,
     apply_live_utxo_deltas, crc20_canonical_resolve, delete_crc20_at_height,
@@ -226,7 +227,8 @@ async fn process_block(
     // The previous Tapswap upsert already committed Pass 1-3 results, so
     // returning Err here would re-run the upsert (idempotent) on the next
     // tick — visible as duplicate-write log noise but not data loss.
-    // Soft-failing avoids that noise.
+    // Soft-failing avoids that noise. Exception: the upsert itself now
+    // hard-fails (see below) because reorg detection depends on the row.
     let blocks_written = if height < ACTIVATION_HEIGHT {
         0
     } else {
@@ -253,9 +255,11 @@ async fn process_block(
                         }
                         1
                     }
+                    // Hard-fail: the stored hash is what reorg detection
+                    // (`find_fork`) compares against, so a missing row would
+                    // hide a reorg. The block re-runs on the next tick.
                     Err(e) => {
-                        warn!(height, error = %e, "blocks upsert failed; soft-skipping");
-                        0
+                        return Err(e.context(format!("blocks upsert at height {height}")));
                     }
                 }
             }
@@ -303,11 +307,7 @@ async fn process_block(
     // ENRICH_SHADOW enables shadow mode (compare-only, no write).
     // Unset, "0", or "false" → authoritative write (production path).
     // Any other value → shadow-comparison mode (bake/validation).
-    let enrich_shadow = std::env::var("ENRICH_SHADOW")
-        .map(|v| v != "0" && v != "false")
-        .unwrap_or(false);
-
-    let enrich_touched = if enrich_shadow {
+    let enrich_touched = if enrich_shadow() {
         match run_enrich_shadow(pool, block).await {
             Ok(n) => n,
             Err(e) => {
@@ -430,12 +430,159 @@ fn merge_into_found(
     }
 }
 
+/// Deepest reorg we unwind automatically. BCH reorgs are 1-2 blocks; a
+/// deeper mismatch means something else is wrong, so stop and let an
+/// operator look (and re-run `enrich-replay`).
+const MAX_REORG_DEPTH: i32 = 100;
+
+fn enrich_shadow() -> bool {
+    std::env::var("ENRICH_SHADOW")
+        .map(|v| v != "0" && v != "false")
+        .unwrap_or(false)
+}
+
+/// Return the lowest orphaned height if the blocks we already processed
+/// (ending at `last`) are no longer on BCHN's best chain, else `None`.
+async fn find_fork(pool: &pg::PgPool, bchn: &BchnClient, last: i32) -> Result<Option<i32>> {
+    let mut fork = None;
+    let mut h = last;
+    if last >= ACTIVATION_HEIGHT && load_block_hash(pool, last).await?.is_none() {
+        warn!(height = last, "no stored hash for last processed block; reorg check skipped");
+    }
+    while let Some(stored) = load_block_hash(pool, h).await? {
+        let bchn_hex = bchn
+            .get_block_hash(h as u64)
+            .await
+            .with_context(|| format!("getblockhash {h} for reorg check"))?;
+        if stored == hex::decode(&bchn_hex).with_context(|| format!("decoding block hash at {h}"))? {
+            break;
+        }
+        fork = Some(h);
+        if last - h + 1 >= MAX_REORG_DEPTH {
+            bail!("reorg deeper than {MAX_REORG_DEPTH} blocks below {last}; refusing to unwind");
+        }
+        h -= 1;
+    }
+    Ok(fork)
+}
+
+/// Unwind event-driven state for orphaned heights `fork..=last`.
+///
+/// `live_token_utxo`: delete rows the orphaned blocks created, then restore
+/// the token outputs they spent (rebuilt from each creating tx via txindex),
+/// then re-aggregate `token_state` for every touched category. The orphaned
+/// blocks are fetched by their stored hash; BCHN keeps stale blocks it has
+/// seen. If one can't be fetched the spent outputs stay missing — logged as
+/// an error naming `enrich-replay` as the repair.
+async fn unwind_reorg(
+    pool: &pg::PgPool,
+    bchn: &BchnClient,
+    fork: i32,
+    last: i32,
+    members: &mut HashSet<[u8; 32]>,
+) -> Result<()> {
+    let mut spends = Vec::new();
+    let mut orphaned_txids: HashSet<[u8; 32]> = HashSet::new();
+    let mut complete = true;
+    for h in fork..=last {
+        let Some(hash) = load_block_hash(pool, h).await? else { continue };
+        match bchn.get_block_verbose(&hex::encode(&hash)).await {
+            Ok(block) => {
+                for tx in &block.tx {
+                    if let Ok(id) = <[u8; 32]>::try_from(hex::decode(&tx.txid)?.as_slice()) {
+                        orphaned_txids.insert(id);
+                    }
+                }
+                spends.extend(derive_block_deltas(&block)?.spends);
+            }
+            Err(e) => {
+                complete = false;
+                error!(height = h, error = %e, "orphaned block unavailable; its spent token outputs can't be restored — run enrich-replay");
+            }
+        }
+    }
+
+    let mut touched = unwind_live_utxo(pool, fork).await?;
+
+    let mut restored = Vec::new();
+    let mut tx_cache: HashMap<[u8; 32], workers::bchn::VerboseTx> = HashMap::new();
+    for sp in spends.iter().filter(|sp| !orphaned_txids.contains(&sp.txid)) {
+        if !tx_cache.contains_key(&sp.txid) {
+            match bchn.get_raw_transaction_verbose(&hex::encode(sp.txid)).await {
+                Ok(tx) => {
+                    tx_cache.insert(sp.txid, tx);
+                }
+                // With an orphaned block missing, its txs aren't in
+                // `orphaned_txids`, so a later orphaned block's spend of one
+                // can't be resolved. Skip it rather than wedge the tail.
+                Err(e) if !complete => {
+                    warn!(txid = %hex::encode(sp.txid), error = %e, "prev tx unresolvable after incomplete unwind; skipping");
+                    continue;
+                }
+                Err(e) => {
+                    return Err(e.context(format!("prev tx {} for reorg restore", hex::encode(sp.txid))));
+                }
+            }
+        }
+        let prev = &tx_cache[&sp.txid];
+        let Some(vout) = prev.vout.get(sp.vout as usize) else { continue };
+        if vout.token_data.is_none() {
+            continue;
+        }
+        let height = match (prev.blockheight, &prev.blockhash) {
+            (Some(h), _) => i32::try_from(h)?,
+            (None, Some(bh)) => bchn.block_header_height(bh).await?,
+            (None, None) => continue, // unconfirmed parent: not a live row anyway
+        };
+        if let Some(u) = live_utxo_from_vout(sp.txid, sp.vout as usize, vout, height)? {
+            restored.push(u);
+        }
+    }
+    let restored_count = restored.len();
+    if !restored.is_empty() {
+        let deltas = BlockDeltas {
+            touched_by_creates: restored.iter().map(|u| u.category).collect(),
+            creates: restored,
+            ..BlockDeltas::default()
+        };
+        touched.extend(apply_live_utxo_deltas(pool, &deltas).await?);
+    }
+
+    let mut crc20_deleted = 0;
+    for h in fork..=last {
+        crc20_deleted += delete_crc20_at_height(pool, h).await?;
+    }
+    let authchain_deleted = unwind_authchain_edges(pool, fork).await?;
+    *members = load_authchain_members(pool).await?;
+
+    if !enrich_shadow() {
+        for category in &touched {
+            rewrite_token_state_from_live(pool, category).await?;
+        }
+    }
+    // Move the checkpoint back last: until here a crash leaves the old
+    // checkpoint and stale `blocks` rows, so a restart re-detects the fork
+    // and redoes this idempotent unwind. After here, re-processing the new
+    // branch writes `blocks` rows (Pass 4) before Passes 5-7, so a failure
+    // mid-block must resume from the checkpoint, not from a stored hash.
+    save_tail_last_block(pool, fork - 1).await?;
+    warn!(
+        fork,
+        last,
+        restored = restored_count,
+        categories = touched.len(),
+        crc20_deleted,
+        authchain_deleted,
+        complete,
+        "reorg unwind complete; re-processing from fork"
+    );
+    Ok(())
+}
+
 /// Catch up from `from` through `to` inclusive, one block at a time, with a
-/// DB checkpoint after each. Before processing each block, compares BCHN's
-/// `getblockhash(height)` against the hash stored in `blocks`; on mismatch
-/// (reorg), unwinds `live_token_utxo`, `token_crc20`, and `authchain_edge` at
-/// the forked height, then reloads the authchain member set before
-/// re-processing. Logs per block.
+/// DB checkpoint after each. First checks that the already-processed blocks
+/// below `from` are still on BCHN's best chain; if not (reorg), unwinds the
+/// orphaned heights and re-processes from the fork. Logs per block.
 async fn catch_up(
     pool: &pg::PgPool,
     bchn: &BchnClient,
@@ -443,43 +590,13 @@ async fn catch_up(
     to: i32,
     members: &mut HashSet<[u8; 32]>,
 ) -> Result<()> {
+    let mut from = from;
+    if let Some(fork) = find_fork(pool, bchn, from - 1).await? {
+        warn!(fork, last = from - 1, "reorg detected — unwinding orphaned blocks");
+        unwind_reorg(pool, bchn, fork, from - 1, members).await?;
+        from = fork;
+    }
     for h in from..=to {
-        // Reorg detection: if a block hash is already stored for this height
-        // and BCHN now serves a different one, a fork occurred. Unwind the
-        // stale event-driven state before re-processing the new branch.
-        // `load_block_hash` returns `None` when no row exists (fresh catch-up
-        // or pre-activation height) — skip the check in that case.
-        if let Some(stored) = load_block_hash(pool, h).await? {
-            let bchn_hash_hex = bchn
-                .get_block_hash(h as u64)
-                .await
-                .with_context(|| format!("getblockhash {h} for reorg check"))?;
-            let bchn_hash = hex::decode(&bchn_hash_hex)
-                .with_context(|| format!("decoding block hash at {h}"))?;
-            if stored != bchn_hash {
-                warn!(
-                    height = h,
-                    stored = %hex::encode(&stored),
-                    bchn = %bchn_hash_hex,
-                    "reorg detected — unwinding live_token_utxo, CRC-20, and authchain_edge at this height"
-                );
-                let utxo_deleted = unwind_live_utxo(pool, h).await?;
-                let crc20_deleted = delete_crc20_at_height(pool, h).await?;
-                let authchain_deleted = unwind_authchain_edges(pool, h).await?;
-                // Reload the member set after unwind — reorgs are rare and
-                // the set is tiny, so a full reload is acceptable.
-                *members = load_authchain_members(pool).await?;
-                info!(
-                    height = h,
-                    utxo_deleted,
-                    crc20_deleted,
-                    authchain_deleted,
-                    members = members.len(),
-                    "reorg unwind complete; re-processing from height"
-                );
-            }
-        }
-
         let block = bchn
             .get_block_by_height(h as u64)
             .await
@@ -550,9 +667,14 @@ async fn catch_up_to_tip(
     info!(from = last_seen + 1, to = tip_i, "delta detected");
     match catch_up(pool, bchn, last_seen + 1, tip_i, members).await {
         Ok(()) => tip_i,
+        // Resume from the DB checkpoint, not the in-memory value: a reorg
+        // unwind may have moved it back below `last_seen`.
         Err(e) => {
             error!(error = %e, "catch-up error; will retry on next signal");
-            last_seen
+            match load_sync_state(pool).await {
+                Ok(s) => s.tail_last_block.unwrap_or(last_seen),
+                Err(_) => last_seen,
+            }
         }
     }
 }
