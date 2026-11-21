@@ -1,7 +1,7 @@
 //! On-chain BCMR walker (Phase 4c).
 //!
 //! Walks the CashTokens authchain forward from each category's genesis tx via
-//! BlockBook's `/api/v2/tx/{txid}` endpoint, parses the on-chain
+//! BCHN `getrawtransaction` and the `authchain_edge` spend index, parses the on-chain
 //! `OP_RETURN BCMR <hash> <URI>` locator at each hop, and surfaces the latest
 //! verified publication.
 //!

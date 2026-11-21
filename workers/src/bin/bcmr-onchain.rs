@@ -1,8 +1,8 @@
 //! bcmr-onchain — walk the on-chain CashTokens authchain to derive BCMR
 //! metadata directly from the chain (Phase 4c).
 //!
-//! For each picked category, we follow `vout[0].spentTxId` through BlockBook
-//! starting at the category's `genesis_txid`, parse any
+//! For each picked category, we follow `vout[0]` spends through BCHN plus the
+//! `authchain_edge` index sync-tail maintains, starting at the category's `genesis_txid`, parse any
 //! `OP_RETURN BCMR <hash> <URI>` locator we find, fetch + sha256-verify the
 //! pointed-to JSON body, and:
 //!   - record one `token_metadata_history` row per locator-bearing hop
@@ -23,8 +23,7 @@
 //!
 //! Env vars:
 //! - DATABASE_URL                  (required)
-//! - BLOCKBOOK_URL                 (required, e.g. http://127.0.0.1:9131)
-//! - BLOCKBOOK_MAX_RPS             default 5 (used by BlockbookClient)
+//! - BCHN_RPC_URL / BCHN_RPC_AUTH  (required)
 //! - BCMR_ONCHAIN_BATCH            default 200
 //! - BCMR_ONCHAIN_STALE_HOURS      default 72 (revisit cadence)
 //! - BCMR_ONCHAIN_FETCH_TIMEOUT_S  default 10 (per-URI fetch budget)

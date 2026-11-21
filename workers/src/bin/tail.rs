@@ -43,7 +43,7 @@ use workers::bchn::{BchnClient, Block, HashBlockSubscriber, zmq_url_from_env};
 use workers::blocks::{ACTIVATION_HEIGHT, summarize_block};
 use workers::crc20::detect_in_tx;
 use workers::enrich_core::aggregate;
-use workers::enrich_walker::derive_block_deltas;
+use workers::enrich_walker::{derive_block_deltas, extend_authchain};
 use workers::pg::{
     self, BlockWrite, FoundCategory, OfferWrite, TokenType, rewrite_token_state_from_live,
     apply_live_utxo_deltas, crc20_canonical_resolve, delete_crc20_at_height,
@@ -331,17 +331,7 @@ async fn process_block(
     // blocks. Hard-fail: a write error here means a gap in the spend
     // index that bcmr-onchain can't recover from without a re-seed.
     let deltas = derive_block_deltas(block)?;
-    let mut new_edges: Vec<(Vec<u8>, Vec<u8>, i32)> = Vec::new();
-    for sp in &deltas.vout0_spends {
-        if members.contains(&sp.prev_txid) {
-            new_edges.push((
-                sp.prev_txid.to_vec(),
-                sp.spending_txid.to_vec(),
-                sp.height,
-            ));
-            members.insert(sp.spending_txid);
-        }
-    }
+    let new_edges = extend_authchain(members, &deltas.vout0_spends);
     let authchain_edges = if new_edges.is_empty() {
         0
     } else {

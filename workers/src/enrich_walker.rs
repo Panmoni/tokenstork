@@ -176,6 +176,37 @@ pub fn derive_block_deltas(block: &Block) -> Result<BlockDeltas> {
     Ok(deltas)
 }
 
+/// Extend the authchain member set with one block's vout[0] spends and return
+/// the new `(parent, child, spent_height)` edges.
+///
+/// Iterates to a fixpoint: BCH blocks use canonical (txid-sorted) transaction
+/// order, so a child that spends a same-block parent's vout[0] can appear
+/// *before* that parent. A single in-order pass misses the edge, and with it
+/// every later hop of the chain (observed 2026-11-21: ~97% of bcmr-onchain
+/// walks failed on such gaps).
+pub fn extend_authchain(
+    members: &mut HashSet<[u8; 32]>,
+    spends: &[Vout0Spend],
+) -> Vec<(Vec<u8>, Vec<u8>, i32)> {
+    let mut edges = Vec::new();
+    let mut pending: Vec<&Vout0Spend> = spends.iter().collect();
+    loop {
+        let before = pending.len();
+        pending.retain(|sp| {
+            if members.contains(&sp.prev_txid) {
+                edges.push((sp.prev_txid.to_vec(), sp.spending_txid.to_vec(), sp.height));
+                members.insert(sp.spending_txid);
+                false
+            } else {
+                true
+            }
+        });
+        if pending.len() == before {
+            return edges;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -291,5 +322,21 @@ mod tests {
         };
         let d = derive_block_deltas(&block(800_004, vec![tx])).unwrap();
         assert!(d.creates.is_empty(), "plain BCH output is not a token UTXO");
+    }
+
+    #[test]
+    fn extend_authchain_follows_child_listed_before_parent() {
+        let (g, a, b) = ([1u8; 32], [0xc5u8; 32], [0xadu8; 32]);
+        // CTOR order: b (spends a:0) sorts before a (spends g:0).
+        let spends = vec![
+            Vout0Spend { prev_txid: a, spending_txid: b, height: 7 },
+            Vout0Spend { prev_txid: g, spending_txid: a, height: 7 },
+            Vout0Spend { prev_txid: [9u8; 32], spending_txid: [8u8; 32], height: 7 },
+        ];
+        let mut members: HashSet<[u8; 32]> = [g].into_iter().collect();
+        let edges = extend_authchain(&mut members, &spends);
+        assert_eq!(edges.len(), 2);
+        assert!(members.contains(&a) && members.contains(&b));
+        assert!(!members.contains(&[8u8; 32]));
     }
 }
