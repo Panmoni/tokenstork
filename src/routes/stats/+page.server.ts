@@ -483,7 +483,7 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
 			// Critical supply-inflation indicator: a token whose total
 			// supply can grow tomorrow has very different semantics from
 			// a token whose supply is permanently fixed. Populated by
-			// `sync-enrich` from `token_state.has_active_minting`.
+			// sync-tail enrichment from `token_state.has_active_minting`.
 			query<WindowCount>(
 				`SELECT COUNT(*)::bigint AS total
 				   FROM tokens t

@@ -5,7 +5,7 @@
 // verified session). Address normalization: cashaddrs are stored
 // canonical-form (with `bitcoincash:` prefix) in users/sessions but
 // bare-form (no prefix) in token_holders + airdrop_outputs to match the
-// existing convention from sync-enrich. Helpers strip the prefix on
+// existing convention from the enrichment pass (sync-tail). Helpers strip the prefix on
 // the way IN to comparisons against token_holders.
 
 import type { PoolClient } from 'pg';
@@ -164,7 +164,7 @@ export async function holderListFor(
 /** Newest snapshot timestamp across `token_holders` rows for a category.
  *  Used as the freshness-guard reference: airdrops.holders_snapshot_at is
  *  set to this at draft, then compared at every broadcast. If the value
- *  has advanced (sync-enrich ran in between), refuse remaining txs and
+ *  has advanced (sync-tail re-enriched it in between), refuse remaining txs and
  *  ask the user to redraft. */
 export async function holderSnapshotFor(
 	categoryBytes: Buffer

@@ -12,7 +12,7 @@
 #   7. systemctl restart tokenstork.service + sync-tail.service
 #
 # Worker services that are timer-triggered one-shots (sync-bcmr,
-# sync-cauldron, sync-enrich, sync-verify) DON'T need a restart — the
+# sync-cauldron, sync-verify) DON'T need a restart — the
 # next timer tick will exec the freshly-built binary automatically.
 # Only sync-tail is a long-running daemon holding the old binary open,
 # so it gets an explicit restart. Any future always-on worker daemon

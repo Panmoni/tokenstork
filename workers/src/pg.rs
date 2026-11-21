@@ -355,45 +355,6 @@ pub async fn mark_tail_run(pool: &PgPool) -> Result<()> {
 // Enrichment helpers.
 // ---------------------------------------------------------------------------
 
-/// Pick up to `limit` categories that need enrichment. Priority:
-///
-/// 1. Categories with no `token_state` row yet (`verified_at IS NULL`).
-/// 2. Active rows older than `active_stale_hours`.
-/// 3. Burned rows older than `burned_stale_hours`.
-///
-/// Randomized within a priority to spread load across runs.
-pub async fn pick_enrichment_batch(
-    pool: &PgPool,
-    active_stale_hours: i32,
-    burned_stale_hours: i32,
-    limit: i32,
-) -> Result<Vec<Vec<u8>>> {
-    let rows: Vec<(Vec<u8>,)> = sqlx::query_as(
-        r#"
-        WITH candidates AS (
-          SELECT t.category, ts.verified_at, ts.is_fully_burned
-            FROM tokens t
-            LEFT JOIN token_state ts ON ts.category = t.category
-        )
-        SELECT category
-          FROM candidates
-         WHERE verified_at IS NULL
-            OR (is_fully_burned IS NOT TRUE AND verified_at < now() - $1 * interval '1 hour')
-            OR (is_fully_burned IS TRUE     AND verified_at < now() - $2 * interval '1 hour')
-         ORDER BY verified_at NULLS FIRST, random()
-         LIMIT $3
-        "#,
-    )
-    .bind(active_stale_hours)
-    .bind(burned_stale_hours)
-    .bind(limit)
-    .fetch_all(pool)
-    .await
-    .context("picking enrichment batch")?;
-
-    Ok(rows.into_iter().map(|(c,)| c).collect())
-}
-
 /// Everything the enricher computes from a BlockBook UTXO response for one
 /// category, ready to be written.
 #[derive(Debug, Clone)]
@@ -679,32 +640,6 @@ pub async fn rewrite_token_state_from_live(pool: &PgPool, category: &[u8]) -> Re
     write_token_state(pool, &w, "bchn")
         .await
         .with_context(|| format!("enrich write for {}", bytes_to_hex(category)))
-}
-
-/// Replace a category's `live_token_utxo` rows wholesale (delete-then-insert,
-/// one transaction). The clean-rebuild primitive for the one-shot bootstrap
-/// seed and for reorg re-seeding. Returns the number of rows written.
-///
-/// Bootstrap rows carry a sentinel `created_height` (the caller passes 0 for
-/// BlockBook-sourced rows whose origin height we don't track) — safe because
-/// reorg unwind only deletes rows at/above a recent forked height, never
-/// reaching height 0.
-pub async fn seed_category_live_utxos(
-    pool: &PgPool,
-    category: &[u8],
-    rows: &[crate::enrich_walker::LiveUtxo],
-) -> Result<usize> {
-    let mut tx: Transaction<'_, Postgres> = pool.begin().await.context("begin seed tx")?;
-    sqlx::query("DELETE FROM live_token_utxo WHERE category = $1")
-        .bind(category)
-        .execute(&mut *tx)
-        .await
-        .with_context(|| format!("wipe live_token_utxo for {}", bytes_to_hex(category)))?;
-    for u in rows {
-        insert_live_utxo(&mut tx, u).await?;
-    }
-    tx.commit().await.context("commit seed")?;
-    Ok(rows.len())
 }
 
 /// Keyset page over `tokens.category` for the bootstrap sweep: the categories

@@ -9,7 +9,7 @@
 // Re-builds chunk K+1 just-in-time AFTER chunk K succeeds and returns
 // it in the response so the wizard can immediately advance to the
 // next signature without an extra round trip. This is also where we
-// re-check the holder snapshot — if `sync-enrich` has run between
+// re-check the holder snapshot — if sync-tail has re-enriched the category between
 // chunks, we halt and surface the change.
 //
 // Auth-gated; ownership-checked (sender_cashaddr must match the
@@ -186,7 +186,7 @@ export const POST: RequestHandler = async ({ locals, request, params }) => {
 	});
 
 	// Build the next chunk's unsigned hex if there is one. Re-check
-	// snapshot freshness — if sync-enrich ran between chunks, the
+	// snapshot freshness — if sync-tail re-enriched it between chunks, the
 	// recipient set may have shifted; we halt rather than send to
 	// possibly-stale targets.
 	let nextChunk: NextChunkPayload | null = null;

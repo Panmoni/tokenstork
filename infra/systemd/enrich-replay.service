@@ -1,7 +1,7 @@
 [Unit]
 Description=tokenstork enrich-replay — rebuild live_token_utxo + token_state from BCHN history (stops sync-tail)
 After=network.target postgresql.service bchn.service sync-tail.service
-Conflicts=sync-tail.service sync-enrich.service enrich-seed.service
+Conflicts=sync-tail.service
 Wants=postgresql.service bchn.service
 
 [Service]
@@ -20,7 +20,7 @@ EnvironmentFile=-/etc/tokenstork/env
 # CPU containment — one sequential getblock walk; keep the box responsive.
 CPUQuota=200%
 
-# Hardening — same profile as sync-enrich / sync-bcmr-onchain / sync-verify / sync-tail.
+# Hardening — same profile as sync-bcmr-onchain / sync-verify / sync-tail.
 NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true

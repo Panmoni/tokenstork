@@ -1,12 +1,9 @@
 //! Shared enrichment aggregation — turns a category's live token-UTXO set into
 //! the `token_state` / `token_holders` / `nft_instances` write payload.
 //!
-//! Both enrichment upstreams normalize into [`AggInput`] and call
-//! [`aggregate`], so they produce **byte-identical** results:
-//!   - the legacy BlockBook `enrich` binary (maps each `blockbook::Utxo`), and
-//!   - the event-driven path (maps each `live_token_utxo` row).
-//! That equivalence is the precondition for safely shadow-comparing the new
-//! path against the old before cutover (see docs/enrich-event-driven-design.md).
+//! The event-driven path (sync-tail Pass 6, `enrich-replay`) maps each
+//! `live_token_utxo` row into [`AggInput`] and calls [`aggregate`]. The legacy
+//! BlockBook `enrich` binary that also fed it was removed 2026-11-21.
 //!
 //! Extracted verbatim from `bin/enrich.rs`; the aggregation/gini logic is
 //! unchanged. The only shape change is that amount parsing + commitment hex

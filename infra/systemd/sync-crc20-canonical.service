@@ -14,7 +14,7 @@ ExecStart=/opt/tokenstork/workers/target/release/crc20-canonical
 Environment="RUST_LOG=info"
 EnvironmentFile=-/etc/tokenstork/env
 
-# Hardening — same profile as sync-bcmr / sync-enrich / sync-verify / sync-tail.
+# Hardening — same profile as sync-bcmr / sync-verify / sync-tail.
 NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true

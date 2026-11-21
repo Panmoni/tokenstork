@@ -16,7 +16,7 @@ Environment="RUST_LOG=info"
 # sees the failure in journalctl. Timer unit retries on the next tick.
 EnvironmentFile=-/etc/tokenstork/env
 
-# Hardening — same profile as sync-bcmr-onchain / sync-enrich / sync-verify.
+# Hardening — same profile as sync-bcmr-onchain / sync-verify.
 NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true

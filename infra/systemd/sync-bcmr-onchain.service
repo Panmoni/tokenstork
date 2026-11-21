@@ -1,7 +1,6 @@
 [Unit]
 Description=tokenstork sync-bcmr-onchain — walk on-chain authchain for BCMR locators (Phase 4c)
 After=network.target postgresql.service
-Conflicts=enrich-seed.service
 Wants=postgresql.service
 
 [Service]
@@ -17,7 +16,7 @@ Environment="RUST_LOG=info"
 # sees the failure in journalctl. Timer unit retries on the next tick.
 EnvironmentFile=-/etc/tokenstork/env
 
-# Hardening — same profile as sync-bcmr / sync-enrich / sync-verify / sync-tail.
+# Hardening — same profile as sync-bcmr / sync-verify / sync-tail.
 NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true

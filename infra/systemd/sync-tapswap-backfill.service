@@ -17,7 +17,7 @@ Environment="RUST_LOG=info"
 # sees the failure in journalctl.
 EnvironmentFile=-/etc/tokenstork/env
 
-# Hardening — same profile as sync-bcmr / sync-cauldron / sync-enrich /
+# Hardening — same profile as sync-bcmr / sync-cauldron /
 # sync-verify / sync-tail.
 NoNewPrivileges=true
 PrivateTmp=true
