@@ -582,16 +582,26 @@ pub async fn apply_live_utxo_deltas(
         insert_live_utxo(&mut tx, u).await?;
     }
 
-    for sp in &deltas.spends {
-        let row: Option<(Vec<u8>,)> = sqlx::query_as(
-            "DELETE FROM live_token_utxo WHERE txid = $1 AND vout = $2 RETURNING category",
+    // One set-based delete per block instead of one round-trip per input:
+    // most inputs are plain-BCH outpoints that match nothing, and a full
+    // history replay (`enrich-replay`) pushes tens of millions of them.
+    if !deltas.spends.is_empty() {
+        let txids: Vec<Vec<u8>> = deltas.spends.iter().map(|sp| sp.txid.to_vec()).collect();
+        let vouts: Vec<i32> = deltas.spends.iter().map(|sp| sp.vout).collect();
+        let rows: Vec<(Vec<u8>,)> = sqlx::query_as(
+            r#"
+            DELETE FROM live_token_utxo l
+             USING unnest($1::bytea[], $2::int[]) AS s(txid, vout)
+             WHERE l.txid = s.txid AND l.vout = s.vout
+            RETURNING l.category
+            "#,
         )
-        .bind(sp.txid.as_slice())
-        .bind(sp.vout)
-        .fetch_optional(&mut *tx)
+        .bind(&txids)
+        .bind(&vouts)
+        .fetch_all(&mut *tx)
         .await
-        .with_context(|| format!("delete live_token_utxo {}:{}", bytes_to_hex(&sp.txid), sp.vout))?;
-        if let Some((cat,)) = row {
+        .context("delete spent live_token_utxo rows")?;
+        for (cat,) in rows {
             if let Ok(c) = <[u8; 32]>::try_from(cat.as_slice()) {
                 touched.insert(c);
             }
@@ -635,6 +645,40 @@ pub async fn load_live_utxos_for_category(
             Ok(crate::enrich_core::AggInput { address, amount, nft })
         })
         .collect()
+}
+
+/// Re-aggregate one category from its `live_token_utxo` rows and write
+/// `token_state` / `token_holders` / `nft_instances` (source `bchn`). The
+/// authoritative write for sync-tail Pass 6 and for `enrich-replay`'s
+/// final full rebuild. A category with no live rows is fully burned.
+pub async fn rewrite_token_state_from_live(pool: &PgPool, category: &[u8]) -> Result<()> {
+    let inputs = load_live_utxos_for_category(pool, category).await?;
+    let agg = crate::enrich_core::aggregate(&inputs);
+    let gini = crate::enrich_core::compute_gini(&agg.holders);
+    let holders: Vec<HolderWrite> = agg
+        .holders
+        .iter()
+        .map(|(addr, h)| HolderWrite {
+            address: addr.clone(),
+            balance: h.balance.to_string(),
+            nft_count: h.nft_count,
+        })
+        .collect();
+    let w = TokenStateWrite {
+        category: category.to_vec(),
+        current_supply: agg.current_supply.to_string(),
+        live_utxo_count: agg.live_utxo_count,
+        live_nft_count: agg.live_nft_count,
+        holder_count: holders.len() as i32,
+        has_active_minting: agg.has_active_minting,
+        is_fully_burned: agg.live_utxo_count == 0,
+        gini_coefficient: gini,
+        holders,
+        nfts: agg.nfts,
+    };
+    write_token_state(pool, &w, "bchn")
+        .await
+        .with_context(|| format!("enrich write for {}", bytes_to_hex(category)))
 }
 
 /// Replace a category's `live_token_utxo` rows wholesale (delete-then-insert,

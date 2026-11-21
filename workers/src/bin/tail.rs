@@ -42,10 +42,10 @@ use tracing_subscriber::EnvFilter;
 use workers::bchn::{BchnClient, Block, HashBlockSubscriber, zmq_url_from_env};
 use workers::blocks::{ACTIVATION_HEIGHT, summarize_block};
 use workers::crc20::detect_in_tx;
-use workers::enrich_core::{aggregate, compute_gini};
+use workers::enrich_core::aggregate;
 use workers::enrich_walker::derive_block_deltas;
 use workers::pg::{
-    self, BlockWrite, FoundCategory, HolderWrite, OfferWrite, TokenStateWrite, TokenType,
+    self, BlockWrite, FoundCategory, OfferWrite, TokenType, rewrite_token_state_from_live,
     apply_live_utxo_deltas, crc20_canonical_resolve, delete_crc20_at_height,
     load_block_hash, load_live_utxos_for_category,
     load_sync_state, mark_blocks_run, mark_crc20_run, mark_enrich_run,
@@ -53,7 +53,7 @@ use workers::pg::{
     pool_from_env, read_token_state_summary, record_authchain_edges,
     save_tail_last_block, unwind_authchain_edges, unwind_live_utxo,
     upsert_block, upsert_tapswap_offers_batch, upsert_tokens, write_crc20_detection,
-    write_token_state, load_authchain_members,
+    load_authchain_members,
 };
 use workers::tapswap::try_decode_tx;
 use workers::tapswap_walker::process_block_spends;
@@ -416,38 +416,7 @@ async fn run_enrich_authoritative(pool: &pg::PgPool, block: &Block) -> Result<us
     let touched = apply_live_utxo_deltas(pool, &deltas).await?;
 
     for category in &touched {
-        let inputs = load_live_utxos_for_category(pool, category).await?;
-        let agg = aggregate(&inputs);
-        let gini = compute_gini(&agg.holders);
-        let is_fully_burned = agg.live_utxo_count == 0;
-
-        let holders: Vec<HolderWrite> = agg
-            .holders
-            .iter()
-            .map(|(addr, h)| HolderWrite {
-                address: addr.clone(),
-                balance: h.balance.to_string(),
-                nft_count: h.nft_count,
-            })
-            .collect();
-
-        let holder_count = holders.len() as i32;
-        let w = TokenStateWrite {
-            category: category.to_vec(),
-            current_supply: agg.current_supply.to_string(),
-            live_utxo_count: agg.live_utxo_count,
-            live_nft_count: agg.live_nft_count,
-            holder_count,
-            has_active_minting: agg.has_active_minting,
-            is_fully_burned,
-            gini_coefficient: gini,
-            holders,
-            nfts: agg.nfts,
-        };
-
-        write_token_state(pool, &w, "bchn")
-            .await
-            .with_context(|| format!("enrich write for {}", pg::bytes_to_hex(category)))?;
+        rewrite_token_state_from_live(pool, category).await?;
     }
 
     // Mark enrich run for observability.
