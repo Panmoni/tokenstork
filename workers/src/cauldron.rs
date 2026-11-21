@@ -26,6 +26,10 @@ use crate::safe_http::{read_body_capped, safe_client_builder};
 
 const USER_AGENT: &str = "tokenstork-workers/0.1";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+/// `/cauldron/user/unique_addresses` scans the whole chain server-side and
+/// takes ~15-18 s (measured 2026-11-21); the 5 s default failed every run
+/// from ~2026-09-22, leaving the /stats chart empty.
+const UNIQUE_ADDRESSES_TIMEOUT: Duration = Duration::from_secs(45);
 const RETRY_ATTEMPTS: usize = 3;
 /// Hard cap on Cauldron response bodies. Same rationale as `BCMR_BODY_CAP`
 /// — protects against a hostile / compromised indexer streaming
@@ -158,19 +162,28 @@ impl CauldronClient {
 	/// i32::MAX (2.1B), which would otherwise hard-fail deserialization.
 	pub async fn get_unique_addresses_by_month(&self) -> Result<Vec<(String, i64)>> {
 		let resp: Option<Vec<(String, i64)>> = self
-			.get_json("/cauldron/user/unique_addresses")
+			.get_json_timeout("/cauldron/user/unique_addresses", UNIQUE_ADDRESSES_TIMEOUT)
 			.await?;
 		Ok(resp.unwrap_or_default())
 	}
 
 	/// Shared GET helper: 3× retry on 5xx / 429 / network, 404 → `Ok(None)`.
 	async fn get_json<T: for<'de> Deserialize<'de>>(&self, path: &str) -> Result<Option<T>> {
+		self.get_json_timeout(path, REQUEST_TIMEOUT).await
+	}
+
+	/// [`Self::get_json`] with a per-request timeout override.
+	async fn get_json_timeout<T: for<'de> Deserialize<'de>>(
+		&self,
+		path: &str,
+		timeout: Duration,
+	) -> Result<Option<T>> {
 		let url = format!("{}{}", self.base_url, path);
 		let mut last_err: Option<anyhow::Error> = None;
 
 		for attempt in 0..RETRY_ATTEMPTS {
 			self.pace().await;
-			let resp = match self.http.get(&url).send().await {
+			let resp = match self.http.get(&url).timeout(timeout).send().await {
 				Ok(r) => r,
 				Err(e) => {
 					last_err = Some(e.into());
