@@ -20,7 +20,7 @@ EnvironmentFile=-/etc/tokenstork/env
 # CPU containment — one sequential getblock walk; keep the box responsive.
 CPUQuota=200%
 
-# Hardening — same profile as sync-bcmr-onchain / sync-verify / sync-tail.
+# Hardening — same profile as sync-bcmr-onchain / sync-tail.
 NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true

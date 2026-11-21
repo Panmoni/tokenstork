@@ -18,7 +18,7 @@ Environment="RUST_LOG=info"
 EnvironmentFile=-/etc/tokenstork/env
 
 # Hardening — same profile as sync-bcmr / sync-cauldron /
-# sync-verify / sync-tail.
+# sync-tail.
 NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true
