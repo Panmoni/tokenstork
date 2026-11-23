@@ -110,7 +110,7 @@ rpcauth=ci_utxo:REPLACE_AT_INSTALL_TIME
 zmqpubhashblock=tcp://127.0.0.1:28332
 zmqpubhashtx=tcp://127.0.0.1:28332
 
-# UTXO-set stats per height (gettxoutsetinfo muhash <height>), PAN-230.
+# UTXO-set stats per height (gettxoutsetinfo ecmh <height>; BCHN has no muhash), PAN-230.
 # Needs BCHN 29+ (carson: v29.0.0). Shared by BCH Live's UTXO Archaeology
 # and the BCH Works UTXO Machine (BCH_RPC_URL). Cleared by the PAN-182
 # headroom baseline (infra/memstat/baseline-2026-11-21.md). This is the

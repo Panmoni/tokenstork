@@ -28,7 +28,7 @@
 # usable. Estimate, not measured on carson: several hours (budget 6-12 h)
 # and a few GB of disk. Done when `--status` shows coinstatsindex
 # "synced": true with best_block_height at the tip; then
-# `bitcoin-cli gettxoutsetinfo muhash <past height>` answers.
+# `bitcoin-cli gettxoutsetinfo ecmh <past height>` answers (BCHN hash types: hash_serialized_3, ecmh, muhash_testing, none).
 #
 # Rollback: copy the .bak file over bitcoin.conf, restart bchn, then delete
 # the index directory it built under /var/lib/bchn/.bitcoin/indexes/
